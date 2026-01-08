@@ -1,0 +1,25 @@
+*.csv
+*.xlsx
+*.parquet
+**/dummy/
+**/output/
+
+# Python cache and environments
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+.venv/
+venv/
+ENV/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
