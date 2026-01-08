@@ -2,7 +2,7 @@ import json
 import uuid
 import os
 from pathlib import Path
-from storage import create_run_dirs
+from core.storage import create_run_dirs
 
 DB_PATH = os.environ.get("BOOBAI_DB", "db.json")
 

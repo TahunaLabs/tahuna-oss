@@ -1,6 +1,6 @@
 import os
 import subprocess
-from storage import download_prefix, download_file, upload_dir
+from core.storage import download_prefix, download_file, upload_dir
 
 env_artifacts = os.environ["ENV_ARTIFACTS"]
 input_path = os.environ["INPUT_PATH"]

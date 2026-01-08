@@ -6,6 +6,7 @@ s3 = boto3.client(
     endpoint_url=os.environ["R2_ENDPOINT"],
     aws_access_key_id=os.environ["R2_ACCESS_KEY"],
     aws_secret_access_key=os.environ["R2_SECRET_KEY"],
+    region_name="auto",
 )
 BUCKET = os.environ["R2_BUCKET"]
 

@@ -1,9 +1,7 @@
+import core
 import argparse
-from dotenv import load_dotenv
-load_dotenv()
-
-from db import create_environment, create_run, get_environment, update_run
-from provisioner import launch_pod, wait_for_pod, stream_logs, terminate_pod
+from core.db import create_environment, create_run, get_environment, update_run
+from core.provisioner import launch_pod, wait_for_pod, stream_logs, terminate_pod
 
 def cmd_create_env(args):
     env_id = create_environment(args.name, args.artifacts, args.gpu_type, args.gpu_count, args.volume_gb)
