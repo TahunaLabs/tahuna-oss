@@ -14,10 +14,16 @@ def _load():
 def _save(db):
     Path(DB_PATH).write_text(json.dumps(db, indent=2))
 
-def create_environment(name: str, artifacts_path: str) -> str:
+def create_environment(name: str, artifacts_path: str, gpu_type: str, gpu_count: int, volume_gb: int) -> str:
     db = _load()
     env_id = str(uuid.uuid4())[:8]
-    db["environments"][env_id] = {"name": name, "artifacts": artifacts_path}
+    db["environments"][env_id] = {
+        "name": name,
+        "artifacts": artifacts_path,
+        "gpu_type": gpu_type,
+        "gpu_count": gpu_count,
+        "volume_gb": volume_gb,
+    }
     _save(db)
     return env_id
 

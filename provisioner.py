@@ -4,13 +4,13 @@ import runpod
 
 runpod.api_key = os.environ["RUNPOD_API_KEY"]
 
-def launch_pod(env_artifacts: str, input_path: str, output_path: str) -> str:
+def launch_pod(env_artifacts: str, input_path: str, output_path: str, gpu_type: str, gpu_count: int, volume_gb: int) -> str:
     pod = runpod.create_pod(
         name="boobai",
         image_name="boobai/runner:latest",
-        gpu_type_id="NVIDIA RTX 4090",
-        gpu_count=2,
-        volume_in_gb=100,
+        gpu_type_id=gpu_type,
+        gpu_count=gpu_count,
+        volume_in_gb=volume_gb,
         env={
             "ENV_ARTIFACTS": env_artifacts,
             "INPUT_PATH": input_path,

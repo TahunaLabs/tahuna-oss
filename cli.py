@@ -3,7 +3,7 @@ from db import create_environment, create_run, get_environment, update_run
 from provisioner import launch_pod, wait_for_pod, stream_logs, terminate_pod
 
 def cmd_create_env(args):
-    env_id = create_environment(args.name, args.artifacts)
+    env_id = create_environment(args.name, args.artifacts, args.gpu_type, args.gpu_count, args.volume_gb)
     print(env_id)
 
 def cmd_run(args):
@@ -20,6 +20,9 @@ def cmd_run(args):
         env_artifacts=env["artifacts"],
         input_path=run_info["input"],
         output_path=run_info["output"],
+        gpu_type=env["gpu_type"],
+        gpu_count=env["gpu_count"],
+        volume_gb=env["volume_gb"],
     )
     update_run(run_id, status="provisioning", pod_id=pod_id)
     
@@ -41,6 +44,9 @@ if __name__ == "__main__":
     p_env = sub.add_parser("create-env")
     p_env.add_argument("--name", required=True)
     p_env.add_argument("--artifacts", required=True)
+    p_env.add_argument("--gpu-type", required=True)
+    p_env.add_argument("--gpu-count", type=int, required=True)
+    p_env.add_argument("--volume-gb", type=int, required=True)
     p_env.set_defaults(func=cmd_create_env)
     
     p_run = sub.add_parser("run")
