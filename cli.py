@@ -1,4 +1,7 @@
 import argparse
+from dotenv import load_dotenv
+load_dotenv()
+
 from db import create_environment, create_run, get_environment, update_run
 from provisioner import launch_pod, wait_for_pod, stream_logs, terminate_pod
 
