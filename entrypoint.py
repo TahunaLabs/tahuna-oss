@@ -31,7 +31,7 @@ def download_data():
 def upload_checkpoint(local_path: str, remote_path: str):
     """Push checkpoint to R2"""
     bucket = "boobai"
-    for root, dirs, files in os.walk(local_path):
+    for root, dirs, files in os.walk(local_path): # TODO: directly get last update from configured model dir
         for file in files:
             local_file = os.path.join(root, file)
             rel_path = os.path.relpath(local_file, local_path)
