@@ -14,6 +14,12 @@ def create_run_dirs(run_id: str):
     s3.put_object(Bucket=BUCKET, Key=f"runs/{run_id}/output/.keep", Body=b"")
     s3.put_object(Bucket=BUCKET, Key=f"runs/{run_id}/logs/.keep", Body=b"")
 
+def create_experiment_input_dir(exp_id: str):
+    s3.put_object(Bucket=BUCKET, Key=f"experiments/{exp_id}/input/.keep", Body=b"")
+
+def create_env_artifacts_dir(env_id: str):
+    s3.put_object(Bucket=BUCKET, Key=f"environments/{env_id}/artifacts/.keep", Body=b"")
+
 def download_prefix(prefix: str, local_dir: str):
     resp = s3.list_objects_v2(Bucket=BUCKET, Prefix=prefix)
     for obj in resp.get("Contents", []):
