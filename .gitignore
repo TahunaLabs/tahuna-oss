@@ -4,6 +4,7 @@
 **/dummy/
 **/output/
 db.json
+presets/
 
 # Python cache and environments
 __pycache__/
