@@ -6,27 +6,41 @@ on:
       - 'backend/templates/**'
   workflow_dispatch:
 
-env:
-  REGISTRY: docker.io
-  
 jobs:
+  # First job: read images.json and output matrix
+  matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      images: ${{ steps.set-matrix.outputs.images }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: set-matrix
+        run: |
+          # Convert images.json to matrix format: [{tag, base}, ...]
+          MATRIX=$(jq -c '[to_entries[] | .key as $fw | .value | to_entries[] | {tag: "\($fw)-\(.key)", base: .value}]' backend/templates/images.json)
+          echo "images=$MATRIX" >> $GITHUB_OUTPUT
+
+  # Second job: build each image
   build:
+    needs: matrix
     runs-on: ubuntu-latest
     environment: dev
     strategy:
+      fail-fast: false
+      max-parallel: 1
       matrix:
-        include:
-          - tag: pt-2.8.0-cu128
-            base: runpod/pytorch:1.0.2-cu1281-torch280-ubuntu2404
-          - tag: pt-2.4.0-cu124
-            base: runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04
-          - tag: pt-2.2.0-cu121
-            base: runpod/pytorch:2.2.0-py3.10-cuda12.1.1-devel-ubuntu22.04
-          - tag: pt-2.1.0-cu118
-            base: runpod/pytorch:2.1.0-py3.10-cuda11.8.0-devel-ubuntu22.04
-            
+        include: ${{ fromJson(needs.matrix.outputs.images) }}
+        
     steps:
       - uses: actions/checkout@v4
+      
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          sudo docker system prune -af
       
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
