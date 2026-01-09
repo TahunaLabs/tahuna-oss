@@ -4,10 +4,31 @@ import runpod
 
 runpod.api_key = os.environ["RUNPOD_API_KEY"]
 
-def launch_pod(env_artifacts: str, input_path: str, output_path: str, gpu_type: str, gpu_count: int, volume_gb: int) -> str:
+
+IMAGES = {
+    "pt": {
+        "2.8.0-cu128": "runpod/pytorch:1.0.2-cu1281-torch280-ubuntu2404",
+        "2.4.0-cu124": "runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04",
+        "2.2.0-cu121": "runpod/pytorch:2.2.0-py3.10-cuda12.1.1-devel-ubuntu22.04",
+        "2.1.0-cu118": "runpod/pytorch:2.1.0-py3.10-cuda11.8.0-devel-ubuntu22.04",
+    },
+}
+
+def launch_pod(
+    env_artifacts: str,
+    input_path: str,
+    output_path: str,
+    gpu_type: str,
+    gpu_count: int,
+    volume_gb: int,
+    framework: str,
+    version: str,
+    run_id: str,
+) -> str:
+    image_name = IMAGES[framework][version]
     pod = runpod.create_pod(
-        name="boobai",
-        image_name="boobai/runner:latest",
+        name=f"tahuna_{run_id}",
+        image_name=image_name,
         gpu_type_id=gpu_type,
         gpu_count=gpu_count,
         volume_in_gb=volume_gb,
