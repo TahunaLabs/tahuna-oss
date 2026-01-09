@@ -3,6 +3,7 @@
 *.parquet
 **/dummy/
 **/output/
+db.json
 
 # Python cache and environments
 __pycache__/
