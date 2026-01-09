@@ -1,7 +1,7 @@
 import core
 import argparse
 from core.db import create_environment, create_experiment, create_run, get_environment, get_experiment, update_run
-from core.provisioner import launch_pod, wait_for_pod, stream_logs, terminate_pod
+from core.provisioner import launch_pod, wait_for_pod, wait_for_completion, terminate_pod, GPUS, IMAGES
 
 def cmd_create_env(args):
     result = create_environment(
@@ -44,6 +44,7 @@ def cmd_run(args):
         env_artifacts=env["artifacts"],
         input_path=exp["input"],
         output_path=run_info["output"],
+        logs_path=run_info["logs"],
         gpu_type=gpu_type,
         gpu_count=gpu_count,
         volume_gb=volume_gb,
@@ -57,7 +58,7 @@ def cmd_run(args):
     update_run(run_id, status="running")
     
     try:
-        stream_logs(pod_id)
+        wait_for_completion(pod_id)
         update_run(run_id, status="completed")
     except Exception as e:
         update_run(run_id, status="failed", error=str(e))
@@ -71,10 +72,10 @@ if __name__ == "__main__":
     # create-env
     p_env = sub.add_parser("create-env")
     p_env.add_argument("--name", required=True)
-    p_env.add_argument("--gpu-type", required=True)
+    p_env.add_argument("--gpu-type", required=True, choices=GPUS)
     p_env.add_argument("--gpu-count", type=int, required=True)
     p_env.add_argument("--volume-gb", type=int, required=True)
-    p_env.add_argument("--framework", required=True, choices=["pt"])
+    p_env.add_argument("--framework", required=True, choices=list(IMAGES.keys()))
     p_env.add_argument("--version", required=True)
     p_env.set_defaults(func=cmd_create_env)
     
