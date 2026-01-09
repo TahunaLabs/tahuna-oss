@@ -7,7 +7,7 @@ import runpod
 runpod.api_key = os.environ["RUNPOD_API_KEY"]
 
 # Docker Hub username for custom images
-DOCKER_USER = os.environ.get("DOCKER_USER", "tahuna")
+DOCKER_USER = os.environ["DOCKER_USER"]
 
 # Load base images from templates/images.json
 _images_path = Path(__file__).parent.parent / "templates" / "images.json"
