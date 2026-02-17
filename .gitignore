@@ -1,10 +1,13 @@
 *.csv
 *.xlsx
 *.parquet
-**/dummy/
 **/output/
 db.json
 presets/
+
+**/dummy/
+**/dummy
+**/dummy.*
 
 # Python cache and environments
 __pycache__/
