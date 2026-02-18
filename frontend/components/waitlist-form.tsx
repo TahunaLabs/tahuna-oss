@@ -33,7 +33,7 @@ export function WaitlistForm() {
         </div>
         <h3 className="text-2xl font-medium mb-4">You're in.</h3>
         <p className="text-muted-foreground leading-relaxed max-w-md mx-auto mb-4">
-          Thanks for joining the Markovi waitlist. As we open up early access, we'll prioritize people with concrete
+          Thanks for joining the Tahuna waitlist. As we open up early access, we'll prioritize people with concrete
           agent use-cases and share behind-the-scenes updates on the platform, the environments we're launching first,
           and opportunities to help shape The Layers.
         </p>
@@ -108,7 +108,7 @@ export function WaitlistForm() {
       <div className="flex items-start gap-3">
         <Checkbox id="updates" className="mt-0.5" />
         <Label htmlFor="updates" className="text-sm text-muted-foreground font-normal cursor-pointer">
-          I'd like early access and occasional product updates from Markovi.
+          I'd like early access and occasional product updates from Tahuna.
         </Label>
       </div>
 

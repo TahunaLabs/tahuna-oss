@@ -7,7 +7,7 @@ export function Footer() {
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
           <div className="flex items-center gap-6">
             <Link href="/" className="text-2xl font-serif font-semibold tracking-tight text-foreground">
-              Markovi
+              Tahuna
             </Link>
             <div className="flex items-center gap-2">
               <div className="w-1.5 h-1.5 rounded-full bg-green-400" />
@@ -20,7 +20,7 @@ export function Footer() {
               Documentation
             </Link>
             <Link href="#" className="hover:text-foreground transition-colors">
-              X @markovi
+              X @Tahuna
             </Link>
             <Link href="#" className="hover:text-foreground transition-colors">
               Terms

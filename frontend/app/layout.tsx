@@ -13,7 +13,7 @@ const cormorant = Cormorant_Garamond({
 })
 
 export const metadata: Metadata = {
-  title: "Markovi | RL-as-a-Service",
+  title: "Tahuna | RL-as-a-Service",
   description:
     "The substrate for agents that actually learn. RL-as-a-Service: a training substrate where AI agents practice, adapt, and improve through experience.",
 }

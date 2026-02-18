@@ -20,7 +20,7 @@ export function Hero() {
           <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-10">
             <div className="max-w-md">
               <p className="text-lg md:text-xl text-foreground/80 leading-relaxed mb-3">
-                Markovi is the frontier training substrate that lets you wield the full power of leading models.
+                Tahuna is the frontier training substrate that lets you wield the full power of leading models.
               </p>
               <p className="text-base text-muted-foreground">
                 Pay as you go, with no markup for individuals.

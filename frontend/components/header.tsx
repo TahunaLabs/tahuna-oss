@@ -8,9 +8,8 @@ export function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   const navLinks = [
-    { label: "Chronicle", href: "#news" },
-    { label: "The Layers", href: "#layers" },
-    { label: "Models", href: "#models" },
+    { label: "Manifesto", href: "#manifesto" },
+    { label: "The Stack", href: "#layers" },
   ]
 
   return (
@@ -18,7 +17,7 @@ export function Header() {
       <nav className="mx-auto max-w-7xl px-6 py-4 flex items-center justify-between">
         {/* Logo */}
         <Link href="/" className="text-2xl font-serif font-semibold tracking-tight text-foreground">
-          Markovi
+          Tahuna
         </Link>
 
         {/* Desktop Navigation */}

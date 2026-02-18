@@ -27,7 +27,7 @@ export function Manifesto() {
           </p>
 
           <p className="text-foreground font-medium">
-            Markovi brings this capability to everyone. Train, evaluate, and iterate on agentic
+            Tahuna brings this capability to everyone. Train, evaluate, and iterate on agentic
             reasoners — with clean reward signals, rigorous evaluation, and continuous improvement
             loops — without needing a research lab to do it.
           </p>

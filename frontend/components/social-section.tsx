@@ -79,7 +79,7 @@ export function SocialSection() {
 
           <div className="flex items-center gap-6">
             <p className="text-lg md:text-xl font-serif text-foreground/80">
-              See how people are building with Markovi
+              See how people are building with Tahuna
             </p>
             <div className="hidden md:flex items-center gap-2">
               <button

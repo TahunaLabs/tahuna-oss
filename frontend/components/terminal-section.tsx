@@ -8,8 +8,8 @@ export function TerminalSection() {
   const [activeTab, setActiveTab] = useState<"mac" | "windows">("mac")
 
   const commands = {
-    mac: "curl -fsSL https://markovi.dev/install | sh",
-    windows: "irm https://markovi.dev/install | iex",
+    mac: "curl -fsSL https://Tahuna.dev/install | sh",
+    windows: "irm https://Tahuna.dev/install | iex",
   }
 
   const handleCopy = () => {
@@ -29,7 +29,7 @@ export function TerminalSection() {
                 Install
               </span>
               <span className="text-xs font-mono uppercase tracking-widest text-muted-foreground">
-                Markovi
+                Tahuna
               </span>
             </div>
             <h2 className="text-3xl md:text-4xl font-serif tracking-tight text-foreground">
@@ -48,14 +48,14 @@ export function TerminalSection() {
                   <div className="w-3 h-3 rounded-full bg-muted-foreground/30" />
                   <div className="w-3 h-3 rounded-full bg-muted-foreground/30" />
                 </div>
-                <span className="text-xs font-mono text-muted-foreground ml-2">markovi</span>
+                <span className="text-xs font-mono text-muted-foreground ml-2">Tahuna</span>
               </div>
 
               {/* Terminal content */}
               <div className="p-5 font-mono text-sm space-y-3 min-h-[280px]">
                 <div className="flex items-start gap-2">
                   <span className="text-primary shrink-0">{">"}</span>
-                  <span className="text-foreground/80">markovi train</span>
+                  <span className="text-foreground/80">Tahuna train</span>
                   <span className="text-muted-foreground">--config reward-shaping.yaml</span>
                 </div>
                 <p className="text-muted-foreground pl-5 text-xs leading-relaxed">
