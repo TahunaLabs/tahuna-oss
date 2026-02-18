@@ -5,73 +5,72 @@ export function Layers() {
     {
       icon: Box,
       title: "The Gym",
-      subtitle: "Simulated Work Environments",
-      description: "Digital sandboxes where agents actually practice.",
+      subtitle: "Sandbox Environments",
+      description: "Plug in your own scenarios or use ours — your agents practice in realistic sandboxes before they ever touch production.",
       features: [
-        "Customer Support Simulators for multi-turn conversations, escalations, and sentiment shifts.",
-        "Enterprise Software Environments that mimic tools like Jira, ServiceNow, CRMs, and internal dashboards.",
-        "Industrial Digital Twins for supply chains, manufacturing, energy, and other high-stakes systems.",
+        "Customer support simulators with multi-turn conversations and escalations.",
+        "Enterprise software environments that mimic Jira, ServiceNow, CRMs, and dashboards.",
+        "Industrial digital twins for supply chains, manufacturing, and high-stakes systems.",
       ],
-      tagline: "We build the environments where your agents practice.",
+      tagline: "Where your agents learn by doing.",
     },
     {
       icon: Scale,
       title: "The Judge",
-      subtitle: "Evaluation & Reward Engine",
-      description: "Autograders and reward functions that define what good looks like.",
+      subtitle: "Rewards & Evaluation",
+      description: "Define what 'good' looks like — then let the system score, rank, and compare.",
       features: [
-        "Multi-metric scoring (quality, speed, cost, safety, policy adherence).",
-        "Reward design tools to encode your business goals as learnable signals.",
-        "Benchmark suites and leaderboards to compare agents, reward functions, and training strategies.",
+        "Multi-metric scoring: quality, speed, cost, safety, and policy adherence.",
+        "Reward design tools that turn your business goals into learnable signals.",
+        "Leaderboards to compare agents, reward functions, and training strategies.",
       ],
-      tagline: "If prompts are how you talk to a model, rewards are how you teach it.",
+      tagline: "Rewards are the new prompts.",
     },
     {
       icon: BookOpen,
       title: "The Curriculum",
-      subtitle: "Task Distributions & Interaction Traces",
-      description: "Massive, structured experience for agents to learn from.",
+      subtitle: "Tasks & Data",
+      description: "Rich, structured experience for agents to learn from — no manual labeling required.",
       features: [
-        "Libraries of common workflows: triage tickets, resolve incidents, update records, orchestrate tools.",
+        "Pre-built workflow libraries: triage tickets, resolve incidents, orchestrate tools.",
         "Human-in-the-loop data: demonstrations, corrections, and preferences.",
-        "Synthetic data generators to create rich, diverse scenarios at scale.",
+        "Synthetic data generators that create diverse scenarios at scale.",
       ],
-      tagline: "The goal: give agents the millions of interactions they need to learn robust behavior.",
+      tagline: "Millions of interactions, ready to go.",
     },
     {
       icon: Cpu,
       title: "The Runtime",
-      subtitle: "Training & Orchestration",
-      description: "The infrastructure that actually runs RL at scale.",
+      subtitle: "One-Click Training",
+      description: "Distributed RL training that just works — configure, launch, iterate.",
       features: [
-        "Distributed rollouts, replay buffers, and policy updates.",
-        "Support for RL, imitation learning, offline RL, and RLHF/RLAIF.",
-        "Experiment tracking, hyperparameter sweeps, and reproducible training runs.",
+        "Distributed rollouts, replay buffers, and policy updates out of the box.",
+        "RL, imitation learning, offline RL, and RLHF/RLAIF — all supported.",
+        "Experiment tracking, hyperparameter sweeps, and reproducible runs.",
       ],
-      tagline: "You define the agents and environments. The runtime handles the rest.",
+      tagline: "You define the goal. The runtime handles the rest.",
     },
     {
       icon: Shield,
       title: "The Bridge",
-      subtitle: "Deployment, Monitoring & Safety",
-      description: "Where trained policies meet the real world.",
+      subtitle: "Deploy & Monitor",
+      description: "Ship trained agents safely — shadow deployments, canary rollouts, one-click rollbacks.",
       features: [
         "Serve agents into your products, tools, and internal workflows.",
-        "Shadow deployments and canary rollouts before full production.",
-        "Monitoring for drift, regressions, and safety violations, with one-click rollbacks.",
+        "Shadow deployments and canary rollouts before going live.",
+        "Monitoring for drift, regressions, and safety violations.",
       ],
-      tagline: "Agents don't just train somewhere else—they keep learning, safely, in your stack.",
+      tagline: "From training to production, safely.",
     },
   ]
 
   return (
     <section id="layers" className="py-24 md:py-32 px-6 bg-background/50 backdrop-blur-sm">
       <div className="mx-auto max-w-4xl">
-        <h2 className="text-3xl md:text-4xl font-medium tracking-tight mb-4">The Layers</h2>
+        <h2 className="text-3xl md:text-4xl font-medium tracking-tight mb-4">The Stack</h2>
 
         <p className="text-lg text-muted-foreground leading-relaxed mb-16 max-w-3xl">
-          We provide a stack: environments, evaluators, data, training infrastructure, and deployment tooling - wired
-          together so agents can safely and iteratively learn from interactions.
+          Everything you need to go from idea to specific intelligence — no PhD required.
         </p>
 
         <div className="space-y-8">
