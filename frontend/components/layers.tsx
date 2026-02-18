@@ -65,7 +65,7 @@ export function Layers() {
   ]
 
   return (
-    <section id="layers" className="py-24 md:py-32 px-6">
+    <section id="layers" className="py-24 md:py-32 px-6 bg-background/50 backdrop-blur-sm">
       <div className="mx-auto max-w-4xl">
         <h2 className="text-3xl md:text-4xl font-medium tracking-tight mb-4">The Layers</h2>
 
@@ -76,8 +76,9 @@ export function Layers() {
 
         <div className="space-y-8">
           {layers.map((layer, index) => (
-            <div key={layer.title} className="bg-card rounded-lg p-8 border border-border">
-              <div className="flex items-start gap-4 mb-4">
+            <div key={layer.title} className="relative rounded-lg p-8 border border-border overflow-hidden">
+              <div className="absolute inset-0 bg-background/50 backdrop-blur-sm -z-10" />
+              <div className="flex items-start gap-4 mb-4 relative z-10">
                 <div className="p-2 bg-secondary rounded-md">
                   <layer.icon className="h-5 w-5" />
                 </div>
@@ -91,9 +92,9 @@ export function Layers() {
                 </div>
               </div>
 
-              <p className="text-muted-foreground mb-4">{layer.description}</p>
+              <p className="text-muted-foreground mb-4 relative z-10">{layer.description}</p>
 
-              <ul className="space-y-2 mb-4">
+              <ul className="space-y-2 mb-4 relative z-10">
                 {layer.features.map((feature, i) => (
                   <li key={i} className="text-sm text-muted-foreground flex items-start gap-2">
                     <span className="text-foreground mt-1.5">•</span>
@@ -102,7 +103,7 @@ export function Layers() {
                 ))}
               </ul>
 
-              <p className="text-sm font-medium italic">{layer.tagline}</p>
+              <p className="text-sm font-medium italic relative z-10">{layer.tagline}</p>
             </div>
           ))}
         </div>

@@ -27,7 +27,7 @@ export function Manifesto() {
   ]
 
   return (
-    <section id="manifesto" className="py-24 md:py-32 px-6 bg-card">
+    <section id="manifesto" className="py-24 md:py-32 px-6 bg-background/50 backdrop-blur-sm">
       <div className="mx-auto max-w-4xl">
         <h2 className="text-3xl md:text-4xl font-medium tracking-tight mb-8">The Markovi Manifesto</h2>
 
