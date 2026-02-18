@@ -12,7 +12,7 @@ export function Layers() {
         "Enterprise Software Environments that mimic tools like Jira, ServiceNow, CRMs, and internal dashboards.",
         "Industrial Digital Twins for supply chains, manufacturing, energy, and other high-stakes systems.",
       ],
-      tagline: "Here is where agents learn workflows, not just words.",
+      tagline: "We build the environments where your agents practice.",
     },
     {
       icon: Scale,

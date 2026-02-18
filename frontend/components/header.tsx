@@ -11,7 +11,6 @@ export function Header() {
     { label: "Chronicle", href: "#news" },
     { label: "The Layers", href: "#layers" },
     { label: "Models", href: "#models" },
-    { label: "Pricing", href: "#pricing" },
   ]
 
   return (
@@ -35,15 +34,9 @@ export function Header() {
           ))}
           <Link
             href="#waitlist"
-            className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-          >
-            Sign In
-          </Link>
-          <Link
-            href="#waitlist"
             className="text-sm font-medium text-foreground border border-foreground/30 rounded-full px-5 py-2 hover:bg-foreground/5 transition-colors"
           >
-            Get Started
+            Get in Touch
           </Link>
         </div>
 
@@ -72,17 +65,10 @@ export function Header() {
           ))}
           <Link
             href="#waitlist"
-            className="block text-sm text-muted-foreground hover:text-foreground"
-            onClick={() => setMobileMenuOpen(false)}
-          >
-            Sign In
-          </Link>
-          <Link
-            href="#waitlist"
             className="block text-sm font-medium text-foreground border border-foreground/30 rounded-full px-5 py-2 text-center hover:bg-foreground/5 transition-colors"
             onClick={() => setMobileMenuOpen(false)}
           >
-            Get Started
+            Get in Touch
           </Link>
         </div>
       )}

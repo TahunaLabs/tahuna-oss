@@ -31,7 +31,7 @@ export function Hero() {
               href="#waitlist"
               className="inline-flex items-center gap-2 text-base font-medium text-foreground border border-foreground/30 rounded-full px-8 py-3.5 hover:bg-foreground/5 transition-colors self-start"
             >
-              Get Started for Free
+              Get in Touch
               <ArrowRight className="h-4 w-4" />
             </Link>
           </div>
