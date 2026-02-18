@@ -2,7 +2,7 @@ import { WaitlistForm } from "./waitlist-form"
 
 export function Waitlist() {
   return (
-    <section id="waitlist" className="py-24 md:py-32 px-6 bg-card">
+    <section id="waitlist" className="py-24 md:py-32 px-6 bg-background/10 backdrop-blur-sm">
       <div className="mx-auto max-w-xl">
         <h2 className="text-3xl md:text-4xl font-medium tracking-tight mb-4 text-center">Get in Touch</h2>
 

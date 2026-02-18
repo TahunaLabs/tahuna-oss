@@ -45,7 +45,7 @@ export function Layers() {
   ]
 
   return (
-    <section id="layers" className="py-24 md:py-32 px-6 bg-background/50 backdrop-blur-sm">
+    <section id="layers" className="py-24 md:py-32 px-6 bg-background/15 backdrop-blur-sm">
       <div className="mx-auto max-w-4xl">
         <h2 className="text-3xl md:text-4xl font-medium tracking-tight mb-4">The Stack</h2>
 

@@ -1,6 +1,6 @@
 export function Manifesto() {
   return (
-    <section id="manifesto" className="py-24 md:py-32 px-6 bg-background/50 backdrop-blur-sm">
+    <section id="manifesto" className="py-24 md:py-32 px-6 bg-background/30 backdrop-blur-sm">
       <div className="mx-auto max-w-4xl">
         <h2 className="text-4xl md:text-5xl lg:text-6xl font-serif italic tracking-tight mb-12 text-foreground">
           Vibe Research.
