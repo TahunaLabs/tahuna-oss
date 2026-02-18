@@ -8,22 +8,28 @@ export function Manifesto() {
 
         <div className="space-y-6 text-lg text-muted-foreground leading-relaxed max-w-3xl">
           <p>
-            You can&apos;t prompt your way into high-quality agentic behavior. Prompts are brittle.
-            The more complex your system — the more steps, the more tools, the more edge cases — the
-            faster a generic model drifts, hallucinates, or breaks.
+            You can&apos;t prompt your way into high-quality agentic behavior. And you can&apos;t
+            brute-force it with scale alone. The last decade was defined by throwing larger volumes
+            of compute at larger monolithic systems — but intelligence shouldn&apos;t be frozen in
+            training data or updated in slow, expensive cycles.
           </p>
 
           <p>
-            Reinforcement learning is the mechanism that changes this. It takes something that works
-            &ldquo;okay&rdquo; in simple settings and makes it robust enough to handle long-horizon,
-            multi-step tasks reliably. This is exactly how the frontier labs are building their next
-            generation of models — and the results speak for themselves.
+            We&apos;re betting against brute-force scaling. Where others chase size, we&apos;re
+            building adaptability-first systems — efficient AI that continually learns.
+          </p>
+
+          <p>
+            Post-training the mechanism that makes this possible. It takes something that
+            works &ldquo;okay&rdquo; in simple settings and makes it robust enough to handle
+            long-horizon, multi-step tasks reliably. This is exactly how the frontier labs are
+            building their next generation of models — and the results speak for themselves.
           </p>
 
           <p className="text-foreground font-medium">
-            Markovi brings this capability to everyone. We make it possible to train, evaluate, and
-            iterate on agentic reasoners — with clean reward signals, rigorous evaluation, and
-            continuous improvement loops — without needing a research lab to do it.
+            Markovi brings this capability to everyone. Train, evaluate, and iterate on agentic
+            reasoners — with clean reward signals, rigorous evaluation, and continuous improvement
+            loops — without needing a research lab to do it.
           </p>
 
           <p>
