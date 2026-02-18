@@ -1,30 +1,37 @@
-# Markovi landing page
+# Tahuna
 
-*Automatically synced with your [v0.app](https://v0.app) deployments*
+Landing page for Tahuna — making agentic reasoner training accessible, fun, and scalable.
 
-[![Deployed on Vercel](https://img.shields.io/badge/Deployed%20on-Vercel-black?style=for-the-badge&logo=vercel)](https://vercel.com/mouns-projects-7de3c0fb/v0-markovi-landing-page)
-[![Built with v0](https://img.shields.io/badge/Built%20with-v0.app-black?style=for-the-badge)](https://v0.app/chat/j7vvFNpwAC5)
+## Getting Started
 
-## Overview
+```bash
+cd frontend
+npm install
+npm run dev
+```
 
-This repository will stay in sync with your deployed chats on [v0.app](https://v0.app).
-Any changes you make to your deployed app will be automatically pushed to this repository from [v0.app](https://v0.app).
+The dev server runs at [http://localhost:3000](http://localhost:3000).
 
-## Deployment
+## Tech Stack
 
-Your project is live at:
+- **Framework**: Next.js (App Router)
+- **Styling**: Tailwind CSS
+- **Language**: TypeScript
 
-**[https://vercel.com/mouns-projects-7de3c0fb/v0-markovi-landing-page](https://vercel.com/mouns-projects-7de3c0fb/v0-markovi-landing-page)**
+## Project Structure
 
-## Build your app
-
-Continue building your app on:
-
-**[https://v0.app/chat/j7vvFNpwAC5](https://v0.app/chat/j7vvFNpwAC5)**
-
-## How It Works
-
-1. Create and modify your project using [v0.app](https://v0.app)
-2. Deploy your chats from the v0 interface
-3. Changes are automatically pushed to this repository
-4. Vercel deploys the latest version from this repository
+```
+frontend/
+├── app/              # Next.js app router pages
+├── components/       # React components
+│   ├── header.tsx        # Navigation bar
+│   ├── hero.tsx          # Hero section
+│   ├── terminal-section.tsx  # Terminal demo + install command
+│   ├── manifesto.tsx     # "Vibe Research" thesis
+│   ├── layers.tsx        # "The Stack" — product layers
+│   ├── waitlist.tsx      # Get in Touch form
+│   ├── footer.tsx        # Footer
+│   └── ui/               # Shared UI primitives
+├── public/           # Static assets
+└── lib/              # Utilities
+```

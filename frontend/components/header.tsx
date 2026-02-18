@@ -8,10 +8,8 @@ export function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   const navLinks = [
-    { label: "Chronicle", href: "#news" },
-    { label: "The Layers", href: "#layers" },
-    { label: "Models", href: "#models" },
-    { label: "Pricing", href: "#pricing" },
+    { label: "Manifesto", href: "#manifesto" },
+    { label: "The Stack", href: "#layers" },
   ]
 
   return (
@@ -19,7 +17,7 @@ export function Header() {
       <nav className="mx-auto max-w-7xl px-6 py-4 flex items-center justify-between">
         {/* Logo */}
         <Link href="/" className="text-2xl font-serif font-semibold tracking-tight text-foreground">
-          Markovi
+          Tahuna
         </Link>
 
         {/* Desktop Navigation */}
@@ -35,15 +33,9 @@ export function Header() {
           ))}
           <Link
             href="#waitlist"
-            className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-          >
-            Sign In
-          </Link>
-          <Link
-            href="#waitlist"
             className="text-sm font-medium text-foreground border border-foreground/30 rounded-full px-5 py-2 hover:bg-foreground/5 transition-colors"
           >
-            Get Started
+            Get in Touch
           </Link>
         </div>
 
@@ -72,17 +64,10 @@ export function Header() {
           ))}
           <Link
             href="#waitlist"
-            className="block text-sm text-muted-foreground hover:text-foreground"
-            onClick={() => setMobileMenuOpen(false)}
-          >
-            Sign In
-          </Link>
-          <Link
-            href="#waitlist"
             className="block text-sm font-medium text-foreground border border-foreground/30 rounded-full px-5 py-2 text-center hover:bg-foreground/5 transition-colors"
             onClick={() => setMobileMenuOpen(false)}
           >
-            Get Started
+            Get in Touch
           </Link>
         </div>
       )}

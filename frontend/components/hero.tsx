@@ -20,7 +20,7 @@ export function Hero() {
           <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-10">
             <div className="max-w-md">
               <p className="text-lg md:text-xl text-foreground/80 leading-relaxed mb-3">
-                Markovi is the frontier training substrate that lets you wield the full power of leading models.
+                Tahuna is the frontier training substrate that lets you wield the full power of leading models.
               </p>
               <p className="text-base text-muted-foreground">
                 Pay as you go, with no markup for individuals.
@@ -31,7 +31,7 @@ export function Hero() {
               href="#waitlist"
               className="inline-flex items-center gap-2 text-base font-medium text-foreground border border-foreground/30 rounded-full px-8 py-3.5 hover:bg-foreground/5 transition-colors self-start"
             >
-              Get Started for Free
+              Get in Touch
               <ArrowRight className="h-4 w-4" />
             </Link>
           </div>

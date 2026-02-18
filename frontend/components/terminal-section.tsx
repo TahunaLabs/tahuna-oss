@@ -8,8 +8,8 @@ export function TerminalSection() {
   const [activeTab, setActiveTab] = useState<"mac" | "windows">("mac")
 
   const commands = {
-    mac: "curl -fsSL https://markovi.dev/install | sh",
-    windows: "irm https://markovi.dev/install | iex",
+    mac: "curl -fsSL https://Tahuna.dev/install | sh",
+    windows: "irm https://Tahuna.dev/install | iex",
   }
 
   const handleCopy = () => {
@@ -29,7 +29,7 @@ export function TerminalSection() {
                 Install
               </span>
               <span className="text-xs font-mono uppercase tracking-widest text-muted-foreground">
-                Markovi
+                Tahuna
               </span>
             </div>
             <h2 className="text-3xl md:text-4xl font-serif tracking-tight text-foreground">
@@ -48,68 +48,67 @@ export function TerminalSection() {
                   <div className="w-3 h-3 rounded-full bg-muted-foreground/30" />
                   <div className="w-3 h-3 rounded-full bg-muted-foreground/30" />
                 </div>
-                <span className="text-xs font-mono text-muted-foreground ml-2">markovi</span>
+                <span className="text-xs font-mono text-muted-foreground ml-2">Tahuna</span>
               </div>
 
               {/* Terminal content */}
               <div className="p-5 font-mono text-sm space-y-3 min-h-[280px]">
                 <div className="flex items-start gap-2">
                   <span className="text-primary shrink-0">{">"}</span>
-                  <span className="text-foreground/80">Thinking</span>
-                  <span className="text-muted-foreground">{">"}</span>
+                  <span className="text-foreground/80">Tahuna train</span>
+                  <span className="text-muted-foreground">--config reward-shaping.yaml</span>
                 </div>
                 <p className="text-muted-foreground pl-5 text-xs leading-relaxed">
-                  Let me check how the training environments work in the simulated sandbox and how the reward signals propagate.
+                  Setting up post-training pipeline for agentic reasoner...
                 </p>
                 <div className="space-y-1.5 pl-5">
                   <div className="flex items-center gap-2 text-xs">
-                    <span className="text-red-400">x</span>
-                    <span className="text-muted-foreground">Read</span>
-                    <span className="text-primary/70 underline">/agents/training/sandbox-env.ts</span>
+                    <span className="text-green-400">✓</span>
+                    <span className="text-muted-foreground">Loading base model</span>
+                    <span className="text-primary/70">MiniMax-M2.5</span>
                   </div>
                   <div className="flex items-center gap-2 text-xs">
-                    <span className="text-red-400">x</span>
-                    <span className="text-muted-foreground">Read</span>
-                    <span className="text-primary/70 underline">/agents/training/reward-signals.ts</span>
+                    <span className="text-green-400">✓</span>
+                    <span className="text-muted-foreground">Initializing reward signals</span>
+                    <span className="text-primary/70">quality, safety, cost</span>
                   </div>
                   <div className="flex items-center gap-2 text-xs">
-                    <span className="text-red-400">x</span>
-                    <span className="text-muted-foreground">Read</span>
-                    <span className="text-primary/70 underline">/agents/training/feedback-loop.ts</span>
+                    <span className="text-green-400">✓</span>
+                    <span className="text-muted-foreground">Spinning up sandbox environment</span>
+                    <span className="text-primary/70">customer-support-sim</span>
                   </div>
                 </div>
                 <p className="text-muted-foreground pl-5 text-xs leading-relaxed">
-                  Let me find where these modules actually are:
+                  Running RL training loop — episode 1/500
                 </p>
                 <div className="space-y-1.5 pl-5">
                   <div className="flex items-center gap-2 text-xs">
                     <span className="text-green-400">{">"}</span>
-                    <span className="text-muted-foreground">Grep</span>
-                    <span className="text-primary/60">class SandboxEnv</span>
-                    <span className="text-muted-foreground">in /agents/training</span>
+                    <span className="text-muted-foreground">Reward</span>
+                    <span className="text-primary/60">+0.82</span>
+                    <span className="text-muted-foreground">| Steps</span>
+                    <span className="text-primary/60">14</span>
+                    <span className="text-muted-foreground">| Policy loss</span>
+                    <span className="text-primary/60">0.031</span>
                   </div>
                   <div className="flex items-center gap-2 text-xs">
                     <span className="text-green-400">{">"}</span>
-                    <span className="text-muted-foreground">Grep</span>
-                    <span className="text-primary/60">class RewardPropagator</span>
-                    <span className="text-muted-foreground">in /agents/training</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-xs">
-                    <span className="text-green-400">{">"}</span>
-                    <span className="text-muted-foreground">Grep</span>
-                    <span className="text-primary/60">class FeedbackLoop</span>
-                    <span className="text-muted-foreground">in /agents/training</span>
+                    <span className="text-muted-foreground">Eval pass rate</span>
+                    <span className="text-primary/60">73.2%</span>
+                    <span className="text-muted-foreground">→</span>
+                    <span className="text-green-400">89.1%</span>
+                    <span className="text-muted-foreground">(+15.9%)</span>
                   </div>
                 </div>
 
                 {/* Bottom bar */}
                 <div className="flex items-center justify-between pt-4 border-t border-border mt-4">
                   <div className="bg-muted px-3 py-1 rounded text-xs text-muted-foreground">
-                    smart
+                    training
                   </div>
                   <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                    <span>/agents/training</span>
-                    <span>27% of 168k</span>
+                    <span>episode 1/500</span>
+                    <span>ETA 2h 14m</span>
                   </div>
                 </div>
               </div>
@@ -123,21 +122,19 @@ export function TerminalSection() {
               <div className="flex items-center gap-1 bg-card border border-border rounded-full overflow-hidden">
                 <button
                   onClick={() => setActiveTab("mac")}
-                  className={`text-xs font-mono px-4 py-2 transition-colors ${
-                    activeTab === "mac"
-                      ? "bg-foreground/10 text-foreground"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
+                  className={`text-xs font-mono px-4 py-2 transition-colors ${activeTab === "mac"
+                    ? "bg-foreground/10 text-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                    }`}
                 >
                   Mac/Linux
                 </button>
                 <button
                   onClick={() => setActiveTab("windows")}
-                  className={`text-xs font-mono px-4 py-2 transition-colors ${
-                    activeTab === "windows"
-                      ? "bg-foreground/10 text-foreground"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
+                  className={`text-xs font-mono px-4 py-2 transition-colors ${activeTab === "windows"
+                    ? "bg-foreground/10 text-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                    }`}
                 >
                   Windows
                 </button>

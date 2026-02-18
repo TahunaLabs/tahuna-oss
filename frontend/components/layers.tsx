@@ -5,79 +5,59 @@ export function Layers() {
     {
       icon: Box,
       title: "The Gym",
-      subtitle: "Simulated Work Environments",
-      description: "Digital sandboxes where agents actually practice.",
-      features: [
-        "Customer Support Simulators for multi-turn conversations, escalations, and sentiment shifts.",
-        "Enterprise Software Environments that mimic tools like Jira, ServiceNow, CRMs, and internal dashboards.",
-        "Industrial Digital Twins for supply chains, manufacturing, energy, and other high-stakes systems.",
-      ],
-      tagline: "Here is where agents learn workflows, not just words.",
+      subtitle: "Sandbox Environments",
+      description:
+        "Realistic sandboxes where your agents practice — customer support simulators, enterprise software environments, industrial digital twins. Plug in your own scenarios or use ours.",
+      tagline: "Where your agents learn by doing.",
     },
     {
       icon: Scale,
       title: "The Judge",
-      subtitle: "Evaluation & Reward Engine",
-      description: "Autograders and reward functions that define what good looks like.",
-      features: [
-        "Multi-metric scoring (quality, speed, cost, safety, policy adherence).",
-        "Reward design tools to encode your business goals as learnable signals.",
-        "Benchmark suites and leaderboards to compare agents, reward functions, and training strategies.",
-      ],
-      tagline: "If prompts are how you talk to a model, rewards are how you teach it.",
+      subtitle: "Rewards & Evaluation",
+      description:
+        "Define what 'good' looks like with multi-metric scoring, reward design tools, and leaderboards. Turn your business goals into learnable signals.",
+      tagline: "Rewards are the new prompts.",
     },
     {
       icon: BookOpen,
       title: "The Curriculum",
-      subtitle: "Task Distributions & Interaction Traces",
-      description: "Massive, structured experience for agents to learn from.",
-      features: [
-        "Libraries of common workflows: triage tickets, resolve incidents, update records, orchestrate tools.",
-        "Human-in-the-loop data: demonstrations, corrections, and preferences.",
-        "Synthetic data generators to create rich, diverse scenarios at scale.",
-      ],
-      tagline: "The goal: give agents the millions of interactions they need to learn robust behavior.",
+      subtitle: "Tasks & Data",
+      description:
+        "Pre-built workflow libraries, human-in-the-loop demonstrations, and synthetic data generators. Rich, structured experience for agents to learn from — no manual labeling required.",
+      tagline: "Millions of interactions, ready to go.",
     },
     {
       icon: Cpu,
       title: "The Runtime",
-      subtitle: "Training & Orchestration",
-      description: "The infrastructure that actually runs RL at scale.",
-      features: [
-        "Distributed rollouts, replay buffers, and policy updates.",
-        "Support for RL, imitation learning, offline RL, and RLHF/RLAIF.",
-        "Experiment tracking, hyperparameter sweeps, and reproducible training runs.",
-      ],
-      tagline: "You define the agents and environments. The runtime handles the rest.",
+      subtitle: "One-Click Training",
+      description:
+        "Distributed RL training that just works. Rollouts, replay buffers, policy updates, experiment tracking, and hyperparameter sweeps — all out of the box.",
+      tagline: "You define the goal. The runtime handles the rest.",
     },
     {
       icon: Shield,
       title: "The Bridge",
-      subtitle: "Deployment, Monitoring & Safety",
-      description: "Where trained policies meet the real world.",
-      features: [
-        "Serve agents into your products, tools, and internal workflows.",
-        "Shadow deployments and canary rollouts before full production.",
-        "Monitoring for drift, regressions, and safety violations, with one-click rollbacks.",
-      ],
-      tagline: "Agents don't just train somewhere else—they keep learning, safely, in your stack.",
+      subtitle: "Deploy & Monitor",
+      description:
+        "Ship trained agents into your products with shadow deployments, canary rollouts, drift monitoring, and one-click rollbacks.",
+      tagline: "From training to production, safely.",
     },
   ]
 
   return (
-    <section id="layers" className="py-24 md:py-32 px-6">
+    <section id="layers" className="py-24 md:py-32 px-6 bg-background/15 backdrop-blur-sm">
       <div className="mx-auto max-w-4xl">
-        <h2 className="text-3xl md:text-4xl font-medium tracking-tight mb-4">The Layers</h2>
+        <h2 className="text-3xl md:text-4xl font-medium tracking-tight mb-4">The Stack</h2>
 
         <p className="text-lg text-muted-foreground leading-relaxed mb-16 max-w-3xl">
-          We provide a stack: environments, evaluators, data, training infrastructure, and deployment tooling - wired
-          together so agents can safely and iteratively learn from interactions.
+          Everything you need to go from idea to specific intelligence — no PhD required.
         </p>
 
         <div className="space-y-8">
           {layers.map((layer, index) => (
-            <div key={layer.title} className="bg-card rounded-lg p-8 border border-border">
-              <div className="flex items-start gap-4 mb-4">
+            <div key={layer.title} className="relative rounded-lg p-8 border border-border overflow-hidden">
+              <div className="absolute inset-0 bg-background/50 backdrop-blur-sm -z-10" />
+              <div className="flex items-start gap-4 mb-4 relative z-10">
                 <div className="p-2 bg-secondary rounded-md">
                   <layer.icon className="h-5 w-5" />
                 </div>
@@ -91,18 +71,9 @@ export function Layers() {
                 </div>
               </div>
 
-              <p className="text-muted-foreground mb-4">{layer.description}</p>
+              <p className="text-muted-foreground mb-4 relative z-10">{layer.description}</p>
 
-              <ul className="space-y-2 mb-4">
-                {layer.features.map((feature, i) => (
-                  <li key={i} className="text-sm text-muted-foreground flex items-start gap-2">
-                    <span className="text-foreground mt-1.5">•</span>
-                    {feature}
-                  </li>
-                ))}
-              </ul>
-
-              <p className="text-sm font-medium italic">{layer.tagline}</p>
+              <p className="text-sm font-medium italic relative z-10">{layer.tagline}</p>
             </div>
           ))}
         </div>
