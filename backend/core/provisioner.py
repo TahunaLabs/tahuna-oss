@@ -4,23 +4,33 @@ import json
 from pathlib import Path
 import runpod
 
-runpod.api_key = os.environ["RUNPOD_API_KEY"]
-
-# Docker Hub username for custom images
-DOCKER_USER = os.environ["DOCKER_USER"]
+runpod.api_key = os.environ.get("RUNPOD_API_KEY", "")
 
 # Load base images from templates/images.json
 _images_path = Path(__file__).parent.parent / "templates" / "images.json"
 _base_images = json.loads(_images_path.read_text())
 
-# Build IMAGES dict with custom tags
-IMAGES = {
-    framework: {
-        version: f"{DOCKER_USER}/tahuna:{framework}-{version}"
-        for version in versions
+def _docker_user() -> str:
+    user = os.environ.get("DOCKER_USER")
+    if not user:
+        raise RuntimeError("DOCKER_USER is required to launch pods")
+    return user
+
+def _ensure_runpod_key():
+    if not os.environ.get("RUNPOD_API_KEY"):
+        raise RuntimeError("RUNPOD_API_KEY is required to launch and monitor pods")
+    runpod.api_key = os.environ["RUNPOD_API_KEY"]
+
+def get_images() -> dict:
+    """Build image map from configured Docker Hub namespace."""
+    user = os.environ.get("DOCKER_USER", "local")
+    return {
+        framework: {
+            version: f"{user}/tahuna:{framework}-{version}"
+            for version in versions
+        }
+        for framework, versions in _base_images.items()
     }
-    for framework, versions in _base_images.items()
-}
 
 GPUS = [
     "NVIDIA GeForce RTX 4090",
@@ -69,7 +79,8 @@ def launch_pod(
     version: str,
     run_id: str,
 ) -> str:
-    image_name = IMAGES[framework][version]
+    _ensure_runpod_key()
+    image_name = f"{_docker_user()}/tahuna:{framework}-{version}"
     
     pod = runpod.create_pod(
         name=f"tahuna_{run_id}",
@@ -93,6 +104,7 @@ def launch_pod(
 
 def wait_for_pod(pod_id: str):
     """Wait for pod to be running."""
+    _ensure_runpod_key()
     while True:
         pod = runpod.get_pod(pod_id)
         if pod["desiredStatus"] == "RUNNING" and pod.get("runtime"):
@@ -101,6 +113,7 @@ def wait_for_pod(pod_id: str):
 
 def wait_for_completion(pod_id: str, timeout: int = 3600):
     """Poll pod until it completes or times out."""
+    _ensure_runpod_key()
     start = time.time()
     while time.time() - start < timeout:
         pod = runpod.get_pod(pod_id)
@@ -119,5 +132,5 @@ def wait_for_completion(pod_id: str, timeout: int = 3600):
     raise TimeoutError(f"Pod did not complete within {timeout}s")
 
 def terminate_pod(pod_id: str):
+    _ensure_runpod_key()
     runpod.terminate_pod(pod_id)
-

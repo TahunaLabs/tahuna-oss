@@ -1,4 +1,4 @@
-# boob-ai
+# tahuna
 
 GPU provisioning platform for ML training. Provision GPUs and run your code with minimal setup.
 
@@ -6,7 +6,7 @@ GPU provisioning platform for ML training. Provision GPUs and run your code with
 
 ```
 ├── backend/      # Provisioning service (Python)
-├── sdk/          # Python SDK for users
+├── cli/          # Go CLI for users
 └── frontend/     # Web dashboard (Next.js)
 ```
 
@@ -18,15 +18,25 @@ The provisioning backend that handles GPU allocation via RunPod and storage via 
 ```bash
 cd backend
 uv sync
-uv run python -m core.cli --help
+uv run uvicorn core.api:app --reload --port 8000
 ```
 
-### SDK
-Python SDK for developers to provision GPUs and run training jobs programmatically.
+### CLI
+Go CLI for developers to provision GPUs and run training jobs programmatically.
 
 ```bash
-cd sdk
-pip install -e .
+cd cli
+go run . init
+```
+
+### CLI Install (Homebrew)
+
+Formula template is included at `Formula/tahuna.rb`.
+Update release URL/SHA fields, publish artifacts, then install:
+
+```bash
+brew tap <your-org>/tap
+brew install tahuna
 ```
 
 ### Frontend
@@ -44,4 +54,4 @@ npm run dev
 |-----------|----------|----------------|
 | Backend | GCP Cloud Run | `backend/` |
 | Frontend | Vercel | `frontend/` |
-| SDK | PyPI | `sdk/` |
+| CLI | GitHub Releases / Homebrew (planned) | `cli/` |

@@ -1,9 +1,11 @@
 [project]
-name = "boobai"
+name = "tahuna"
 version = "0.1.0"
 requires-python = ">=3.10"
 dependencies = [
     "runpod",
     "boto3",
     "python-dotenv",
+    "fastapi",
+    "uvicorn",
 ]

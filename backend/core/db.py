@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 from core.storage import create_run_dirs, create_experiment_input_dir, create_env_artifacts_dir
 
-DB_PATH = os.environ.get("BOOBAI_DB", "db.json")
+DB_PATH = os.environ.get("TAHUNA_DB", "db.json")
 
 def _load():
     if Path(DB_PATH).exists():
@@ -32,8 +32,19 @@ def create_environment(name: str, gpu_type: str, gpu_count: int, volume_gb: int,
     _save(db)
     return {"env_id": env_id, "artifacts": artifacts_path}
 
+def list_environments() -> dict:
+    return _load()["environments"]
+
 def get_environment(env_id: str) -> dict:
     return _load()["environments"].get(env_id)
+
+def delete_environment(env_id: str) -> bool:
+    db = _load()
+    if env_id not in db["environments"]:
+        return False
+    del db["environments"][env_id]
+    _save(db)
+    return True
 
 def create_experiment(env_id: str, name: str) -> dict:
     db = _load()
@@ -52,15 +63,27 @@ def create_experiment(env_id: str, name: str) -> dict:
     _save(db)
     return {"exp_id": exp_id, "input": input_path}
 
+def list_experiments() -> dict:
+    return _load()["experiments"]
+
 def get_experiment(exp_id: str) -> dict:
     return _load()["experiments"].get(exp_id)
 
-def create_run(env_id: str, input_path: str) -> dict:
+def delete_experiment(exp_id: str) -> bool:
+    db = _load()
+    if exp_id not in db["experiments"]:
+        return False
+    del db["experiments"][exp_id]
+    _save(db)
+    return True
+
+def create_run(env_id: str, input_path: str, experiment_id: str | None = None) -> dict:
     run_id = str(uuid.uuid4())[:8]
     create_run_dirs(run_id)
     
     run = {
         "env_id": env_id,
+        "experiment_id": experiment_id,
         "input": input_path,
         "output": f"runs/{run_id}/output",
         "logs": f"runs/{run_id}/logs",
@@ -73,6 +96,17 @@ def create_run(env_id: str, input_path: str) -> dict:
 
 def get_run(run_id: str) -> dict:
     return _load()["runs"].get(run_id)
+
+def list_runs() -> dict:
+    return _load()["runs"]
+
+def delete_run(run_id: str) -> bool:
+    db = _load()
+    if run_id not in db["runs"]:
+        return False
+    del db["runs"][run_id]
+    _save(db)
+    return True
 
 def update_run(run_id: str, **fields):
     db = _load()

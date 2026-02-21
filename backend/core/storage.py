@@ -19,22 +19,3 @@ def create_experiment_input_dir(exp_id: str):
 
 def create_env_artifacts_dir(env_id: str):
     s3.put_object(Bucket=BUCKET, Key=f"environments/{env_id}/artifacts/.keep", Body=b"")
-
-def download_prefix(prefix: str, local_dir: str):
-    resp = s3.list_objects_v2(Bucket=BUCKET, Prefix=prefix)
-    for obj in resp.get("Contents", []):
-        key = obj["Key"]
-        local = f"{local_dir}/{os.path.relpath(key, prefix)}"
-        os.makedirs(os.path.dirname(local), exist_ok=True)
-        s3.download_file(BUCKET, key, local)
-
-def download_file(key: str, local: str):
-    os.makedirs(os.path.dirname(local), exist_ok=True)
-    s3.download_file(BUCKET, key, local)
-
-def upload_dir(local_dir: str, prefix: str):
-    for root, _, files in os.walk(local_dir):
-        for f in files:
-            local = os.path.join(root, f)
-            key = f"{prefix}/{os.path.relpath(local, local_dir)}"
-            s3.upload_file(local, BUCKET, key)
