@@ -8,6 +8,9 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"time"
+
+	"github.com/redis/go-redis/v9"
 )
 
 type ctxKey string
@@ -19,6 +22,97 @@ type bootstrapRequest struct {
 	Role  string `json:"role"`
 	OrgID string `json:"org_id"`
 	Name  string `json:"name"`
+}
+
+type authService struct {
+	db    *sql.DB
+	redis *redis.Client
+}
+
+func newAuthService(db *sql.DB, redis *redis.Client) *authService {
+	return &authService{db: db, redis: redis}
+}
+
+func (s *authService) bootstrap(ctx context.Context, req bootstrapRequest) (bootstrapResponse, error) {
+	userID, err := s.ensureUser(ctx, req.Email, req.Role, req.OrgID)
+	if err != nil {
+		return bootstrapResponse{}, wrapServiceError(500, "failed to ensure user", err)
+	}
+
+	plainKey := "tk_" + longID()
+	keyHash := sha256Hex(plainKey)
+	apiKeyID := shortID()
+	_, err = s.db.ExecContext(ctx, `
+		INSERT INTO api_keys (id, user_id, name, key_hash)
+		VALUES ($1, $2, $3, $4)
+	`, apiKeyID, userID, req.Name, keyHash)
+	if err != nil {
+		return bootstrapResponse{}, wrapServiceError(500, "failed to create api key", err)
+	}
+
+	return bootstrapResponse{UserID: userID, APIKey: plainKey, APIKeyID: apiKeyID}, nil
+}
+
+func (s *authService) createSession(ctx context.Context, userID, sessionCookie string, sessionTTL time.Duration) (createSessionResponse, *http.Cookie, error) {
+	sid := "sess_" + longID()
+	key := "session:" + sid
+	if err := s.redis.Set(ctx, key, userID, sessionTTL).Err(); err != nil {
+		return createSessionResponse{}, nil, wrapServiceError(500, "failed to create session", err)
+	}
+
+	cookie := &http.Cookie{
+		Name:     sessionCookie,
+		Value:    sid,
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   envBoolOr("COOKIE_SECURE", false),
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   int(sessionTTL.Seconds()),
+	}
+	return createSessionResponse{SessionID: sid, UserID: userID}, cookie, nil
+}
+
+func (s *authService) deleteSession(ctx context.Context, sessionCookie, cookieValue string) (deleteResponse, *http.Cookie, error) {
+	if cookieValue != "" {
+		if err := s.redis.Del(ctx, "session:"+cookieValue).Err(); err != nil {
+			return deleteResponse{}, nil, wrapServiceError(500, "failed to delete session", err)
+		}
+	}
+	expired := &http.Cookie{Name: sessionCookie, Value: "", Path: "/", MaxAge: -1, HttpOnly: true}
+	return deleteResponse{Deleted: true}, expired, nil
+}
+
+func (s *authService) me(ctx context.Context, userID string) (meResponse, error) {
+	var email, role string
+	var orgID sql.NullString
+	err := s.db.QueryRowContext(ctx, `SELECT email, role, org_id FROM users WHERE id = $1`, userID).Scan(&email, &role, &orgID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return meResponse{}, newServiceError(404, "user not found")
+		}
+		return meResponse{}, wrapServiceError(500, "failed to load user", err)
+	}
+	return meResponse{UserID: userID, Email: email, Role: role, OrgID: orgID.String}, nil
+}
+
+func (s *authService) ensureUser(ctx context.Context, email, role, orgID string) (string, error) {
+	var userID string
+	err := s.db.QueryRowContext(ctx, `SELECT id FROM users WHERE email = $1`, email).Scan(&userID)
+	if err == nil {
+		return userID, nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return "", err
+	}
+	userID = shortID()
+	_, err = s.db.ExecContext(ctx, `
+		INSERT INTO users (id, email, role, org_id)
+		VALUES ($1,$2,$3,$4)
+	`, userID, email, role, nullIfEmpty(orgID))
+	if err != nil {
+		return "", err
+	}
+	return userID, nil
 }
 
 func (a *app) bootstrap(w http.ResponseWriter, r *http.Request) {
@@ -48,30 +142,12 @@ func (a *app) bootstrap(w http.ResponseWriter, r *http.Request) {
 		req.Name = "bootstrap"
 	}
 
-	ctx := r.Context()
-	userID, err := a.ensureUser(ctx, req.Email, req.Role, req.OrgID)
+	resp, err := a.authSvc.bootstrap(r.Context(), req)
 	if err != nil {
-		writeErr(w, 500, err.Error())
+		writeServiceErr(w, err)
 		return
 	}
-
-	plainKey := "tk_" + longID()
-	keyHash := sha256Hex(plainKey)
-	apiKeyID := shortID()
-	_, err = a.db.ExecContext(ctx, `
-		INSERT INTO api_keys (id, user_id, name, key_hash)
-		VALUES ($1, $2, $3, $4)
-	`, apiKeyID, userID, req.Name, keyHash)
-	if err != nil {
-		writeErr(w, 500, "failed to create api key")
-		return
-	}
-
-	writeJSON(w, 200, map[string]any{
-		"user_id":    userID,
-		"api_key":    plainKey,
-		"api_key_id": apiKeyID,
-	})
+	writeJSON(w, 200, resp)
 }
 
 func (a *app) createSession(w http.ResponseWriter, r *http.Request) {
@@ -81,54 +157,37 @@ func (a *app) createSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sid := "sess_" + longID()
-	key := "session:" + sid
-	if err := a.redis.Set(r.Context(), key, userID, a.sessionTTL).Err(); err != nil {
-		writeErr(w, 500, "failed to create session")
+	resp, cookie, err := a.authSvc.createSession(r.Context(), userID, a.sessionCookie, a.sessionTTL)
+	if err != nil {
+		writeServiceErr(w, err)
 		return
 	}
-
-	http.SetCookie(w, &http.Cookie{
-		Name:     a.sessionCookie,
-		Value:    sid,
-		Path:     "/",
-		HttpOnly: true,
-		Secure:   envBoolOr("COOKIE_SECURE", false),
-		SameSite: http.SameSiteLaxMode,
-		MaxAge:   int(a.sessionTTL.Seconds()),
-	})
-
-	writeJSON(w, 200, map[string]any{"session_id": sid, "user_id": userID})
+	http.SetCookie(w, cookie)
+	writeJSON(w, 200, resp)
 }
 
 func (a *app) deleteSession(w http.ResponseWriter, r *http.Request) {
-	cookie, err := r.Cookie(a.sessionCookie)
-	if err == nil && cookie.Value != "" {
-		_ = a.redis.Del(r.Context(), "session:"+cookie.Value).Err()
+	cookie, _ := r.Cookie(a.sessionCookie)
+	cookieValue := ""
+	if cookie != nil {
+		cookieValue = cookie.Value
 	}
-	http.SetCookie(w, &http.Cookie{Name: a.sessionCookie, Value: "", Path: "/", MaxAge: -1, HttpOnly: true})
-	writeJSON(w, 200, map[string]any{"deleted": true})
+	resp, expired, err := a.authSvc.deleteSession(r.Context(), a.sessionCookie, cookieValue)
+	if err != nil {
+		writeServiceErr(w, err)
+		return
+	}
+	http.SetCookie(w, expired)
+	writeJSON(w, 200, resp)
 }
 
 func (a *app) me(w http.ResponseWriter, r *http.Request) {
-	userID := authUserID(r)
-	var email, role string
-	var orgID sql.NullString
-	err := a.db.QueryRowContext(r.Context(), `SELECT email, role, org_id FROM users WHERE id = $1`, userID).Scan(&email, &role, &orgID)
+	resp, err := a.authSvc.me(r.Context(), authUserID(r))
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			writeErr(w, 404, "user not found")
-			return
-		}
-		writeErr(w, 500, err.Error())
+		writeServiceErr(w, err)
 		return
 	}
-	writeJSON(w, 200, map[string]any{
-		"user_id": userID,
-		"email":   email,
-		"role":    role,
-		"org_id":  orgID.String,
-	})
+	writeJSON(w, 200, resp)
 }
 
 func (a *app) withAuth(next http.HandlerFunc) http.HandlerFunc {
@@ -179,26 +238,6 @@ func (a *app) authenticate(r *http.Request) (string, string, bool) {
 func authUserID(r *http.Request) string {
 	v, _ := r.Context().Value(userIDKey).(string)
 	return v
-}
-
-func (a *app) ensureUser(ctx context.Context, email, role, orgID string) (string, error) {
-	var userID string
-	err := a.db.QueryRowContext(ctx, `SELECT id FROM users WHERE email = $1`, email).Scan(&userID)
-	if err == nil {
-		return userID, nil
-	}
-	if !errors.Is(err, sql.ErrNoRows) {
-		return "", err
-	}
-	userID = shortID()
-	_, err = a.db.ExecContext(ctx, `
-		INSERT INTO users (id, email, role, org_id)
-		VALUES ($1,$2,$3,$4)
-	`, userID, email, role, nullIfEmpty(orgID))
-	if err != nil {
-		return "", err
-	}
-	return userID, nil
 }
 
 func sha256Hex(s string) string {

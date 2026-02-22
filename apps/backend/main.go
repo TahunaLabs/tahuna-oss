@@ -6,14 +6,17 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/hibiken/asynq"
@@ -32,10 +35,16 @@ type app struct {
 	bootstrapSecret string
 	sessionTTL      time.Duration
 	sessionCookie   string
+
+	authSvc        *authService
+	environmentSvc *environmentService
+	runSvc         *runService
 }
 
 func main() {
-	ctx := context.Background()
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
 	dbURL := strings.TrimSpace(os.Getenv("DATABASE_URL"))
 	if dbURL == "" {
 		log.Fatal("DATABASE_URL is required")
@@ -44,6 +53,8 @@ func main() {
 	if err != nil {
 		log.Fatalf("open db: %v", err)
 	}
+	defer db.Close()
+
 	if err := db.PingContext(ctx); err != nil {
 		log.Fatalf("ping db: %v", err)
 	}
@@ -57,6 +68,8 @@ func main() {
 		Password: strings.TrimSpace(os.Getenv("REDIS_PASSWORD")),
 		DB:       envIntOr("REDIS_DB", 0),
 	})
+	defer redisClient.Close()
+
 	if err := redisClient.Ping(ctx).Err(); err != nil {
 		log.Fatalf("redis ping failed: %v", err)
 	}
@@ -67,28 +80,57 @@ func main() {
 		DB:       envIntOr("REDIS_DB", 0),
 	}
 
+	queueName := envOr("TAHUNA_QUEUE_NAME", "runs")
+	asynqClient := asynq.NewClient(asynqRedis)
+	defer asynqClient.Close()
+	asynqInspector := asynq.NewInspector(asynqRedis)
+
 	a := &app{
 		db:              db,
 		redis:           redisClient,
-		asynqClient:     asynq.NewClient(asynqRedis),
-		asynqInspector:  asynq.NewInspector(asynqRedis),
-		queueName:       envOr("TAHUNA_QUEUE_NAME", "runs"),
+		asynqClient:     asynqClient,
+		asynqInspector:  asynqInspector,
+		queueName:       queueName,
 		authRequired:    envBoolOr("AUTH_REQUIRED", true),
 		devUserID:       strings.TrimSpace(os.Getenv("DEV_USER_ID")),
 		bootstrapSecret: strings.TrimSpace(os.Getenv("BOOTSTRAP_SECRET")),
 		sessionTTL:      envDurationOr("SESSION_TTL", 7*24*time.Hour),
 		sessionCookie:   envOr("SESSION_COOKIE_NAME", "tahuna_session"),
 	}
-	defer a.asynqClient.Close()
+	a.authSvc = newAuthService(db, redisClient)
+	a.environmentSvc = newEnvironmentService(db, redisClient)
+	a.runSvc = newRunService(db, asynqClient, asynqInspector, queueName)
 
 	mux := a.routes()
 	port := envOr("PORT", "8000")
-	log.Printf("backend listening on :%s", port)
-	log.Fatal(http.ListenAndServe(":"+port, mux))
+	server := &http.Server{
+		Addr:              ":" + port,
+		Handler:           mux,
+		ReadHeaderTimeout: 5 * time.Second,
+	}
+
+	errCh := make(chan error, 1)
+	go func() {
+		log.Printf("backend listening on :%s", port)
+		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			errCh <- err
+		}
+	}()
+
+	select {
+	case <-ctx.Done():
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := server.Shutdown(shutdownCtx); err != nil {
+			log.Printf("server shutdown failed: %v", err)
+		}
+	case err := <-errCh:
+		log.Fatalf("server failed: %v", err)
+	}
 }
 
 func (a *app) health(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, 200, map[string]string{"status": "ok"})
+	writeJSON(w, 200, healthResponse{Status: "ok"})
 }
 
 func applyMigrations(ctx context.Context, db *sql.DB, dir string) error {

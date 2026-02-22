@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -24,46 +25,50 @@ type runTaskPayload struct {
 	Overrides map[string]any `json:"overrides,omitempty"`
 }
 
-func (a *app) createRun(w http.ResponseWriter, r *http.Request) {
-	experimentID := r.PathValue("experiment_id")
-	var req runCreateRequest
-	if err := decodeJSON(r, &req); err != nil {
-		writeErr(w, 400, err.Error())
-		return
-	}
+type runDeleteResult struct {
+	StatusCode int
+	Body       any
+}
+
+type runService struct {
+	db             *sql.DB
+	asynqClient    *asynq.Client
+	asynqInspector *asynq.Inspector
+	queueName      string
+}
+
+func newRunService(db *sql.DB, asynqClient *asynq.Client, asynqInspector *asynq.Inspector, queueName string) *runService {
+	return &runService{db: db, asynqClient: asynqClient, asynqInspector: asynqInspector, queueName: queueName}
+}
+
+func (s *runService) createRun(ctx context.Context, userID, experimentID string, req runCreateRequest) (runResponse, error) {
 	if req.GPUCount != nil && *req.GPUCount < 1 {
-		writeErr(w, 400, "gpu_count must be >= 1")
-		return
+		return runResponse{}, newServiceError(400, "gpu_count must be >= 1")
 	}
 	if req.VolumeGB != nil && *req.VolumeGB < 1 {
-		writeErr(w, 400, "volume_gb must be >= 1")
-		return
+		return runResponse{}, newServiceError(400, "volume_gb must be >= 1")
 	}
-	uid := authUserID(r)
 
 	var envID, input string
-	err := a.db.QueryRowContext(r.Context(), `
+	err := s.db.QueryRowContext(ctx, `
 		SELECT environment_id, input FROM experiments WHERE id = $1 AND user_id = $2
-	`, experimentID, uid).Scan(&envID, &input)
+	`, experimentID, userID).Scan(&envID, &input)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			writeErr(w, 404, "Experiment "+experimentID+" not found")
-			return
+			return runResponse{}, newServiceError(404, "Experiment "+experimentID+" not found")
 		}
-		writeErr(w, 500, err.Error())
-		return
+		return runResponse{}, wrapServiceError(500, "failed to load experiment", err)
 	}
 
 	runID := shortID()
 	output := "runs/" + runID + "/output"
 	logsPath := "runs/" + runID + "/logs"
-	_, err = a.db.ExecContext(r.Context(), `
+	_, err = s.db.ExecContext(ctx, `
 		INSERT INTO runs (id, user_id, environment_id, experiment_id, input, output, logs, status, cancellation_requested)
 		VALUES ($1,$2,$3,$4,$5,$6,$7,'queued',FALSE)
-	`, runID, uid, envID, experimentID, input, output, logsPath)
+	`, runID, userID, envID, experimentID, input, output, logsPath)
 	if err != nil {
-		writeErr(w, 500, err.Error())
-		return
+		return runResponse{}, wrapServiceError(500, "failed to create run", err)
 	}
 
 	overrides := map[string]any{}
@@ -77,164 +82,171 @@ func (a *app) createRun(w http.ResponseWriter, r *http.Request) {
 		overrides["volume_gb"] = *req.VolumeGB
 	}
 
-	payload, _ := json.Marshal(runTaskPayload{RunID: runID, UserID: uid, Overrides: overrides})
-	task := asynq.NewTask(runTaskType, payload, asynq.Queue(a.queueName), asynq.Timeout(2*time.Hour))
-	taskInfo, err := a.asynqClient.Enqueue(task, asynq.MaxRetry(10), asynq.ProcessIn(0))
+	payload, _ := json.Marshal(runTaskPayload{RunID: runID, UserID: userID, Overrides: overrides})
+	task := asynq.NewTask(runTaskType, payload, asynq.Queue(s.queueName), asynq.Timeout(2*time.Hour))
+	taskInfo, err := s.asynqClient.Enqueue(task, asynq.MaxRetry(10), asynq.ProcessIn(0))
 	if err != nil {
-		_, _ = a.db.ExecContext(r.Context(), `UPDATE runs SET status = 'failed', error = $2, updated_at = NOW() WHERE id = $1`, runID, "failed to enqueue run: "+err.Error())
-		writeErr(w, 500, "failed to enqueue run")
-		return
+		_, _ = s.db.ExecContext(ctx, `UPDATE runs SET status = 'failed', error = $2, updated_at = NOW() WHERE id = $1`, runID, "failed to enqueue run: "+err.Error())
+		return runResponse{}, wrapServiceError(500, "failed to enqueue run", err)
 	}
-	_, _ = a.db.ExecContext(r.Context(), `UPDATE runs SET task_id = $2, updated_at = NOW() WHERE id = $1`, runID, taskInfo.ID)
+	_, _ = s.db.ExecContext(ctx, `UPDATE runs SET task_id = $2, updated_at = NOW() WHERE id = $1`, runID, taskInfo.ID)
 
-	writeJSON(w, 200, map[string]any{
-		"run_id":        runID,
-		"env_id":        envID,
-		"experiment_id": experimentID,
-		"input":         input,
-		"output":        output,
-		"logs":          logsPath,
-		"status":        "queued",
-	})
+	return runResponse{
+		RunID:        runID,
+		EnvID:        envID,
+		ExperimentID: experimentID,
+		Input:        input,
+		Output:       output,
+		Logs:         logsPath,
+		Status:       "queued",
+	}, nil
 }
 
-func (a *app) listRuns(w http.ResponseWriter, r *http.Request) {
-	rows, err := a.db.QueryContext(r.Context(), `
+func (s *runService) listRuns(ctx context.Context, userID string) ([]runResponse, error) {
+	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, environment_id, experiment_id, input, output, logs, status,
 		       COALESCE(error,''), COALESCE(pod_id,''), COALESCE(effective_gpu_type,''),
 		       COALESCE(effective_gpu_count,0), COALESCE(effective_volume_gb,0),
 		       cancellation_requested
 		FROM runs WHERE user_id = $1 ORDER BY created_at DESC
-	`, authUserID(r))
+	`, userID)
 	if err != nil {
-		writeErr(w, 500, err.Error())
-		return
+		return nil, wrapServiceError(500, "failed to list runs", err)
 	}
 	defer rows.Close()
-	out := make([]map[string]any, 0)
+
+	out := make([]runResponse, 0)
 	for rows.Next() {
-		var id, envID, expID, input, output, logsPath, status, errMsg, podID, gpuType string
-		var gpuCount, volumeGB int
-		var cancellationRequested bool
-		if err := rows.Scan(&id, &envID, &expID, &input, &output, &logsPath, &status, &errMsg, &podID, &gpuType, &gpuCount, &volumeGB, &cancellationRequested); err != nil {
-			writeErr(w, 500, err.Error())
-			return
+		var item runResponse
+		if err := rows.Scan(&item.RunID, &item.EnvID, &item.ExperimentID, &item.Input, &item.Output, &item.Logs, &item.Status, &item.Error, &item.PodID, &item.EffectiveGPUType, &item.EffectiveGPUCount, &item.EffectiveVolumeGB, &item.CancellationRequested); err != nil {
+			return nil, wrapServiceError(500, "failed to scan run row", err)
 		}
-		out = append(out, map[string]any{
-			"run_id":                 id,
-			"env_id":                 envID,
-			"experiment_id":          expID,
-			"input":                  input,
-			"output":                 output,
-			"logs":                   logsPath,
-			"status":                 status,
-			"error":                  errMsg,
-			"pod_id":                 podID,
-			"effective_gpu_type":     gpuType,
-			"effective_gpu_count":    gpuCount,
-			"effective_volume_gb":    volumeGB,
-			"cancellation_requested": cancellationRequested,
-		})
+		out = append(out, item)
 	}
-	writeJSON(w, 200, map[string]any{"runs": out})
+	if err := rows.Err(); err != nil {
+		return nil, wrapServiceError(500, "failed while iterating runs", err)
+	}
+	return out, nil
 }
 
-func (a *app) getRun(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("run_id")
-	row := a.db.QueryRowContext(r.Context(), `
-		SELECT environment_id, experiment_id, input, output, logs, status,
+func (s *runService) getRun(ctx context.Context, userID, runID string) (runResponse, error) {
+	var item runResponse
+	err := s.db.QueryRowContext(ctx, `
+		SELECT id, environment_id, experiment_id, input, output, logs, status,
 		       COALESCE(error,''), COALESCE(pod_id,''), COALESCE(effective_gpu_type,''),
 		       COALESCE(effective_gpu_count,0), COALESCE(effective_volume_gb,0),
 		       cancellation_requested
 		FROM runs WHERE id = $1 AND user_id = $2
-	`, id, authUserID(r))
-	var envID, expID, input, output, logsPath, status, errMsg, podID, gpuType string
-	var gpuCount, volumeGB int
-	var cancellationRequested bool
-	if err := row.Scan(&envID, &expID, &input, &output, &logsPath, &status, &errMsg, &podID, &gpuType, &gpuCount, &volumeGB, &cancellationRequested); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			writeErr(w, 404, "Run "+id+" not found")
-			return
-		}
-		writeErr(w, 500, err.Error())
-		return
-	}
-	writeJSON(w, 200, map[string]any{
-		"run_id":                 id,
-		"env_id":                 envID,
-		"experiment_id":          expID,
-		"input":                  input,
-		"output":                 output,
-		"logs":                   logsPath,
-		"status":                 status,
-		"error":                  errMsg,
-		"pod_id":                 podID,
-		"effective_gpu_type":     gpuType,
-		"effective_gpu_count":    gpuCount,
-		"effective_volume_gb":    volumeGB,
-		"cancellation_requested": cancellationRequested,
-	})
-}
-
-func (a *app) getRunLogs(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("run_id")
-	var logsPath string
-	err := a.db.QueryRowContext(r.Context(), `SELECT logs FROM runs WHERE id = $1 AND user_id = $2`, id, authUserID(r)).Scan(&logsPath)
+	`, runID, userID).Scan(&item.RunID, &item.EnvID, &item.ExperimentID, &item.Input, &item.Output, &item.Logs, &item.Status, &item.Error, &item.PodID, &item.EffectiveGPUType, &item.EffectiveGPUCount, &item.EffectiveVolumeGB, &item.CancellationRequested)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			writeErr(w, 404, "Run "+id+" not found")
-			return
+			return runResponse{}, newServiceError(404, "Run "+runID+" not found")
 		}
-		writeErr(w, 500, err.Error())
-		return
+		return runResponse{}, wrapServiceError(500, "failed to load run", err)
 	}
-	writeJSON(w, 200, map[string]any{
-		"run_id":    id,
-		"logs_path": logsPath,
-		"log_file":  logsPath + "/run.log",
-		"note":      "Logs are uploaded by the training pod into R2.",
-	})
+	return item, nil
 }
 
-func (a *app) deleteRun(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("run_id")
-	uid := authUserID(r)
+func (s *runService) getRunLogs(ctx context.Context, userID, runID string) (runLogsResponse, error) {
+	var logsPath string
+	err := s.db.QueryRowContext(ctx, `SELECT logs FROM runs WHERE id = $1 AND user_id = $2`, runID, userID).Scan(&logsPath)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return runLogsResponse{}, newServiceError(404, "Run "+runID+" not found")
+		}
+		return runLogsResponse{}, wrapServiceError(500, "failed to load run logs", err)
+	}
+	return runLogsResponse{
+		RunID:    runID,
+		LogsPath: logsPath,
+		LogFile:  logsPath + "/run.log",
+		Note:     "Logs are uploaded by the training pod into R2.",
+	}, nil
+}
+
+func (s *runService) deleteRun(ctx context.Context, userID, runID string) (runDeleteResult, error) {
 	var status, podID, taskID string
-	err := a.db.QueryRowContext(r.Context(), `
+	err := s.db.QueryRowContext(ctx, `
 		SELECT status, COALESCE(pod_id,''), COALESCE(task_id,'')
 		FROM runs WHERE id = $1 AND user_id = $2
-	`, id, uid).Scan(&status, &podID, &taskID)
+	`, runID, userID).Scan(&status, &podID, &taskID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			writeErr(w, 404, "Run "+id+" not found")
-			return
+			return runDeleteResult{}, newServiceError(404, "Run "+runID+" not found")
 		}
-		writeErr(w, 500, err.Error())
-		return
+		return runDeleteResult{}, wrapServiceError(500, "failed to load run for delete", err)
 	}
 	if status == "queued" || status == "provisioning" || status == "running" || status == "cancelling" {
-		_, _ = a.db.ExecContext(r.Context(), `
+		_, _ = s.db.ExecContext(ctx, `
 			UPDATE runs
 			SET cancellation_requested = TRUE, status = 'cancelling', updated_at = NOW()
 			WHERE id = $1 AND user_id = $2
-		`, id, uid)
+		`, runID, userID)
 		if taskID != "" {
-			_ = a.asynqInspector.DeleteTask(a.queueName, taskID)
+			_ = s.asynqInspector.DeleteTask(s.queueName, taskID)
 		}
 		if taskID != "" && podID == "" {
-			_, _ = a.db.ExecContext(r.Context(), `
+			_, _ = s.db.ExecContext(ctx, `
 				UPDATE runs
 				SET status = 'cancelled', cancellation_requested = TRUE, updated_at = NOW()
 				WHERE id = $1 AND user_id = $2
-			`, id, uid)
+			`, runID, userID)
 		}
-		writeJSON(w, 202, map[string]any{"cancel_requested": true, "run_id": id})
-		return
+		return runDeleteResult{StatusCode: 202, Body: cancelRunResponse{CancelRequested: true, RunID: runID}}, nil
 	}
-	_, err = a.db.ExecContext(r.Context(), `DELETE FROM runs WHERE id = $1 AND user_id = $2`, id, uid)
+	_, err = s.db.ExecContext(ctx, `DELETE FROM runs WHERE id = $1 AND user_id = $2`, runID, userID)
 	if err != nil {
-		writeErr(w, 500, err.Error())
+		return runDeleteResult{}, wrapServiceError(500, "failed to delete run", err)
+	}
+	return runDeleteResult{StatusCode: 200, Body: deleteRunResponse{Deleted: true, RunID: runID}}, nil
+}
+
+func (a *app) createRun(w http.ResponseWriter, r *http.Request) {
+	var req runCreateRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeErr(w, 400, err.Error())
 		return
 	}
-	writeJSON(w, 200, map[string]any{"deleted": true, "run_id": id})
+	resp, err := a.runSvc.createRun(r.Context(), authUserID(r), r.PathValue("experiment_id"), req)
+	if err != nil {
+		writeServiceErr(w, err)
+		return
+	}
+	writeJSON(w, 200, resp)
+}
+
+func (a *app) listRuns(w http.ResponseWriter, r *http.Request) {
+	items, err := a.runSvc.listRuns(r.Context(), authUserID(r))
+	if err != nil {
+		writeServiceErr(w, err)
+		return
+	}
+	writeJSON(w, 200, listRunsResponse{Runs: items})
+}
+
+func (a *app) getRun(w http.ResponseWriter, r *http.Request) {
+	resp, err := a.runSvc.getRun(r.Context(), authUserID(r), r.PathValue("run_id"))
+	if err != nil {
+		writeServiceErr(w, err)
+		return
+	}
+	writeJSON(w, 200, resp)
+}
+
+func (a *app) getRunLogs(w http.ResponseWriter, r *http.Request) {
+	resp, err := a.runSvc.getRunLogs(r.Context(), authUserID(r), r.PathValue("run_id"))
+	if err != nil {
+		writeServiceErr(w, err)
+		return
+	}
+	writeJSON(w, 200, resp)
+}
+
+func (a *app) deleteRun(w http.ResponseWriter, r *http.Request) {
+	result, err := a.runSvc.deleteRun(r.Context(), authUserID(r), r.PathValue("run_id"))
+	if err != nil {
+		writeServiceErr(w, err)
+		return
+	}
+	writeJSON(w, result.StatusCode, result.Body)
 }

@@ -1,11 +1,14 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"time"
+
+	"github.com/redis/go-redis/v9"
 )
 
 var gpus = []string{
@@ -56,25 +59,222 @@ type experimentCreateRequest struct {
 	Name string `json:"name"`
 }
 
-func (a *app) catalog(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
+type environmentService struct {
+	db    *sql.DB
+	redis *redis.Client
+}
+
+func newEnvironmentService(db *sql.DB, redis *redis.Client) *environmentService {
+	return &environmentService{db: db, redis: redis}
+}
+
+func (s *environmentService) catalog(ctx context.Context) (catalogResponse, error) {
 	cacheKey := "catalog:mvp"
-	if raw, err := a.redis.Get(ctx, cacheKey).Bytes(); err == nil && len(raw) > 0 {
-		var cached map[string]any
+	if raw, err := s.redis.Get(ctx, cacheKey).Bytes(); err == nil && len(raw) > 0 {
+		var cached catalogResponse
 		if json.Unmarshal(raw, &cached) == nil {
-			writeJSON(w, 200, cached)
-			return
+			return cached, nil
 		}
 	}
 
 	images, err := getImages()
 	if err != nil {
-		writeErr(w, 500, err.Error())
-		return
+		return catalogResponse{}, wrapServiceError(500, "failed to load image catalog", err)
 	}
-	resp := map[string]any{"gpus": gpus, "images": images}
+	resp := catalogResponse{GPUs: gpus, Images: images}
 	if payload, err := json.Marshal(resp); err == nil {
-		_ = a.redis.Set(ctx, cacheKey, payload, 2*time.Minute).Err()
+		_ = s.redis.Set(ctx, cacheKey, payload, 2*time.Minute).Err()
+	}
+	return resp, nil
+}
+
+func (s *environmentService) createEnvironment(ctx context.Context, userID string, req environmentCreateRequest) (environmentResponse, error) {
+	if req.Name == "" || req.GPUType == "" || req.Framework == "" || req.Version == "" || req.GPUCount < 1 || req.VolumeGB < 1 {
+		return environmentResponse{}, newServiceError(400, "invalid environment payload")
+	}
+	if !contains(gpus, req.GPUType) {
+		return environmentResponse{}, newServiceError(400, "Unsupported GPU type: "+req.GPUType)
+	}
+	images, err := getImages()
+	if err != nil {
+		return environmentResponse{}, wrapServiceError(500, "failed to load image catalog", err)
+	}
+	versions, ok := images[req.Framework]
+	if !ok {
+		return environmentResponse{}, newServiceError(400, "Unsupported framework: "+req.Framework)
+	}
+	if _, ok := versions[req.Version]; !ok {
+		return environmentResponse{}, newServiceError(400, "Unsupported version for framework "+req.Framework+": "+req.Version)
+	}
+
+	envID := shortID()
+	artifacts := "environments/" + envID + "/artifacts"
+	_, err = s.db.ExecContext(ctx, `
+		INSERT INTO environments (id, user_id, name, artifacts, gpu_type, gpu_count, volume_gb, framework, version)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+	`, envID, userID, req.Name, artifacts, req.GPUType, req.GPUCount, req.VolumeGB, req.Framework, req.Version)
+	if err != nil {
+		return environmentResponse{}, wrapServiceError(500, "failed to create environment", err)
+	}
+
+	return environmentResponse{
+		EnvironmentID: envID,
+		Name:          req.Name,
+		Artifacts:     artifacts,
+		GPUType:       req.GPUType,
+		GPUCount:      req.GPUCount,
+		VolumeGB:      req.VolumeGB,
+		Framework:     req.Framework,
+		Version:       req.Version,
+	}, nil
+}
+
+func (s *environmentService) listEnvironments(ctx context.Context, userID string) ([]environmentResponse, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT id, name, artifacts, gpu_type, gpu_count, volume_gb, framework, version
+		FROM environments WHERE user_id = $1 ORDER BY created_at DESC
+	`, userID)
+	if err != nil {
+		return nil, wrapServiceError(500, "failed to list environments", err)
+	}
+	defer rows.Close()
+
+	out := make([]environmentResponse, 0)
+	for rows.Next() {
+		var item environmentResponse
+		if err := rows.Scan(&item.EnvironmentID, &item.Name, &item.Artifacts, &item.GPUType, &item.GPUCount, &item.VolumeGB, &item.Framework, &item.Version); err != nil {
+			return nil, wrapServiceError(500, "failed to scan environment row", err)
+		}
+		out = append(out, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, wrapServiceError(500, "failed while iterating environments", err)
+	}
+	return out, nil
+}
+
+func (s *environmentService) getEnvironment(ctx context.Context, userID, id string) (environmentResponse, error) {
+	var item environmentResponse
+	err := s.db.QueryRowContext(ctx, `
+		SELECT id, name, artifacts, gpu_type, gpu_count, volume_gb, framework, version
+		FROM environments WHERE id = $1 AND user_id = $2
+	`, id, userID).Scan(&item.EnvironmentID, &item.Name, &item.Artifacts, &item.GPUType, &item.GPUCount, &item.VolumeGB, &item.Framework, &item.Version)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return environmentResponse{}, newServiceError(404, "Environment "+id+" not found")
+		}
+		return environmentResponse{}, wrapServiceError(500, "failed to load environment", err)
+	}
+	return item, nil
+}
+
+func (s *environmentService) deleteEnvironment(ctx context.Context, userID, id string) (deleteEnvironmentResponse, error) {
+	var hasExp bool
+	if err := s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM experiments WHERE environment_id = $1 AND user_id = $2)`, id, userID).Scan(&hasExp); err != nil {
+		return deleteEnvironmentResponse{}, wrapServiceError(500, "failed to check dependent experiments", err)
+	}
+	if hasExp {
+		return deleteEnvironmentResponse{}, newServiceError(409, "Environment "+id+" still has experiments; delete them first")
+	}
+
+	res, err := s.db.ExecContext(ctx, `DELETE FROM environments WHERE id = $1 AND user_id = $2`, id, userID)
+	if err != nil {
+		return deleteEnvironmentResponse{}, wrapServiceError(500, "failed to delete environment", err)
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return deleteEnvironmentResponse{}, newServiceError(404, "Environment "+id+" not found")
+	}
+	return deleteEnvironmentResponse{Deleted: true, EnvironmentID: id}, nil
+}
+
+func (s *environmentService) createExperiment(ctx context.Context, userID, envID string, req experimentCreateRequest) (experimentResponse, error) {
+	if req.Name == "" {
+		return experimentResponse{}, newServiceError(400, "name is required")
+	}
+	var exists bool
+	if err := s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM environments WHERE id = $1 AND user_id = $2)`, envID, userID).Scan(&exists); err != nil {
+		return experimentResponse{}, wrapServiceError(500, "failed to validate environment", err)
+	}
+	if !exists {
+		return experimentResponse{}, newServiceError(404, "Environment "+envID+" not found")
+	}
+
+	expID := shortID()
+	input := "experiments/" + expID + "/input"
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO experiments (id, user_id, environment_id, name, input)
+		VALUES ($1,$2,$3,$4,$5)
+	`, expID, userID, envID, req.Name, input)
+	if err != nil {
+		return experimentResponse{}, wrapServiceError(500, "failed to create experiment", err)
+	}
+	return experimentResponse{ExperimentID: expID, Name: req.Name, EnvID: envID, Input: input}, nil
+}
+
+func (s *environmentService) listExperiments(ctx context.Context, userID string) ([]experimentResponse, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT id, name, environment_id, input FROM experiments
+		WHERE user_id = $1 ORDER BY created_at DESC
+	`, userID)
+	if err != nil {
+		return nil, wrapServiceError(500, "failed to list experiments", err)
+	}
+	defer rows.Close()
+
+	out := make([]experimentResponse, 0)
+	for rows.Next() {
+		var item experimentResponse
+		if err := rows.Scan(&item.ExperimentID, &item.Name, &item.EnvID, &item.Input); err != nil {
+			return nil, wrapServiceError(500, "failed to scan experiment row", err)
+		}
+		out = append(out, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, wrapServiceError(500, "failed while iterating experiments", err)
+	}
+	return out, nil
+}
+
+func (s *environmentService) getExperiment(ctx context.Context, userID, id string) (experimentResponse, error) {
+	var item experimentResponse
+	err := s.db.QueryRowContext(ctx, `
+		SELECT id, name, environment_id, input FROM experiments WHERE id = $1 AND user_id = $2
+	`, id, userID).Scan(&item.ExperimentID, &item.Name, &item.EnvID, &item.Input)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return experimentResponse{}, newServiceError(404, "Experiment "+id+" not found")
+		}
+		return experimentResponse{}, wrapServiceError(500, "failed to load experiment", err)
+	}
+	return item, nil
+}
+
+func (s *environmentService) deleteExperiment(ctx context.Context, userID, id string) (deleteExperimentResponse, error) {
+	var hasRuns bool
+	if err := s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM runs WHERE experiment_id = $1 AND user_id = $2)`, id, userID).Scan(&hasRuns); err != nil {
+		return deleteExperimentResponse{}, wrapServiceError(500, "failed to check dependent runs", err)
+	}
+	if hasRuns {
+		return deleteExperimentResponse{}, newServiceError(409, "Experiment "+id+" still has runs; delete them first")
+	}
+
+	res, err := s.db.ExecContext(ctx, `DELETE FROM experiments WHERE id = $1 AND user_id = $2`, id, userID)
+	if err != nil {
+		return deleteExperimentResponse{}, wrapServiceError(500, "failed to delete experiment", err)
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return deleteExperimentResponse{}, newServiceError(404, "Experiment "+id+" not found")
+	}
+	return deleteExperimentResponse{Deleted: true, ExperimentID: id}, nil
+}
+
+func (a *app) catalog(w http.ResponseWriter, r *http.Request) {
+	resp, err := a.environmentSvc.catalog(r.Context())
+	if err != nil {
+		writeServiceErr(w, err)
+		return
 	}
 	writeJSON(w, 200, resp)
 }
@@ -85,240 +285,78 @@ func (a *app) createEnvironment(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 400, err.Error())
 		return
 	}
-	if req.Name == "" || req.GPUType == "" || req.Framework == "" || req.Version == "" || req.GPUCount < 1 || req.VolumeGB < 1 {
-		writeErr(w, 400, "invalid environment payload")
-		return
-	}
-	if !contains(gpus, req.GPUType) {
-		writeErr(w, 400, "Unsupported GPU type: "+req.GPUType)
-		return
-	}
-	images, err := getImages()
+	resp, err := a.environmentSvc.createEnvironment(r.Context(), authUserID(r), req)
 	if err != nil {
-		writeErr(w, 500, err.Error())
+		writeServiceErr(w, err)
 		return
 	}
-	versions, ok := images[req.Framework]
-	if !ok {
-		writeErr(w, 400, "Unsupported framework: "+req.Framework)
-		return
-	}
-	if _, ok := versions[req.Version]; !ok {
-		writeErr(w, 400, "Unsupported version for framework "+req.Framework+": "+req.Version)
-		return
-	}
-
-	envID := shortID()
-	userID := authUserID(r)
-	artifacts := "environments/" + envID + "/artifacts"
-	_, err = a.db.ExecContext(r.Context(), `
-		INSERT INTO environments (id, user_id, name, artifacts, gpu_type, gpu_count, volume_gb, framework, version)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
-	`, envID, userID, req.Name, artifacts, req.GPUType, req.GPUCount, req.VolumeGB, req.Framework, req.Version)
-	if err != nil {
-		writeErr(w, 500, err.Error())
-		return
-	}
-
-	writeJSON(w, 200, map[string]any{
-		"environment_id": envID,
-		"name":           req.Name,
-		"artifacts":      artifacts,
-		"gpu_type":       req.GPUType,
-		"gpu_count":      req.GPUCount,
-		"volume_gb":      req.VolumeGB,
-		"framework":      req.Framework,
-		"version":        req.Version,
-	})
+	writeJSON(w, 200, resp)
 }
 
 func (a *app) listEnvironments(w http.ResponseWriter, r *http.Request) {
-	rows, err := a.db.QueryContext(r.Context(), `
-		SELECT id, name, artifacts, gpu_type, gpu_count, volume_gb, framework, version
-		FROM environments WHERE user_id = $1 ORDER BY created_at DESC
-	`, authUserID(r))
+	items, err := a.environmentSvc.listEnvironments(r.Context(), authUserID(r))
 	if err != nil {
-		writeErr(w, 500, err.Error())
+		writeServiceErr(w, err)
 		return
 	}
-	defer rows.Close()
-
-	out := make([]map[string]any, 0)
-	for rows.Next() {
-		var id, name, artifacts, gpuType, framework, version string
-		var gpuCount, volumeGB int
-		if err := rows.Scan(&id, &name, &artifacts, &gpuType, &gpuCount, &volumeGB, &framework, &version); err != nil {
-			writeErr(w, 500, err.Error())
-			return
-		}
-		out = append(out, map[string]any{
-			"environment_id": id,
-			"name":           name,
-			"artifacts":      artifacts,
-			"gpu_type":       gpuType,
-			"gpu_count":      gpuCount,
-			"volume_gb":      volumeGB,
-			"framework":      framework,
-			"version":        version,
-		})
-	}
-	writeJSON(w, 200, map[string]any{"environments": out})
+	writeJSON(w, 200, listEnvironmentsResponse{Environments: items})
 }
 
 func (a *app) getEnvironment(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("environment_id")
-	var name, artifacts, gpuType, framework, version string
-	var gpuCount, volumeGB int
-	err := a.db.QueryRowContext(r.Context(), `
-		SELECT name, artifacts, gpu_type, gpu_count, volume_gb, framework, version
-		FROM environments WHERE id = $1 AND user_id = $2
-	`, id, authUserID(r)).Scan(&name, &artifacts, &gpuType, &gpuCount, &volumeGB, &framework, &version)
+	resp, err := a.environmentSvc.getEnvironment(r.Context(), authUserID(r), r.PathValue("environment_id"))
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			writeErr(w, 404, "Environment "+id+" not found")
-			return
-		}
-		writeErr(w, 500, err.Error())
+		writeServiceErr(w, err)
 		return
 	}
-	writeJSON(w, 200, map[string]any{
-		"environment_id": id,
-		"name":           name,
-		"artifacts":      artifacts,
-		"gpu_type":       gpuType,
-		"gpu_count":      gpuCount,
-		"volume_gb":      volumeGB,
-		"framework":      framework,
-		"version":        version,
-	})
+	writeJSON(w, 200, resp)
 }
 
 func (a *app) deleteEnvironment(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("environment_id")
-	ctx := r.Context()
-	uid := authUserID(r)
-
-	var hasExp bool
-	if err := a.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM experiments WHERE environment_id = $1 AND user_id = $2)`, id, uid).Scan(&hasExp); err != nil {
-		writeErr(w, 500, err.Error())
-		return
-	}
-	if hasExp {
-		writeErr(w, 409, "Environment "+id+" still has experiments; delete them first")
-		return
-	}
-
-	res, err := a.db.ExecContext(ctx, `DELETE FROM environments WHERE id = $1 AND user_id = $2`, id, uid)
+	resp, err := a.environmentSvc.deleteEnvironment(r.Context(), authUserID(r), r.PathValue("environment_id"))
 	if err != nil {
-		writeErr(w, 500, err.Error())
+		writeServiceErr(w, err)
 		return
 	}
-	n, _ := res.RowsAffected()
-	if n == 0 {
-		writeErr(w, 404, "Environment "+id+" not found")
-		return
-	}
-	writeJSON(w, 200, map[string]any{"deleted": true, "environment_id": id})
+	writeJSON(w, 200, resp)
 }
 
 func (a *app) createExperiment(w http.ResponseWriter, r *http.Request) {
-	envID := r.PathValue("environment_id")
 	var req experimentCreateRequest
 	if err := decodeJSON(r, &req); err != nil {
 		writeErr(w, 400, err.Error())
 		return
 	}
-	if req.Name == "" {
-		writeErr(w, 400, "name is required")
-		return
-	}
-	uid := authUserID(r)
-	var exists bool
-	if err := a.db.QueryRowContext(r.Context(), `SELECT EXISTS(SELECT 1 FROM environments WHERE id = $1 AND user_id = $2)`, envID, uid).Scan(&exists); err != nil {
-		writeErr(w, 500, err.Error())
-		return
-	}
-	if !exists {
-		writeErr(w, 404, "Environment "+envID+" not found")
-		return
-	}
-
-	expID := shortID()
-	input := "experiments/" + expID + "/input"
-	_, err := a.db.ExecContext(r.Context(), `
-		INSERT INTO experiments (id, user_id, environment_id, name, input)
-		VALUES ($1,$2,$3,$4,$5)
-	`, expID, uid, envID, req.Name, input)
+	resp, err := a.environmentSvc.createExperiment(r.Context(), authUserID(r), r.PathValue("environment_id"), req)
 	if err != nil {
-		writeErr(w, 500, err.Error())
+		writeServiceErr(w, err)
 		return
 	}
-	writeJSON(w, 200, map[string]any{"experiment_id": expID, "name": req.Name, "env_id": envID, "input": input})
+	writeJSON(w, 200, resp)
 }
 
 func (a *app) listExperiments(w http.ResponseWriter, r *http.Request) {
-	rows, err := a.db.QueryContext(r.Context(), `
-		SELECT id, name, environment_id, input FROM experiments
-		WHERE user_id = $1 ORDER BY created_at DESC
-	`, authUserID(r))
+	items, err := a.environmentSvc.listExperiments(r.Context(), authUserID(r))
 	if err != nil {
-		writeErr(w, 500, err.Error())
+		writeServiceErr(w, err)
 		return
 	}
-	defer rows.Close()
-	out := make([]map[string]any, 0)
-	for rows.Next() {
-		var id, name, envID, input string
-		if err := rows.Scan(&id, &name, &envID, &input); err != nil {
-			writeErr(w, 500, err.Error())
-			return
-		}
-		out = append(out, map[string]any{"experiment_id": id, "name": name, "env_id": envID, "input": input})
-	}
-	writeJSON(w, 200, map[string]any{"experiments": out})
+	writeJSON(w, 200, listExperimentsResponse{Experiments: items})
 }
 
 func (a *app) getExperiment(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("experiment_id")
-	var name, envID, input string
-	err := a.db.QueryRowContext(r.Context(), `
-		SELECT name, environment_id, input FROM experiments WHERE id = $1 AND user_id = $2
-	`, id, authUserID(r)).Scan(&name, &envID, &input)
+	resp, err := a.environmentSvc.getExperiment(r.Context(), authUserID(r), r.PathValue("experiment_id"))
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			writeErr(w, 404, "Experiment "+id+" not found")
-			return
-		}
-		writeErr(w, 500, err.Error())
+		writeServiceErr(w, err)
 		return
 	}
-	writeJSON(w, 200, map[string]any{"experiment_id": id, "name": name, "env_id": envID, "input": input})
+	writeJSON(w, 200, resp)
 }
 
 func (a *app) deleteExperiment(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("experiment_id")
-	uid := authUserID(r)
-	ctx := r.Context()
-
-	var hasRuns bool
-	if err := a.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM runs WHERE experiment_id = $1 AND user_id = $2)`, id, uid).Scan(&hasRuns); err != nil {
-		writeErr(w, 500, err.Error())
-		return
-	}
-	if hasRuns {
-		writeErr(w, 409, "Experiment "+id+" still has runs; delete them first")
-		return
-	}
-
-	res, err := a.db.ExecContext(ctx, `DELETE FROM experiments WHERE id = $1 AND user_id = $2`, id, uid)
+	resp, err := a.environmentSvc.deleteExperiment(r.Context(), authUserID(r), r.PathValue("experiment_id"))
 	if err != nil {
-		writeErr(w, 500, err.Error())
+		writeServiceErr(w, err)
 		return
 	}
-	n, _ := res.RowsAffected()
-	if n == 0 {
-		writeErr(w, 404, "Experiment "+id+" not found")
-		return
-	}
-	writeJSON(w, 200, map[string]any{"deleted": true, "experiment_id": id})
+	writeJSON(w, 200, resp)
 }
