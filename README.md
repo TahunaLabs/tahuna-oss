@@ -57,8 +57,8 @@ Web dashboard for monitoring and managing training runs.
 
 ```bash
 cd apps/web
-npm install
-npm run dev
+bun install
+bun run dev
 ```
 
 ## Deployment

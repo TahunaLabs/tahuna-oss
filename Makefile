@@ -1,7 +1,7 @@
 .PHONY: web backend worker cli infra-up infra-down build test fmt dev tree
 
 web:
-	cd apps/web && npm run dev
+	cd apps/web && bun run dev
 
 backend:
 	@set -a; \

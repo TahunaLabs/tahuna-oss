@@ -5,9 +5,9 @@ Landing page for Tahuna — making agentic reasoner training accessible, fun, an
 ## Getting Started
 
 ```bash
-cd frontend
-npm install
-npm run dev
+cd apps/web
+bun install
+bun run dev
 ```
 
 The dev server runs at [http://localhost:3000](http://localhost:3000).
