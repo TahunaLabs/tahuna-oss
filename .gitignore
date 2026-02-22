@@ -30,6 +30,7 @@ ENV/
 *.swp
 *.swo
 .DS_Store
+.cache/
 
 # Go build artifacts
 *.test
