@@ -1,6 +1,6 @@
 # tahuna CLI (Go)
 
-This CLI consumes the Python provisioning API.
+This CLI consumes the backend API (FastAPI control plane + Go provisioner runtime).
 It uses arrow-key interactive prompts with a colored terminal UI.
 
 ## Build

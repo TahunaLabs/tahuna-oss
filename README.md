@@ -5,20 +5,32 @@ GPU provisioning platform for ML training. Provision GPUs and run your code with
 ## Structure
 
 ```
-├── backend/      # Provisioning service (Python)
-├── cli/          # Go CLI for users
-└── frontend/     # Web dashboard (Next.js)
+├── apps/
+│   ├── web/          # Next.js dashboard
+│   ├── backend/      # Go API (users/sessions/envs/auth)
+│   └── provisioner/  # Go RunPod orchestration runtime
+├── cli/              # Go CLI
+├── libs/             # Shared libs (placeholder)
+├── proto/            # gRPC contracts (placeholder)
+└── infra/            # Infra definitions (placeholder)
 ```
 
 ## Components
 
 ### Backend
-The provisioning backend that handles GPU allocation via RunPod and storage via R2.
+Go backend API.
 
 ```bash
-cd backend
-uv sync
-uv run uvicorn core.api:app --reload --port 8000
+cd apps/backend
+go run .
+```
+
+### Provisioner
+Go provisioner service/runtime for RunPod orchestration.
+
+```bash
+cd apps/provisioner
+go run .
 ```
 
 ### CLI
@@ -39,11 +51,11 @@ brew tap <your-org>/tap
 brew install tahuna
 ```
 
-### Frontend
+### Web
 Web dashboard for monitoring and managing training runs.
 
 ```bash
-cd frontend
+cd apps/web
 npm install
 npm run dev
 ```
@@ -52,6 +64,7 @@ npm run dev
 
 | Component | Platform | Root Directory |
 |-----------|----------|----------------|
-| Backend | GCP Cloud Run | `backend/` |
-| Frontend | Vercel | `frontend/` |
+| Backend | GCP Cloud Run | `apps/backend/` |
+| Provisioner | GCP Cloud Run / worker | `apps/provisioner/` |
+| Web | Vercel | `apps/web/` |
 | CLI | GitHub Releases / Homebrew (planned) | `cli/` |
