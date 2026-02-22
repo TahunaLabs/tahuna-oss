@@ -12,7 +12,10 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
+	"unicode/utf8"
+	"unsafe"
 
 	"github.com/manifoldco/promptui"
 )
@@ -21,22 +24,20 @@ const (
 	defaultAPIURL = "http://localhost:8000"
 	cliVersion    = "0.1.0"
 	cReset        = "\033[0m"
-	// Logo-only colors mapped from frontend palette:
-	// wordmark: teal family (#142e30/#1e3e40), mascot: gold (#c8a84e)
-	cLogoWord   = "\033[38;5;30m"
-	cLogoDonkey = "\033[38;5;179m"
 	// AMP frontend palette mapping:
 	// background #0b1d1f, foreground #e8e0d4, primary/accent #c8a84e, muted #8a9a93
-	cAmpWord   = "\033[38;5;44m"  // blue-green wordmark
-	cAmpText   = "\033[38;5;223m" // sand/foreground
-	cAmpMuted  = "\033[38;5;108m" // muted green-gray
-	cAmpTeal   = "\033[38;5;37m"  // dark teal accent
-	cAmpSlate  = "\033[38;5;66m"  // subdued slate
+	cAmpWord  = "\033[38;5;44m"  // blue-green wordmark
+	cAmpText  = "\033[38;5;223m" // sand/foreground
+	cAmpMuted = "\033[38;5;108m" // muted green-gray
+	cAmpTeal  = "\033[38;5;37m"  // dark teal accent
+	cAmpSlate = "\033[38;5;66m"  // subdued slate
+	cAmpGreen = "\033[38;5;48m"
+	cAmpGold  = "\033[38;5;179m"
 )
 
 func main() {
 	if len(os.Args) < 2 {
-		printLogo()
+		printHeader()
 		must(guidedSetup())
 		return
 	}
@@ -49,10 +50,10 @@ func main() {
 	case "run":
 		handleRun(os.Args[2:])
 	case "init", "start":
-		printLogo()
+		printHeader()
 		must(guidedSetup())
 	case "up":
-		printLogo()
+		printHeader()
 		must(guidedSetup())
 	case "version":
 		fmt.Printf("tahuna %s\n", cliVersion)
@@ -62,110 +63,6 @@ func main() {
 		usage()
 		os.Exit(1)
 	}
-}
-
-func printLogo() {
-	logo := strings.TrimPrefix(`
-                                                                          ▄▄█████▄
-                                                                     ▄████▀▀████                 ▄▄▄
-                                                                    █████    ████              ▄█████▄
-                                                                    █████    ████             ████▀▀███
-                                                                    █████    ████            █████   ███
-                                                                     █████   ████           █████    ███
-                                                                     █████   ████          █████     ███
-                                                                      █████  █████        █████     ███
-  ██             ██                                                   ██████▄▄█████████████████    ███
-  ██             ██                                                    ███████████████████████████████
-██████   ▄████▄  ██████▄  ██    ██ ▄██████▄  ▄████▄                   █████████████████████████████████
-  ██    ██▀  ▀██ ██▀  ▀██ ██    ██ ██▀  ▀██ ██▀  ▀██                 ███████████████████████████████████
-  ██    ████████ ██    ██ ██    ██ ██    ██ ████████                 █▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀█
-  ██    ██▄  ▄██ ██    ██ ██▄  ▄██ ██    ██ ██▄  ▄██                 ███████    ████████████    ████████
-  ▀████ ▀██████▀ ██    ██ ▀██████▀ ██    ██ ▀██████▀                 ███████    ████████████    ████████
-                                                                      ███████▄▄▄████████████▄▄▄████████
-─────────────────────────────────────────────────────────              ███████████████████████████████
-                                                                        █████████████████████████████
-     T H E   R L   T R A I N I N G   S U B S T R A T E                    ██████████████████████████
-                                                                           █████████████████████████
-                                                                            █████████████████████████
-                                                                            ████████  ████████  █████
-                                                                            ████████▄▄████████▄▄█████
-                                                                             ███████████████████████
-                                                                              ████████      ███████
-                                                                               ███████████████████
-                                                                                 ▀▀▀██████████▀▀▀
-`, "\n")
-	for _, line := range strings.Split(logo, "\n") {
-		gapStart, gapEnd, gapLen := longestGap(line)
-		if gapLen >= 10 {
-			left := line[:gapStart]
-			gap := line[gapStart:gapEnd]
-			right := line[gapEnd:]
-			leftHasGlyphs := strings.TrimSpace(left) != ""
-			rightHasGlyphs := strings.TrimSpace(right) != ""
-
-			switch {
-			case leftHasGlyphs && rightHasGlyphs:
-				fmt.Printf("%s%s%s\n", colorGlyphs(left, cLogoWord), gap, colorGlyphs(right, cLogoDonkey))
-				continue
-			case rightHasGlyphs:
-				fmt.Printf("%s\n", colorGlyphs(line, cLogoDonkey))
-				continue
-			case leftHasGlyphs:
-				fmt.Printf("%s\n", colorGlyphs(line, cLogoWord))
-				continue
-			}
-		}
-		fmt.Printf("%s\n", colorGlyphs(line, cLogoDonkey))
-	}
-	fmt.Println()
-}
-
-func colorGlyphs(s, color string) string {
-	var b strings.Builder
-	inColor := false
-	for _, r := range s {
-		if r == ' ' {
-			if inColor {
-				b.WriteString(cReset)
-				inColor = false
-			}
-			b.WriteRune(r)
-			continue
-		}
-		if !inColor {
-			b.WriteString(color)
-			inColor = true
-		}
-		b.WriteRune(r)
-	}
-	if inColor {
-		b.WriteString(cReset)
-	}
-	return b.String()
-}
-
-func longestGap(s string) (start int, end int, length int) {
-	bestStart, bestEnd, bestLen := 0, 0, 0
-	curStart, curLen := -1, 0
-	for i, r := range s {
-		if r == ' ' {
-			if curStart == -1 {
-				curStart = i
-				curLen = 1
-			} else {
-				curLen++
-			}
-			if curLen > bestLen {
-				bestLen = curLen
-				bestStart = curStart
-				bestEnd = i + 1
-			}
-		} else {
-			curStart = -1
-			curLen = 0
-		}
-	}
-	return bestStart, bestEnd, bestLen
 }
 
 func usage() {
@@ -187,6 +84,12 @@ Tip:
 `)
 }
 
+func printHeader() {
+	printPanel("Tahuna", []string{
+		fmt.Sprintf("%s>%s Tahuna CLI", cAmpGold, cReset),
+	}, "", "")
+}
+
 func apiURL() string {
 	if v := os.Getenv("TAHUNA_API_URL"); v != "" {
 		return strings.TrimRight(v, "/")
@@ -195,8 +98,6 @@ func apiURL() string {
 }
 
 func guidedSetup() error {
-	fmt.Printf("%sUsing API:%s %s\n\n", cAmpSlate, cReset, apiURL())
-
 	gpus, versionsByFramework, err := fetchCatalog()
 	if err != nil {
 		return err
@@ -259,6 +160,7 @@ func guidedSetup() error {
 	}
 	runID := asString(runResp["run_id"])
 	fmt.Printf("\n%sRun created:%s         %s\n", cAmpWord, cReset, runID)
+	printTrainPreview(expID, runID)
 
 	if promptYesNo("Watch this run now?", true) {
 		return monitorRun(runID, 5)
@@ -549,16 +451,136 @@ func monitorRun(runID string, interval int) error {
 		}
 		status := asString(resp["status"])
 		errMsg := asString(resp["error"])
-		fmt.Printf("%s[%s]%s run=%s status=%s\n", cAmpTeal, time.Now().Format(time.RFC3339), cReset, runID, status)
-		if errMsg != "" {
-			fmt.Printf("error=%s\n", errMsg)
-		}
+		printRunPanel(runID, status, errMsg)
 		if status == "completed" || status == "failed" {
 			break
 		}
 		time.Sleep(time.Duration(interval) * time.Second)
 	}
 	return nil
+}
+
+func printTrainPreview(expID, runID string) {
+	lines := []string{
+		fmt.Sprintf("%s>%s Tahuna train --experiment %s", cAmpGold, cReset, expID),
+		"",
+		fmt.Sprintf("  %sSetting up post-training pipeline...%s", cAmpMuted, cReset),
+		"",
+		fmt.Sprintf("  %s✓%s Loading environment and artifacts", cAmpGreen, cReset),
+		fmt.Sprintf("  %s✓%s Launching run %s%s%s", cAmpGreen, cReset, cAmpGold, runID, cReset),
+		fmt.Sprintf("  %s✓%s Waiting for pod allocation", cAmpGreen, cReset),
+	}
+	printPanel("Tahuna", lines, "training", "episode 1/500  ETA --")
+}
+
+func printRunPanel(runID, status, errMsg string) {
+	statusColor := cAmpGold
+	if status == "running" || status == "completed" {
+		statusColor = cAmpGreen
+	}
+	lines := []string{
+		fmt.Sprintf("%s>%s Tahuna run watch --id %s", cAmpGold, cReset, runID),
+		"",
+		fmt.Sprintf("  %sMonitoring run lifecycle...%s", cAmpMuted, cReset),
+		"",
+		fmt.Sprintf("  %s✓%s Status %s%s%s", cAmpGreen, cReset, statusColor, status, cReset),
+		fmt.Sprintf("  %s>%s Last update %s", cAmpGreen, cReset, time.Now().Format(time.RFC3339)),
+	}
+	if errMsg != "" {
+		lines = append(lines, fmt.Sprintf("  %s>%s Error %s", cAmpGold, cReset, errMsg))
+	}
+	printPanel("Tahuna", lines, status, "run "+runID)
+}
+
+func printPanel(title string, lines []string, leftFooter, rightFooter string) {
+	width := panelWidth()
+	border := strings.Repeat("─", width-2)
+
+	fmt.Printf("\n%s╭%s╮%s\n", cAmpTeal, border, cReset)
+	printPanelLine(width, fmt.Sprintf("%s● ● ●%s  %s%s%s", cAmpMuted, cReset, cAmpText, title, cReset))
+	fmt.Printf("%s├%s┤%s\n", cAmpTeal, border, cReset)
+	for _, line := range lines {
+		printPanelLine(width, line)
+	}
+	if strings.TrimSpace(leftFooter) != "" || strings.TrimSpace(rightFooter) != "" {
+		fmt.Printf("%s├%s┤%s\n", cAmpTeal, border, cReset)
+		footerGap := width - 4 - visibleLen(leftFooter) - visibleLen(rightFooter)
+		if footerGap < 1 {
+			footerGap = 1
+		}
+		printPanelLine(width, leftFooter+strings.Repeat(" ", footerGap)+rightFooter)
+	}
+	fmt.Printf("%s╰%s╯%s\n", cAmpTeal, border, cReset)
+}
+
+func printPanelLine(width int, content string) {
+	space := width - 6 - visibleLen(content)
+	if space < 0 {
+		space = 0
+	}
+	fmt.Printf("%s│%s  %s%s  %s│%s\n", cAmpTeal, cReset, content, strings.Repeat(" ", space), cAmpTeal, cReset)
+}
+
+func visibleLen(s string) int {
+	n := 0
+	for i := 0; i < len(s); {
+		if s[i] == 0x1b {
+			for i < len(s) && s[i] != 'm' {
+				i++
+			}
+			if i < len(s) {
+				i++
+			}
+			continue
+		}
+		_, size := utf8.DecodeRuneInString(s[i:])
+		n++
+		i += size
+	}
+	return n
+}
+
+func panelWidth() int {
+	cols := terminalColumns()
+	if cols <= 0 {
+		cols = 100
+	}
+
+	// Keep the panel readable on small terminals and avoid getting too wide.
+	width := cols - 2
+	if width < 72 {
+		width = 72
+	}
+	if width > 120 {
+		width = 120
+	}
+	return width
+}
+
+func terminalColumns() int {
+	if v := strings.TrimSpace(os.Getenv("COLUMNS")); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			return n
+		}
+	}
+
+	type winsize struct {
+		Row    uint16
+		Col    uint16
+		Xpixel uint16
+		Ypixel uint16
+	}
+	ws := winsize{}
+	_, _, errno := syscall.Syscall(
+		syscall.SYS_IOCTL,
+		uintptr(os.Stdout.Fd()),
+		uintptr(syscall.TIOCGWINSZ),
+		uintptr(unsafe.Pointer(&ws)),
+	)
+	if errno == 0 && ws.Col > 0 {
+		return int(ws.Col)
+	}
+	return 0
 }
 
 func fetchCatalog() ([]string, map[string][]string, error) {
@@ -648,7 +670,7 @@ func promptChoice(label string, options []string, defaultIndex int) string {
 		Size:      10,
 		Templates: &promptui.SelectTemplates{
 			Label:    "{{ . }}",
-			Active:   fmt.Sprintf("%s▸%s {{ . }}", cAmpWord, cReset),
+			Active:   fmt.Sprintf("%s>%s {{ . }}", cAmpGold, cReset),
 			Inactive: fmt.Sprintf("%s  {{ . }}%s", cAmpMuted, cReset),
 			Selected: fmt.Sprintf("%s✔%s {{ .Label }}: %s{{ . }}%s", cAmpWord, cReset, cAmpText, cReset),
 		},
