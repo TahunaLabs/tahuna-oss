@@ -18,28 +18,49 @@ GPU provisioning platform for ML training. Provision GPUs and run your code with
 
 ## Components
 
+### Make Targets
+
+Install everything:
+
+```bash
+make install
+```
+
+Run core services (backend + worker + web):
+
+```bash
+make run
+```
+
+Per-component targets are also available:
+- `make install-web` / `make run-web`
+- `make install-backend` / `make run-backend`
+- `make install-worker` / `make run-worker`
+- `make install-provisioner` / `make run-provisioner`
+- `make install-cli` / `make run-cli`
+
 ### Backend
 Go backend API (Postgres + Redis + Asynq producer).
 
 ```bash
-cd apps/backend
-go run .
+make install-backend
+make run-backend
 ```
 
 ### Worker
 Go worker service that consumes Redis/Asynq run jobs and executes provisioning.
 
 ```bash
-cd apps/worker
-go run .
+make install-worker
+make run-worker
 ```
 
 ### CLI
 Go CLI for developers to provision GPUs and run training jobs programmatically.
 
 ```bash
-cd cli
-go run . init
+make install-cli
+make run-cli
 ```
 
 ### CLI Install (Homebrew)
@@ -56,9 +77,8 @@ brew install tahuna
 Web dashboard for monitoring and managing training runs.
 
 ```bash
-cd apps/web
-bun install
-bun run dev
+make install-web
+make run-web
 ```
 
 ## Deployment

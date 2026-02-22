@@ -1,22 +1,60 @@
-.PHONY: web backend worker cli infra-up infra-down build test fmt dev tree
+.PHONY: \
+	install run \
+	install-web install-backend install-worker install-provisioner install-cli \
+	run-web run-backend run-worker run-provisioner run-cli \
+	web backend worker provisioner cli \
+	infra-up infra-down build test fmt dev tree
 
-web:
+install: install-web install-backend install-worker install-provisioner install-cli
+
+run:
+	@trap 'kill 0' INT TERM EXIT; \
+	$(MAKE) run-backend & \
+	$(MAKE) run-worker & \
+	$(MAKE) run-web & \
+	wait
+
+install-web:
+	cd apps/web && bun install
+
+run-web:
 	cd apps/web && bun run dev
 
-backend:
+install-backend:
+	cd apps/backend && go mod download
+
+run-backend:
 	@set -a; \
 	if [ -f apps/backend/.env.local ]; then . apps/backend/.env.local; fi; \
 	set +a; \
 	cd apps/backend && go run .
 
-worker:
+install-worker:
+	cd apps/worker && go mod download
+
+run-worker:
 	@set -a; \
 	if [ -f apps/backend/.env.local ]; then . apps/backend/.env.local; fi; \
 	set +a; \
 	cd apps/worker && go run .
 
-cli:
+install-provisioner:
+	cd apps/provisioner && go mod download
+
+run-provisioner:
+	cd apps/provisioner && go run .
+
+install-cli:
+	cd cli && go mod download
+
+run-cli:
 	cd cli && go run .
+
+web: run-web
+backend: run-backend
+worker: run-worker
+provisioner: run-provisioner
+cli: run-cli
 
 infra-up:
 	docker compose up -d
@@ -42,7 +80,7 @@ fmt:
 	cd apps/provisioner && gofmt -w *.go
 	cd cli && gofmt -w *.go
 
-dev: backend
+dev: run-backend
 
 tree:
 	@echo "monorepo/"
