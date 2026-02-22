@@ -25,16 +25,15 @@ import (
 )
 
 type app struct {
-	db              *sql.DB
-	redis           *redis.Client
-	asynqClient     *asynq.Client
-	asynqInspector  *asynq.Inspector
-	queueName       string
-	authRequired    bool
-	devUserID       string
-	bootstrapSecret string
-	sessionTTL      time.Duration
-	sessionCookie   string
+	db             *sql.DB
+	redis          *redis.Client
+	asynqClient    *asynq.Client
+	asynqInspector *asynq.Inspector
+	queueName      string
+	authRequired   bool
+	devUserID      string
+	sessionTTL     time.Duration
+	sessionCookie  string
 
 	authSvc        *authService
 	environmentSvc *environmentService
@@ -86,16 +85,15 @@ func main() {
 	asynqInspector := asynq.NewInspector(asynqRedis)
 
 	a := &app{
-		db:              db,
-		redis:           redisClient,
-		asynqClient:     asynqClient,
-		asynqInspector:  asynqInspector,
-		queueName:       queueName,
-		authRequired:    envBoolOr("AUTH_REQUIRED", true),
-		devUserID:       strings.TrimSpace(os.Getenv("DEV_USER_ID")),
-		bootstrapSecret: strings.TrimSpace(os.Getenv("BOOTSTRAP_SECRET")),
-		sessionTTL:      envDurationOr("SESSION_TTL", 7*24*time.Hour),
-		sessionCookie:   envOr("SESSION_COOKIE_NAME", "tahuna_session"),
+		db:             db,
+		redis:          redisClient,
+		asynqClient:    asynqClient,
+		asynqInspector: asynqInspector,
+		queueName:      queueName,
+		authRequired:   envBoolOr("AUTH_REQUIRED", true),
+		devUserID:      strings.TrimSpace(os.Getenv("DEV_USER_ID")),
+		sessionTTL:     envDurationOr("SESSION_TTL", 7*24*time.Hour),
+		sessionCookie:  envOr("SESSION_COOKIE_NAME", "tahuna_session"),
 	}
 	a.authSvc = newAuthService(db, redisClient)
 	a.environmentSvc = newEnvironmentService(db, redisClient)

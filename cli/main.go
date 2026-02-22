@@ -71,7 +71,7 @@ func main() {
 }
 
 func usage() {
-	fmt.Println(`tahuna CLI
+	fmt.Print(`tahuna CLI
 
 Usage:
   tahuna shell
@@ -84,7 +84,7 @@ Usage:
 
 Environment:
   TAHUNA_API_URL   Backend base URL (default: http://localhost:8000)
-  TAHUNA_API_KEY   API key from /auth/bootstrap (sent as Bearer token)
+  TAHUNA_API_KEY   API key from the API key manager (sent as Bearer token)
 
 Tip:
   Run "tahuna" with no args to launch the guided setup flow (same as "tahuna init").

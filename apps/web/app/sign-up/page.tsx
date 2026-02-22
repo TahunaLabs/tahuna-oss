@@ -1,66 +1,51 @@
 "use client"
 
 import Link from "next/link"
-import { useMemo, useState, type FormEvent } from "react"
+import { useState, type FormEvent } from "react"
 import { AuthPageShell } from "@/components/auth-page-shell"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 
-type BootstrapResponse = {
-  user_id: string
-  api_key: string
-  api_key_id: string
-}
-
-const DEFAULT_ROLE = "user"
-const DEFAULT_API_URL = process.env.NEXT_PUBLIC_TAHUNA_API_URL?.trim() || "http://localhost:8000"
-
 export default function SignUpPage() {
   const [email, setEmail] = useState("")
-  const [name, setName] = useState("web-signup")
+  const [password, setPassword] = useState("")
   const [orgID, setOrgID] = useState("")
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState("")
-  const [result, setResult] = useState<BootstrapResponse | null>(null)
-
-  const exportSnippet = useMemo(() => {
-    if (!result) {
-      return ""
-    }
-    return `export TAHUNA_API_URL=${DEFAULT_API_URL}
-export TAHUNA_API_KEY=${result.api_key}`
-  }, [result])
+  const [isComplete, setIsComplete] = useState(false)
+  const [emailSent, setEmailSent] = useState<boolean | null>(null)
+  const [warning, setWarning] = useState("")
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setBusy(true)
     setError("")
-    setResult(null)
+    setIsComplete(false)
+    setEmailSent(null)
+    setWarning("")
 
     try {
-      const bootstrapResp = await fetch("/api/auth/bootstrap", {
+      const signupResp = await fetch("/api/auth/signup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           email,
-          role: DEFAULT_ROLE,
+          password,
           org_id: orgID,
-          name,
         }),
       })
-      const bootstrapData = await bootstrapResp.json()
-      if (!bootstrapResp.ok) {
-        throw new Error(bootstrapData.detail || "failed to create account")
+      const signupData = (await signupResp.json()) as {
+        detail?: string
+        email_sent?: boolean
+        warning?: string | null
       }
-
-      setResult(bootstrapData as BootstrapResponse)
-
-      await fetch("/api/auth/sessions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ api_key: (bootstrapData as BootstrapResponse).api_key }),
-      })
+      if (!signupResp.ok) {
+        throw new Error(signupData.detail || "failed to create account")
+      }
+      setEmailSent(Boolean(signupData.email_sent))
+      setWarning(signupData.warning || "")
+      setIsComplete(true)
     } catch (err) {
       setError(err instanceof Error ? err.message : "unexpected error")
     } finally {
@@ -72,7 +57,7 @@ export TAHUNA_API_KEY=${result.api_key}`
     <AuthPageShell
       eyebrow="Account Setup"
       title="Sign up for Tahuna"
-      subtitle="Create your account identity and issue your first API key. The API key is shown once and can be used immediately in the CLI."
+      subtitle="Create your account with email and password, then get CLI API keys from the API key manager."
     >
       <form onSubmit={onSubmit} className="space-y-5">
         <div className="space-y-2">
@@ -90,13 +75,16 @@ export TAHUNA_API_KEY=${result.api_key}`
 
         <div className="grid gap-5 md:grid-cols-2">
           <div className="space-y-2">
-            <Label htmlFor="name">Key Name</Label>
+            <Label htmlFor="password">Password</Label>
             <Input
-              id="name"
+              id="password"
+              type="password"
+              autoComplete="new-password"
               required
-              placeholder="web-signup"
-              value={name}
-              onChange={(event) => setName(event.target.value)}
+              minLength={8}
+              placeholder="At least 8 characters"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
             />
           </div>
 
@@ -112,26 +100,30 @@ export TAHUNA_API_KEY=${result.api_key}`
         </div>
 
         <Button type="submit" disabled={busy} className="w-full sm:w-auto">
-          {busy ? "Creating account..." : "Create account + API key"}
+          {busy ? "Creating account..." : "Create account"}
         </Button>
 
         {error ? <p className="text-sm text-destructive">{error}</p> : null}
 
-        {result ? (
+        {isComplete ? (
           <div className="mt-4 rounded-lg border border-primary/40 bg-primary/10 p-4 space-y-3">
-            <p className="text-sm text-foreground">
-              API key created for user <span className="font-mono">{result.user_id}</span>.
-            </p>
-            <div className="rounded-md border border-border bg-background/70 p-3 font-mono text-xs break-all">{result.api_key}</div>
-            <pre className="rounded-md border border-border bg-background/70 p-3 text-xs overflow-x-auto">
-              <code>{exportSnippet}</code>
-            </pre>
+            <p className="text-sm text-foreground">Account created and signed in.</p>
+            {emailSent ? (
+              <p className="text-xs text-muted-foreground">
+                Confirmation email sent to <span className="font-medium">{email}</span>.
+              </p>
+            ) : (
+              <p className="text-xs text-amber-200">
+                We could not confirm email delivery for <span className="font-medium">{email}</span>.
+                {warning ? ` ${warning}` : ""}
+              </p>
+            )}
             <p className="text-xs text-muted-foreground">
-              Save this key now. It will not be shown again. Need another one later? Use{" "}
+              Ready for CLI access? Open{" "}
               <Link href="/api-key" className="text-foreground underline underline-offset-2">
                 Get API Key
               </Link>
-              .
+              {" "}to generate a dedicated key.
             </p>
           </div>
         ) : null}

@@ -24,7 +24,6 @@ const DEFAULT_API_URL = process.env.NEXT_PUBLIC_TAHUNA_API_URL?.trim() || "http:
 export default function ApiKeyPage() {
   const [email, setEmail] = useState("")
   const [name, setName] = useState("cli")
-  const [orgID, setOrgID] = useState("")
   const [loadingProfile, setLoadingProfile] = useState(true)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState("")
@@ -44,7 +43,6 @@ export default function ApiKeyPage() {
           return
         }
         setEmail(me.email ?? "")
-        setOrgID(me.org_id ?? "")
       } finally {
         if (active) {
           setLoadingProfile(false)
@@ -73,19 +71,16 @@ export TAHUNA_API_KEY=${result.api_key}`
     setResult(null)
 
     try {
-      const bootstrapResp = await fetch("/api/auth/bootstrap", {
+      const apiKeyResp = await fetch("/api/auth/api-keys", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          email,
-          role: "user",
-          org_id: orgID,
           name,
         }),
       })
 
-      const data = await bootstrapResp.json()
-      if (!bootstrapResp.ok) {
+      const data = await apiKeyResp.json()
+      if (!apiKeyResp.ok) {
         throw new Error(data.detail || "failed to create api key")
       }
       setResult(data as BootstrapResponse)
@@ -100,43 +95,30 @@ export TAHUNA_API_KEY=${result.api_key}`
     <AuthPageShell
       eyebrow="CLI Credentials"
       title="Get an API key"
-      subtitle="Issue an API key for local CLI usage. Keys are displayed once, so copy it when generated."
+      subtitle="Issue an API key for local CLI usage. You must be signed in. Keys are displayed once, so copy them when generated."
     >
       <form onSubmit={onSubmit} className="space-y-5">
         <div className="space-y-2">
-          <Label htmlFor="email">Email</Label>
+          <Label htmlFor="email">Signed In As</Label>
           <Input
             id="email"
             type="email"
-            required
-            placeholder="you@example.com"
+            placeholder="Sign in first"
             value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            disabled={loadingProfile}
+            readOnly
+            disabled
           />
         </div>
 
-        <div className="grid gap-5 md:grid-cols-2">
-          <div className="space-y-2">
-            <Label htmlFor="name">Key Name</Label>
-            <Input
-              id="name"
-              required
-              placeholder="cli"
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="org-id">Org ID (optional)</Label>
-            <Input
-              id="org-id"
-              placeholder="acme"
-              value={orgID}
-              onChange={(event) => setOrgID(event.target.value)}
-            />
-          </div>
+        <div className="space-y-2">
+          <Label htmlFor="name">Key Name</Label>
+          <Input
+            id="name"
+            required
+            placeholder="cli"
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+          />
         </div>
 
         <Button type="submit" disabled={busy || loadingProfile} className="w-full sm:w-auto">

@@ -14,16 +14,15 @@ go run .
 
 ```bash
 export TAHUNA_API_URL=http://localhost:8000
-export TAHUNA_API_KEY=<bootstrap-issued-key>
+export TAHUNA_API_KEY=<api-key-from-api-key-manager>
 ```
 
-Bootstrap an API key (one-time):
+Create an API key:
 
 ```bash
-curl -X POST "$TAHUNA_API_URL/auth/bootstrap" \
-  -H "X-Bootstrap-Secret: $BOOTSTRAP_SECRET" \
-  -H "Content-Type: application/json" \
-  -d '{"email":"you@example.com","name":"local-cli"}'
+# 1) Sign up / sign in in the web app
+# 2) Open "Get API Key"
+# 3) Create key and copy it into TAHUNA_API_KEY
 ```
 
 ## Examples

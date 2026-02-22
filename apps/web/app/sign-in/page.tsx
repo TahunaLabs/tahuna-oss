@@ -15,7 +15,8 @@ type MeResponse = {
 }
 
 export default function SignInPage() {
-  const [apiKey, setApiKey] = useState("")
+  const [email, setEmail] = useState("")
+  const [password, setPassword] = useState("")
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState("")
   const [me, setMe] = useState<MeResponse | null>(null)
@@ -27,14 +28,17 @@ export default function SignInPage() {
     setMe(null)
 
     try {
-      const sessionResp = await fetch("/api/auth/sessions", {
+      const signinResp = await fetch("/api/auth/signin", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ api_key: apiKey }),
+        body: JSON.stringify({
+          email,
+          password,
+        }),
       })
-      const sessionData = await sessionResp.json()
-      if (!sessionResp.ok) {
-        throw new Error(sessionData.detail || "failed to create session")
+      const signinData = await signinResp.json()
+      if (!signinResp.ok) {
+        throw new Error(signinData.detail || "failed to sign in")
       }
 
       const meResp = await fetch("/api/auth/me", { method: "GET" })
@@ -53,20 +57,32 @@ export default function SignInPage() {
   return (
     <AuthPageShell
       eyebrow="Session Access"
-      title="Sign in with API key"
-      subtitle="Tahuna currently authenticates with API keys. Enter an existing key to start a browser session for the dashboard flows."
+      title="Sign in to Tahuna"
+      subtitle="Sign in with your account email and password to start a browser session. Generate CLI API keys in the API key manager."
     >
       <form onSubmit={onSubmit} className="space-y-5">
         <div className="space-y-2">
-          <Label htmlFor="api-key">API Key</Label>
+          <Label htmlFor="email">Email</Label>
           <Input
-            id="api-key"
-            type="password"
-            autoComplete="off"
+            id="email"
+            type="email"
+            autoComplete="email"
             required
-            placeholder="tk_..."
-            value={apiKey}
-            onChange={(event) => setApiKey(event.target.value)}
+            placeholder="you@example.com"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="password">Password</Label>
+          <Input
+            id="password"
+            type="password"
+            autoComplete="current-password"
+            required
+            placeholder="Your password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
           />
         </div>
 
@@ -78,7 +94,7 @@ export default function SignInPage() {
 
         {me ? (
           <div className="rounded-lg border border-primary/40 bg-primary/10 p-4 text-sm">
-            Signed in as <span className="font-medium">{me.email}</span> ({me.role}).
+            Signed in as <span className="font-medium">{me.email}</span>.
             <br />
             Continue to{" "}
             <Link href="/api-key" className="underline underline-offset-2">
@@ -89,7 +105,7 @@ export default function SignInPage() {
         ) : null}
 
         <p className="text-xs text-muted-foreground">
-          No key yet? Create one on{" "}
+          New here? Create your account on{" "}
           <Link href="/sign-up" className="text-foreground underline underline-offset-2">
             Sign Up
           </Link>

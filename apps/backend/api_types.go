@@ -4,11 +4,7 @@ type healthResponse struct {
 	Status string `json:"status"`
 }
 
-type deleteResponse struct {
-	Deleted bool `json:"deleted"`
-}
-
-type bootstrapResponse struct {
+type apiKeyResponse struct {
 	UserID   string `json:"user_id"`
 	APIKey   string `json:"api_key"`
 	APIKeyID string `json:"api_key_id"`
@@ -17,6 +13,13 @@ type bootstrapResponse struct {
 type createSessionResponse struct {
 	SessionID string `json:"session_id"`
 	UserID    string `json:"user_id"`
+}
+
+type signupResponse struct {
+	UserID    string `json:"user_id"`
+	SessionID string `json:"session_id"`
+	EmailSent bool   `json:"email_sent"`
+	Warning   string `json:"warning,omitempty"`
 }
 
 type meResponse struct {
