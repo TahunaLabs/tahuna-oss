@@ -8,8 +8,10 @@ export function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   const navLinks = [
-    { label: "Manifesto", href: "#manifesto" },
-    { label: "The Stack", href: "#layers" },
+    { label: "Manifesto", href: "/#manifesto" },
+    { label: "The Stack", href: "/#layers" },
+    { label: "Sign In", href: "/sign-in" },
+    { label: "Sign Up", href: "/sign-up" },
   ]
 
   return (
@@ -32,10 +34,10 @@ export function Header() {
             </Link>
           ))}
           <Link
-            href="#waitlist"
+            href="/api-key"
             className="text-sm font-medium text-foreground border border-foreground/30 rounded-full px-5 py-2 hover:bg-foreground/5 transition-colors"
           >
-            Get in Touch
+            Get API Key
           </Link>
         </div>
 
@@ -63,11 +65,11 @@ export function Header() {
             </Link>
           ))}
           <Link
-            href="#waitlist"
+            href="/api-key"
             className="block text-sm font-medium text-foreground border border-foreground/30 rounded-full px-5 py-2 text-center hover:bg-foreground/5 transition-colors"
             onClick={() => setMobileMenuOpen(false)}
           >
-            Get in Touch
+            Get API Key
           </Link>
         </div>
       )}
