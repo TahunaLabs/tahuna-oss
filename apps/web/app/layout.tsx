@@ -1,7 +1,7 @@
-import type React from "react"
-import type { Metadata } from "next"
-import { Geist, Geist_Mono, Cormorant_Garamond } from "next/font/google"
 import { Analytics } from "@vercel/analytics/next"
+import type { Metadata } from "next"
+import { Cormorant_Garamond, Geist, Geist_Mono } from "next/font/google"
+import type React from "react"
 import "./globals.css"
 
 const geist = Geist({ subsets: ["latin"], variable: "--font-sans" })
@@ -13,9 +13,9 @@ const cormorant = Cormorant_Garamond({
 })
 
 export const metadata: Metadata = {
-  title: "Tahuna | RL-as-a-Service",
+  title: "Tahuna | The RL Training Substrate",
   description:
-    "The substrate for agents that actually learn. RL-as-a-Service: a training substrate where AI agents practice, adapt, and improve through experience.",
+    "The RL training substrate. Where AI agents practice, adapt, and improve through experience — no research lab required.",
 }
 
 export default function RootLayout({
