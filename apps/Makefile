@@ -1,4 +1,4 @@
-.PHONY: web backend provisioner cli build test fmt dev tree
+.PHONY: web backend worker cli build test fmt dev tree
 
 web:
 	$(MAKE) -C .. web
@@ -6,8 +6,8 @@ web:
 backend:
 	$(MAKE) -C .. backend
 
-provisioner:
-	$(MAKE) -C .. provisioner ARGS="$(ARGS)"
+worker:
+	$(MAKE) -C .. worker
 
 cli:
 	$(MAKE) -C .. cli

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -9,11 +8,11 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 )
 
 var gpus = []string{
@@ -58,8 +57,9 @@ type dbState struct {
 }
 
 type app struct {
-	mu     sync.Mutex
-	dbPath string
+	mu       sync.Mutex
+	dbPath   string
+	queueDir string
 }
 
 type environmentCreateRequest struct {
@@ -81,8 +81,19 @@ type runCreateRequest struct {
 	VolumeGB *int    `json:"volume_gb"`
 }
 
+type runJob struct {
+	RunID     string         `json:"run_id"`
+	Overrides map[string]any `json:"overrides,omitempty"`
+}
+
 func main() {
-	a := &app{dbPath: envOr("TAHUNA_DB", "db.json")}
+	a := &app{
+		dbPath:   envOr("TAHUNA_DB", "db.json"),
+		queueDir: envOr("TAHUNA_QUEUE_DIR", "queue/runs"),
+	}
+	if err := os.MkdirAll(a.queueDir, 0o755); err != nil {
+		log.Fatalf("failed to create queue dir %q: %v", a.queueDir, err)
+	}
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /health", a.health)
@@ -334,7 +345,7 @@ func (a *app) createRun(w http.ResponseWriter, r *http.Request) {
 		"input":         asString(exp["input"]),
 		"output":        "runs/" + runID + "/output",
 		"logs":          "runs/" + runID + "/logs",
-		"status":        "created",
+		"status":        "queued",
 	}
 	db.Runs[runID] = run
 	a.save(db)
@@ -350,7 +361,19 @@ func (a *app) createRun(w http.ResponseWriter, r *http.Request) {
 	if req.VolumeGB != nil {
 		overrides["volume_gb"] = *req.VolumeGB
 	}
-	go a.executeRun(runID, overrides)
+	if err := a.enqueueRun(runID, overrides); err != nil {
+		a.mu.Lock()
+		db := a.load()
+		if run, ok := db.Runs[runID]; ok {
+			run["status"] = "failed"
+			run["error"] = "failed to enqueue run job: " + err.Error()
+			db.Runs[runID] = run
+		}
+		a.save(db)
+		a.mu.Unlock()
+		writeErr(w, 500, "failed to enqueue run")
+		return
+	}
 
 	resp := cloneMap(run)
 	resp["run_id"] = runID
@@ -424,135 +447,6 @@ func (a *app) deleteRun(w http.ResponseWriter, r *http.Request) {
 	a.save(db)
 	a.mu.Unlock()
 	writeJSON(w, 200, map[string]any{"deleted": true, "run_id": id})
-}
-
-func (a *app) executeRun(runID string, overrides map[string]any) {
-	get := func() (map[string]any, map[string]any, map[string]any, error) {
-		a.mu.Lock()
-		defer a.mu.Unlock()
-		db := a.load()
-		run, ok := db.Runs[runID]
-		if !ok {
-			return nil, nil, nil, fmt.Errorf("run not found")
-		}
-		exp, ok := db.Experiments[asString(run["experiment_id"])]
-		if !ok {
-			return nil, nil, nil, fmt.Errorf("experiment %s not found", asString(run["experiment_id"]))
-		}
-		env, ok := db.Environments[asString(exp["env_id"])]
-		if !ok {
-			return nil, nil, nil, fmt.Errorf("environment %s not found", asString(exp["env_id"]))
-		}
-		return cloneMap(run), cloneMap(exp), cloneMap(env), nil
-	}
-	update := func(fields map[string]any) {
-		a.mu.Lock()
-		db := a.load()
-		run := db.Runs[runID]
-		if run != nil {
-			for k, v := range fields {
-				run[k] = v
-			}
-			db.Runs[runID] = run
-			a.save(db)
-		}
-		a.mu.Unlock()
-	}
-
-	run, exp, env, err := get()
-	if err != nil {
-		update(map[string]any{"status": "failed", "error": err.Error()})
-		return
-	}
-	gpuType := firstString(overrides["gpu_type"], env["gpu_type"])
-	gpuCount := firstInt(overrides["gpu_count"], env["gpu_count"])
-	volumeGB := firstInt(overrides["volume_gb"], env["volume_gb"])
-	update(map[string]any{
-		"status":              "queued",
-		"effective_gpu_type":  gpuType,
-		"effective_gpu_count": gpuCount,
-		"effective_volume_gb": volumeGB,
-	})
-
-	podID := ""
-	defer func() {
-		if podID != "" {
-			_, _ = runProvisioner("terminate", "--pod-id", podID)
-		}
-	}()
-
-	resp, err := runProvisioner(
-		"launch",
-		"--env-artifacts", asString(env["artifacts"]),
-		"--input-path", asString(exp["input"]),
-		"--output-path", asString(run["output"]),
-		"--logs-path", asString(run["logs"]),
-		"--gpu-type", gpuType,
-		"--gpu-count", strconv.Itoa(gpuCount),
-		"--volume-gb", strconv.Itoa(volumeGB),
-		"--framework", asString(env["framework"]),
-		"--version", asString(env["version"]),
-		"--run-id", runID,
-	)
-	if err != nil {
-		update(map[string]any{"status": "failed", "error": err.Error()})
-		return
-	}
-	podID = asString(resp["pod_id"])
-	if podID == "" {
-		update(map[string]any{"status": "failed", "error": "pod_id missing from provisioner"})
-		return
-	}
-	update(map[string]any{"status": "provisioning", "pod_id": podID})
-
-	if _, err := runProvisioner("wait-running", "--pod-id", podID); err != nil {
-		update(map[string]any{"status": "failed", "error": err.Error()})
-		return
-	}
-	update(map[string]any{"status": "running"})
-
-	if _, err := runProvisioner("wait-completion", "--pod-id", podID, "--timeout", "3600"); err != nil {
-		update(map[string]any{"status": "failed", "error": err.Error()})
-		return
-	}
-	update(map[string]any{"status": "completed"})
-}
-
-func runProvisioner(args ...string) (map[string]any, error) {
-	if v := strings.TrimSpace(os.Getenv("GO_PROVISIONER_BIN")); v != "" {
-		cmd := exec.Command(v, args...)
-		cmd.Dir = "."
-		return runCmd(cmd)
-	}
-	cmd := exec.Command("go", append([]string{"run", "../provisioner"}, args...)...)
-	cmd.Dir = "."
-	return runCmd(cmd)
-}
-
-func runCmd(cmd *exec.Cmd) (map[string]any, error) {
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	cmd.Env = os.Environ()
-	if err := cmd.Run(); err != nil {
-		msg := strings.TrimSpace(stderr.String())
-		if msg == "" {
-			msg = strings.TrimSpace(stdout.String())
-		}
-		if msg == "" {
-			msg = err.Error()
-		}
-		return nil, fmt.Errorf(msg)
-	}
-	out := strings.TrimSpace(stdout.String())
-	if out == "" {
-		return map[string]any{}, nil
-	}
-	var m map[string]any
-	if err := json.Unmarshal([]byte(out), &m); err != nil {
-		return nil, fmt.Errorf("invalid provisioner output: %s", out)
-	}
-	return m, nil
 }
 
 func getImages() (map[string]map[string]string, error) {
@@ -658,43 +552,29 @@ func asString(v any) string {
 	return fmt.Sprintf("%v", v)
 }
 
-func asInt(v any) int {
-	switch t := v.(type) {
-	case int:
-		return t
-	case int64:
-		return int(t)
-	case float64:
-		return int(t)
-	case json.Number:
-		n, _ := t.Int64()
-		return int(n)
-	case string:
-		n, _ := strconv.Atoi(t)
-		return n
-	default:
-		return 0
+func (a *app) enqueueRun(runID string, overrides map[string]any) error {
+	job := runJob{
+		RunID:     runID,
+		Overrides: overrides,
 	}
+	payload, err := json.Marshal(job)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(a.queueDir, 0o755); err != nil {
+		return err
+	}
+	base := fmt.Sprintf("%d-%s-%s", timeNowUnixNano(), runID, shortID())
+	tmpPath := filepath.Join(a.queueDir, base+".tmp")
+	finalPath := filepath.Join(a.queueDir, base+".json")
+	if err := os.WriteFile(tmpPath, payload, 0o644); err != nil {
+		return err
+	}
+	return os.Rename(tmpPath, finalPath)
 }
 
-func firstString(values ...any) string {
-	for _, v := range values {
-		s := strings.TrimSpace(asString(v))
-		if s != "" && s != "<nil>" {
-			return s
-		}
-	}
-	return ""
-}
-
-func firstInt(values ...any) int {
-	for _, v := range values {
-		n := asInt(v)
-		if n > 0 {
-			return n
-		}
-	}
-	return 0
+var timeNowUnixNano = func() int64 {
+	return time.Now().UnixNano()
 }
 
 func envOr(key, fallback string) string {

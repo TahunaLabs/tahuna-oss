@@ -8,7 +8,8 @@ GPU provisioning platform for ML training. Provision GPUs and run your code with
 ├── apps/
 │   ├── web/          # Next.js dashboard
 │   ├── backend/      # Go API (users/sessions/envs/auth)
-│   └── provisioner/  # Go RunPod orchestration runtime
+│   ├── worker/       # Go worker (queue consumer for runs)
+│   └── provisioner/  # Internal RunPod orchestration package/ops tool
 ├── cli/              # Go CLI
 ├── libs/             # Shared libs (placeholder)
 ├── proto/            # gRPC contracts (placeholder)
@@ -25,11 +26,11 @@ cd apps/backend
 go run .
 ```
 
-### Provisioner
-Go provisioner service/runtime for RunPod orchestration.
+### Worker
+Go worker service that executes queued runs.
 
 ```bash
-cd apps/provisioner
+cd apps/worker
 go run .
 ```
 
@@ -65,6 +66,6 @@ npm run dev
 | Component | Platform | Root Directory |
 |-----------|----------|----------------|
 | Backend | GCP Cloud Run | `apps/backend/` |
-| Provisioner | GCP Cloud Run / worker | `apps/provisioner/` |
+| Worker | GCP Cloud Run job / worker VM | `apps/worker/` |
 | Web | Vercel | `apps/web/` |
 | CLI | GitHub Releases / Homebrew (planned) | `cli/` |

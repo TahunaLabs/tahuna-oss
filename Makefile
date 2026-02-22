@@ -1,4 +1,4 @@
-.PHONY: web backend provisioner cli build test fmt dev tree
+.PHONY: web backend worker cli build test fmt dev tree
 
 web:
 	cd apps/web && npm run dev
@@ -6,30 +6,27 @@ web:
 backend:
 	cd apps/backend && go run .
 
-provisioner:
-	@if [ -z "$(ARGS)" ]; then \
-		echo "usage: make provisioner ARGS='<subcommand and flags>'"; \
-		echo "example: make provisioner ARGS='terminate --pod-id <pod_id>'"; \
-		echo "subcommands: launch | wait-running | wait-completion | terminate"; \
-	else \
-		cd apps/provisioner && go run . $(ARGS); \
-	fi
+worker:
+	cd apps/worker && go run .
 
 cli:
 	cd cli && go run .
 
 build:
 	cd apps/backend && go build .
+	cd apps/worker && go build .
 	cd apps/provisioner && go build .
 	cd cli && go build .
 
 test:
 	cd apps/backend && go test ./...
+	cd apps/worker && go test ./...
 	cd apps/provisioner && go test ./...
 	cd cli && go test ./...
 
 fmt:
 	cd apps/backend && gofmt -w *.go
+	cd apps/worker && gofmt -w *.go
 	cd apps/provisioner && gofmt -w *.go
 	cd cli && gofmt -w *.go
 
@@ -40,6 +37,7 @@ tree:
 	@echo "├── apps/"
 	@echo "│   ├── web"
 	@echo "│   ├── backend"
+	@echo "│   ├── worker"
 	@echo "│   └── provisioner"
 	@echo "├── cli"
 	@echo "├── libs"
