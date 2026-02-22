@@ -1,16 +1,28 @@
-.PHONY: web backend worker cli build test fmt dev tree
+.PHONY: web backend worker cli infra-up infra-down build test fmt dev tree
 
 web:
 	cd apps/web && npm run dev
 
 backend:
+	@set -a; \
+	if [ -f apps/backend/.env.local ]; then . apps/backend/.env.local; fi; \
+	set +a; \
 	cd apps/backend && go run .
 
 worker:
+	@set -a; \
+	if [ -f apps/backend/.env.local ]; then . apps/backend/.env.local; fi; \
+	set +a; \
 	cd apps/worker && go run .
 
 cli:
 	cd cli && go run .
+
+infra-up:
+	docker compose up -d
+
+infra-down:
+	docker compose down
 
 build:
 	cd apps/backend && go build .

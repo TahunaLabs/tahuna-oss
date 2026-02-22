@@ -3,196 +3,144 @@ package main
 import (
 	"context"
 	"crypto/rand"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
-	"path/filepath"
-	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
+	"github.com/hibiken/asynq"
+	_ "github.com/jackc/pgx/v5/stdlib"
 	"tahuna-provisioner/pkg/provisioner"
 )
 
-type dbState struct {
-	Environments map[string]map[string]any `json:"environments"`
-	Experiments  map[string]map[string]any `json:"experiments"`
-	Runs         map[string]map[string]any `json:"runs"`
-}
+const runTaskType = "runs:execute"
 
 type app struct {
-	mu     sync.Mutex
-	dbPath string
+	db     *sql.DB
+	client *http.Client
+	apiKey string
+	cfg    provisioner.Config
 }
 
-type runJob struct {
+type runTaskPayload struct {
 	RunID     string         `json:"run_id"`
+	UserID    string         `json:"user_id"`
 	Overrides map[string]any `json:"overrides,omitempty"`
 }
 
 func main() {
-	dbPath := envOr("TAHUNA_DB", "db.json")
-	queueDir := envOr("TAHUNA_QUEUE_DIR", "queue/runs")
-	pollEvery := envDurationOr("WORKER_POLL_INTERVAL", 2*time.Second)
-
-	if err := os.MkdirAll(queueDir, 0o755); err != nil {
-		log.Fatalf("worker failed to create queue dir %q: %v", queueDir, err)
+	dbURL := strings.TrimSpace(os.Getenv("DATABASE_URL"))
+	if dbURL == "" {
+		log.Fatal("DATABASE_URL is required")
+	}
+	db, err := sql.Open("pgx", dbURL)
+	if err != nil {
+		log.Fatalf("open db: %v", err)
+	}
+	if err := db.PingContext(context.Background()); err != nil {
+		log.Fatalf("ping db: %v", err)
 	}
 
 	apiKey := strings.TrimSpace(os.Getenv("RUNPOD_API_KEY"))
 	if apiKey == "" {
-		log.Fatal("worker invalid config: RUNPOD_API_KEY is required")
+		log.Fatal("RUNPOD_API_KEY is required")
 	}
 	cfg, err := loadProvisionerConfigFromEnv()
 	if err != nil {
-		log.Fatalf("worker invalid config: %v", err)
+		log.Fatalf("config: %v", err)
 	}
 
-	a := &app{dbPath: dbPath}
-	client := &http.Client{Timeout: 60 * time.Second}
-	log.Printf("worker started (db=%s queue=%s interval=%s)", dbPath, queueDir, pollEvery)
+	redisAddr := envOr("REDIS_ADDR", "127.0.0.1:6379")
+	redisOpt := asynq.RedisClientOpt{
+		Addr:     redisAddr,
+		Password: strings.TrimSpace(os.Getenv("REDIS_PASSWORD")),
+		DB:       envIntOr("REDIS_DB", 0),
+	}
+	queueName := envOr("TAHUNA_QUEUE_NAME", "runs")
+	concurrency := envIntOr("WORKER_CONCURRENCY", 10)
 
-	for {
-		processed, err := processNextJob(a, client, apiKey, cfg, queueDir)
-		if err != nil {
-			log.Printf("worker error: %v", err)
-		}
-		if !processed {
-			time.Sleep(pollEvery)
-		}
+	a := &app{
+		db:     db,
+		client: &http.Client{Timeout: 60 * time.Second},
+		apiKey: apiKey,
+		cfg:    cfg,
+	}
+
+	srv := asynq.NewServer(redisOpt, asynq.Config{
+		Concurrency: concurrency,
+		Queues: map[string]int{
+			queueName: 10,
+		},
+	})
+	mux := asynq.NewServeMux()
+	mux.HandleFunc(runTaskType, a.handleRunTask)
+
+	log.Printf("worker started (queue=%s, concurrency=%d)", queueName, concurrency)
+	if err := srv.Run(mux); err != nil {
+		log.Fatalf("worker stopped: %v", err)
 	}
 }
 
-func processNextJob(a *app, client *http.Client, apiKey string, cfg provisioner.Config, queueDir string) (bool, error) {
-	jobFile, job, ok, err := claimNextJob(queueDir)
+func (a *app) handleRunTask(ctx context.Context, t *asynq.Task) error {
+	var payload runTaskPayload
+	if err := json.Unmarshal(t.Payload(), &payload); err != nil {
+		return fmt.Errorf("invalid payload: %w", err)
+	}
+	if strings.TrimSpace(payload.RunID) == "" || strings.TrimSpace(payload.UserID) == "" {
+		return errors.New("invalid payload: run_id and user_id are required")
+	}
+	if payload.Overrides == nil {
+		payload.Overrides = map[string]any{}
+	}
+	if cancelled, err := a.isCancellationRequested(ctx, payload.RunID, payload.UserID); err == nil && cancelled {
+		_ = a.markCancelled(ctx, payload.RunID, "run cancelled before execution")
+		return nil
+	}
+
+	run, exp, env, err := a.getRunContext(ctx, payload.RunID, payload.UserID)
 	if err != nil {
-		return false, err
-	}
-	if !ok {
-		return false, nil
-	}
-	defer func() {
-		_ = os.Remove(jobFile)
-	}()
-
-	executeRun(a, client, apiKey, cfg, job.RunID, job.Overrides)
-	return true, nil
-}
-
-func claimNextJob(queueDir string) (string, runJob, bool, error) {
-	entries, err := os.ReadDir(queueDir)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return "", runJob{}, false, nil
-		}
-		return "", runJob{}, false, err
+		_ = a.failRun(ctx, payload.RunID, err)
+		return err
 	}
 
-	candidates := make([]string, 0, len(entries))
-	for _, e := range entries {
-		if e.IsDir() {
-			continue
-		}
-		name := e.Name()
-		if strings.HasSuffix(name, ".json") {
-			candidates = append(candidates, name)
-		}
-	}
-	sort.Strings(candidates)
+	runCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	stopWatcher := make(chan struct{})
+	go a.watchCancellation(runCtx, payload.RunID, payload.UserID, cancel, stopWatcher)
+	defer close(stopWatcher)
 
-	for _, name := range candidates {
-		src := filepath.Join(queueDir, name)
-		claimed := src + ".processing-" + shortID()
-		if err := os.Rename(src, claimed); err != nil {
-			continue
-		}
-
-		b, err := os.ReadFile(claimed)
-		if err != nil {
-			return claimed, runJob{}, true, fmt.Errorf("read claimed job: %w", err)
-		}
-
-		var job runJob
-		if err := json.Unmarshal(b, &job); err != nil {
-			return claimed, runJob{}, true, fmt.Errorf("invalid job payload: %w", err)
-		}
-		if strings.TrimSpace(job.RunID) == "" {
-			return claimed, runJob{}, true, fmt.Errorf("invalid job payload: run_id missing")
-		}
-		if job.Overrides == nil {
-			job.Overrides = map[string]any{}
-		}
-		return claimed, job, true, nil
-	}
-
-	return "", runJob{}, false, nil
-}
-
-func executeRun(a *app, client *http.Client, apiKey string, runpodCfg provisioner.Config, runID string, overrides map[string]any) {
-	ctx := context.Background()
-
-	get := func() (map[string]any, map[string]any, map[string]any, error) {
-		a.mu.Lock()
-		defer a.mu.Unlock()
-		db := a.load()
-		run, ok := db.Runs[runID]
-		if !ok {
-			return nil, nil, nil, fmt.Errorf("run %s not found", runID)
-		}
-		exp, ok := db.Experiments[asString(run["experiment_id"])]
-		if !ok {
-			return nil, nil, nil, fmt.Errorf("experiment %s not found", asString(run["experiment_id"]))
-		}
-		env, ok := db.Environments[asString(exp["env_id"])]
-		if !ok {
-			return nil, nil, nil, fmt.Errorf("environment %s not found", asString(exp["env_id"]))
-		}
-		return cloneMap(run), cloneMap(exp), cloneMap(env), nil
-	}
-
-	update := func(fields map[string]any) {
-		a.mu.Lock()
-		db := a.load()
-		run := db.Runs[runID]
-		if run != nil {
-			for k, v := range fields {
-				run[k] = v
-			}
-			db.Runs[runID] = run
-			a.save(db)
-		}
-		a.mu.Unlock()
-	}
-
-	run, exp, env, err := get()
-	if err != nil {
-		update(map[string]any{"status": "failed", "error": err.Error()})
-		return
-	}
-
-	gpuType := firstString(overrides["gpu_type"], env["gpu_type"])
-	gpuCount := firstInt(overrides["gpu_count"], env["gpu_count"])
-	volumeGB := firstInt(overrides["volume_gb"], env["volume_gb"])
-	update(map[string]any{
+	gpuType := firstString(payload.Overrides["gpu_type"], env["gpu_type"])
+	gpuCount := firstInt(payload.Overrides["gpu_count"], env["gpu_count"])
+	volumeGB := firstInt(payload.Overrides["volume_gb"], env["volume_gb"])
+	_ = a.updateRun(ctx, payload.RunID, map[string]any{
 		"status":              "queued",
 		"effective_gpu_type":  gpuType,
 		"effective_gpu_count": gpuCount,
 		"effective_volume_gb": volumeGB,
 	})
+	_ = a.addRunEvent(ctx, payload.RunID, "queued", "run queued for execution", map[string]any{"gpu_type": gpuType, "gpu_count": gpuCount, "volume_gb": volumeGB})
 
 	podID := ""
 	defer func() {
 		if podID != "" {
-			_, _ = provisioner.Terminate(ctx, client, apiKey, podID)
+			termCtx, termCancel := context.WithTimeout(context.Background(), 20*time.Second)
+			defer termCancel()
+			_, _ = provisioner.Terminate(termCtx, a.client, a.apiKey, podID)
 		}
 	}()
+	if cancelled, err := a.isCancellationRequested(ctx, payload.RunID, payload.UserID); err == nil && cancelled {
+		_ = a.markCancelled(ctx, payload.RunID, "run cancelled before launch")
+		return nil
+	}
 
-	podID, err = provisioner.Launch(ctx, client, apiKey, runpodCfg, provisioner.LaunchRequest{
+	podID, err = provisioner.Launch(runCtx, a.client, a.apiKey, a.cfg, provisioner.LaunchRequest{
 		EnvArtifacts: asString(env["artifacts"]),
 		InputPath:    asString(exp["input"]),
 		OutputPath:   asString(run["output"]),
@@ -202,25 +150,209 @@ func executeRun(a *app, client *http.Client, apiKey string, runpodCfg provisione
 		VolumeGB:     volumeGB,
 		Framework:    asString(env["framework"]),
 		Version:      asString(env["version"]),
-		RunID:        runID,
+		RunID:        payload.RunID,
 	})
 	if err != nil {
-		update(map[string]any{"status": "failed", "error": err.Error()})
-		return
+		if errors.Is(err, context.Canceled) {
+			if cancelled, cErr := a.isCancellationRequested(context.Background(), payload.RunID, payload.UserID); cErr == nil && cancelled {
+				_ = a.markCancelled(context.Background(), payload.RunID, "run cancelled during launch")
+				return nil
+			}
+		}
+		_ = a.failRun(ctx, payload.RunID, err)
+		return err
 	}
-	update(map[string]any{"status": "provisioning", "pod_id": podID})
+	_ = a.updateRun(ctx, payload.RunID, map[string]any{"status": "provisioning", "pod_id": podID})
+	_ = a.addRunEvent(ctx, payload.RunID, "provisioning", "pod launched", map[string]any{"pod_id": podID})
 
-	if _, err := provisioner.WaitRunning(ctx, client, apiKey, podID, 30*time.Minute); err != nil {
-		update(map[string]any{"status": "failed", "error": err.Error()})
-		return
+	if _, err := provisioner.WaitRunning(runCtx, a.client, a.apiKey, podID, 30*time.Minute); err != nil {
+		if errors.Is(err, context.Canceled) {
+			if cancelled, cErr := a.isCancellationRequested(context.Background(), payload.RunID, payload.UserID); cErr == nil && cancelled {
+				_ = a.markCancelled(context.Background(), payload.RunID, "run cancelled while provisioning")
+				return nil
+			}
+		}
+		_ = a.failRun(ctx, payload.RunID, err)
+		return err
 	}
-	update(map[string]any{"status": "running"})
+	_ = a.updateRun(ctx, payload.RunID, map[string]any{"status": "running"})
+	_ = a.addRunEvent(ctx, payload.RunID, "running", "pod running", nil)
 
-	if _, err := provisioner.WaitCompletion(ctx, client, apiKey, podID, time.Hour); err != nil {
-		update(map[string]any{"status": "failed", "error": err.Error()})
-		return
+	if _, err := provisioner.WaitCompletion(runCtx, a.client, a.apiKey, podID, time.Hour); err != nil {
+		if errors.Is(err, context.Canceled) {
+			if cancelled, cErr := a.isCancellationRequested(context.Background(), payload.RunID, payload.UserID); cErr == nil && cancelled {
+				_ = a.markCancelled(context.Background(), payload.RunID, "run cancelled while running")
+				return nil
+			}
+		}
+		_ = a.failRun(ctx, payload.RunID, err)
+		return err
 	}
-	update(map[string]any{"status": "completed"})
+	_ = a.updateRun(ctx, payload.RunID, map[string]any{"status": "completed", "error": nil})
+	_ = a.addRunEvent(ctx, payload.RunID, "completed", "run completed", nil)
+	return nil
+}
+
+func (a *app) getRunContext(ctx context.Context, runID, userID string) (map[string]any, map[string]any, map[string]any, error) {
+	var run = map[string]any{}
+	var exp = map[string]any{}
+	var env = map[string]any{}
+
+	var expID, input, output, logsPath, envID string
+	err := a.db.QueryRowContext(ctx, `
+		SELECT experiment_id, input, output, logs, environment_id
+		FROM runs WHERE id = $1 AND user_id = $2
+	`, runID, userID).Scan(&expID, &input, &output, &logsPath, &envID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil, nil, fmt.Errorf("run %s not found", runID)
+		}
+		return nil, nil, nil, err
+	}
+	run["experiment_id"] = expID
+	run["input"] = input
+	run["output"] = output
+	run["logs"] = logsPath
+	run["env_id"] = envID
+
+	var envRefID, expInput, expName string
+	err = a.db.QueryRowContext(ctx, `
+		SELECT environment_id, input, name
+		FROM experiments WHERE id = $1 AND user_id = $2
+	`, expID, userID).Scan(&envRefID, &expInput, &expName)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil, nil, fmt.Errorf("experiment %s not found", expID)
+		}
+		return nil, nil, nil, err
+	}
+	exp["env_id"] = envRefID
+	exp["input"] = expInput
+	exp["name"] = expName
+
+	var artifacts, gpuType, framework, version string
+	var gpuCount, volumeGB int
+	err = a.db.QueryRowContext(ctx, `
+		SELECT artifacts, gpu_type, gpu_count, volume_gb, framework, version
+		FROM environments WHERE id = $1 AND user_id = $2
+	`, envRefID, userID).Scan(&artifacts, &gpuType, &gpuCount, &volumeGB, &framework, &version)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil, nil, fmt.Errorf("environment %s not found", envRefID)
+		}
+		return nil, nil, nil, err
+	}
+	env["artifacts"] = artifacts
+	env["gpu_type"] = gpuType
+	env["gpu_count"] = gpuCount
+	env["volume_gb"] = volumeGB
+	env["framework"] = framework
+	env["version"] = version
+
+	return run, exp, env, nil
+}
+
+func (a *app) updateRun(ctx context.Context, runID string, fields map[string]any) error {
+	if len(fields) == 0 {
+		return nil
+	}
+
+	allowed := map[string]bool{
+		"status":                 true,
+		"error":                  true,
+		"pod_id":                 true,
+		"effective_gpu_type":     true,
+		"effective_gpu_count":    true,
+		"effective_volume_gb":    true,
+		"cancellation_requested": true,
+	}
+
+	sets := make([]string, 0, len(fields)+1)
+	args := make([]any, 0, len(fields)+1)
+	i := 1
+	for k, v := range fields {
+		if !allowed[k] {
+			continue
+		}
+		sets = append(sets, fmt.Sprintf("%s = $%d", k, i))
+		args = append(args, v)
+		i++
+	}
+	if len(sets) == 0 {
+		return nil
+	}
+	sets = append(sets, "updated_at = NOW()")
+	args = append(args, runID)
+	query := fmt.Sprintf("UPDATE runs SET %s WHERE id = $%d", strings.Join(sets, ", "), len(args))
+	_, err := a.db.ExecContext(ctx, query, args...)
+	return err
+}
+
+func (a *app) failRun(ctx context.Context, runID string, err error) error {
+	_ = a.addRunEvent(ctx, runID, "failed", err.Error(), nil)
+	return a.updateRun(ctx, runID, map[string]any{"status": "failed", "error": err.Error()})
+}
+
+func (a *app) markCancelled(ctx context.Context, runID, message string) error {
+	_ = a.addRunEvent(ctx, runID, "cancelled", message, nil)
+	return a.updateRun(ctx, runID, map[string]any{
+		"status":                 "cancelled",
+		"error":                  nil,
+		"cancellation_requested": true,
+	})
+}
+
+func (a *app) isCancellationRequested(ctx context.Context, runID, userID string) (bool, error) {
+	var cancelRequested bool
+	err := a.db.QueryRowContext(ctx, `
+		SELECT cancellation_requested
+		FROM runs WHERE id = $1 AND user_id = $2
+	`, runID, userID).Scan(&cancelRequested)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return false, nil
+		}
+		return false, err
+	}
+	return cancelRequested, nil
+}
+
+func (a *app) watchCancellation(ctx context.Context, runID, userID string, cancel context.CancelFunc, stop <-chan struct{}) {
+	ticker := time.NewTicker(3 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-stop:
+			return
+		case <-ticker.C:
+			cancelled, err := a.isCancellationRequested(context.Background(), runID, userID)
+			if err != nil {
+				continue
+			}
+			if cancelled {
+				cancel()
+				return
+			}
+		}
+	}
+}
+
+func (a *app) addRunEvent(ctx context.Context, runID, eventType, message string, payload map[string]any) error {
+	var raw any
+	if payload != nil {
+		b, err := json.Marshal(payload)
+		if err != nil {
+			return err
+		}
+		raw = b
+	}
+	_, err := a.db.ExecContext(ctx, `
+		INSERT INTO run_events (run_id, event_type, message, payload)
+		VALUES ($1,$2,$3,$4)
+	`, runID, eventType, message, raw)
+	return err
 }
 
 func loadProvisionerConfigFromEnv() (provisioner.Config, error) {
@@ -260,40 +392,6 @@ func loadProvisionerConfigFromEnv() (provisioner.Config, error) {
 		R2SecretKey: r2Secret,
 		R2Bucket:    r2Bucket,
 	}, nil
-}
-
-func (a *app) load() dbState {
-	b, err := os.ReadFile(a.dbPath)
-	if err != nil {
-		return dbState{Environments: map[string]map[string]any{}, Experiments: map[string]map[string]any{}, Runs: map[string]map[string]any{}}
-	}
-	var db dbState
-	if err := json.Unmarshal(b, &db); err != nil {
-		return dbState{Environments: map[string]map[string]any{}, Experiments: map[string]map[string]any{}, Runs: map[string]map[string]any{}}
-	}
-	if db.Environments == nil {
-		db.Environments = map[string]map[string]any{}
-	}
-	if db.Experiments == nil {
-		db.Experiments = map[string]map[string]any{}
-	}
-	if db.Runs == nil {
-		db.Runs = map[string]map[string]any{}
-	}
-	return db
-}
-
-func (a *app) save(db dbState) {
-	b, _ := json.MarshalIndent(db, "", "  ")
-	_ = os.WriteFile(a.dbPath, b, 0o644)
-}
-
-func cloneMap(src map[string]any) map[string]any {
-	dst := make(map[string]any, len(src))
-	for k, v := range src {
-		dst[k] = v
-	}
-	return dst
 }
 
 func asString(v any) string {
@@ -346,7 +444,7 @@ func firstInt(values ...any) int {
 func shortID() string {
 	b := make([]byte, 4)
 	if _, err := rand.Read(b); err != nil {
-		return strconv.FormatInt(int64(os.Getpid()), 16)
+		return strconv.FormatInt(time.Now().UnixNano(), 16)
 	}
 	return hex.EncodeToString(b)
 }
@@ -359,14 +457,14 @@ func envOr(key, fallback string) string {
 	return v
 }
 
-func envDurationOr(key string, fallback time.Duration) time.Duration {
+func envIntOr(key string, fallback int) int {
 	v := strings.TrimSpace(os.Getenv(key))
 	if v == "" {
 		return fallback
 	}
-	d, err := time.ParseDuration(v)
+	n, err := strconv.Atoi(v)
 	if err != nil {
 		return fallback
 	}
-	return d
+	return n
 }

@@ -19,7 +19,7 @@ GPU provisioning platform for ML training. Provision GPUs and run your code with
 ## Components
 
 ### Backend
-Go backend API.
+Go backend API (Postgres + Redis + Asynq producer).
 
 ```bash
 cd apps/backend
@@ -27,7 +27,7 @@ go run .
 ```
 
 ### Worker
-Go worker service that executes queued runs.
+Go worker service that consumes Redis/Asynq run jobs and executes provisioning.
 
 ```bash
 cd apps/worker
@@ -69,3 +69,20 @@ npm run dev
 | Worker | GCP Cloud Run job / worker VM | `apps/worker/` |
 | Web | Vercel | `apps/web/` |
 | CLI | GitHub Releases / Homebrew (planned) | `cli/` |
+
+## Infra Prereqs
+
+- PostgreSQL (`DATABASE_URL`)
+- Redis (`REDIS_ADDR`) for sessions, queue, and cache
+
+Start local infra:
+
+```bash
+docker compose up -d
+```
+
+Stop local infra:
+
+```bash
+docker compose down
+```

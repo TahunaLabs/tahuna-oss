@@ -84,6 +84,7 @@ Usage:
 
 Environment:
   TAHUNA_API_URL   Backend base URL (default: http://localhost:8000)
+  TAHUNA_API_KEY   API key from /auth/bootstrap (sent as Bearer token)
 
 Tip:
   Run "tahuna" with no args to launch the guided setup flow (same as "tahuna init").
@@ -237,7 +238,7 @@ func guidedSetup() error {
 		"framework": framework,
 		"version":   version,
 	}
-	env, err := doJSON(http.MethodPost, "/v1/environments", envPayload)
+	env, err := doJSON(http.MethodPost, "/environments", envPayload)
 	if err != nil {
 		return err
 	}
@@ -254,7 +255,7 @@ func guidedSetup() error {
 	expName := promptString("Experiment name", "baseline")
 	exp, err := doJSON(
 		http.MethodPost,
-		"/v1/environments/"+envID+"/experiments",
+		"/environments/"+envID+"/experiments",
 		map[string]any{"name": expName},
 	)
 	if err != nil {
@@ -270,7 +271,7 @@ func guidedSetup() error {
 		return nil
 	}
 
-	runResp, err := doJSON(http.MethodPost, "/v1/experiments/"+expID+"/runs", map[string]any{})
+	runResp, err := doJSON(http.MethodPost, "/experiments/"+expID+"/runs", map[string]any{})
 	if err != nil {
 		return err
 	}
@@ -387,7 +388,7 @@ func environmentCreate(args []string) {
 		"framework": *framework,
 		"version":   *version,
 	}
-	resp, err := doJSON(http.MethodPost, "/v1/environments", payload)
+	resp, err := doJSON(http.MethodPost, "/environments", payload)
 	must(err)
 	printJSON(resp)
 }
@@ -399,13 +400,13 @@ func environmentShow(args []string) {
 	fs.Parse(args)
 
 	if *list {
-		resp, err := doJSON(http.MethodGet, "/v1/environments", nil)
+		resp, err := doJSON(http.MethodGet, "/environments", nil)
 		must(err)
 		printJSON(resp)
 		return
 	}
 	require(*id != "", "--id is required when --list is not set")
-	resp, err := doJSON(http.MethodGet, "/v1/environments/"+*id, nil)
+	resp, err := doJSON(http.MethodGet, "/environments/"+*id, nil)
 	must(err)
 	printJSON(resp)
 }
@@ -420,7 +421,7 @@ func environmentDelete(args []string) {
 	fs.Parse(args)
 	require(*id != "", "--id is required")
 
-	resp, err := doJSON(http.MethodDelete, "/v1/environments/"+*id, nil)
+	resp, err := doJSON(http.MethodDelete, "/environments/"+*id, nil)
 	must(err)
 	printJSON(resp)
 }
@@ -438,7 +439,7 @@ func experimentCreate(args []string) {
 	}
 
 	payload := map[string]any{"name": *name}
-	resp, err := doJSON(http.MethodPost, "/v1/environments/"+*environmentID+"/experiments", payload)
+	resp, err := doJSON(http.MethodPost, "/environments/"+*environmentID+"/experiments", payload)
 	must(err)
 	printJSON(resp)
 }
@@ -450,13 +451,13 @@ func experimentShow(args []string) {
 	fs.Parse(args)
 
 	if *list {
-		resp, err := doJSON(http.MethodGet, "/v1/experiments", nil)
+		resp, err := doJSON(http.MethodGet, "/experiments", nil)
 		must(err)
 		printJSON(resp)
 		return
 	}
 	require(*id != "", "--id is required when --list is not set")
-	resp, err := doJSON(http.MethodGet, "/v1/experiments/"+*id, nil)
+	resp, err := doJSON(http.MethodGet, "/experiments/"+*id, nil)
 	must(err)
 	printJSON(resp)
 }
@@ -471,7 +472,7 @@ func experimentDelete(args []string) {
 	fs.Parse(args)
 	require(*id != "", "--id is required")
 
-	resp, err := doJSON(http.MethodDelete, "/v1/experiments/"+*id, nil)
+	resp, err := doJSON(http.MethodDelete, "/experiments/"+*id, nil)
 	must(err)
 	printJSON(resp)
 }
@@ -500,7 +501,7 @@ func runCreate(args []string) {
 		payload["volume_gb"] = *volumeGB
 	}
 
-	resp, err := doJSON(http.MethodPost, "/v1/experiments/"+*experimentID+"/runs", payload)
+	resp, err := doJSON(http.MethodPost, "/experiments/"+*experimentID+"/runs", payload)
 	must(err)
 	printJSON(resp)
 	if *watch || *monitor {
@@ -515,13 +516,13 @@ func runShow(args []string) {
 	fs.Parse(args)
 
 	if *list {
-		resp, err := doJSON(http.MethodGet, "/v1/runs", nil)
+		resp, err := doJSON(http.MethodGet, "/runs", nil)
 		must(err)
 		printJSON(resp)
 		return
 	}
 	require(*id != "", "--id is required when --list is not set")
-	resp, err := doJSON(http.MethodGet, "/v1/runs/"+*id, nil)
+	resp, err := doJSON(http.MethodGet, "/runs/"+*id, nil)
 	must(err)
 	printJSON(resp)
 }
@@ -543,7 +544,7 @@ func runLogs(args []string) {
 	fs.Parse(args)
 	require(*id != "", "--id is required")
 
-	resp, err := doJSON(http.MethodGet, "/v1/runs/"+*id+"/logs", nil)
+	resp, err := doJSON(http.MethodGet, "/runs/"+*id+"/logs", nil)
 	must(err)
 	printJSON(resp)
 }
@@ -554,14 +555,14 @@ func runDelete(args []string) {
 	fs.Parse(args)
 	require(*id != "", "--id is required")
 
-	resp, err := doJSON(http.MethodDelete, "/v1/runs/"+*id, nil)
+	resp, err := doJSON(http.MethodDelete, "/runs/"+*id, nil)
 	must(err)
 	printJSON(resp)
 }
 
 func monitorRun(runID string, interval int) error {
 	for {
-		resp, err := doJSON(http.MethodGet, "/v1/runs/"+runID, nil)
+		resp, err := doJSON(http.MethodGet, "/runs/"+runID, nil)
 		if err != nil {
 			return err
 		}
@@ -700,7 +701,7 @@ func terminalColumns() int {
 }
 
 func fetchCatalog() ([]string, map[string][]string, error) {
-	resp, err := doJSON(http.MethodGet, "/v1/catalog", nil)
+	resp, err := doJSON(http.MethodGet, "/catalog", nil)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -830,6 +831,9 @@ func doJSON(method, path string, payload map[string]any) (map[string]any, error)
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
+	if key := strings.TrimSpace(os.Getenv("TAHUNA_API_KEY")); key != "" {
+		req.Header.Set("Authorization", "Bearer "+key)
+	}
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {

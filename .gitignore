@@ -30,3 +30,22 @@ ENV/
 *.swp
 *.swo
 .DS_Store
+
+# Go build artifacts
+*.test
+*.out
+coverage.out
+cover.out
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+**/bin/
+**/dist/
+
+# Project binaries
+cli/tahuna-cli
+apps/backend/tahuna-backend
+apps/worker/tahuna-worker
+apps/provisioner/tahuna-provisioner

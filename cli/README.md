@@ -14,6 +14,16 @@ go run .
 
 ```bash
 export TAHUNA_API_URL=http://localhost:8000
+export TAHUNA_API_KEY=<bootstrap-issued-key>
+```
+
+Bootstrap an API key (one-time):
+
+```bash
+curl -X POST "$TAHUNA_API_URL/auth/bootstrap" \
+  -H "X-Bootstrap-Secret: $BOOTSTRAP_SECRET" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"you@example.com","name":"local-cli"}'
 ```
 
 ## Examples
