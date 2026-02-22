@@ -10,8 +10,7 @@ export function Header() {
   const navLinks = [
     { label: "Manifesto", href: "/#manifesto" },
     { label: "The Stack", href: "/#layers" },
-    { label: "Sign In", href: "/sign-in" },
-    { label: "Sign Up", href: "/sign-up" },
+    { label: "Sign In", href: "/auth" },
   ]
 
   return (

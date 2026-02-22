@@ -7,8 +7,8 @@ func (a *app) routes() *http.ServeMux {
 
 	mux.HandleFunc("GET /health", a.health)
 
-	mux.HandleFunc("POST /auth/signup", a.signup)
-	mux.HandleFunc("POST /auth/signin", a.signin)
+	mux.HandleFunc("POST /auth/request-email-otp", a.requestEmailOTP)
+	mux.HandleFunc("POST /auth/verify-email-otp", a.verifyEmailOTP)
 	mux.HandleFunc("POST /auth/api-keys", a.withAuth(a.createAPIKey))
 	mux.HandleFunc("GET /auth/me", a.withAuth(a.me))
 

@@ -32,8 +32,9 @@ type app struct {
 	queueName      string
 	authRequired   bool
 	devUserID      string
-	sessionTTL     time.Duration
-	sessionCookie  string
+	jwtSecret      []byte
+	jwtIssuer      string
+	jwtAudience    string
 
 	authSvc        *authService
 	environmentSvc *environmentService
@@ -92,8 +93,9 @@ func main() {
 		queueName:      queueName,
 		authRequired:   envBoolOr("AUTH_REQUIRED", true),
 		devUserID:      strings.TrimSpace(os.Getenv("DEV_USER_ID")),
-		sessionTTL:     envDurationOr("SESSION_TTL", 7*24*time.Hour),
-		sessionCookie:  envOr("SESSION_COOKIE_NAME", "tahuna_session"),
+		jwtSecret:      []byte(strings.TrimSpace(os.Getenv("JWT_SECRET"))),
+		jwtIssuer:      envOr("JWT_ISSUER", "tahuna-web"),
+		jwtAudience:    envOr("JWT_AUDIENCE", "tahuna-api"),
 	}
 	a.authSvc = newAuthService(db, redisClient)
 	a.environmentSvc = newEnvironmentService(db, redisClient)

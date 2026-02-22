@@ -7,7 +7,7 @@ GPU provisioning platform for ML training. Provision GPUs and run your code with
 ```
 ├── apps/
 │   ├── web/          # Next.js dashboard
-│   ├── backend/      # Go API (users/sessions/envs/auth)
+│   ├── backend/      # Go API (users/envs/auth)
 │   ├── worker/       # Go worker (queue consumer for runs)
 │   └── provisioner/  # Internal RunPod orchestration package/ops tool
 ├── cli/              # Go CLI
@@ -93,7 +93,7 @@ make run-web
 ## Infra Prereqs
 
 - PostgreSQL (`DATABASE_URL`)
-- Redis (`REDIS_ADDR`) for sessions, queue, and cache
+- Redis (`REDIS_ADDR`) for queue and cache
 
 Start local infra:
 

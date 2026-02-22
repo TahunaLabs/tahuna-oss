@@ -10,14 +10,7 @@ type apiKeyResponse struct {
 	APIKeyID string `json:"api_key_id"`
 }
 
-type createSessionResponse struct {
-	SessionID string `json:"session_id"`
-	UserID    string `json:"user_id"`
-}
-
-type signupResponse struct {
-	UserID    string `json:"user_id"`
-	SessionID string `json:"session_id"`
+type requestEmailOTPResponse struct {
 	EmailSent bool   `json:"email_sent"`
 	Warning   string `json:"warning,omitempty"`
 }

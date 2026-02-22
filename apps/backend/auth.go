@@ -3,40 +3,52 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/hmac"
+	"crypto/rand"
 	"crypto/sha256"
 	"database/sql"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"strings"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/redis/go-redis/v9"
-	"golang.org/x/crypto/bcrypt"
 )
 
 type ctxKey string
 
 const userIDKey ctxKey = "user_id"
 
-type signupRequest struct {
-	Email    string `json:"email"`
-	Password string `json:"password"`
-	Role     string `json:"role"`
-	OrgID    string `json:"org_id"`
-}
-
-type signinRequest struct {
-	Email    string `json:"email"`
-	Password string `json:"password"`
+type requestEmailOTPRequest struct {
+	Email string `json:"email"`
 }
 
 type createAPIKeyRequest struct {
 	Name string `json:"name"`
+}
+
+type verifyEmailOTPRequest struct {
+	Email string `json:"email"`
+	OTP   string `json:"otp"`
+}
+
+type jwtHeader struct {
+	Alg string `json:"alg"`
+	Typ string `json:"typ"`
+}
+
+type jwtClaims struct {
+	Sub string `json:"sub"`
+	Iss string `json:"iss"`
+	Aud any    `json:"aud"`
+	Exp int64  `json:"exp"`
+	Nbf int64  `json:"nbf"`
 }
 
 type authService struct {
@@ -65,25 +77,6 @@ func (s *authService) createAPIKey(ctx context.Context, userID, name string) (ap
 	return apiKeyResponse{UserID: userID, APIKey: plainKey, APIKeyID: apiKeyID}, nil
 }
 
-func (s *authService) createSession(ctx context.Context, userID, sessionCookie string, sessionTTL time.Duration) (createSessionResponse, *http.Cookie, error) {
-	sid := "sess_" + longID()
-	key := "session:" + sid
-	if err := s.redis.Set(ctx, key, userID, sessionTTL).Err(); err != nil {
-		return createSessionResponse{}, nil, wrapServiceError(500, "failed to create session", err)
-	}
-
-	cookie := &http.Cookie{
-		Name:     sessionCookie,
-		Value:    sid,
-		Path:     "/",
-		HttpOnly: true,
-		Secure:   envBoolOr("COOKIE_SECURE", false),
-		SameSite: http.SameSiteLaxMode,
-		MaxAge:   int(sessionTTL.Seconds()),
-	}
-	return createSessionResponse{SessionID: sid, UserID: userID}, cookie, nil
-}
-
 func (s *authService) me(ctx context.Context, userID string) (meResponse, error) {
 	var email, role string
 	var orgID sql.NullString
@@ -97,60 +90,95 @@ func (s *authService) me(ctx context.Context, userID string) (meResponse, error)
 	return meResponse{UserID: userID, Email: email, Role: role, OrgID: orgID.String}, nil
 }
 
-func (s *authService) createUserWithPassword(ctx context.Context, email, passwordHash, role, orgID string) (string, error) {
+func (s *authService) ensureUserByEmail(ctx context.Context, email string) (string, error) {
 	userID := shortID()
-	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO users (id, email, role, org_id, password_hash)
-		VALUES ($1,$2,$3,$4,$5)
-	`, userID, email, role, nullIfEmpty(orgID), passwordHash)
-	if err != nil {
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
-			var existingID string
-			var existingHash sql.NullString
-			readErr := s.db.QueryRowContext(ctx, `SELECT id, password_hash FROM users WHERE email = $1`, email).Scan(&existingID, &existingHash)
-			if readErr != nil {
-				return "", readErr
-			}
-			if existingHash.Valid && strings.TrimSpace(existingHash.String) != "" {
-				return "", newServiceError(409, "email already exists")
-			}
-			_, updateErr := s.db.ExecContext(ctx, `
-				UPDATE users
-				SET password_hash = $2, role = COALESCE(NULLIF($3, ''), role), org_id = COALESCE(NULLIF($4, ''), org_id)
-				WHERE id = $1
-			`, existingID, passwordHash, role, orgID)
-			if updateErr != nil {
-				return "", updateErr
-			}
-			return existingID, nil
-		}
+	var createdID string
+	err := s.db.QueryRowContext(ctx, `
+		INSERT INTO users (id, email, role, org_id, email_verified_at)
+		VALUES ($1, $2, 'user', NULL, NULL)
+		ON CONFLICT (email) DO NOTHING
+		RETURNING id
+	`, userID, email).Scan(&createdID)
+	if err == nil && createdID != "" {
+		return createdID, nil
+	}
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return "", err
 	}
-	return userID, nil
-}
 
-func (s *authService) verifyUserPassword(ctx context.Context, email, password string) (string, error) {
-	var userID string
-	var passwordHash sql.NullString
-	err := s.db.QueryRowContext(ctx, `SELECT id, password_hash FROM users WHERE email = $1`, email).Scan(&userID, &passwordHash)
+	var existingUserID string
+	err = s.db.QueryRowContext(ctx, `SELECT id FROM users WHERE email = $1`, email).Scan(&existingUserID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return "", newServiceError(401, "invalid email or password")
+			return "", newServiceError(404, "user not found")
 		}
 		return "", err
 	}
-	if !passwordHash.Valid || strings.TrimSpace(passwordHash.String) == "" {
-		return "", newServiceError(401, "invalid email or password")
+	return existingUserID, nil
+}
+
+func generateEmailOTP() (string, error) {
+	var b [3]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return "", err
 	}
-	if bcrypt.CompareHashAndPassword([]byte(passwordHash.String), []byte(password)) != nil {
-		return "", newServiceError(401, "invalid email or password")
+	n := int(b[0])<<16 | int(b[1])<<8 | int(b[2])
+	return fmt.Sprintf("%06d", n%1000000), nil
+}
+
+func otpRedisKey(email string) string {
+	return "email_otp:" + strings.ToLower(strings.TrimSpace(email))
+}
+
+func (s *authService) saveEmailOTP(ctx context.Context, email, otp string, ttl time.Duration) error {
+	if s.redis == nil {
+		return newServiceError(500, "otp storage unavailable")
 	}
+	if err := s.redis.Set(ctx, otpRedisKey(email), sha256Hex(strings.TrimSpace(otp)), ttl).Err(); err != nil {
+		return wrapServiceError(500, "failed to store otp", err)
+	}
+	return nil
+}
+
+func (s *authService) verifyAndConsumeEmailOTP(ctx context.Context, email, otp string) (string, error) {
+	if s.redis == nil {
+		return "", newServiceError(500, "otp storage unavailable")
+	}
+
+	key := otpRedisKey(email)
+	expectedHash, err := s.redis.Get(ctx, key).Result()
+	if err != nil {
+		if errors.Is(err, redis.Nil) {
+			return "", newServiceError(401, "invalid or expired verification code")
+		}
+		return "", wrapServiceError(500, "failed to load otp", err)
+	}
+
+	submittedHash := sha256Hex(strings.TrimSpace(otp))
+	if !hmac.Equal([]byte(submittedHash), []byte(expectedHash)) {
+		return "", newServiceError(401, "invalid or expired verification code")
+	}
+
+	var userID string
+	err = s.db.QueryRowContext(ctx, `
+		UPDATE users
+		SET email_verified_at = COALESCE(email_verified_at, NOW())
+		WHERE email = $1
+		RETURNING id
+	`, email).Scan(&userID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", newServiceError(404, "user not found")
+		}
+		return "", wrapServiceError(500, "failed to verify email", err)
+	}
+
+	_ = s.redis.Del(ctx, key).Err()
 	return userID, nil
 }
 
-func (a *app) signup(w http.ResponseWriter, r *http.Request) {
-	var req signupRequest
+func (a *app) requestEmailOTP(w http.ResponseWriter, r *http.Request) {
+	var req requestEmailOTPRequest
 	if err := decodeJSON(r, &req); err != nil {
 		writeErr(w, 400, err.Error())
 		return
@@ -160,71 +188,56 @@ func (a *app) signup(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 400, "email is required")
 		return
 	}
-	if req.Role == "" {
-		req.Role = "user"
-	}
-	if len(req.Password) < 8 {
-		writeErr(w, 400, "password must be at least 8 characters")
-		return
-	}
 
-	passwordHash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
-	if err != nil {
-		writeServiceErr(w, wrapServiceError(500, "failed to hash password", err))
-		return
-	}
-
-	userID, err := a.authSvc.createUserWithPassword(r.Context(), req.Email, string(passwordHash), req.Role, req.OrgID)
+	_, err := a.authSvc.ensureUserByEmail(r.Context(), req.Email)
 	if err != nil {
 		writeServiceErr(w, err)
 		return
 	}
 
-	sessionResp, cookie, err := a.authSvc.createSession(r.Context(), userID, a.sessionCookie, a.sessionTTL)
+	otp, err := generateEmailOTP()
 	if err != nil {
+		writeServiceErr(w, wrapServiceError(500, "failed to generate otp", err))
+		return
+	}
+	otpTTL := envDurationOr("EMAIL_OTP_TTL", 10*time.Minute)
+	if err := a.authSvc.saveEmailOTP(r.Context(), req.Email, otp, otpTTL); err != nil {
 		writeServiceErr(w, err)
 		return
 	}
-	http.SetCookie(w, cookie)
 
-	emailSent, warning := a.sendWelcomeEmail(r.Context(), req.Email)
-	writeJSON(w, 200, signupResponse{
-		UserID:    userID,
-		SessionID: sessionResp.SessionID,
+	emailSent, warning := a.sendEmailOTP(r.Context(), req.Email, otp, otpTTL)
+	writeJSON(w, 200, requestEmailOTPResponse{
 		EmailSent: emailSent,
 		Warning:   warning,
 	})
 }
 
-func (a *app) signin(w http.ResponseWriter, r *http.Request) {
-	var req signinRequest
+func (a *app) verifyEmailOTP(w http.ResponseWriter, r *http.Request) {
+	var req verifyEmailOTPRequest
 	if err := decodeJSON(r, &req); err != nil {
 		writeErr(w, 400, err.Error())
 		return
 	}
+
 	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
+	req.OTP = strings.TrimSpace(req.OTP)
 	if req.Email == "" {
 		writeErr(w, 400, "email is required")
 		return
 	}
-	if strings.TrimSpace(req.Password) == "" {
-		writeErr(w, 400, "password is required")
+	if len(req.OTP) != 6 {
+		writeErr(w, 400, "otp must be 6 digits")
 		return
 	}
 
-	userID, err := a.authSvc.verifyUserPassword(r.Context(), req.Email, req.Password)
+	userID, err := a.authSvc.verifyAndConsumeEmailOTP(r.Context(), req.Email, req.OTP)
 	if err != nil {
 		writeServiceErr(w, err)
 		return
 	}
 
-	resp, cookie, err := a.authSvc.createSession(r.Context(), userID, a.sessionCookie, a.sessionTTL)
-	if err != nil {
-		writeServiceErr(w, err)
-		return
-	}
-	http.SetCookie(w, cookie)
-	writeJSON(w, 200, resp)
+	writeJSON(w, 200, map[string]string{"user_id": userID})
 }
 
 func (a *app) createAPIKey(w http.ResponseWriter, r *http.Request) {
@@ -265,16 +278,14 @@ func (a *app) withAuth(next http.HandlerFunc) http.HandlerFunc {
 func (a *app) authenticate(r *http.Request) (string, string, bool) {
 	ctx := r.Context()
 
-	if cookie, err := r.Cookie(a.sessionCookie); err == nil && cookie.Value != "" {
-		if uid, err := a.redis.Get(ctx, "session:"+cookie.Value).Result(); err == nil && uid != "" {
-			return uid, "session", true
-		}
-	}
-
 	authz := strings.TrimSpace(r.Header.Get("Authorization"))
 	if strings.HasPrefix(strings.ToLower(authz), "bearer ") {
 		token := strings.TrimSpace(authz[len("Bearer "):])
 		if token != "" {
+			if userID, ok := a.validateJWT(token); ok {
+				return userID, "jwt", true
+			}
+
 			hash := sha256Hex(token)
 			var userID string
 			err := a.db.QueryRowContext(ctx, `
@@ -295,6 +306,89 @@ func (a *app) authenticate(r *http.Request) (string, string, bool) {
 	return "", "", false
 }
 
+func (a *app) validateJWT(token string) (string, bool) {
+	if len(a.jwtSecret) == 0 {
+		return "", false
+	}
+
+	parts := strings.Split(token, ".")
+	if len(parts) != 3 {
+		return "", false
+	}
+
+	headerBytes, err := base64.RawURLEncoding.DecodeString(parts[0])
+	if err != nil {
+		return "", false
+	}
+
+	var header jwtHeader
+	if err := json.Unmarshal(headerBytes, &header); err != nil {
+		return "", false
+	}
+	if !strings.EqualFold(header.Alg, "HS256") {
+		return "", false
+	}
+
+	signingInput := parts[0] + "." + parts[1]
+	mac := hmac.New(sha256.New, a.jwtSecret)
+	_, _ = mac.Write([]byte(signingInput))
+	expectedSig := mac.Sum(nil)
+
+	actualSig, err := base64.RawURLEncoding.DecodeString(parts[2])
+	if err != nil {
+		return "", false
+	}
+	if !hmac.Equal(actualSig, expectedSig) {
+		return "", false
+	}
+
+	payloadBytes, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return "", false
+	}
+
+	var claims jwtClaims
+	if err := json.Unmarshal(payloadBytes, &claims); err != nil {
+		return "", false
+	}
+
+	if strings.TrimSpace(claims.Sub) == "" {
+		return "", false
+	}
+
+	now := time.Now().Unix()
+	if claims.Exp <= now {
+		return "", false
+	}
+	if claims.Nbf > 0 && now < claims.Nbf {
+		return "", false
+	}
+
+	if a.jwtIssuer != "" && claims.Iss != a.jwtIssuer {
+		return "", false
+	}
+	if a.jwtAudience != "" && !hasAudience(claims.Aud, a.jwtAudience) {
+		return "", false
+	}
+
+	return claims.Sub, true
+}
+
+func hasAudience(aud any, expected string) bool {
+	switch v := aud.(type) {
+	case string:
+		return v == expected
+	case []any:
+		for _, item := range v {
+			s, ok := item.(string)
+			if ok && s == expected {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func authUserID(r *http.Request) string {
 	v, _ := r.Context().Value(userIDKey).(string)
 	return v
@@ -305,7 +399,7 @@ func sha256Hex(s string) string {
 	return hex.EncodeToString(h[:])
 }
 
-func (a *app) sendWelcomeEmail(ctx context.Context, toEmail string) (bool, string) {
+func (a *app) sendEmailOTP(ctx context.Context, toEmail, otp string, ttl time.Duration) (bool, string) {
 	key := strings.TrimSpace(os.Getenv("RESEND_API_KEY"))
 	if key == "" {
 		return false, "Email delivery is not configured."
@@ -318,8 +412,8 @@ func (a *app) sendWelcomeEmail(ctx context.Context, toEmail string) (bool, strin
 	payload := map[string]any{
 		"from":    from,
 		"to":      []string{toEmail},
-		"subject": "Welcome to Tahuna",
-		"html":    "<p>Welcome to Tahuna. Your account is ready.</p>",
+		"subject": "Your Tahuna verification code",
+		"html":    fmt.Sprintf("<p>Your verification code is <strong>%s</strong>. It expires in %d minutes.</p>", otp, int(ttl.Minutes())),
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {

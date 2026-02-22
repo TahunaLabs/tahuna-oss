@@ -17,10 +17,7 @@ export function AuthPageShell({ eyebrow, title, subtitle, children }: AuthPageSh
             Tahuna
           </Link>
           <div className="flex items-center gap-6 text-sm">
-            <Link href="/sign-up" className="text-muted-foreground hover:text-foreground transition-colors">
-              Sign Up
-            </Link>
-            <Link href="/sign-in" className="text-muted-foreground hover:text-foreground transition-colors">
+            <Link href="/auth" className="text-muted-foreground hover:text-foreground transition-colors">
               Sign In
             </Link>
             <Link
