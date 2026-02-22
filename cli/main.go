@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"errors"
@@ -9,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"sort"
 	"strconv"
 	"strings"
@@ -33,6 +35,7 @@ const (
 	cAmpSlate = "\033[38;5;66m"  // subdued slate
 	cAmpGreen = "\033[38;5;48m"
 	cAmpGold  = "\033[38;5;179m"
+	cAmpRed   = "\033[38;5;196m"
 )
 
 func main() {
@@ -49,6 +52,8 @@ func main() {
 		handleExperiment(os.Args[2:])
 	case "run":
 		handleRun(os.Args[2:])
+	case "shell":
+		must(runShell())
 	case "init", "start":
 		printHeader()
 		must(guidedSetup())
@@ -69,6 +74,7 @@ func usage() {
 	fmt.Println(`tahuna CLI
 
 Usage:
+  tahuna shell
   tahuna init
   tahuna env create|list|show|delete ...
   tahuna exp create|list|show|delete ...
@@ -88,6 +94,116 @@ func printHeader() {
 	printPanel("Tahuna", []string{
 		fmt.Sprintf("%s>%s Tahuna CLI", cAmpGold, cReset),
 	}, "", "")
+}
+
+func runShell() error {
+	printHeader()
+	fmt.Printf("%sSession mode%s (type 'help' for commands, 'exit' to quit)\n\n", cAmpMuted, cReset)
+
+	reader := bufio.NewReader(os.Stdin)
+	for {
+		fmt.Printf("%s%s%s tahuna> %s", serverDot(), cReset, cAmpGold, cReset)
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				fmt.Println()
+				return nil
+			}
+			return err
+		}
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		switch line {
+		case "exit", "quit":
+			return nil
+		case "help":
+			usage()
+			continue
+		case "clear":
+			fmt.Print("\033[2J\033[H")
+			printHeader()
+			continue
+		}
+
+		args := splitArgs(line)
+		if len(args) == 0 {
+			continue
+		}
+		if args[0] == "shell" {
+			fmt.Println("already in shell mode")
+			continue
+		}
+
+		cmd := exec.Command(os.Args[0], args...)
+		cmd.Stdin = os.Stdin
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		cmd.Env = os.Environ()
+		_ = cmd.Run()
+	}
+}
+
+func splitArgs(s string) []string {
+	// Lightweight parser: keeps quoted segments together.
+	var out []string
+	var cur strings.Builder
+	inQuote := byte(0)
+	escaped := false
+	for i := 0; i < len(s); i++ {
+		ch := s[i]
+		if escaped {
+			cur.WriteByte(ch)
+			escaped = false
+			continue
+		}
+		if ch == '\\' {
+			escaped = true
+			continue
+		}
+		if inQuote != 0 {
+			if ch == inQuote {
+				inQuote = 0
+			} else {
+				cur.WriteByte(ch)
+			}
+			continue
+		}
+		if ch == '"' || ch == '\'' {
+			inQuote = ch
+			continue
+		}
+		if ch == ' ' || ch == '\t' {
+			if cur.Len() > 0 {
+				out = append(out, cur.String())
+				cur.Reset()
+			}
+			continue
+		}
+		cur.WriteByte(ch)
+	}
+	if cur.Len() > 0 {
+		out = append(out, cur.String())
+	}
+	return out
+}
+
+func serverDot() string {
+	client := &http.Client{Timeout: 1200 * time.Millisecond}
+	req, err := http.NewRequest(http.MethodGet, apiURL()+"/health", nil)
+	if err != nil {
+		return cAmpRed + "●"
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return cAmpRed + "●"
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		return cAmpGreen + "●"
+	}
+	return cAmpRed + "●"
 }
 
 func apiURL() string {
