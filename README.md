@@ -6,7 +6,7 @@ GPU provisioning platform for ML training. Provision GPUs and run your code with
 
 ```
 ├── apps/
-│   ├── web/          # Next.js dashboard
+│   ├── web/          # SvelteKit dashboard
 │   ├── backend/      # Go API (users/envs/auth)
 │   ├── worker/       # Go worker (queue consumer for runs)
 │   └── provisioner/  # Internal RunPod orchestration package/ops tool

@@ -1,6 +1,6 @@
-# Tahuna
+# Tahuna Web (SvelteKit)
 
-Landing page for Tahuna — making agentic reasoner training accessible, fun, and scalable.
+Web dashboard + landing UI for Tahuna.
 
 ## Getting Started
 
@@ -10,28 +10,22 @@ bun install
 bun run dev
 ```
 
-The dev server runs at [http://localhost:3000](http://localhost:3000).
+The dev server runs at [http://localhost:5173](http://localhost:5173).
 
 ## Tech Stack
 
-- **Framework**: Next.js (App Router)
-- **Styling**: Tailwind CSS
+- **Framework**: SvelteKit
+- **Build Tool**: Vite
 - **Language**: TypeScript
 
-## Project Structure
+## Routes
 
-```
-frontend/
-├── app/              # Next.js app router pages
-├── components/       # React components
-│   ├── header.tsx        # Navigation bar
-│   ├── hero.tsx          # Hero section
-│   ├── terminal-section.tsx  # Terminal demo + install command
-│   ├── manifesto.tsx     # "Vibe Research" thesis
-│   ├── layers.tsx        # "The Stack" — product layers
-│   ├── waitlist.tsx      # Get in Touch form
-│   ├── footer.tsx        # Footer
-│   └── ui/               # Shared UI primitives
-├── public/           # Static assets
-└── lib/              # Utilities
-```
+- `/` landing page (auto-redirects to `/dashboard` when logged in)
+- `/auth` email OTP auth flow
+- `/dashboard` environments / experiments / runs console
+- `/api-key` API key generation for CLI
+- `/api/*` authenticated proxy routes to backend
+
+## Environment
+
+Copy `.env.example` to `.env.local` and set values as needed.

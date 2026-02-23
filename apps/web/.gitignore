@@ -1,2 +1,10 @@
-node_modules/*
-.next/*
+node_modules/
+.svelte-kit/
+build/
+.next/
+.vite/
+.vercel/
+.env.local
+.env.*.local
+!.env.example
+.DS_Store
