@@ -1,5 +1,6 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
+  import AuthPageShell from '$lib/components/AuthPageShell.svelte';
 
   let email = '';
   let otp = '';
@@ -24,7 +25,7 @@
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ email })
       });
-      const data = (await resp.json()) as { detail?: string; email_sent?: boolean; warning?: string };
+      const data = (await resp.json()) as { detail?: string; email_sent?: boolean; warning?: string | null };
       if (!resp.ok) throw new Error(data.detail || 'failed to request verification code');
       emailSent = Boolean(data.email_sent);
       warning = data.warning || '';
@@ -58,48 +59,59 @@
 
 <svelte:head><title>Sign In | Tahuna</title></svelte:head>
 
-<main class="container" style="padding:48px 0;">
-  <section class="card" style="max-width:700px;margin:0 auto;padding:30px;">
-    <p class="muted" style="letter-spacing:.14em;text-transform:uppercase;font-size:12px;">Account Access</p>
-    <h1 style="margin:8px 0 6px;">Sign in or sign up</h1>
-    <p class="muted" style="margin-top:0;">Use your email and a one-time verification code.</p>
+<AuthPageShell
+  eyebrow="Account Access"
+  title="Sign in or sign up"
+  subtitle="Use your email and a one-time verification code. New and returning users use the same flow."
+>
+  <form on:submit={onRequestCode} class="space-y-5">
+    <div class="space-y-2">
+      <label for="email">Email</label>
+      <input
+        id="email"
+        class="w-full rounded-md border border-input bg-background/60 px-3 py-2"
+        type="email"
+        autocomplete="email"
+        required
+        placeholder="you@example.com"
+        bind:value={email}
+      />
+    </div>
 
-    <form on:submit={onRequestCode} style="display:grid;gap:12px;margin-top:18px;">
-      <label>
-        <div style="font-size:14px;margin-bottom:6px;">Email</div>
-        <input class="input" type="email" bind:value={email} required placeholder="you@example.com" />
-      </label>
+    <button type="submit" disabled={busy || needsVerification} class="w-full sm:w-auto rounded-md border border-primary/50 bg-primary/15 px-4 py-2 text-sm">
+      {busy ? 'Sending code...' : 'Send verification code'}
+    </button>
 
-      <div>
-        <button class="primary" type="submit" disabled={busy || needsVerification}>
-          {busy ? 'Sending code...' : 'Send verification code'}
-        </button>
-      </div>
-
-      {#if error}
-        <p style="color:#ffb3a8;margin:2px 0 0;">{error}</p>
-      {/if}
-    </form>
+    {#if error}<p class="text-sm text-destructive">{error}</p>{/if}
 
     {#if needsVerification}
-      <div class="card" style="margin-top:16px;padding:16px;background:rgba(200,168,78,.08);">
-        <p style="margin:0 0 8px;">Enter the 6-digit code sent to your email.</p>
+      <div class="mt-4 rounded-lg border border-primary/40 bg-primary/10 p-4 space-y-3">
+        <p class="text-sm text-foreground">Enter the 6-digit code sent to your email.</p>
         {#if emailSent}
-          <p class="muted" style="margin-top:0;font-size:13px;">Verification code sent to <strong>{email}</strong>.</p>
+          <p class="text-xs text-muted-foreground">Verification code sent to <span class="font-medium">{email}</span>.</p>
         {:else}
-          <p style="margin-top:0;font-size:13px;color:#f0c76a;">We could not confirm delivery for <strong>{email}</strong>. {warning}</p>
+          <p class="text-xs text-amber-200">We could not confirm email delivery for <span class="font-medium">{email}</span>.{warning ? ` ${warning}` : ''}</p>
         {/if}
 
-        <label>
-          <div style="font-size:14px;margin-bottom:6px;">Verification Code</div>
-          <input class="input" bind:value={otp} inputmode="numeric" maxlength="6" pattern="[0-9]{6}" placeholder="123456" />
-        </label>
-        <div style="margin-top:10px;">
-          <button class="primary" type="button" on:click={onVerifyCode} disabled={busy || otp.trim().length !== 6}>
+        <div class="space-y-3">
+          <div class="space-y-2">
+            <label for="otp">Verification Code</label>
+            <input
+              id="otp"
+              class="w-full rounded-md border border-input bg-background/60 px-3 py-2"
+              required
+              inputmode="numeric"
+              pattern="[0-9]{6}"
+              maxlength="6"
+              placeholder="123456"
+              bind:value={otp}
+            />
+          </div>
+          <button type="button" on:click={onVerifyCode} disabled={busy || otp.trim().length !== 6} class="w-full sm:w-auto rounded-md border border-primary/50 bg-primary/15 px-4 py-2 text-sm">
             {busy ? 'Verifying...' : 'Verify and continue'}
           </button>
         </div>
       </div>
     {/if}
-  </section>
-</main>
+  </form>
+</AuthPageShell>

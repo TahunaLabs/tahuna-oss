@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import AuthPageShell from '$lib/components/AuthPageShell.svelte';
 
   type MeResponse = { user_id: string; email: string; role: string; org_id: string };
   type BootstrapResponse = { user_id: string; api_key: string; api_key_id: string };
@@ -15,9 +16,7 @@
   let error = '';
   let result: BootstrapResponse | null = null;
 
-  $: exportSnippet = result
-    ? `export TAHUNA_API_URL=${defaultURL}\nexport TAHUNA_API_KEY=${result.api_key}`
-    : '';
+  $: exportSnippet = result ? `export TAHUNA_API_URL=${defaultURL}\nexport TAHUNA_API_KEY=${result.api_key}` : '';
 
   onMount(async () => {
     try {
@@ -55,40 +54,34 @@
 
 <svelte:head><title>API Key | Tahuna</title></svelte:head>
 
-<main class="container" style="padding:48px 0;">
-  <section class="card" style="max-width:760px;margin:0 auto;padding:30px;">
-    <p class="muted" style="letter-spacing:.14em;text-transform:uppercase;font-size:12px;">CLI Credentials</p>
-    <h1 style="margin:8px 0 6px;">Get an API key</h1>
-    <p class="muted" style="margin-top:0;">Issue a key for local CLI usage. Keys are shown once.</p>
+<AuthPageShell
+  eyebrow="CLI Credentials"
+  title="Get an API key"
+  subtitle="Issue an API key for local CLI usage. You must be signed in. Keys are displayed once, so copy them when generated."
+>
+  <form on:submit={onSubmit} class="space-y-5">
+    <div class="space-y-2">
+      <label for="email">Signed In As</label>
+      <input id="email" class="w-full rounded-md border border-input bg-background/60 px-3 py-2" type="email" placeholder="Sign in first" value={email} readonly disabled />
+    </div>
 
-    <form on:submit={onSubmit} style="display:grid;gap:12px;margin-top:16px;">
-      <label>
-        <div style="font-size:14px;margin-bottom:6px;">Signed In As</div>
-        <input class="input" type="email" value={email} disabled />
-      </label>
+    <div class="space-y-2">
+      <label for="name">Key Name</label>
+      <input id="name" class="w-full rounded-md border border-input bg-background/60 px-3 py-2" required placeholder="cli" bind:value={name} />
+    </div>
 
-      <label>
-        <div style="font-size:14px;margin-bottom:6px;">Key Name</div>
-        <input class="input" bind:value={name} required placeholder="cli" />
-      </label>
+    <button type="submit" disabled={busy || loadingProfile} class="w-full sm:w-auto rounded-md border border-primary/50 bg-primary/15 px-4 py-2 text-sm">
+      {busy ? 'Creating key...' : 'Create API key'}
+    </button>
 
-      <div>
-        <button class="primary" disabled={busy || loadingProfile}>
-          {busy ? 'Creating key...' : 'Create API key'}
-        </button>
+    {#if error}<p class="text-sm text-destructive">{error}</p>{/if}
+
+    {#if result}
+      <div class="mt-4 rounded-lg border border-primary/40 bg-primary/10 p-4 space-y-3">
+        <p class="text-sm">Key ID: <span class="font-mono">{result.api_key_id}</span></p>
+        <div class="rounded-md border border-border bg-background/70 p-3 font-mono text-xs break-all">{result.api_key}</div>
+        <pre class="rounded-md border border-border bg-background/70 p-3 text-xs overflow-x-auto"><code>{exportSnippet}</code></pre>
       </div>
-
-      {#if error}
-        <p style="color:#ffb3a8;margin:2px 0 0;">{error}</p>
-      {/if}
-
-      {#if result}
-        <div class="card" style="padding:14px;background:rgba(200,168,78,.08);display:grid;gap:10px;">
-          <p style="margin:0;">Key ID: <code>{result.api_key_id}</code></p>
-          <div class="card" style="padding:10px;font-family:ui-monospace,monospace;font-size:12px;word-break:break-all;">{result.api_key}</div>
-          <pre class="card" style="padding:10px;font-size:12px;overflow:auto;"><code>{exportSnippet}</code></pre>
-        </div>
-      {/if}
-    </form>
-  </section>
-</main>
+    {/if}
+  </form>
+</AuthPageShell>
