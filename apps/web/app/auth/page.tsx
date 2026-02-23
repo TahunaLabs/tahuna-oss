@@ -67,7 +67,7 @@ export default function AuthPage() {
       if (!verifyResp.ok) {
         throw new Error(verifyData.detail || "failed to verify code")
       }
-      router.replace("/api-key")
+      router.replace("/dashboard")
     } catch (err) {
       setError(err instanceof Error ? err.message : "unexpected error")
     } finally {
