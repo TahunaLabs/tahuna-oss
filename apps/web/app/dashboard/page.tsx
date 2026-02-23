@@ -275,11 +275,10 @@ export default function DashboardPage() {
             <h1 className="font-serif text-4xl md:text-5xl tracking-tight">Frontier Training Dashboard</h1>
             <div className="text-right text-sm text-foreground/75">
               <p>{me?.email}</p>
-              <p className="text-muted-foreground">User: {me?.user_id}</p>
             </div>
           </div>
           <p className="mt-4 max-w-3xl text-sm md:text-base text-foreground/75">
-            Store data and artifacts, manage environment configuration, and monitor training runs from one screen.
+            Manage environments, experiments, and training runs from one screen.
           </p>
         </header>
 
@@ -288,9 +287,9 @@ export default function DashboardPage() {
 
         <section className="grid gap-4 md:grid-cols-3">
           <div className="rounded-xl border border-border/70 bg-card/75 p-5">
-            <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Data Plane</p>
-            <p className="mt-2 text-2xl font-semibold">R2 Connected</p>
-            <p className="mt-2 text-sm text-foreground/70">Inputs, outputs, and logs stream to object storage.</p>
+            <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Storage</p>
+            <p className="mt-2 text-2xl font-semibold">Ready</p>
+            <p className="mt-2 text-sm text-foreground/70">Training inputs and outputs are available.</p>
           </div>
           <div className="rounded-xl border border-border/70 bg-card/75 p-5">
             <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Environments</p>
@@ -307,7 +306,7 @@ export default function DashboardPage() {
         <section className="grid gap-6 lg:grid-cols-2">
           <form onSubmit={createEnvironment} className="rounded-2xl border border-border/80 bg-card/80 p-6 space-y-4">
             <div>
-              <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Concern 2</p>
+              <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Environment</p>
               <h2 className="mt-1 text-2xl font-semibold">Environment Builder</h2>
             </div>
 
@@ -389,17 +388,13 @@ export default function DashboardPage() {
             <Button type="submit" disabled={busy} className="w-full sm:w-auto">
               {busy ? "Saving..." : "Create environment"}
             </Button>
-            <p className="text-xs text-muted-foreground">Visibility selection is tracked in UI for now; backend persistence can be added next.</p>
           </form>
 
           <div className="rounded-2xl border border-border/80 bg-card/80 p-6 space-y-4">
             <div>
-              <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Config Layer</p>
-              <h2 className="mt-1 text-2xl font-semibold">YAML + Overrides</h2>
+              <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Configuration</p>
+              <h2 className="mt-1 text-2xl font-semibold">Run Configuration</h2>
             </div>
-            <p className="text-sm text-foreground/75">
-              Keep infra config and in-artifact YAML aligned, then override per run when needed.
-            </p>
             <Textarea
               value={yamlConfig}
               onChange={(event) => setYamlConfig(event.target.value)}
@@ -407,7 +402,7 @@ export default function DashboardPage() {
             />
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               <div className="space-y-2">
-                <Label htmlFor="override-gpu">Override GPU</Label>
+                <Label htmlFor="override-gpu">GPU</Label>
                 <Input
                   id="override-gpu"
                   value={override.gpu_type}
@@ -416,7 +411,7 @@ export default function DashboardPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="override-count">Override Count</Label>
+                <Label htmlFor="override-count">GPU Count</Label>
                 <Input
                   id="override-count"
                   type="number"
@@ -427,7 +422,7 @@ export default function DashboardPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="override-volume">Override Volume</Label>
+                <Label htmlFor="override-volume">Volume (GB)</Label>
                 <Input
                   id="override-volume"
                   type="number"
@@ -496,7 +491,7 @@ export default function DashboardPage() {
         <section className="rounded-2xl border border-border/80 bg-card/85 p-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Concern 1</p>
+              <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Runs</p>
               <h2 className="mt-1 text-2xl font-semibold">Training Monitor</h2>
             </div>
             <Button variant="outline" onClick={() => withBusy(refreshData)} disabled={busy}>
@@ -511,8 +506,6 @@ export default function DashboardPage() {
                   <th className="py-2 pr-3">Run</th>
                   <th className="py-2 pr-3">Status</th>
                   <th className="py-2 pr-3">Experiment</th>
-                  <th className="py-2 pr-3">Output</th>
-                  <th className="py-2 pr-3">Logs</th>
                   <th className="py-2 pr-3">Effective Infra</th>
                   <th className="py-2">Action</th>
                 </tr>
@@ -527,8 +520,6 @@ export default function DashboardPage() {
                       </span>
                     </td>
                     <td className="py-3 pr-3 font-mono text-xs">{run.experiment_id}</td>
-                    <td className="py-3 pr-3 font-mono text-xs text-foreground/80">{run.output}</td>
-                    <td className="py-3 pr-3 font-mono text-xs text-foreground/80">{run.logs}</td>
                     <td className="py-3 pr-3 text-xs text-foreground/80">
                       {run.effective_gpu_type || "-"} / {run.effective_gpu_count || "-"} / {run.effective_volume_gb || "-"}GB
                     </td>
@@ -550,12 +541,11 @@ export default function DashboardPage() {
         </section>
 
         <section className="rounded-2xl border border-border/80 bg-card/70 p-6">
-          <h2 className="text-xl font-semibold">Environment Artifacts</h2>
+          <h2 className="text-xl font-semibold">Environments</h2>
           <div className="mt-4 grid gap-3 md:grid-cols-2">
             {environments.map((env) => (
               <div key={env.environment_id} className="rounded-lg border border-border/60 bg-background/35 p-4">
                 <p className="font-semibold">{env.name}</p>
-                <p className="mt-1 font-mono text-xs text-foreground/75">{env.artifacts}</p>
                 <p className="mt-2 text-xs text-foreground/70">{env.framework}:{env.version} | {env.gpu_type} x{env.gpu_count} | {env.volume_gb}GB</p>
               </div>
             ))}

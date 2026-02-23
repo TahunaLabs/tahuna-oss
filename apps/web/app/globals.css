@@ -65,12 +65,15 @@
     @apply bg-background text-foreground;
     position: relative;
     min-height: 100vh;
-    background-image: url('/amp-back.jpeg');
-    background-size: cover;
-    background-position: center;
-    background-repeat: no-repeat;
-    background-attachment: fixed;
   }
+}
+
+.landing-page-bg {
+  background-image: url('/amp-back.jpeg');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
 }
 
 html {

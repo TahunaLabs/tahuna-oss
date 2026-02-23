@@ -1,16 +1,39 @@
 "use client"
 
 import Link from "next/link"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Menu, X } from "lucide-react"
 
 export function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
+
+  useEffect(() => {
+    let active = true
+
+    async function loadSession() {
+      try {
+        const resp = await fetch("/api/auth/me", { method: "GET" })
+        if (active) {
+          setIsAuthenticated(resp.ok)
+        }
+      } catch {
+        if (active) {
+          setIsAuthenticated(false)
+        }
+      }
+    }
+
+    loadSession()
+    return () => {
+      active = false
+    }
+  }, [])
 
   const navLinks = [
     { label: "Manifesto", href: "/#manifesto" },
     { label: "The Stack", href: "/#layers" },
-    { label: "Dashboard", href: "/dashboard" },
+    ...(isAuthenticated ? [{ label: "Dashboard", href: "/dashboard" }] : []),
     { label: "Sign In", href: "/auth" },
   ]
 
