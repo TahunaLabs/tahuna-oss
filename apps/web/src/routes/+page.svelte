@@ -94,12 +94,11 @@
         {#if data?.isAuthenticated}
           <a href="/dashboard" class="text-sm text-muted-foreground hover:text-foreground transition-colors">Dashboard</a>
         {/if}
-        <a href="/auth" class="text-sm text-muted-foreground hover:text-foreground transition-colors">Sign In</a>
         <a
-          href="/api-key"
+          href="/auth"
           class="text-sm font-medium text-foreground border border-foreground/30 rounded-full px-5 py-2 hover:bg-foreground/5 transition-colors"
         >
-          Get API Key
+          Get started
         </a>
       </div>
 
@@ -115,13 +114,12 @@
         {#if data?.isAuthenticated}
           <a href="/dashboard" class="block text-sm text-muted-foreground hover:text-foreground" on:click={() => (mobileMenuOpen = false)}>Dashboard</a>
         {/if}
-        <a href="/auth" class="block text-sm text-muted-foreground hover:text-foreground" on:click={() => (mobileMenuOpen = false)}>Sign In</a>
         <a
-          href="/api-key"
+          href="/auth"
           class="block text-sm font-medium text-foreground border border-foreground/30 rounded-full px-5 py-2 text-center hover:bg-foreground/5 transition-colors"
           on:click={() => (mobileMenuOpen = false)}
         >
-          Get API Key
+          Get started
         </a>
       </div>
     {/if}
