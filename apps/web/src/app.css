@@ -66,6 +66,10 @@
     min-height: 100vh;
   }
 
+  button:enabled {
+    cursor: pointer;
+  }
+
   html {
     scroll-behavior: smooth;
   }

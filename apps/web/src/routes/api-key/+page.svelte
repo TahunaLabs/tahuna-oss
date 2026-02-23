@@ -1,6 +1,10 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import AuthPageShell from '$lib/components/AuthPageShell.svelte';
+  import { Alert } from '$lib/components/ui/alert';
+  import { Button } from '$lib/components/ui/button';
+  import { Input } from '$lib/components/ui/input';
+  import { Label } from '$lib/components/ui/label';
 
   type MeResponse = { user_id: string; email: string; role: string; org_id: string };
   type BootstrapResponse = { user_id: string; api_key: string; api_key_id: string };
@@ -61,27 +65,27 @@
 >
   <form on:submit={onSubmit} class="space-y-5">
     <div class="space-y-2">
-      <label for="email">Signed In As</label>
-      <input id="email" class="w-full rounded-md border border-input bg-background/60 px-3 py-2" type="email" placeholder="Sign in first" value={email} readonly disabled />
+      <Label for="email">Signed In As</Label>
+      <Input id="email" type="email" placeholder="Sign in first" value={email} readonly disabled />
     </div>
 
     <div class="space-y-2">
-      <label for="name">Key Name</label>
-      <input id="name" class="w-full rounded-md border border-input bg-background/60 px-3 py-2" required placeholder="cli" bind:value={name} />
+      <Label for="name">Key Name</Label>
+      <Input id="name" required placeholder="cli" bind:value={name} />
     </div>
 
-    <button type="submit" disabled={busy || loadingProfile} class="w-full sm:w-auto rounded-md border border-primary/50 bg-primary/15 px-4 py-2 text-sm">
+    <Button type="submit" disabled={busy || loadingProfile} className="w-full sm:w-auto" variant="secondary">
       {busy ? 'Creating key...' : 'Create API key'}
-    </button>
+    </Button>
 
-    {#if error}<p class="text-sm text-destructive">{error}</p>{/if}
+    {#if error}<Alert variant="destructive">{error}</Alert>{/if}
 
     {#if result}
-      <div class="mt-4 rounded-lg border border-primary/40 bg-primary/10 p-4 space-y-3">
+      <Alert variant="success" className="mt-4 space-y-3">
         <p class="text-sm">Key ID: <span class="font-mono">{result.api_key_id}</span></p>
         <div class="rounded-md border border-border bg-background/70 p-3 font-mono text-xs break-all">{result.api_key}</div>
         <pre class="rounded-md border border-border bg-background/70 p-3 text-xs overflow-x-auto"><code>{exportSnippet}</code></pre>
-      </div>
+      </Alert>
     {/if}
   </form>
 </AuthPageShell>

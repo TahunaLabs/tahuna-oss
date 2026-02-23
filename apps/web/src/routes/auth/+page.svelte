@@ -1,6 +1,10 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
   import AuthPageShell from '$lib/components/AuthPageShell.svelte';
+  import { Alert } from '$lib/components/ui/alert';
+  import { Button } from '$lib/components/ui/button';
+  import { Input } from '$lib/components/ui/input';
+  import { Label } from '$lib/components/ui/label';
 
   let email = '';
   let otp = '';
@@ -66,10 +70,9 @@
 >
   <form on:submit={onRequestCode} class="space-y-5">
     <div class="space-y-2">
-      <label for="email">Email</label>
-      <input
+      <Label for="email">Email</Label>
+      <Input
         id="email"
-        class="w-full rounded-md border border-input bg-background/60 px-3 py-2"
         type="email"
         autocomplete="email"
         required
@@ -78,14 +81,14 @@
       />
     </div>
 
-    <button type="submit" disabled={busy || needsVerification} class="w-full sm:w-auto rounded-md border border-primary/50 bg-primary/15 px-4 py-2 text-sm">
+    <Button type="submit" disabled={busy || needsVerification} className="w-full sm:w-auto" variant="secondary">
       {busy ? 'Sending code...' : 'Send verification code'}
-    </button>
+    </Button>
 
-    {#if error}<p class="text-sm text-destructive">{error}</p>{/if}
+    {#if error}<Alert variant="destructive">{error}</Alert>{/if}
 
     {#if needsVerification}
-      <div class="mt-4 rounded-lg border border-primary/40 bg-primary/10 p-4 space-y-3">
+      <Alert variant="success" className="mt-4 space-y-3">
         <p class="text-sm text-foreground">Enter the 6-digit code sent to your email.</p>
         {#if emailSent}
           <p class="text-xs text-muted-foreground">Verification code sent to <span class="font-medium">{email}</span>.</p>
@@ -95,10 +98,9 @@
 
         <div class="space-y-3">
           <div class="space-y-2">
-            <label for="otp">Verification Code</label>
-            <input
+            <Label for="otp">Verification Code</Label>
+            <Input
               id="otp"
-              class="w-full rounded-md border border-input bg-background/60 px-3 py-2"
               required
               inputmode="numeric"
               pattern="[0-9]{6}"
@@ -107,11 +109,11 @@
               bind:value={otp}
             />
           </div>
-          <button type="button" on:click={onVerifyCode} disabled={busy || otp.trim().length !== 6} class="w-full sm:w-auto rounded-md border border-primary/50 bg-primary/15 px-4 py-2 text-sm">
+          <Button type="button" on:click={onVerifyCode} disabled={busy || otp.trim().length !== 6} className="w-full sm:w-auto" variant="secondary">
             {busy ? 'Verifying...' : 'Verify and continue'}
-          </button>
+          </Button>
         </div>
-      </div>
+      </Alert>
     {/if}
   </form>
 </AuthPageShell>

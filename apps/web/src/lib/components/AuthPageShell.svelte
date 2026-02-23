@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { Card, CardContent } from '$lib/components/ui/card';
+
   export let eyebrow: string;
   export let title: string;
   export let subtitle: string;
@@ -21,9 +23,11 @@
       <h1 class="font-serif text-4xl md:text-6xl tracking-tight leading-[0.95] text-foreground mb-6">{title}</h1>
       <p class="text-lg text-foreground/80 max-w-2xl">{subtitle}</p>
 
-      <div class="mt-10 rounded-xl border border-border bg-card/80 backdrop-blur-sm p-6 md:p-8">
-        <slot />
-      </div>
+      <Card className="mt-10 bg-card/80 backdrop-blur-sm">
+        <CardContent className="p-6 md:p-8">
+          <slot />
+        </CardContent>
+      </Card>
     </div>
   </main>
 </div>

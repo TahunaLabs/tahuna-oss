@@ -1,4 +1,15 @@
 <script lang="ts">
+  import { Alert } from '$lib/components/ui/alert';
+  import { Badge } from '$lib/components/ui/badge';
+  import { Button } from '$lib/components/ui/button';
+  import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '$lib/components/ui/card';
+  import SegmentedToggle from '$lib/components/SegmentedToggle.svelte';
+  import TerminalBlock from '$lib/components/TerminalBlock.svelte';
+  import { Input } from '$lib/components/ui/input';
+  import { Label } from '$lib/components/ui/label';
+  import { Select } from '$lib/components/ui/select';
+  import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '$lib/components/ui/table';
+  import { Textarea } from '$lib/components/ui/textarea';
   import type { Catalog, Environment, Experiment, MeResponse, Run } from '$lib/types';
   import { onMount } from 'svelte';
 
@@ -139,6 +150,10 @@
     });
   }
 
+  function handleVisibilityToggle(next: string) {
+    if (next === 'personal' || next === 'shareable') visibility = next;
+  }
+
   onMount(async () => {
     try {
       const meResp = await fetch('/api/auth/me');
@@ -164,193 +179,237 @@
 {:else}
   <div class="min-h-screen text-foreground bg-[radial-gradient(circle_at_15%_20%,rgba(200,168,78,0.18),transparent_38%),radial-gradient(circle_at_88%_0%,rgba(71,179,171,0.12),transparent_30%),rgba(9,24,25,0.95)]">
     <div class="mx-auto max-w-7xl px-6 py-10 md:py-14 space-y-8">
-      <header class="rounded-2xl border border-border/80 bg-card/70 backdrop-blur-xl p-6 md:p-8">
-        <p class="text-xs uppercase tracking-[0.2em] text-primary/90">Tahuna Lab Console</p>
-        <div class="mt-3 flex flex-wrap items-center justify-between gap-4">
-          <h1 class="font-serif text-4xl md:text-5xl tracking-tight">Frontier Training Dashboard</h1>
-          <div class="text-right text-sm text-foreground/75">
-            <p>{me?.email}</p>
+      <Card className="rounded-2xl border-border/80 bg-card/70 backdrop-blur-xl">
+        <CardHeader>
+          <p class="text-xs uppercase tracking-[0.2em] text-primary/90">Tahuna Lab Console</p>
+          <div class="mt-2 flex flex-wrap items-center justify-between gap-4">
+            <CardTitle className="font-serif text-4xl md:text-5xl tracking-tight">Frontier Training Dashboard</CardTitle>
+            <div class="text-right text-sm text-foreground/75">
+              <p>{me?.email}</p>
+            </div>
           </div>
-        </div>
-        <p class="mt-4 max-w-3xl text-sm md:text-base text-foreground/75">Manage environments, experiments, and training runs from one screen.</p>
-      </header>
+          <CardDescription className="mt-2 max-w-3xl text-sm md:text-base text-foreground/75">
+            Manage environments, experiments, and training runs from one screen.
+          </CardDescription>
+        </CardHeader>
+      </Card>
 
-      {#if error}<p class="rounded-lg border border-destructive/60 bg-destructive/10 px-4 py-3 text-sm text-destructive-foreground">{error}</p>{/if}
-      {#if message}<p class="rounded-lg border border-primary/50 bg-primary/10 px-4 py-3 text-sm text-primary">{message}</p>{/if}
+      {#if error}<Alert variant="destructive">{error}</Alert>{/if}
+      {#if message}<Alert variant="success">{message}</Alert>{/if}
 
       <section class="grid gap-4 md:grid-cols-3">
-        <div class="rounded-xl border border-border/70 bg-card/75 p-5">
-          <p class="text-xs uppercase tracking-[0.14em] text-muted-foreground">Storage</p>
-          <p class="mt-2 text-2xl font-semibold">Ready</p>
-          <p class="mt-2 text-sm text-foreground/70">Training inputs and outputs are available.</p>
-        </div>
-        <div class="rounded-xl border border-border/70 bg-card/75 p-5">
-          <p class="text-xs uppercase tracking-[0.14em] text-muted-foreground">Environments</p>
-          <p class="mt-2 text-2xl font-semibold">{environments.length}</p>
-          <p class="mt-2 text-sm text-foreground/70">Artifact snapshots + infra defaults.</p>
-        </div>
-        <div class="rounded-xl border border-border/70 bg-card/75 p-5">
-          <p class="text-xs uppercase tracking-[0.14em] text-muted-foreground">Active Runs</p>
-          <p class="mt-2 text-2xl font-semibold">{runs.filter((run) => ['queued', 'provisioning', 'running', 'cancelling'].includes(run.status)).length}</p>
-          <p class="mt-2 text-sm text-foreground/70">Realtime lifecycle visibility.</p>
-        </div>
+        <Card className="border-border/70 bg-card/75">
+          <CardHeader className="pb-3">
+            <CardDescription className="text-xs uppercase tracking-[0.14em]">Storage</CardDescription>
+            <CardTitle className="text-2xl">Ready</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p class="text-sm text-foreground/70">Training inputs and outputs are available.</p>
+          </CardContent>
+        </Card>
+        <Card className="border-border/70 bg-card/75">
+          <CardHeader className="pb-3">
+            <CardDescription className="text-xs uppercase tracking-[0.14em]">Environments</CardDescription>
+            <CardTitle className="text-2xl">{environments.length}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p class="text-sm text-foreground/70">Artifact snapshots + infra defaults.</p>
+          </CardContent>
+        </Card>
+        <Card className="border-border/70 bg-card/75">
+          <CardHeader className="pb-3">
+            <CardDescription className="text-xs uppercase tracking-[0.14em]">Active Runs</CardDescription>
+            <CardTitle className="text-2xl">{runs.filter((run) => ['queued', 'provisioning', 'running', 'cancelling'].includes(run.status)).length}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p class="text-sm text-foreground/70">Realtime lifecycle visibility.</p>
+          </CardContent>
+        </Card>
       </section>
 
       <section class="grid gap-6 lg:grid-cols-2">
-        <form on:submit={createEnvironment} class="rounded-2xl border border-border/80 bg-card/80 p-6 space-y-4">
-          <div>
-            <p class="text-xs uppercase tracking-[0.14em] text-muted-foreground">Environment</p>
-            <h2 class="mt-1 text-2xl font-semibold">Environment Builder</h2>
-          </div>
+        <Card className="rounded-2xl border-border/80 bg-card/80">
+          <CardHeader>
+            <CardDescription className="text-xs uppercase tracking-[0.14em]">Environment</CardDescription>
+            <CardTitle className="text-2xl">Environment Builder</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <form on:submit={createEnvironment} class="space-y-4">
+              <div class="space-y-2">
+                <Label for="env-name">Name</Label>
+                <Input id="env-name" bind:value={envName} required />
+              </div>
 
-          <div class="space-y-2">
-            <label for="env-name">Name</label>
-            <input id="env-name" class="w-full rounded-md border border-input bg-background/60 px-3 py-2 text-sm" bind:value={envName} required />
-          </div>
+              <SegmentedToggle
+                className="w-fit"
+                value={visibility}
+                on:change={(event) => handleVisibilityToggle(event.detail)}
+                options={[{ value: 'personal', label: 'Personal' }, { value: 'shareable', label: 'Shareable' }]}
+              />
 
-          <div class="grid grid-cols-2 gap-3">
-            <button type="button" on:click={() => (visibility = 'personal')} class={`rounded-lg border px-3 py-2 text-sm ${visibility === 'personal' ? 'border-primary bg-primary/15' : 'border-border bg-background/40'}`}>Personal</button>
-            <button type="button" on:click={() => (visibility = 'shareable')} class={`rounded-lg border px-3 py-2 text-sm ${visibility === 'shareable' ? 'border-primary bg-primary/15' : 'border-border bg-background/40'}`}>Shareable</button>
-          </div>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div class="space-y-2">
+                  <Label for="gpu-type">GPU</Label>
+                  <Select id="gpu-type" bind:value={envGPUType}>
+                    {#each (catalog?.gpus || []) as gpu}<option value={gpu}>{gpu}</option>{/each}
+                  </Select>
+                </div>
+                <div class="space-y-2">
+                  <Label for="framework">Framework</Label>
+                  <Select id="framework" bind:value={framework}>
+                    {#each Object.keys(catalog?.images || {}) as key}<option value={key}>{key}</option>{/each}
+                  </Select>
+                </div>
+              </div>
 
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div class="space-y-2">
-              <label for="gpu-type">GPU</label>
-              <select id="gpu-type" class="w-full rounded-md border border-input bg-background/60 px-3 py-2 text-sm" bind:value={envGPUType}>
-                {#each (catalog?.gpus || []) as gpu}<option value={gpu}>{gpu}</option>{/each}
-              </select>
-            </div>
-            <div class="space-y-2">
-              <label for="framework">Framework</label>
-              <select id="framework" class="w-full rounded-md border border-input bg-background/60 px-3 py-2 text-sm" bind:value={framework}>
-                {#each Object.keys(catalog?.images || {}) as key}<option value={key}>{key}</option>{/each}
-              </select>
-            </div>
-          </div>
+              <div class="grid grid-cols-3 gap-3">
+                <div class="space-y-2">
+                  <Label for="gpu-count">GPU Count</Label>
+                  <Input id="gpu-count" type="number" min="1" bind:value={envGPUCount} />
+                </div>
+                <div class="space-y-2">
+                  <Label for="volume">Volume (GB)</Label>
+                  <Input id="volume" type="number" min="1" bind:value={envVolume} />
+                </div>
+                <div class="space-y-2">
+                  <Label for="version">Version</Label>
+                  <Select id="version" bind:value={frameworkVersion}>
+                    {#each frameworkVersions as version}<option value={version}>{version}</option>{/each}
+                  </Select>
+                </div>
+              </div>
 
-          <div class="grid grid-cols-3 gap-3">
-            <div class="space-y-2">
-              <label for="gpu-count">GPU Count</label>
-              <input id="gpu-count" class="w-full rounded-md border border-input bg-background/60 px-3 py-2 text-sm" type="number" min="1" bind:value={envGPUCount} />
-            </div>
-            <div class="space-y-2">
-              <label for="volume">Volume (GB)</label>
-              <input id="volume" class="w-full rounded-md border border-input bg-background/60 px-3 py-2 text-sm" type="number" min="1" bind:value={envVolume} />
-            </div>
-            <div class="space-y-2">
-              <label for="version">Version</label>
-              <select id="version" class="w-full rounded-md border border-input bg-background/60 px-3 py-2 text-sm" bind:value={frameworkVersion}>
-                {#each frameworkVersions as version}<option value={version}>{version}</option>{/each}
-              </select>
-            </div>
-          </div>
+              <Button type="submit" className="w-full sm:w-auto" variant="secondary" disabled={busy}>{busy ? 'Saving...' : 'Create environment'}</Button>
+            </form>
+          </CardContent>
+        </Card>
 
-          <button type="submit" class="w-full sm:w-auto rounded-md border border-primary/50 bg-primary/15 px-4 py-2 text-sm" disabled={busy}>{busy ? 'Saving...' : 'Create environment'}</button>
-        </form>
-
-        <div class="rounded-2xl border border-border/80 bg-card/80 p-6 space-y-4">
-          <div>
-            <p class="text-xs uppercase tracking-[0.14em] text-muted-foreground">Configuration</p>
-            <h2 class="mt-1 text-2xl font-semibold">Run Configuration</h2>
-          </div>
-          <textarea bind:value={yamlConfig} class="min-h-40 w-full rounded-md border border-input bg-background/60 px-3 py-2 font-mono text-xs"></textarea>
-          <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <div class="space-y-2">
-              <label for="override-gpu">GPU</label>
-              <input id="override-gpu" class="w-full rounded-md border border-input bg-background/60 px-3 py-2 text-sm" bind:value={override.gpu_type} placeholder="optional" />
+        <TerminalBlock title="Run Configuration" className="border-border/80 bg-card/80" contentClassName="space-y-4">
+            <Textarea bind:value={yamlConfig} className="min-h-40 font-mono text-xs" />
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div class="space-y-2">
+                <Label for="override-gpu">GPU</Label>
+                <Input id="override-gpu" bind:value={override.gpu_type} placeholder="optional" />
+              </div>
+              <div class="space-y-2">
+                <Label for="override-count">GPU Count</Label>
+                <Input id="override-count" type="number" min="1" bind:value={override.gpu_count} placeholder="optional" />
+              </div>
+              <div class="space-y-2">
+                <Label for="override-volume">Volume (GB)</Label>
+                <Input id="override-volume" type="number" min="1" bind:value={override.volume_gb} placeholder="optional" />
+              </div>
             </div>
-            <div class="space-y-2">
-              <label for="override-count">GPU Count</label>
-              <input id="override-count" class="w-full rounded-md border border-input bg-background/60 px-3 py-2 text-sm" type="number" min="1" bind:value={override.gpu_count} placeholder="optional" />
-            </div>
-            <div class="space-y-2">
-              <label for="override-volume">Volume (GB)</label>
-              <input id="override-volume" class="w-full rounded-md border border-input bg-background/60 px-3 py-2 text-sm" type="number" min="1" bind:value={override.volume_gb} placeholder="optional" />
-            </div>
-          </div>
-        </div>
+        </TerminalBlock>
       </section>
 
       <section class="grid gap-6 lg:grid-cols-2">
-        <form on:submit={createExperiment} class="rounded-2xl border border-border/80 bg-card/80 p-6 space-y-4">
-          <div>
-            <p class="text-xs uppercase tracking-[0.14em] text-muted-foreground">Experiment Design</p>
-            <h2 class="mt-1 text-2xl font-semibold">Create Experiment</h2>
-          </div>
-          <div class="space-y-2">
-            <label for="exp-name">Experiment Name</label>
-            <input id="exp-name" class="w-full rounded-md border border-input bg-background/60 px-3 py-2 text-sm" bind:value={experimentName} required />
-          </div>
-          <div class="space-y-2">
-            <label for="exp-env">Environment</label>
-            <select id="exp-env" class="w-full rounded-md border border-input bg-background/60 px-3 py-2 text-sm" bind:value={experimentEnvID}>
-              {#each environments as env}<option value={env.environment_id}>{env.name} ({env.environment_id})</option>{/each}
-            </select>
-          </div>
-          <button type="submit" class="w-full sm:w-auto rounded-md border border-primary/50 bg-primary/15 px-4 py-2 text-sm" disabled={busy || environments.length === 0}>{busy ? 'Creating...' : 'Create experiment'}</button>
-        </form>
+        <Card className="rounded-2xl border-border/80 bg-card/80">
+          <CardHeader>
+            <CardDescription className="text-xs uppercase tracking-[0.14em]">Experiment Design</CardDescription>
+            <CardTitle className="text-2xl">Create Experiment</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <form on:submit={createExperiment} class="space-y-4">
+              <div class="space-y-2">
+                <Label for="exp-name">Experiment Name</Label>
+                <Input id="exp-name" bind:value={experimentName} required />
+              </div>
+              <div class="space-y-2">
+                <Label for="exp-env">Environment</Label>
+                <Select id="exp-env" bind:value={experimentEnvID}>
+                  {#each environments as env}<option value={env.environment_id}>{env.name} ({env.environment_id})</option>{/each}
+                </Select>
+              </div>
+              <Button type="submit" className="w-full sm:w-auto" variant="secondary" disabled={busy || environments.length === 0}>
+                {busy ? 'Creating...' : 'Create experiment'}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
 
-        <form on:submit={launchRun} class="rounded-2xl border border-border/80 bg-card/80 p-6 space-y-4">
-          <div>
-            <p class="text-xs uppercase tracking-[0.14em] text-muted-foreground">Training</p>
-            <h2 class="mt-1 text-2xl font-semibold">Launch Run</h2>
-          </div>
-          <div class="space-y-2">
-            <label for="run-exp">Experiment</label>
-            <select id="run-exp" class="w-full rounded-md border border-input bg-background/60 px-3 py-2 text-sm" bind:value={runExperimentID}>
-              {#each experiments as exp}<option value={exp.experiment_id}>{exp.name} ({exp.experiment_id})</option>{/each}
-            </select>
-          </div>
-          <button type="submit" class="w-full sm:w-auto rounded-md border border-primary/50 bg-primary/15 px-4 py-2 text-sm" disabled={busy || experiments.length === 0}>{busy ? 'Starting...' : 'Start training'}</button>
-        </form>
+        <Card className="rounded-2xl border-border/80 bg-card/80">
+          <CardHeader>
+            <CardDescription className="text-xs uppercase tracking-[0.14em]">Training</CardDescription>
+            <CardTitle className="text-2xl">Launch Run</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <form on:submit={launchRun} class="space-y-4">
+              <div class="space-y-2">
+                <Label for="run-exp">Experiment</Label>
+                <Select id="run-exp" bind:value={runExperimentID}>
+                  {#each experiments as exp}<option value={exp.experiment_id}>{exp.name} ({exp.experiment_id})</option>{/each}
+                </Select>
+              </div>
+              <Button type="submit" className="w-full sm:w-auto" variant="secondary" disabled={busy || experiments.length === 0}>
+                {busy ? 'Starting...' : 'Start training'}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
       </section>
 
-      <section class="rounded-2xl border border-border/80 bg-card/85 p-6">
-        <div class="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p class="text-xs uppercase tracking-[0.14em] text-muted-foreground">Runs</p>
-            <h2 class="mt-1 text-2xl font-semibold">Training Monitor</h2>
-          </div>
-          <button class="rounded-md border border-border px-4 py-2 text-sm" on:click={() => withBusy(refreshData)} disabled={busy}>Refresh</button>
+      <TerminalBlock title="Training Monitor" className="border-border/80 bg-card/85">
+        <div class="mb-5 flex flex-wrap items-center justify-between gap-3">
+          <p class="text-xs uppercase tracking-[0.14em] text-muted-foreground">Runs</p>
+          <Button variant="outline" on:click={() => withBusy(refreshData)} disabled={busy}>Refresh</Button>
         </div>
-
-        <div class="mt-5 overflow-x-auto">
-          <table class="w-full min-w-[900px] text-sm">
-            <thead>
-              <tr class="border-b border-border/80 text-left text-muted-foreground">
-                <th class="py-2 pr-3">Run</th>
-                <th class="py-2 pr-3">Status</th>
-                <th class="py-2 pr-3">Experiment</th>
-                <th class="py-2 pr-3">Effective Infra</th>
-                <th class="py-2">Action</th>
-              </tr>
-            </thead>
-            <tbody>
+        <div class="-mx-5">
+          <Table className="min-w-[900px]">
+            <TableHeader>
+              <TableRow className="border-border/80">
+                <TableHead className="py-2 pr-3">Run</TableHead>
+                <TableHead className="py-2 pr-3">Status</TableHead>
+                <TableHead className="py-2 pr-3">Experiment</TableHead>
+                <TableHead className="py-2 pr-3">Effective Infra</TableHead>
+                <TableHead className="py-2">Action</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {#each runs as run}
-                <tr class="border-b border-border/40 align-top">
-                  <td class="py-3 pr-3 font-mono text-xs">{run.run_id}</td>
-                  <td class="py-3 pr-3"><span class={`inline-flex rounded-md border px-2 py-1 text-xs ${statusTone(run.status)}`}>{run.status}</span></td>
-                  <td class="py-3 pr-3 font-mono text-xs">{run.experiment_id}</td>
-                  <td class="py-3 pr-3 text-xs text-foreground/80">{run.effective_gpu_type || '-'} / {run.effective_gpu_count || '-'} / {run.effective_volume_gb || '-'}GB</td>
-                  <td class="py-3"><button class="rounded-md border border-border px-3 py-1.5 text-xs" disabled={busy || !['queued', 'provisioning', 'running', 'cancelling'].includes(run.status)} on:click={() => cancelRun(run.run_id)}>Cancel</button></td>
-                </tr>
+                <TableRow className="align-top">
+                  <TableCell className="py-3 pr-3 font-mono text-xs">{run.run_id}</TableCell>
+                  <TableCell className="py-3 pr-3">
+                    <Badge variant="outline" className={statusTone(run.status)}>{run.status}</Badge>
+                  </TableCell>
+                  <TableCell className="py-3 pr-3 font-mono text-xs">{run.experiment_id}</TableCell>
+                  <TableCell className="py-3 pr-3 text-xs text-foreground/80">
+                    {run.effective_gpu_type || '-'} / {run.effective_gpu_count || '-'} / {run.effective_volume_gb || '-'}GB
+                  </TableCell>
+                  <TableCell className="py-3">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={busy || !['queued', 'provisioning', 'running', 'cancelling'].includes(run.status)}
+                      on:click={() => cancelRun(run.run_id)}
+                    >
+                      Cancel
+                    </Button>
+                  </TableCell>
+                </TableRow>
               {/each}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
-      </section>
+      </TerminalBlock>
 
-      <section class="rounded-2xl border border-border/80 bg-card/70 p-6">
-        <h2 class="text-xl font-semibold">Environments</h2>
-        <div class="mt-4 grid gap-3 md:grid-cols-2">
-          {#each environments as env}
-            <div class="rounded-lg border border-border/60 bg-background/35 p-4">
-              <p class="font-semibold">{env.name}</p>
-              <p class="mt-2 text-xs text-foreground/70">{env.framework}:{env.version} | {env.gpu_type} x{env.gpu_count} | {env.volume_gb}GB</p>
-            </div>
-          {/each}
-        </div>
-      </section>
+      <Card className="rounded-2xl border-border/80 bg-card/70">
+        <CardHeader>
+          <CardTitle className="text-xl">Environments</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div class="grid gap-3 md:grid-cols-2">
+            {#each environments as env}
+              <Card className="border-border/60 bg-background/35">
+                <CardContent className="p-4">
+                  <p class="font-semibold">{env.name}</p>
+                  <p class="mt-2 text-xs text-foreground/70">{env.framework}:{env.version} | {env.gpu_type} x{env.gpu_count} | {env.volume_gb}GB</p>
+                </CardContent>
+              </Card>
+            {/each}
+          </div>
+        </CardContent>
+      </Card>
     </div>
   </div>
 {/if}

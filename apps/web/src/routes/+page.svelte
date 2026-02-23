@@ -1,4 +1,12 @@
 <script lang="ts">
+  import { Button } from '$lib/components/ui/button';
+  import { Card, CardContent } from '$lib/components/ui/card';
+  import { Checkbox } from '$lib/components/ui/checkbox';
+  import { Input } from '$lib/components/ui/input';
+  import { Label } from '$lib/components/ui/label';
+  import SegmentedToggle from '$lib/components/SegmentedToggle.svelte';
+  import { Textarea } from '$lib/components/ui/textarea';
+  import TerminalBlock from '$lib/components/TerminalBlock.svelte';
   import { ArrowRight, BookOpen, Box, Check, CheckCircle2, Copy, Cpu, Menu, Scale, Shield, X } from 'lucide-svelte';
 
   export let data: { isAuthenticated?: boolean };
@@ -73,6 +81,10 @@
     isSubmitting = false;
     isSuccess = true;
   }
+
+  function handleInstallToggle(next: string) {
+    if (next === 'mac' || next === 'windows') activeTab = next;
+  }
 </script>
 
 <svelte:head>
@@ -102,9 +114,9 @@
         </a>
       </div>
 
-      <button class="md:hidden p-2 text-foreground" on:click={() => (mobileMenuOpen = !mobileMenuOpen)} aria-label="Toggle menu">
+      <Button className="md:hidden p-2" variant="ghost" size="icon" on:click={() => (mobileMenuOpen = !mobileMenuOpen)} aria-label="Toggle menu">
         {#if mobileMenuOpen}<X class="h-5 w-5" />{:else}<Menu class="h-5 w-5" />{/if}
-      </button>
+      </Button>
     </nav>
 
     {#if mobileMenuOpen}
@@ -166,17 +178,7 @@
           </div>
 
           <div class="lg:w-2/3">
-            <div class="bg-card border border-border rounded-lg overflow-hidden mb-8">
-              <div class="flex items-center gap-2 px-4 py-3 border-b border-border">
-                <div class="flex gap-1.5">
-                  <div class="w-3 h-3 rounded-full bg-muted-foreground/30"></div>
-                  <div class="w-3 h-3 rounded-full bg-muted-foreground/30"></div>
-                  <div class="w-3 h-3 rounded-full bg-muted-foreground/30"></div>
-                </div>
-                <span class="text-xs font-mono text-muted-foreground ml-2">Tahuna</span>
-              </div>
-
-              <div class="p-5 font-mono text-sm space-y-3 min-h-[280px]">
+            <TerminalBlock className="mb-8" contentClassName="font-mono text-sm space-y-3 min-h-[280px]" title="Tahuna">
                 <div class="flex items-start gap-2">
                   <span class="text-primary shrink-0">&gt;</span>
                   <span class="text-foreground/80">Tahuna train</span>
@@ -198,25 +200,15 @@
                   <div class="bg-muted px-3 py-1 rounded text-xs text-muted-foreground">training</div>
                   <div class="flex items-center gap-4 text-xs text-muted-foreground"><span>episode 1/500</span><span>ETA 2h 14m</span></div>
                 </div>
-              </div>
-            </div>
+            </TerminalBlock>
 
             <div class="flex flex-col sm:flex-row items-start sm:items-center gap-4">
               <span class="text-xs font-mono uppercase tracking-widest text-muted-foreground">Install</span>
-              <div class="flex items-center gap-1 bg-card border border-border rounded-full overflow-hidden">
-                <button
-                  on:click={() => (activeTab = 'mac')}
-                  class={`text-xs font-mono px-4 py-2 transition-colors ${activeTab === 'mac' ? 'bg-foreground/10 text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
-                >
-                  Mac/Linux
-                </button>
-                <button
-                  on:click={() => (activeTab = 'windows')}
-                  class={`text-xs font-mono px-4 py-2 transition-colors ${activeTab === 'windows' ? 'bg-foreground/10 text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
-                >
-                  Windows
-                </button>
-              </div>
+              <SegmentedToggle
+                value={activeTab}
+                on:change={(event) => handleInstallToggle(event.detail)}
+                options={[{ value: 'mac', label: 'Mac/Linux' }, { value: 'windows', label: 'Windows' }]}
+              />
               <div class="flex items-center gap-2 bg-card border border-border rounded-full px-5 py-2.5 flex-1 min-w-0">
                 <code class="text-sm font-mono text-foreground/80 truncate">{commands[activeTab]}</code>
                 <button on:click={handleCopy} class="text-muted-foreground hover:text-foreground transition-colors shrink-0 ml-auto" aria-label="Copy command">
@@ -276,7 +268,8 @@
         <h2 class="text-3xl md:text-4xl font-medium tracking-tight mb-4 text-center">Get in Touch</h2>
         <p class="text-muted-foreground text-center mb-10 leading-relaxed">We are a service for fine-tuning agents. We work with AI labs, infra teams, and ambitious startups to build specific, high-performance agentic workflows.</p>
 
-        <div class="bg-background rounded-xl p-6 sm:p-8 border border-border">
+        <Card className="bg-background">
+          <CardContent className="p-6 sm:p-8">
           {#if isSuccess}
             <div class="text-center py-8">
               <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-secondary mb-6"><CheckCircle2 class="h-8 w-8 text-foreground" /></div>
@@ -287,25 +280,43 @@
           {:else}
             <form on:submit={handleSubmit} class="space-y-5">
               <div class="grid sm:grid-cols-2 gap-5">
-                <div class="space-y-2"><label for="email" class="text-sm font-medium">Work email</label><input id="email" type="email" placeholder="you@company.com" required class="w-full bg-background border border-border rounded-md px-3 py-2" /></div>
-                <div class="space-y-2"><label for="name" class="text-sm font-medium">Name</label><input id="name" type="text" placeholder="Ada Lovelace" required class="w-full bg-background border border-border rounded-md px-3 py-2" /></div>
+                <div class="space-y-2">
+                  <Label for="email">Work email</Label>
+                  <Input id="email" type="email" placeholder="you@company.com" required />
+                </div>
+                <div class="space-y-2">
+                  <Label for="name">Name</Label>
+                  <Input id="name" type="text" placeholder="Ada Lovelace" required />
+                </div>
               </div>
               <div class="grid sm:grid-cols-2 gap-5">
-                <div class="space-y-2"><label for="organization" class="text-sm font-medium">Organization</label><input id="organization" type="text" placeholder="Company, lab, or project name" class="w-full bg-background border border-border rounded-md px-3 py-2" /></div>
-                <div class="space-y-2"><label for="role" class="text-sm font-medium">Role</label><input id="role" type="text" placeholder="e.g. ML engineer, founder, head of ops" class="w-full bg-background border border-border rounded-md px-3 py-2" /></div>
+                <div class="space-y-2">
+                  <Label for="organization">Organization</Label>
+                  <Input id="organization" type="text" placeholder="Company, lab, or project name" />
+                </div>
+                <div class="space-y-2">
+                  <Label for="role">Role</Label>
+                  <Input id="role" type="text" placeholder="e.g. ML engineer, founder, head of ops" />
+                </div>
               </div>
               <div class="space-y-2">
-                <label for="usecase" class="text-sm font-medium">What do you want to teach your agents to do?</label>
-                <textarea id="usecase" placeholder="Tell us about the workflows, tools, or domains where you want agents to learn and improve over time." rows="4" class="w-full bg-background border border-border rounded-md px-3 py-2 resize-none"></textarea>
+                <Label for="usecase">What do you want to teach your agents to do?</Label>
+                <Textarea
+                  id="usecase"
+                  placeholder="Tell us about the workflows, tools, or domains where you want agents to learn and improve over time."
+                  rows="4"
+                  className="resize-none"
+                />
               </div>
               <label for="updates" class="flex items-start gap-3 cursor-pointer">
-                <input id="updates" type="checkbox" class="mt-0.5" />
+                <Checkbox id="updates" className="mt-0.5" />
                 <span class="text-sm text-muted-foreground font-normal">I'd like early access and occasional product updates from Tahuna.</span>
               </label>
-              <button type="submit" class="w-full rounded-full px-4 py-2.5 bg-primary text-primary-foreground" disabled={isSubmitting}>{isSubmitting ? 'Submitting…' : 'Get in Touch'}</button>
+              <Button type="submit" className="w-full rounded-full" disabled={isSubmitting}>{isSubmitting ? 'Submitting…' : 'Get in Touch'}</Button>
             </form>
           {/if}
-        </div>
+          </CardContent>
+        </Card>
       </div>
     </section>
   </main>
