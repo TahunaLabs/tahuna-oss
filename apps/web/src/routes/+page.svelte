@@ -130,28 +130,26 @@
       <div class="absolute top-8 right-8 text-primary text-5xl font-serif select-none hidden lg:block" aria-hidden="true">*</div>
 
       <div class="mx-auto max-w-7xl">
-        <div class="max-w-4xl">
-          <h1 class="font-serif text-5xl md:text-7xl lg:text-[5.5rem] leading-[0.95] tracking-tight mb-10 text-foreground">
-            <span class="italic">Engineered</span><br />
-            <span>For The Frontier</span>
-          </h1>
+        <h1 class="max-w-4xl font-serif text-5xl md:text-7xl lg:text-[5.5rem] leading-[0.95] tracking-tight mb-10 text-foreground">
+          <span class="italic">Engineered</span><br />
+          <span>For The Frontier</span>
+        </h1>
 
-          <div class="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-10">
-            <div class="max-w-md">
-              <p class="text-lg md:text-xl text-foreground/80 leading-relaxed mb-3">
-                Tahuna is the frontier training substrate that lets you wield the full power of leading models.
-              </p>
-              <p class="text-base text-muted-foreground">Pay as you go, with no markup for individuals.</p>
-            </div>
-
-            <a
-              href="#waitlist"
-              class="inline-flex items-center gap-2 text-base font-medium text-foreground border border-foreground/30 rounded-full px-8 py-3.5 hover:bg-foreground/5 transition-colors self-start"
-            >
-              Get in Touch
-              <ArrowRight class="h-4 w-4" />
-            </a>
+        <div class="grid grid-cols-1 gap-10 lg:grid-cols-2 lg:items-start">
+          <div class="max-w-md lg:justify-self-start">
+            <p class="text-lg md:text-xl text-foreground/80 leading-relaxed mb-3">
+              Tahuna is the frontier training substrate that lets you wield the full power of leading models.
+            </p>
+            <p class="text-base text-muted-foreground">Pay as you go, with no markup for individuals.</p>
           </div>
+
+          <a
+            href="#waitlist"
+            class="inline-flex items-center gap-2 text-base font-medium text-primary border border-primary/50 rounded-full px-8 py-3.5 hover:bg-primary/10 transition-colors self-start lg:justify-self-center"
+          >
+            Get in Touch
+            <ArrowRight class="h-4 w-4" />
+          </a>
         </div>
       </div>
     </section>
