@@ -8,3 +8,9 @@
 8. time out before deleting pod ?
 9. when docker sets a bad cuda version, the pod keeps running !! that shouldn't be the case !!!
 10. "2.4.0-cu124" works with "NVIDIA GeForce RTX 4090" but not 2.9.0-cu124, fix that !!
+
+
+
+
+11. Only keep: "data" / "env"/ "run" - drop "experiments" ??
+12. Add Doc
