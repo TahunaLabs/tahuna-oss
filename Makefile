@@ -34,7 +34,7 @@ install-worker:
 
 run-worker:
 	@set -a; \
-	if [ -f apps/worker/.env.local ]; then . apps/worker/.env.local; fi; \
+	if [ -f apps/backend/.env.local ]; then . apps/backend/.env.local; fi; \
 	set +a; \
 	cd apps/worker && go run .
 
@@ -43,7 +43,7 @@ install-provisioner:
 
 run-provisioner:
 	@set -a; \
-	if [ -f apps/provisioner/.env.local ]; then . apps/provisioner/.env.local; fi; \
+	if [ -f apps/backend/.env.local ]; then . apps/backend/.env.local; fi; \
 	set +a; \
 	cd apps/provisioner && go run .
 
