@@ -1,7 +1,10 @@
 <script lang="ts">
-  export let className = '';
+  export let className = "";
 </script>
 
-<div class={`rounded-xl border border-border bg-card text-card-foreground shadow-sm ${className}`} {...$$restProps}>
+<div
+  class={`rounded-lg border border-border bg-card text-card-foreground ${className}`}
+  {...$$restProps}
+>
   <slot />
 </div>

@@ -318,7 +318,9 @@
                 No data assets yet. Create an environment or run first.
               </p>
             {:else}
-              <div class="overflow-x-auto border border-border rounded-lg">
+              <div
+                class="overflow-x-auto border border-border rounded-lg bg-card overflow-hidden"
+              >
                 <Table>
                   <TableHeader>
                     <TableRow className="border-border">
@@ -422,11 +424,8 @@
                     />
                   </div>
                 </div>
-                <Button
-                  type="submit"
-                  variant="secondary"
-                  disabled={busy}
-                  className="h-10">{busy ? "Saving…" : "Create"}</Button
+                <Button type="submit" variant="secondary" disabled={busy}
+                  >{busy ? "Saving…" : "Create"}</Button
                 >
               </form>
             </div>
@@ -437,7 +436,9 @@
                 No environments yet.
               </p>
             {:else}
-              <div class="overflow-x-auto border border-border rounded-lg">
+              <div
+                class="overflow-x-auto border border-border rounded-lg bg-card overflow-hidden"
+              >
                 <Table>
                   <TableHeader>
                     <TableRow className="border-border">
@@ -567,7 +568,6 @@
                   type="submit"
                   variant="secondary"
                   disabled={busy || environments.length === 0}
-                  className="h-10"
                 >
                   {busy ? "Starting…" : "Start run"}
                 </Button>
@@ -580,7 +580,9 @@
                 No runs yet.
               </p>
             {:else}
-              <div class="overflow-x-auto border border-border rounded-lg">
+              <div
+                class="overflow-x-auto border border-border rounded-lg bg-card overflow-hidden"
+              >
                 <Table>
                   <TableHeader>
                     <TableRow className="border-border">
