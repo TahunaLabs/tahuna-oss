@@ -31,8 +31,7 @@ Create an API key:
 go run . init
 go run . env create --name demo --gpu-type "NVIDIA GeForce RTX 4090" --gpu-count 1 --volume-gb 80 --framework pt --version 2.8.0-cu128
 go run . env list
-go run . exp create --environment-id <environment_id> --name baseline
-go run . run create --experiment-id <experiment_id> --watch
+go run . run create --environment-id <environment_id> --watch
 go run . run watch --id <run_id> --interval 5
 ```
 

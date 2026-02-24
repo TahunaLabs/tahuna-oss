@@ -17,12 +17,8 @@ func (a *app) routes() *http.ServeMux {
 	mux.HandleFunc("GET /environments", a.withAuth(a.listEnvironments))
 	mux.HandleFunc("GET /environments/{environment_id}", a.withAuth(a.getEnvironment))
 	mux.HandleFunc("DELETE /environments/{environment_id}", a.withAuth(a.deleteEnvironment))
-	mux.HandleFunc("POST /environments/{environment_id}/experiments", a.withAuth(a.createExperiment))
-	mux.HandleFunc("GET /experiments", a.withAuth(a.listExperiments))
-	mux.HandleFunc("GET /experiments/{experiment_id}", a.withAuth(a.getExperiment))
-	mux.HandleFunc("DELETE /experiments/{experiment_id}", a.withAuth(a.deleteExperiment))
 
-	mux.HandleFunc("POST /experiments/{experiment_id}/runs", a.withAuth(a.createRun))
+	mux.HandleFunc("POST /environments/{environment_id}/runs", a.withAuth(a.createRun))
 	mux.HandleFunc("GET /runs", a.withAuth(a.listRuns))
 	mux.HandleFunc("GET /runs/{run_id}", a.withAuth(a.getRun))
 	mux.HandleFunc("GET /runs/{run_id}/logs", a.withAuth(a.getRunLogs))

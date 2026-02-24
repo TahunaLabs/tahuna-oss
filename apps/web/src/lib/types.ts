@@ -16,17 +16,9 @@ export type Environment = {
   version: string;
 };
 
-export type Experiment = {
-  experiment_id: string;
-  name: string;
-  env_id: string;
-  input: string;
-};
-
 export type Run = {
   run_id: string;
   env_id: string;
-  experiment_id: string;
   input: string;
   output: string;
   logs: string;

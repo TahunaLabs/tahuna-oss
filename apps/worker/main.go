@@ -104,7 +104,7 @@ func (a *app) handleRunTask(ctx context.Context, t *asynq.Task) error {
 		return nil
 	}
 
-	run, exp, env, err := a.getRunContext(ctx, payload.RunID, payload.UserID)
+	run, env, err := a.getRunContext(ctx, payload.RunID, payload.UserID)
 	if err != nil {
 		_ = a.failRun(ctx, payload.RunID, err)
 		return err
@@ -142,7 +142,7 @@ func (a *app) handleRunTask(ctx context.Context, t *asynq.Task) error {
 
 	podID, err = provisioner.Launch(runCtx, a.client, a.apiKey, a.cfg, provisioner.LaunchRequest{
 		EnvArtifacts: asString(env["artifacts"]),
-		InputPath:    asString(exp["input"]),
+		InputPath:    asString(run["input"]),
 		OutputPath:   asString(run["output"]),
 		LogsPath:     asString(run["logs"]),
 		GPUType:      gpuType,
@@ -193,54 +193,37 @@ func (a *app) handleRunTask(ctx context.Context, t *asynq.Task) error {
 	return nil
 }
 
-func (a *app) getRunContext(ctx context.Context, runID, userID string) (map[string]any, map[string]any, map[string]any, error) {
+func (a *app) getRunContext(ctx context.Context, runID, userID string) (map[string]any, map[string]any, error) {
 	var run = map[string]any{}
-	var exp = map[string]any{}
 	var env = map[string]any{}
 
-	var expID, input, output, logsPath, envID string
+	var input, output, logsPath, envID string
 	err := a.db.QueryRowContext(ctx, `
-		SELECT experiment_id, input, output, logs, environment_id
+		SELECT input, output, logs, environment_id
 		FROM runs WHERE id = $1 AND user_id = $2
-	`, runID, userID).Scan(&expID, &input, &output, &logsPath, &envID)
+	`, runID, userID).Scan(&input, &output, &logsPath, &envID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, nil, nil, fmt.Errorf("run %s not found", runID)
+			return nil, nil, fmt.Errorf("run %s not found", runID)
 		}
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
-	run["experiment_id"] = expID
 	run["input"] = input
 	run["output"] = output
 	run["logs"] = logsPath
 	run["env_id"] = envID
-
-	var envRefID, expInput, expName string
-	err = a.db.QueryRowContext(ctx, `
-		SELECT environment_id, input, name
-		FROM experiments WHERE id = $1 AND user_id = $2
-	`, expID, userID).Scan(&envRefID, &expInput, &expName)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, nil, nil, fmt.Errorf("experiment %s not found", expID)
-		}
-		return nil, nil, nil, err
-	}
-	exp["env_id"] = envRefID
-	exp["input"] = expInput
-	exp["name"] = expName
 
 	var artifacts, gpuType, framework, version string
 	var gpuCount, volumeGB int
 	err = a.db.QueryRowContext(ctx, `
 		SELECT artifacts, gpu_type, gpu_count, volume_gb, framework, version
 		FROM environments WHERE id = $1 AND user_id = $2
-	`, envRefID, userID).Scan(&artifacts, &gpuType, &gpuCount, &volumeGB, &framework, &version)
+	`, envID, userID).Scan(&artifacts, &gpuType, &gpuCount, &volumeGB, &framework, &version)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, nil, nil, fmt.Errorf("environment %s not found", envRefID)
+			return nil, nil, fmt.Errorf("environment %s not found", envID)
 		}
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
 	env["artifacts"] = artifacts
 	env["gpu_type"] = gpuType
@@ -249,7 +232,7 @@ func (a *app) getRunContext(ctx context.Context, runID, userID string) (map[stri
 	env["framework"] = framework
 	env["version"] = version
 
-	return run, exp, env, nil
+	return run, env, nil
 }
 
 func (a *app) updateRun(ctx context.Context, runID string, fields map[string]any) error {

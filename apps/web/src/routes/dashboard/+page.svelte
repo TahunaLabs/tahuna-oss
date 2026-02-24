@@ -13,16 +13,9 @@
     TableHeader,
     TableRow,
   } from "$lib/components/ui/table";
-  import type {
-    Catalog,
-    Environment,
-    Experiment,
-    MeResponse,
-    Run,
-  } from "$lib/types";
+  import type { Catalog, Environment, MeResponse, Run } from "$lib/types";
   import {
     Database,
-    FlaskConical,
     Key,
     LogOut,
     Play,
@@ -33,7 +26,7 @@
   import { onMount } from "svelte";
 
   type RunOverride = { gpu_type: string; gpu_count: string; volume_gb: string };
-  type MainSection = "data" | "environments" | "experiments" | "runs";
+  type MainSection = "data" | "environments" | "runs";
   type UtilitySection = "settings";
 
   let me: MeResponse | null = null;
@@ -46,7 +39,6 @@
 
   let catalog: Catalog | null = null;
   let environments: Environment[] = [];
-  let experiments: Experiment[] = [];
   let runs: Run[] = [];
 
   let envName = "Frontier Runtime";
@@ -56,10 +48,7 @@
   let framework = "pt";
   let frameworkVersion = "";
 
-  let experimentName = "baseline";
-  let experimentEnvID = "";
-
-  let runExperimentID = "";
+  let runEnvID = "";
   let override: RunOverride = { gpu_type: "", gpu_count: "", volume_gb: "" };
 
   const primaryNav: {
@@ -69,7 +58,6 @@
   }[] = [
     { id: "data", label: "Data", icon: Database },
     { id: "environments", label: "Environments", icon: Server },
-    { id: "experiments", label: "Experiments", icon: FlaskConical },
     { id: "runs", label: "Runs", icon: Play },
   ];
 
@@ -82,11 +70,8 @@
   ) {
     frameworkVersion = frameworkVersions[0];
   }
-  $: if (!experimentEnvID && environments.length > 0) {
-    experimentEnvID = environments[0].environment_id;
-  }
-  $: if (!runExperimentID && experiments.length > 0) {
-    runExperimentID = experiments[0].experiment_id;
+  $: if (!runEnvID && environments.length > 0) {
+    runEnvID = environments[0].environment_id;
   }
 
   $: dataRows = [
@@ -95,12 +80,8 @@
       owner: env.environment_id,
       path: env.artifacts,
     })),
-    ...experiments.map((exp) => ({
-      kind: "Experiment input",
-      owner: exp.experiment_id,
-      path: exp.input,
-    })),
     ...runs.flatMap((run) => [
+      { kind: "Run input", owner: run.run_id, path: run.input },
       { kind: "Run output", owner: run.run_id, path: run.output },
       { kind: "Run logs", owner: run.run_id, path: run.logs },
     ]),
@@ -126,16 +107,14 @@
   }
 
   async function refreshData() {
-    const [catalogData, envData, expData, runData] = await Promise.all([
+    const [catalogData, envData, runData] = await Promise.all([
       fetchJSON<Catalog>("/api/dashboard/catalog"),
       fetchJSON<{ environments: Environment[] }>("/api/dashboard/environments"),
-      fetchJSON<{ experiments: Experiment[] }>("/api/dashboard/experiments"),
       fetchJSON<{ runs: Run[] }>("/api/dashboard/runs"),
     ]);
 
     catalog = catalogData;
     environments = envData.environments;
-    experiments = expData.experiments;
     runs = runData.runs;
 
     if (!envGPUType && catalogData.gpus.length > 0)
@@ -186,35 +165,11 @@
     });
   }
 
-  async function createExperiment(event: SubmitEvent) {
-    event.preventDefault();
-    await withBusy(async () => {
-      await fetchJSON<Experiment>("/api/dashboard/experiments", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ env_id: experimentEnvID, name: experimentName }),
-      });
-      await refreshData();
-      message = "Experiment created.";
-    });
-  }
-
-  async function deleteExperiment(expID: string) {
-    await withBusy(async () => {
-      await fetchJSON(
-        `/api/dashboard/experiments?exp_id=${encodeURIComponent(expID)}`,
-        { method: "DELETE" },
-      );
-      await refreshData();
-      message = `Experiment ${expID} deleted.`;
-    });
-  }
-
   async function launchRun(event: SubmitEvent) {
     event.preventDefault();
     await withBusy(async () => {
       const payload: Record<string, string | number> = {
-        experiment_id: runExperimentID,
+        environment_id: runEnvID,
       };
       if (override.gpu_type.trim()) payload.gpu_type = override.gpu_type.trim();
       if (override.gpu_count.trim())
@@ -342,14 +297,12 @@
           <section>
             <h2 class="text-2xl font-semibold tracking-tight mb-1">Data</h2>
             <p class="text-sm text-muted-foreground mb-8">
-              Backend-backed storage references for environments, experiments,
-              and runs.
+              Backend-backed storage references for environments and runs.
             </p>
 
             {#if dataRows.length === 0}
               <p class="text-sm text-muted-foreground py-12 text-center">
-                No data assets yet. Create an environment, experiment, or run
-                first.
+                No data assets yet. Create an environment or run first.
               </p>
             {:else}
               <div class="overflow-x-auto border border-border rounded-lg">
@@ -522,105 +475,6 @@
           </section>
         {/if}
 
-        <!-- EXPERIMENTS SECTION -->
-        {#if activeSection === "experiments"}
-          <section>
-            <div class="flex items-center justify-between mb-8">
-              <div>
-                <h2 class="text-2xl font-semibold tracking-tight mb-1">
-                  Experiments
-                </h2>
-                <p class="text-sm text-muted-foreground">
-                  Training experiments linked to your environments.
-                </p>
-              </div>
-            </div>
-
-            <!-- Create form -->
-            <div class="border-b border-border pb-8 mb-8">
-              <h3
-                class="text-sm font-semibold uppercase tracking-widest text-muted-foreground mb-5"
-              >
-                Create Experiment
-              </h3>
-              <form
-                on:submit={createExperiment}
-                class="grid gap-4 lg:grid-cols-[1fr_1fr_auto] lg:items-end"
-              >
-                <div class="space-y-2">
-                  <Label for="exp-name">Experiment Name</Label>
-                  <Input id="exp-name" bind:value={experimentName} required />
-                </div>
-                <div class="space-y-2">
-                  <Label for="exp-env">Environment</Label>
-                  <Select id="exp-env" bind:value={experimentEnvID}>
-                    {#each environments as env}<option
-                        value={env.environment_id}
-                        >{env.name} ({env.environment_id})</option
-                      >{/each}
-                  </Select>
-                </div>
-                <Button
-                  type="submit"
-                  variant="secondary"
-                  disabled={busy || environments.length === 0}
-                  className="h-10"
-                >
-                  {busy ? "Creating…" : "Create"}
-                </Button>
-              </form>
-            </div>
-
-            <!-- Experiment list -->
-            {#if experiments.length === 0}
-              <p class="text-sm text-muted-foreground py-12 text-center">
-                No experiments yet.
-              </p>
-            {:else}
-              <div class="overflow-x-auto border border-border rounded-lg">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="border-border">
-                      <TableHead>Name</TableHead>
-                      <TableHead>ID</TableHead>
-                      <TableHead>Environment</TableHead>
-                      <TableHead>Input Path</TableHead>
-                      <TableHead className="w-16"></TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {#each experiments as exp}
-                      <TableRow>
-                        <TableCell className="font-medium">{exp.name}</TableCell
-                        >
-                        <TableCell className="font-mono text-xs"
-                          >{exp.experiment_id}</TableCell
-                        >
-                        <TableCell className="font-mono text-xs"
-                          >{exp.env_id}</TableCell
-                        >
-                        <TableCell className="font-mono text-xs"
-                          >{exp.input}</TableCell
-                        >
-                        <TableCell>
-                          <button
-                            class="p-1.5 rounded-md text-foreground/40 hover:text-rose-300 hover:bg-rose-900/20 transition-colors disabled:opacity-30"
-                            disabled={busy}
-                            on:click={() => deleteExperiment(exp.experiment_id)}
-                            title="Delete experiment"
-                          >
-                            <Trash2 class="h-3.5 w-3.5" />
-                          </button>
-                        </TableCell>
-                      </TableRow>
-                    {/each}
-                  </TableBody>
-                </Table>
-              </div>
-            {/if}
-          </section>
-        {/if}
-
         <!-- RUNS SECTION -->
         {#if activeSection === "runs"}
           <section>
@@ -651,10 +505,11 @@
                 class="grid gap-4 lg:grid-cols-[1fr_1fr_auto_auto_auto] lg:items-end"
               >
                 <div class="space-y-2">
-                  <Label for="run-exp">Experiment</Label>
-                  <Select id="run-exp" bind:value={runExperimentID}>
-                    {#each experiments as exp}<option value={exp.experiment_id}
-                        >{exp.name} ({exp.experiment_id})</option
+                  <Label for="run-env">Environment</Label>
+                  <Select id="run-env" bind:value={runEnvID}>
+                    {#each environments as env}<option
+                        value={env.environment_id}
+                        >{env.name} ({env.environment_id})</option
                       >{/each}
                   </Select>
                 </div>
@@ -689,7 +544,7 @@
                 <Button
                   type="submit"
                   variant="secondary"
-                  disabled={busy || experiments.length === 0}
+                  disabled={busy || environments.length === 0}
                   className="h-10"
                 >
                   {busy ? "Starting…" : "Start run"}
@@ -709,7 +564,7 @@
                     <TableRow className="border-border">
                       <TableHead>Run</TableHead>
                       <TableHead>Status</TableHead>
-                      <TableHead>Experiment</TableHead>
+                      <TableHead>Environment</TableHead>
                       <TableHead>Effective Infra</TableHead>
                       <TableHead className="w-20">Action</TableHead>
                     </TableRow>
@@ -728,7 +583,7 @@
                           >
                         </TableCell>
                         <TableCell className="font-mono text-xs"
-                          >{run.experiment_id}</TableCell
+                          >{run.env_id}</TableCell
                         >
                         <TableCell className="text-xs text-foreground/80">
                           {run.effective_gpu_type || "—"} / {run.effective_gpu_count ||

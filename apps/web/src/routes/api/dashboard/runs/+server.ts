@@ -1,9 +1,9 @@
-import type { RequestHandler } from './$types';
 import { jsonError, readJSONBody } from '$lib/server/http';
 import { proxyWithAuth } from '$lib/server/proxy';
+import type { RequestHandler } from './$types';
 
 type RunCreateBody = {
-  experiment_id?: string;
+  environment_id?: string;
   gpu_type?: string;
   gpu_count?: number;
   volume_gb?: number;
@@ -13,9 +13,9 @@ export const GET: RequestHandler = async (event) => proxyWithAuth(event, '/runs'
 
 export const POST: RequestHandler = async (event) => {
   const body = (await readJSONBody(event.request)) as RunCreateBody | null;
-  const experimentID = body?.experiment_id?.trim() || '';
-  if (!experimentID) {
-    return jsonError('experiment_id is required', 400);
+  const environmentID = body?.environment_id?.trim() || '';
+  if (!environmentID) {
+    return jsonError('environment_id is required', 400);
   }
 
   const payload: Record<string, string | number> = {};
@@ -29,7 +29,7 @@ export const POST: RequestHandler = async (event) => {
     payload.volume_gb = body.volume_gb;
   }
 
-  return proxyWithAuth(event, `/experiments/${experimentID}/runs`, {
+  return proxyWithAuth(event, `/environments/${environmentID}/runs`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(payload)

@@ -48,8 +48,6 @@ func main() {
 	switch os.Args[1] {
 	case "env", "environment":
 		handleEnvironment(os.Args[2:])
-	case "exp", "experiment":
-		handleExperiment(os.Args[2:])
 	case "run":
 		handleRun(os.Args[2:])
 	case "shell":
@@ -77,7 +75,6 @@ Usage:
   tahuna shell
   tahuna init
   tahuna env create|list|show|delete ...
-  tahuna exp create|list|show|delete ...
   tahuna run create|list|show|watch|logs|delete ...
   tahuna up
   tahuna version
@@ -247,37 +244,18 @@ func guidedSetup() error {
 	fmt.Printf("\n%sEnvironment created:%s %s\n", cAmpWord, cReset, envID)
 	fmt.Printf("%sArtifacts path:%s      %s\n", cAmpMuted, cReset, asString(env["artifacts"]))
 
-	if !promptYesNo("\nCreate an experiment now?", true) {
-		fmt.Println("\nDone. Next: tahuna exp create --environment-id <environment_id> --name <name>")
-		return nil
-	}
-
-	expName := promptString("Experiment name", "baseline")
-	exp, err := doJSON(
-		http.MethodPost,
-		"/environments/"+envID+"/experiments",
-		map[string]any{"name": expName},
-	)
-	if err != nil {
-		return err
-	}
-
-	expID := asString(exp["experiment_id"])
-	fmt.Printf("\n%sExperiment created:%s  %s\n", cAmpWord, cReset, expID)
-	fmt.Printf("%sInput path:%s          %s\n", cAmpMuted, cReset, asString(exp["input"]))
-
 	if !promptYesNo("\nStart a run now?", true) {
-		fmt.Println("\nDone. Next: tahuna run create --experiment-id <experiment_id>")
+		fmt.Println("\nDone. Next: tahuna run create --environment-id <environment_id>")
 		return nil
 	}
 
-	runResp, err := doJSON(http.MethodPost, "/experiments/"+expID+"/runs", map[string]any{})
+	runResp, err := doJSON(http.MethodPost, "/environments/"+envID+"/runs", map[string]any{})
 	if err != nil {
 		return err
 	}
 	runID := asString(runResp["run_id"])
 	fmt.Printf("\n%sRun created:%s         %s\n", cAmpWord, cReset, runID)
-	printTrainPreview(expID, runID)
+	printTrainPreview(envID, runID)
 
 	if promptYesNo("Watch this run now?", true) {
 		return monitorRun(runID, 5)
@@ -303,26 +281,6 @@ func handleEnvironment(args []string) {
 		environmentDelete(args[1:])
 	default:
 		fmt.Printf("unknown environment subcommand: %s\n", args[0])
-		os.Exit(1)
-	}
-}
-
-func handleExperiment(args []string) {
-	if len(args) == 0 {
-		fmt.Println("missing experiment subcommand")
-		os.Exit(1)
-	}
-	switch args[0] {
-	case "create":
-		experimentCreate(args[1:])
-	case "list":
-		experimentList(args[1:])
-	case "show":
-		experimentShow(args[1:])
-	case "delete":
-		experimentDelete(args[1:])
-	default:
-		fmt.Printf("unknown experiment subcommand: %s\n", args[0])
 		os.Exit(1)
 	}
 }
@@ -426,68 +384,17 @@ func environmentDelete(args []string) {
 	printJSON(resp)
 }
 
-func experimentCreate(args []string) {
-	fs := flag.NewFlagSet("experiment create", flag.ExitOnError)
-	environmentID := fs.String("environment-id", "", "Parent environment ID")
-	name := fs.String("name", "", "Experiment name")
-	fs.Parse(args)
-	if *environmentID == "" {
-		*environmentID = promptString("Environment ID", "")
-	}
-	if *name == "" {
-		*name = promptString("Experiment name", "baseline")
-	}
-
-	payload := map[string]any{"name": *name}
-	resp, err := doJSON(http.MethodPost, "/environments/"+*environmentID+"/experiments", payload)
-	must(err)
-	printJSON(resp)
-}
-
-func experimentShow(args []string) {
-	fs := flag.NewFlagSet("experiment show", flag.ExitOnError)
-	id := fs.String("id", "", "Experiment ID")
-	list := fs.Bool("list", false, "List all experiments")
-	fs.Parse(args)
-
-	if *list {
-		resp, err := doJSON(http.MethodGet, "/experiments", nil)
-		must(err)
-		printJSON(resp)
-		return
-	}
-	require(*id != "", "--id is required when --list is not set")
-	resp, err := doJSON(http.MethodGet, "/experiments/"+*id, nil)
-	must(err)
-	printJSON(resp)
-}
-
-func experimentList(args []string) {
-	experimentShow(append(args, "--list"))
-}
-
-func experimentDelete(args []string) {
-	fs := flag.NewFlagSet("experiment delete", flag.ExitOnError)
-	id := fs.String("id", "", "Experiment ID")
-	fs.Parse(args)
-	require(*id != "", "--id is required")
-
-	resp, err := doJSON(http.MethodDelete, "/experiments/"+*id, nil)
-	must(err)
-	printJSON(resp)
-}
-
 func runCreate(args []string) {
 	fs := flag.NewFlagSet("run create", flag.ExitOnError)
-	experimentID := fs.String("experiment-id", "", "Experiment ID")
+	environmentID := fs.String("environment-id", "", "Environment ID")
 	gpuType := fs.String("gpu-type", "", "Override GPU type")
 	gpuCount := fs.Int("gpu-count", 0, "Override GPU count")
 	volumeGB := fs.Int("volume-gb", 0, "Override volume size")
 	watch := fs.Bool("watch", false, "Watch run status after creation")
 	monitor := fs.Bool("monitor", false, "Alias for --watch")
 	fs.Parse(args)
-	if *experimentID == "" {
-		*experimentID = promptString("Experiment ID", "")
+	if *environmentID == "" {
+		*environmentID = promptString("Environment ID", "")
 	}
 
 	payload := map[string]any{}
@@ -501,7 +408,7 @@ func runCreate(args []string) {
 		payload["volume_gb"] = *volumeGB
 	}
 
-	resp, err := doJSON(http.MethodPost, "/experiments/"+*experimentID+"/runs", payload)
+	resp, err := doJSON(http.MethodPost, "/environments/"+*environmentID+"/runs", payload)
 	must(err)
 	printJSON(resp)
 	if *watch || *monitor {
@@ -577,9 +484,9 @@ func monitorRun(runID string, interval int) error {
 	return nil
 }
 
-func printTrainPreview(expID, runID string) {
+func printTrainPreview(envID, runID string) {
 	lines := []string{
-		fmt.Sprintf("%s>%s Tahuna train --experiment %s", cAmpGold, cReset, expID),
+		fmt.Sprintf("%s>%s Tahuna train --environment %s", cAmpGold, cReset, envID),
 		"",
 		fmt.Sprintf("  %sSetting up post-training pipeline...%s", cAmpMuted, cReset),
 		"",

@@ -41,7 +41,7 @@ func newRunService(db *sql.DB, asynqClient *asynq.Client, asynqInspector *asynq.
 	return &runService{db: db, asynqClient: asynqClient, asynqInspector: asynqInspector, queueName: queueName}
 }
 
-func (s *runService) createRun(ctx context.Context, userID, experimentID string, req runCreateRequest) (runResponse, error) {
+func (s *runService) createRun(ctx context.Context, userID, environmentID string, req runCreateRequest) (runResponse, error) {
 	if req.GPUCount != nil && *req.GPUCount < 1 {
 		return runResponse{}, newServiceError(400, "gpu_count must be >= 1")
 	}
@@ -49,24 +49,26 @@ func (s *runService) createRun(ctx context.Context, userID, experimentID string,
 		return runResponse{}, newServiceError(400, "volume_gb must be >= 1")
 	}
 
-	var envID, input string
+	// Verify environment exists and belongs to user
+	var exists bool
 	err := s.db.QueryRowContext(ctx, `
-		SELECT environment_id, input FROM experiments WHERE id = $1 AND user_id = $2
-	`, experimentID, userID).Scan(&envID, &input)
+		SELECT EXISTS(SELECT 1 FROM environments WHERE id = $1 AND user_id = $2)
+	`, environmentID, userID).Scan(&exists)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return runResponse{}, newServiceError(404, "Experiment "+experimentID+" not found")
-		}
-		return runResponse{}, wrapServiceError(500, "failed to load experiment", err)
+		return runResponse{}, wrapServiceError(500, "failed to validate environment", err)
+	}
+	if !exists {
+		return runResponse{}, newServiceError(404, "Environment "+environmentID+" not found")
 	}
 
 	runID := shortID()
+	input := "runs/" + runID + "/input"
 	output := "runs/" + runID + "/output"
 	logsPath := "runs/" + runID + "/logs"
 	_, err = s.db.ExecContext(ctx, `
-		INSERT INTO runs (id, user_id, environment_id, experiment_id, input, output, logs, status, cancellation_requested)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,'queued',FALSE)
-	`, runID, userID, envID, experimentID, input, output, logsPath)
+		INSERT INTO runs (id, user_id, environment_id, input, output, logs, status, cancellation_requested)
+		VALUES ($1,$2,$3,$4,$5,$6,'queued',FALSE)
+	`, runID, userID, environmentID, input, output, logsPath)
 	if err != nil {
 		return runResponse{}, wrapServiceError(500, "failed to create run", err)
 	}
@@ -92,19 +94,18 @@ func (s *runService) createRun(ctx context.Context, userID, experimentID string,
 	_, _ = s.db.ExecContext(ctx, `UPDATE runs SET task_id = $2, updated_at = NOW() WHERE id = $1`, runID, taskInfo.ID)
 
 	return runResponse{
-		RunID:        runID,
-		EnvID:        envID,
-		ExperimentID: experimentID,
-		Input:        input,
-		Output:       output,
-		Logs:         logsPath,
-		Status:       "queued",
+		RunID:  runID,
+		EnvID:  environmentID,
+		Input:  input,
+		Output: output,
+		Logs:   logsPath,
+		Status: "queued",
 	}, nil
 }
 
 func (s *runService) listRuns(ctx context.Context, userID string) ([]runResponse, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, environment_id, experiment_id, input, output, logs, status,
+		SELECT id, environment_id, input, output, logs, status,
 		       COALESCE(error,''), COALESCE(pod_id,''), COALESCE(effective_gpu_type,''),
 		       COALESCE(effective_gpu_count,0), COALESCE(effective_volume_gb,0),
 		       cancellation_requested
@@ -118,7 +119,7 @@ func (s *runService) listRuns(ctx context.Context, userID string) ([]runResponse
 	out := make([]runResponse, 0)
 	for rows.Next() {
 		var item runResponse
-		if err := rows.Scan(&item.RunID, &item.EnvID, &item.ExperimentID, &item.Input, &item.Output, &item.Logs, &item.Status, &item.Error, &item.PodID, &item.EffectiveGPUType, &item.EffectiveGPUCount, &item.EffectiveVolumeGB, &item.CancellationRequested); err != nil {
+		if err := rows.Scan(&item.RunID, &item.EnvID, &item.Input, &item.Output, &item.Logs, &item.Status, &item.Error, &item.PodID, &item.EffectiveGPUType, &item.EffectiveGPUCount, &item.EffectiveVolumeGB, &item.CancellationRequested); err != nil {
 			return nil, wrapServiceError(500, "failed to scan run row", err)
 		}
 		out = append(out, item)
@@ -132,12 +133,12 @@ func (s *runService) listRuns(ctx context.Context, userID string) ([]runResponse
 func (s *runService) getRun(ctx context.Context, userID, runID string) (runResponse, error) {
 	var item runResponse
 	err := s.db.QueryRowContext(ctx, `
-		SELECT id, environment_id, experiment_id, input, output, logs, status,
+		SELECT id, environment_id, input, output, logs, status,
 		       COALESCE(error,''), COALESCE(pod_id,''), COALESCE(effective_gpu_type,''),
 		       COALESCE(effective_gpu_count,0), COALESCE(effective_volume_gb,0),
 		       cancellation_requested
 		FROM runs WHERE id = $1 AND user_id = $2
-	`, runID, userID).Scan(&item.RunID, &item.EnvID, &item.ExperimentID, &item.Input, &item.Output, &item.Logs, &item.Status, &item.Error, &item.PodID, &item.EffectiveGPUType, &item.EffectiveGPUCount, &item.EffectiveVolumeGB, &item.CancellationRequested)
+	`, runID, userID).Scan(&item.RunID, &item.EnvID, &item.Input, &item.Output, &item.Logs, &item.Status, &item.Error, &item.PodID, &item.EffectiveGPUType, &item.EffectiveGPUCount, &item.EffectiveVolumeGB, &item.CancellationRequested)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return runResponse{}, newServiceError(404, "Run "+runID+" not found")
@@ -207,7 +208,7 @@ func (a *app) createRun(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 400, err.Error())
 		return
 	}
-	resp, err := a.runSvc.createRun(r.Context(), authUserID(r), r.PathValue("experiment_id"), req)
+	resp, err := a.runSvc.createRun(r.Context(), authUserID(r), r.PathValue("environment_id"), req)
 	if err != nil {
 		writeServiceErr(w, err)
 		return

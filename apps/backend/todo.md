@@ -12,5 +12,5 @@
 
 
 
-11. Only keep: "data" / "env"/ "run" - drop "experiments" ??
+11. Only keep: "data"/ "env"/ "run" - drop "experiments" ??
 12. Add Doc

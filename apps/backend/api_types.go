@@ -42,21 +42,9 @@ type listEnvironmentsResponse struct {
 	Environments []environmentResponse `json:"environments"`
 }
 
-type experimentResponse struct {
-	ExperimentID string `json:"experiment_id"`
-	Name         string `json:"name"`
-	EnvID        string `json:"env_id"`
-	Input        string `json:"input"`
-}
-
-type listExperimentsResponse struct {
-	Experiments []experimentResponse `json:"experiments"`
-}
-
 type runResponse struct {
 	RunID                 string `json:"run_id"`
 	EnvID                 string `json:"env_id"`
-	ExperimentID          string `json:"experiment_id"`
 	Input                 string `json:"input"`
 	Output                string `json:"output"`
 	Logs                  string `json:"logs"`
@@ -88,11 +76,6 @@ type cancelRunResponse struct {
 type deleteEnvironmentResponse struct {
 	Deleted       bool   `json:"deleted"`
 	EnvironmentID string `json:"environment_id"`
-}
-
-type deleteExperimentResponse struct {
-	Deleted      bool   `json:"deleted"`
-	ExperimentID string `json:"experiment_id"`
 }
 
 type deleteRunResponse struct {

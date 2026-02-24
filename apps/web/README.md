@@ -22,7 +22,7 @@ The dev server runs at [http://localhost:5173](http://localhost:5173).
 
 - `/` landing page (auto-redirects to `/dashboard` when logged in)
 - `/auth` email OTP auth flow
-- `/dashboard` environments / experiments / runs console
+- `/dashboard` environments / runs console
 - `/api-key` API key generation for CLI
 - `/api/*` authenticated proxy routes to backend
 
