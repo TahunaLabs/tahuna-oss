@@ -6,6 +6,7 @@ require (
 	github.com/hibiken/asynq v0.25.1
 	github.com/jackc/pgx/v5 v5.7.6
 	github.com/redis/go-redis/v9 v9.16.0
+	tahuna-provisioner v0.0.0
 )
 
 require (
@@ -24,3 +25,5 @@ require (
 	golang.org/x/time v0.8.0 // indirect
 	google.golang.org/protobuf v1.35.2 // indirect
 )
+
+replace tahuna-provisioner => ../provisioner

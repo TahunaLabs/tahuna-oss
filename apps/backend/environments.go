@@ -9,42 +9,8 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
+	"tahuna-provisioner/pkg/provisioner"
 )
-
-var gpus = []string{
-	"NVIDIA GeForce RTX 4090",
-	"NVIDIA GeForce RTX 4080",
-	"NVIDIA GeForce RTX 4080 SUPER",
-	"NVIDIA GeForce RTX 4070 Ti",
-	"NVIDIA GeForce RTX 3090",
-	"NVIDIA GeForce RTX 3090 Ti",
-	"NVIDIA GeForce RTX 3080",
-	"NVIDIA GeForce RTX 3080 Ti",
-	"NVIDIA GeForce RTX 3070",
-	"NVIDIA A100 80GB PCIe",
-	"NVIDIA A100-SXM4-80GB",
-	"NVIDIA A40",
-	"NVIDIA A30",
-	"NVIDIA L40",
-	"NVIDIA L40S",
-	"NVIDIA L4",
-	"NVIDIA H100 80GB HBM3",
-	"NVIDIA H100 PCIe",
-	"NVIDIA H100 NVL",
-	"NVIDIA H200",
-	"NVIDIA H200 NVL",
-	"NVIDIA RTX A6000",
-	"NVIDIA RTX A5000",
-	"NVIDIA RTX A4500",
-	"NVIDIA RTX A4000",
-	"NVIDIA RTX A2000",
-	"NVIDIA RTX 6000 Ada Generation",
-	"NVIDIA RTX 5000 Ada Generation",
-	"NVIDIA RTX 4000 Ada Generation",
-	"Tesla V100-SXM2-32GB",
-	"Tesla V100-SXM2-16GB",
-	"Tesla V100-PCIE-16GB",
-}
 
 type environmentCreateRequest struct {
 	Name      string `json:"name"`
@@ -56,12 +22,47 @@ type environmentCreateRequest struct {
 }
 
 type environmentService struct {
-	db    *sql.DB
-	redis *redis.Client
+	db           *sql.DB
+	redis        *redis.Client
+	httpClient   *http.Client
+	runpodAPIKey string
 }
 
-func newEnvironmentService(db *sql.DB, redis *redis.Client) *environmentService {
-	return &environmentService{db: db, redis: redis}
+func newEnvironmentService(db *sql.DB, redis *redis.Client, httpClient *http.Client, runpodAPIKey string) *environmentService {
+	return &environmentService{db: db, redis: redis, httpClient: httpClient, runpodAPIKey: runpodAPIKey}
+}
+
+// queryGPUTypes fetches GPU types from RunPod via provisioner, with Redis caching.
+func (s *environmentService) queryGPUTypes(ctx context.Context) ([]gpuTypeInfo, error) {
+	cacheKey := "runpod:gpu_types"
+	if raw, err := s.redis.Get(ctx, cacheKey).Bytes(); err == nil && len(raw) > 0 {
+		var cached []gpuTypeInfo
+		if json.Unmarshal(raw, &cached) == nil {
+			return cached, nil
+		}
+	}
+
+	rpGPUs, err := provisioner.QueryGPUTypes(ctx, s.httpClient, s.runpodAPIKey)
+	if err != nil {
+		return nil, wrapServiceError(500, "failed to query gpu types from runpod", err)
+	}
+	gpus := make([]gpuTypeInfo, 0, len(rpGPUs))
+	for _, g := range rpGPUs {
+		gpus = append(gpus, gpuTypeInfo{
+			ID:             g.ID,
+			DisplayName:    g.DisplayName,
+			MemoryInGB:     g.MemoryInGB,
+			MaxGPUCount:    g.MaxGPUCount,
+			SecureCloud:    g.SecureCloud,
+			CommunityCloud: g.CommunityCloud,
+			CommunityPrice: g.CommunityPrice,
+			SecurePrice:    g.SecurePrice,
+		})
+	}
+	if payload, err := json.Marshal(gpus); err == nil {
+		_ = s.redis.Set(ctx, cacheKey, payload, 2*time.Minute).Err()
+	}
+	return gpus, nil
 }
 
 func (s *environmentService) catalog(ctx context.Context) (catalogResponse, error) {
@@ -77,6 +78,10 @@ func (s *environmentService) catalog(ctx context.Context) (catalogResponse, erro
 	if err != nil {
 		return catalogResponse{}, wrapServiceError(500, "failed to load image catalog", err)
 	}
+	gpus, err := s.queryGPUTypes(ctx)
+	if err != nil {
+		return catalogResponse{}, err
+	}
 	resp := catalogResponse{GPUs: gpus, Images: images}
 	if payload, err := json.Marshal(resp); err == nil {
 		_ = s.redis.Set(ctx, cacheKey, payload, 2*time.Minute).Err()
@@ -88,8 +93,23 @@ func (s *environmentService) createEnvironment(ctx context.Context, userID strin
 	if req.Name == "" || req.GPUType == "" || req.Framework == "" || req.Version == "" || req.GPUCount < 1 || req.VolumeGB < 1 {
 		return environmentResponse{}, newServiceError(400, "invalid environment payload")
 	}
-	if !contains(gpus, req.GPUType) {
-		return environmentResponse{}, newServiceError(400, "Unsupported GPU type: "+req.GPUType)
+	// Validate GPU type and count against live RunPod inventory
+	gpus, err := s.queryGPUTypes(ctx)
+	if err != nil {
+		return environmentResponse{}, err
+	}
+	var matched *gpuTypeInfo
+	for i, g := range gpus {
+		if g.ID == req.GPUType {
+			matched = &gpus[i]
+			break
+		}
+	}
+	if matched == nil {
+		return environmentResponse{}, newServiceError(400, "Unsupported GPU type: "+req.GPUType+" — not available on RunPod")
+	}
+	if matched.MaxGPUCount > 0 && req.GPUCount > matched.MaxGPUCount {
+		return environmentResponse{}, newServiceError(400, "GPU count exceeds maximum ("+req.GPUType+" supports up to "+itoa(matched.MaxGPUCount)+")")
 	}
 	images, err := getImages()
 	if err != nil {

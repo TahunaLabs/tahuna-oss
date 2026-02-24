@@ -22,8 +22,19 @@ type meResponse struct {
 	OrgID  string `json:"org_id"`
 }
 
+type gpuTypeInfo struct {
+	ID             string  `json:"id"`
+	DisplayName    string  `json:"displayName"`
+	MemoryInGB     int     `json:"memoryInGb"`
+	MaxGPUCount    int     `json:"maxGpuCount"`
+	SecureCloud    bool    `json:"secureCloud"`
+	CommunityCloud bool    `json:"communityCloud"`
+	CommunityPrice float64 `json:"communityPrice"`
+	SecurePrice    float64 `json:"securePrice"`
+}
+
 type catalogResponse struct {
-	GPUs   []string                     `json:"gpus"`
+	GPUs   []gpuTypeInfo                `json:"gpus"`
 	Images map[string]map[string]string `json:"images"`
 }
 

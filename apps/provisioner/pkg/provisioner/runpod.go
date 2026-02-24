@@ -15,11 +15,72 @@ import (
 const runPodEndpoint = "https://api.runpod.io/graphql"
 
 type Config struct {
-	DockerUser  string
-	R2Endpoint  string
-	R2AccessKey string
-	R2SecretKey string
-	R2Bucket    string
+	DockerUser       string
+	R2Endpoint       string
+	R2AccessKey      string
+	R2SecretKey      string
+	R2Bucket         string
+	ContainerDiskGB  int           // default 20
+	VolumeMountPath  string        // default "/workspace"
+	StartSSH         bool          // default true
+	WaitRunTimeout   time.Duration // default 30m
+	WaitCompTimeout  time.Duration // default 1h
+	PollRunInterval  time.Duration // default 5s
+	PollCompInterval time.Duration // default 30s
+}
+
+func (c Config) containerDiskGB() int {
+	if c.ContainerDiskGB > 0 {
+		return c.ContainerDiskGB
+	}
+	return 20
+}
+
+func (c Config) volumeMountPath() string {
+	if c.VolumeMountPath != "" {
+		return c.VolumeMountPath
+	}
+	return "/workspace"
+}
+
+func (c Config) waitRunTimeout() time.Duration {
+	if c.WaitRunTimeout > 0 {
+		return c.WaitRunTimeout
+	}
+	return 30 * time.Minute
+}
+
+func (c Config) waitCompTimeout() time.Duration {
+	if c.WaitCompTimeout > 0 {
+		return c.WaitCompTimeout
+	}
+	return time.Hour
+}
+
+func (c Config) pollRunInterval() time.Duration {
+	if c.PollRunInterval > 0 {
+		return c.PollRunInterval
+	}
+	return 5 * time.Second
+}
+
+func (c Config) pollCompInterval() time.Duration {
+	if c.PollCompInterval > 0 {
+		return c.PollCompInterval
+	}
+	return 30 * time.Second
+}
+
+// GPUTypeInfo holds the metadata RunPod returns for each GPU type.
+type GPUTypeInfo struct {
+	ID             string  `json:"id"`
+	DisplayName    string  `json:"displayName"`
+	MemoryInGB     int     `json:"memoryInGb"`
+	MaxGPUCount    int     `json:"maxGpuCount"`
+	SecureCloud    bool    `json:"secureCloud"`
+	CommunityCloud bool    `json:"communityCloud"`
+	CommunityPrice float64 `json:"communityPrice"`
+	SecurePrice    float64 `json:"securePrice"`
 }
 
 type LaunchRequest struct {
@@ -94,9 +155,9 @@ func Launch(ctx context.Context, client *http.Client, apiKey string, cfg Config,
 			"gpuTypeId":         req.GPUType,
 			"gpuCount":          req.GPUCount,
 			"volumeInGb":        req.VolumeGB,
-			"containerDiskInGb": 20,
-			"volumeMountPath":   "/workspace",
-			"startSsh":          true,
+			"containerDiskInGb": cfg.containerDiskGB(),
+			"volumeMountPath":   cfg.volumeMountPath(),
+			"startSsh":          cfg.StartSSH,
 			"env":               env,
 		},
 	}
@@ -123,7 +184,7 @@ func WaitRunning(ctx context.Context, client *http.Client, apiKey, podID string,
 		return nil, errors.New("pod id is required")
 	}
 	if timeout <= 0 {
-		timeout = 30 * time.Minute
+		timeout = 30 * time.Minute // caller can override via Config.WaitRunTimeout
 	}
 
 	deadline := time.Now().Add(timeout)
@@ -141,7 +202,7 @@ func WaitRunning(ctx context.Context, client *http.Client, apiKey, podID string,
 		if time.Now().After(deadline) {
 			return nil, fmt.Errorf("pod %s did not become RUNNING within %s", podID, timeout)
 		}
-		timer := time.NewTimer(5 * time.Second)
+		timer := time.NewTimer(5 * time.Second) // default poll interval
 		select {
 		case <-ctx.Done():
 			timer.Stop()
@@ -311,4 +372,20 @@ func validateLaunchConfig(cfg Config, req LaunchRequest) error {
 		return errors.New("volume gb must be >= 1")
 	}
 	return nil
+}
+
+// QueryGPUTypes fetches all available GPU types from the RunPod API.
+func QueryGPUTypes(ctx context.Context, client *http.Client, apiKey string) ([]GPUTypeInfo, error) {
+	if strings.TrimSpace(apiKey) == "" {
+		return nil, errors.New("api key is required")
+	}
+
+	query := `query { gpuTypes { id displayName memoryInGb maxGpuCount secureCloud communityCloud communityPrice securePrice } }`
+	var out struct {
+		GPUTypes []GPUTypeInfo `json:"gpuTypes"`
+	}
+	if err := doGraphQL(ctx, client, apiKey, query, nil, &out); err != nil {
+		return nil, fmt.Errorf("query gpu types: %w", err)
+	}
+	return out.GPUTypes, nil
 }

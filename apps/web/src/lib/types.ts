@@ -30,7 +30,18 @@ export type Run = {
   cancellation_requested?: boolean;
 };
 
+export type GPUType = {
+  id: string;
+  displayName: string;
+  memoryInGb: number;
+  maxGpuCount: number;
+  secureCloud: boolean;
+  communityCloud: boolean;
+  communityPrice: number;
+  securePrice: number;
+};
+
 export type Catalog = {
-  gpus: string[];
+  gpus: GPUType[];
   images: Record<string, Record<string, string>>;
 };

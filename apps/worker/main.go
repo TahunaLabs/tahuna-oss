@@ -369,11 +369,18 @@ func loadProvisionerConfigFromEnv() (provisioner.Config, error) {
 	}
 
 	return provisioner.Config{
-		DockerUser:  dockerUser,
-		R2Endpoint:  r2Endpoint,
-		R2AccessKey: r2Access,
-		R2SecretKey: r2Secret,
-		R2Bucket:    r2Bucket,
+		DockerUser:       dockerUser,
+		R2Endpoint:       r2Endpoint,
+		R2AccessKey:      r2Access,
+		R2SecretKey:      r2Secret,
+		R2Bucket:         r2Bucket,
+		ContainerDiskGB:  envIntOr("CONTAINER_DISK_GB", 0),
+		VolumeMountPath:  envOr("VOLUME_MOUNT_PATH", ""),
+		StartSSH:         envBoolOr("START_SSH", true),
+		WaitRunTimeout:   envDurationOr("WAIT_RUN_TIMEOUT", 0),
+		WaitCompTimeout:  envDurationOr("WAIT_COMP_TIMEOUT", 0),
+		PollRunInterval:  envDurationOr("POLL_RUN_INTERVAL", 0),
+		PollCompInterval: envDurationOr("POLL_COMP_INTERVAL", 0),
 	}, nil
 }
 
@@ -450,4 +457,24 @@ func envIntOr(key string, fallback int) int {
 		return fallback
 	}
 	return n
+}
+
+func envBoolOr(key string, fallback bool) bool {
+	v := strings.TrimSpace(strings.ToLower(os.Getenv(key)))
+	if v == "" {
+		return fallback
+	}
+	return v == "1" || v == "true" || v == "yes"
+}
+
+func envDurationOr(key string, fallback time.Duration) time.Duration {
+	v := strings.TrimSpace(os.Getenv(key))
+	if v == "" {
+		return fallback
+	}
+	d, err := time.ParseDuration(v)
+	if err != nil {
+		return fallback
+	}
+	return d
 }

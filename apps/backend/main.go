@@ -97,8 +97,14 @@ func main() {
 		jwtIssuer:      envOr("JWT_ISSUER", "tahuna-web"),
 		jwtAudience:    envOr("JWT_AUDIENCE", "tahuna-api"),
 	}
+	runpodAPIKey := strings.TrimSpace(os.Getenv("RUNPOD_API_KEY"))
+	if runpodAPIKey == "" {
+		log.Fatal("RUNPOD_API_KEY is required")
+	}
+	httpClient := &http.Client{Timeout: 30 * time.Second}
+
 	a.authSvc = newAuthService(db, redisClient)
-	a.environmentSvc = newEnvironmentService(db, redisClient)
+	a.environmentSvc = newEnvironmentService(db, redisClient, httpClient, runpodAPIKey)
 	a.runSvc = newRunService(db, asynqClient, asynqInspector, queueName)
 
 	mux := a.routes()
@@ -237,15 +243,6 @@ func writeErr(w http.ResponseWriter, status int, msg string) {
 	writeJSON(w, status, map[string]string{"detail": msg})
 }
 
-func contains(values []string, target string) bool {
-	for _, v := range values {
-		if v == target {
-			return true
-		}
-	}
-	return false
-}
-
 func shortID() string {
 	b := make([]byte, 4)
 	if _, err := rand.Read(b); err != nil {
@@ -302,10 +299,6 @@ func envBoolOr(key string, fallback bool) bool {
 	return v == "1" || v == "true" || v == "yes"
 }
 
-func nullIfEmpty(s string) any {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return nil
-	}
-	return s
+func itoa(n int) string {
+	return strconv.Itoa(n)
 }

@@ -73,6 +73,19 @@
   $: if (!runEnvID && environments.length > 0) {
     runEnvID = environments[0].environment_id;
   }
+  $: selectedGPU = catalog?.gpus.find((g) => g.id === envGPUType) ?? null;
+  $: maxGPUs = selectedGPU?.maxGpuCount || 8;
+  $: if (Number.parseInt(envGPUCount, 10) > maxGPUs) {
+    envGPUCount = String(maxGPUs);
+  }
+  $: selectedRunEnv =
+    environments.find((e) => e.environment_id === runEnvID) ?? null;
+  $: overrideGPU =
+    catalog?.gpus.find((g) => g.id === override.gpu_type) ??
+    (selectedRunEnv
+      ? (catalog?.gpus.find((g) => g.id === selectedRunEnv.gpu_type) ?? null)
+      : null);
+  $: overrideMaxGPUs = overrideGPU?.maxGpuCount || 8;
 
   $: dataRows = [
     ...environments.map((env) => ({
@@ -118,7 +131,7 @@
     runs = runData.runs;
 
     if (!envGPUType && catalogData.gpus.length > 0)
-      envGPUType = catalogData.gpus[0];
+      envGPUType = catalogData.gpus[0].id;
   }
 
   async function withBusy(task: () => Promise<void>) {
@@ -365,8 +378,9 @@
                 <div class="space-y-2">
                   <Label for="gpu-type">GPU</Label>
                   <Select id="gpu-type" bind:value={envGPUType}>
-                    {#each catalog?.gpus || [] as gpu}<option value={gpu}
-                        >{gpu}</option
+                    {#each catalog?.gpus || [] as gpu}<option value={gpu.id}
+                        >{gpu.displayName} ({gpu.memoryInGb}GB) · {gpu.maxGpuCount}
+                        max</option
                       >{/each}
                   </Select>
                 </div>
@@ -388,11 +402,13 @@
                     </Select>
                   </div>
                   <div class="space-y-2">
-                    <Label for="gpu-count">GPUs</Label>
+                    <Label for="gpu-count">Count</Label>
                     <Input
                       id="gpu-count"
                       type="number"
                       min="1"
+                      max={maxGPUs}
+                      placeholder="max {maxGPUs}"
                       bind:value={envGPUCount}
                     />
                   </div>
@@ -515,20 +531,26 @@
                 </div>
                 <div class="space-y-2">
                   <Label for="override-gpu">GPU Override</Label>
-                  <Input
-                    id="override-gpu"
-                    bind:value={override.gpu_type}
-                    placeholder="optional"
-                  />
+                  <Select id="override-gpu" bind:value={override.gpu_type}>
+                    <option value=""
+                      >Use env default ({selectedRunEnv?.gpu_type ||
+                        "—"})</option
+                    >
+                    {#each catalog?.gpus || [] as gpu}<option value={gpu.id}
+                        >{gpu.displayName} ({gpu.memoryInGb}GB) · {gpu.maxGpuCount}
+                        max</option
+                      >{/each}
+                  </Select>
                 </div>
                 <div class="space-y-2">
-                  <Label for="override-count">GPUs</Label>
+                  <Label for="override-count">Count</Label>
                   <Input
                     id="override-count"
                     type="number"
                     min="1"
+                    max={overrideMaxGPUs}
                     bind:value={override.gpu_count}
-                    placeholder="—"
+                    placeholder={selectedRunEnv?.gpu_count?.toString() || "—"}
                   />
                 </div>
                 <div class="space-y-2">
@@ -538,7 +560,7 @@
                     type="number"
                     min="1"
                     bind:value={override.volume_gb}
-                    placeholder="—"
+                    placeholder={selectedRunEnv?.volume_gb?.toString() || "—"}
                   />
                 </div>
                 <Button
