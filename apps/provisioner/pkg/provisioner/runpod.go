@@ -73,14 +73,10 @@ func (c Config) pollCompInterval() time.Duration {
 
 // GPUTypeInfo holds the metadata RunPod returns for each GPU type.
 type GPUTypeInfo struct {
-	ID             string  `json:"id"`
-	DisplayName    string  `json:"displayName"`
-	MemoryInGB     int     `json:"memoryInGb"`
-	MaxGPUCount    int     `json:"maxGpuCount"`
-	SecureCloud    bool    `json:"secureCloud"`
-	CommunityCloud bool    `json:"communityCloud"`
-	CommunityPrice float64 `json:"communityPrice"`
-	SecurePrice    float64 `json:"securePrice"`
+	ID          string `json:"id"`
+	DisplayName string `json:"displayName"`
+	MemoryInGB  int    `json:"memoryInGb"`
+	MaxGPUCount int    `json:"maxGpuCount"`
 }
 
 type LaunchRequest struct {
@@ -380,7 +376,7 @@ func QueryGPUTypes(ctx context.Context, client *http.Client, apiKey string) ([]G
 		return nil, errors.New("api key is required")
 	}
 
-	query := `query { gpuTypes { id displayName memoryInGb maxGpuCount secureCloud communityCloud communityPrice securePrice } }`
+	query := `query { gpuTypes { id displayName memoryInGb maxGpuCount } }`
 	var out struct {
 		GPUTypes []GPUTypeInfo `json:"gpuTypes"`
 	}

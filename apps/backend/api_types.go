@@ -23,14 +23,10 @@ type meResponse struct {
 }
 
 type gpuTypeInfo struct {
-	ID             string  `json:"id"`
-	DisplayName    string  `json:"displayName"`
-	MemoryInGB     int     `json:"memoryInGb"`
-	MaxGPUCount    int     `json:"maxGpuCount"`
-	SecureCloud    bool    `json:"secureCloud"`
-	CommunityCloud bool    `json:"communityCloud"`
-	CommunityPrice float64 `json:"communityPrice"`
-	SecurePrice    float64 `json:"securePrice"`
+	ID          string `json:"id"`
+	DisplayName string `json:"displayName"`
+	MemoryInGB  int    `json:"memoryInGb"`
+	MaxGPUCount int    `json:"maxGpuCount"`
 }
 
 type catalogResponse struct {

@@ -49,14 +49,10 @@ func (s *environmentService) queryGPUTypes(ctx context.Context) ([]gpuTypeInfo, 
 	gpus := make([]gpuTypeInfo, 0, len(rpGPUs))
 	for _, g := range rpGPUs {
 		gpus = append(gpus, gpuTypeInfo{
-			ID:             g.ID,
-			DisplayName:    g.DisplayName,
-			MemoryInGB:     g.MemoryInGB,
-			MaxGPUCount:    g.MaxGPUCount,
-			SecureCloud:    g.SecureCloud,
-			CommunityCloud: g.CommunityCloud,
-			CommunityPrice: g.CommunityPrice,
-			SecurePrice:    g.SecurePrice,
+			ID:          g.ID,
+			DisplayName: g.DisplayName,
+			MemoryInGB:  g.MemoryInGB,
+			MaxGPUCount: g.MaxGPUCount,
 		})
 	}
 	if payload, err := json.Marshal(gpus); err == nil {

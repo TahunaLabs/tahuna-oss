@@ -35,10 +35,6 @@ export type GPUType = {
   displayName: string;
   memoryInGb: number;
   maxGpuCount: number;
-  secureCloud: boolean;
-  communityCloud: boolean;
-  communityPrice: number;
-  securePrice: number;
 };
 
 export type Catalog = {
