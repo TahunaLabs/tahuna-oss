@@ -23,7 +23,7 @@ import (
 )
 
 const (
-	defaultAPIURL = "http://localhost:8000"
+	defaultAPIURL = "http://localhost:3000"
 	cliVersion    = "0.1.0"
 	cReset        = "\033[0m"
 	// AMP frontend palette mapping:
@@ -32,7 +32,6 @@ const (
 	cAmpText  = "\033[38;5;223m" // sand/foreground
 	cAmpMuted = "\033[38;5;108m" // muted green-gray
 	cAmpTeal  = "\033[38;5;37m"  // dark teal accent
-	cAmpSlate = "\033[38;5;66m"  // subdued slate
 	cAmpGreen = "\033[38;5;48m"
 	cAmpGold  = "\033[38;5;179m"
 	cAmpRed   = "\033[38;5;196m"
@@ -80,7 +79,7 @@ Usage:
   tahuna version
 
 Environment:
-  TAHUNA_API_URL   Backend base URL (default: http://localhost:8000)
+  TAHUNA_API_URL   API base URL (default: http://localhost:3000)
   TAHUNA_API_KEY   API key from the API key manager (sent as Bearer token)
 
 Tip:
@@ -476,7 +475,7 @@ func monitorRun(runID string, interval int) error {
 		status := asString(resp["status"])
 		errMsg := asString(resp["error"])
 		printRunPanel(runID, status, errMsg)
-		if status == "completed" || status == "failed" {
+		if status == "completed" || status == "failed" || status == "cancelled" {
 			break
 		}
 		time.Sleep(time.Duration(interval) * time.Second)

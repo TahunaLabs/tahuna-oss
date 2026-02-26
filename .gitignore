@@ -47,6 +47,8 @@ cover.out
 
 # Project binaries
 cli/tahuna-cli
-apps/backend/tahuna-backend
-apps/worker/tahuna-worker
-apps/provisioner/tahuna-provisioner
+
+# Web generated artifacts
+web/.next/
+web/node_modules/
+web/tsconfig.tsbuildinfo

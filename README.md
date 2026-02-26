@@ -1,24 +1,20 @@
 # tahuna
 
-GPU provisioning platform for ML training. Provision GPUs and run your code with minimal setup.
+GPU provisioning platform for ML training. The architecture is now:
+- `web`: Next.js + Convex (UI + backend API)
+- `cli`: standalone Go CLI for end users
 
 ## Structure
 
 ```
-├── apps/
-│   ├── web/          # SvelteKit dashboard
-│   ├── backend/      # Go API (users/envs/auth)
-│   ├── worker/       # Go worker (queue consumer for runs)
-│   └── provisioner/  # Internal RunPod orchestration package/ops tool
-├── cli/              # Go CLI
-├── libs/             # Shared libs (placeholder)
-├── proto/            # gRPC contracts (placeholder)
-└── infra/            # Infra definitions (placeholder)
+├── web/              # Next.js app + Convex backend
+├── cli/              # Go CLI (standalone distribution)
+├── libs/
+├── proto/
+└── infra/
 ```
 
-## Components
-
-### Make Targets
+## Getting Started
 
 Install everything:
 
@@ -26,83 +22,48 @@ Install everything:
 make install
 ```
 
-Run core services (backend + worker + web):
+Run web app:
 
 ```bash
-make run
-```
-
-Per-component targets are also available:
-- `make install-web` / `make run-web`
-- `make install-backend` / `make run-backend`
-- `make install-worker` / `make run-worker`
-- `make install-provisioner` / `make run-provisioner`
-- `make install-cli` / `make run-cli`
-
-### Backend
-Go backend API (Postgres + Redis + Asynq producer).
-
-```bash
-make install-backend
-make run-backend
-```
-
-### Worker
-Go worker service that consumes Redis/Asynq run jobs and executes provisioning.
-
-```bash
-make install-worker
-make run-worker
-```
-
-### CLI
-Go CLI for developers to provision GPUs and run training jobs programmatically.
-
-```bash
-make install-cli
-make run-cli
-```
-
-### CLI Install (Homebrew)
-
-Formula template is included at `Formula/tahuna.rb`.
-Update release URL/SHA fields, publish artifacts, then install:
-
-```bash
-brew tap <your-org>/tap
-brew install tahuna
-```
-
-### Web
-Web dashboard for monitoring and managing training runs.
-
-```bash
-make install-web
 make run-web
 ```
 
-## Deployment
-
-| Component | Platform | Root Directory |
-|-----------|----------|----------------|
-| Backend | GCP Cloud Run | `apps/backend/` |
-| Worker | GCP Cloud Run job / worker VM | `apps/worker/` |
-| Web | Vercel | `apps/web/` |
-| CLI | GitHub Releases / Homebrew (planned) | `cli/` |
-
-## Infra Prereqs
-
-- PostgreSQL (`DATABASE_URL`)
-- Redis (`REDIS_ADDR`) for queue and cache
-
-Start local infra:
+Run only Next.js (without Convex dev):
 
 ```bash
-docker compose up -d
+make run-web-app
 ```
 
-Stop local infra:
+Run CLI:
 
 ```bash
-docker compose down
+make run-cli
 ```
+
+## Web (Next.js + Convex)
+
+```bash
+cd web
+bun install
+bun run convex:dev
+bun run dev
+```
+
+Required env vars are in [`web/.env.example`](/Users/pazuzzu/Desktop/gigi/boob-ai/web/.env.example).
+
+## CLI
+
+```bash
+cd cli
+go mod download
+go run .
+```
+
+Default API URL is `http://localhost:3000`.
+
+## Why this architecture
+
+- Removes local Postgres/Redis/worker orchestration.
+- Uses Convex as backend state + scheduling substrate.
+- Keeps CLI standalone and API-compatible using Next route handlers.
+- Preserves polling in CLI for long-running jobs.
