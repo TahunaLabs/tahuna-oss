@@ -29,9 +29,9 @@ export function Hero() {
               </p>
             </div>
 
-            <Button variant="pill" size="lg" asChild className="self-start px-8 py-3.5 h-auto">
-              <Link href="#waitlist">
-                Get in Touch
+            <Button variant="pill" size="lg" asChild className="self-start px-8 py-3.5 h-auto bg-primary/15 text-primary border-primary/30 hover:bg-primary/25">
+              <Link href="/auth">
+                Get Started
                 <ArrowRight className="h-4 w-4" />
               </Link>
             </Button>

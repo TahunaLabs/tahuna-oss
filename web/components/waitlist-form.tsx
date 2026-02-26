@@ -110,7 +110,7 @@ export function WaitlistForm() {
       </div>
 
       <Button type="submit" size="lg" className="w-full rounded-full" disabled={isSubmitting}>
-        {isSubmitting ? "Submitting…" : "Get in Touch"}
+        {isSubmitting ? "Submitting…" : "Get Started"}
       </Button>
     </form>
   )

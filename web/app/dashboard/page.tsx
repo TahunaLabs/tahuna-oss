@@ -1,12 +1,13 @@
 "use client"
 
-import { useEffect, useMemo, useState, type FormEvent } from "react"
-import Link from "next/link"
-import { useRouter } from "next/navigation"
-import { Database, Key, LogOut, Play, Server, Settings, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Spinner } from "@/components/ui/spinner"
+import { Database, Key, LogOut, Play, Server, Settings, Trash2 } from "lucide-react"
+import Link from "next/link"
+import { useRouter } from "next/navigation"
+import { useEffect, useMemo, useState, type FormEvent } from "react"
 
 type SessionResponse = {
   user?: {
@@ -295,7 +296,12 @@ export default function DashboardPage() {
   }
 
   if (loading) {
-    return <div className="min-h-screen flex items-center justify-center text-sm text-foreground/70">Loading dashboard...</div>
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center gap-3">
+        <Spinner size="lg" />
+        <p className="text-sm text-muted-foreground">Loading dashboard…</p>
+      </div>
+    )
   }
 
   return (

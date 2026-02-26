@@ -11,6 +11,7 @@ export function Header() {
   const navLinks = [
     { label: "Manifesto", href: "/#manifesto" },
     { label: "The Stack", href: "/#layers" },
+    { label: "Get in Touch", href: "/#waitlist" },
   ]
 
   return (
@@ -34,7 +35,7 @@ export function Header() {
           ))}
           <Button variant="pill" size="sm" asChild className="px-5 py-2 h-auto">
             <Link href="/auth">
-              Get Started
+              Sign In
             </Link>
           </Button>
         </div>
@@ -64,7 +65,7 @@ export function Header() {
           ))}
           <Button variant="pill" asChild className="w-full justify-center px-5 py-2 h-auto">
             <Link href="/auth" onClick={() => setMobileMenuOpen(false)}>
-              Get Started
+              Sign In
             </Link>
           </Button>
         </div>
