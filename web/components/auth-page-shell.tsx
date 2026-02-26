@@ -1,5 +1,4 @@
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import Link from "next/link"
 import type { ReactNode } from "react"
@@ -15,20 +14,10 @@ export function AuthPageShell({ eyebrow, title, subtitle, children }: AuthPageSh
   return (
     <div className="min-h-screen flex flex-col">
       <header className="border-b border-border bg-background/90 backdrop-blur-md">
-        <div className="mx-auto max-w-7xl px-6 py-4 flex items-center justify-between">
+        <div className="mx-auto max-w-7xl px-6 py-4">
           <Link href="/" className="text-2xl font-serif font-semibold tracking-tight text-foreground">
             Tahuna
           </Link>
-          <div className="flex items-center gap-6 text-sm">
-            <Link href="/auth" className="text-muted-foreground hover:text-foreground transition-colors">
-              Sign In
-            </Link>
-            <Button variant="pill" size="sm" asChild className="px-4 py-1.5 h-auto">
-              <Link href="/api-key">
-                API Key
-              </Link>
-            </Button>
-          </div>
         </div>
       </header>
 

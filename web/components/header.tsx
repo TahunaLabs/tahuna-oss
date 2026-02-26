@@ -3,44 +3,14 @@
 import { Button } from "@/components/ui/button"
 import { Menu, X } from "lucide-react"
 import Link from "next/link"
-import { useEffect, useState } from "react"
+import { useState } from "react"
 
 export function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
-  const [isAuthenticated, setIsAuthenticated] = useState(false)
-
-  useEffect(() => {
-    let active = true
-
-    async function loadSession() {
-      try {
-        const resp = await fetch("/api/auth/get-session", { method: "GET", cache: "no-store" })
-        if (active) {
-          if (!resp.ok) {
-            setIsAuthenticated(false)
-            return
-          }
-          const data = (await resp.json()) as { user?: unknown } | null
-          setIsAuthenticated(Boolean(data?.user))
-        }
-      } catch {
-        if (active) {
-          setIsAuthenticated(false)
-        }
-      }
-    }
-
-    loadSession()
-    return () => {
-      active = false
-    }
-  }, [])
 
   const navLinks = [
     { label: "Manifesto", href: "/#manifesto" },
     { label: "The Stack", href: "/#layers" },
-    ...(isAuthenticated ? [{ label: "Dashboard", href: "/dashboard" }] : []),
-    { label: "Sign In", href: "/auth" },
   ]
 
   return (
@@ -63,8 +33,8 @@ export function Header() {
             </Link>
           ))}
           <Button variant="pill" size="sm" asChild className="px-5 py-2 h-auto">
-            <Link href="/api-key">
-              Get API Key
+            <Link href="/auth">
+              Get Started
             </Link>
           </Button>
         </div>
@@ -93,8 +63,8 @@ export function Header() {
             </Link>
           ))}
           <Button variant="pill" asChild className="w-full justify-center px-5 py-2 h-auto">
-            <Link href="/api-key" onClick={() => setMobileMenuOpen(false)}>
-              Get API Key
+            <Link href="/auth" onClick={() => setMobileMenuOpen(false)}>
+              Get Started
             </Link>
           </Button>
         </div>
