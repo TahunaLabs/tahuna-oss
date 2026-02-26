@@ -1,14 +1,14 @@
 "use client"
 
-import { useEffect, useMemo, useState, type FormEvent } from "react"
 import { AuthPageShell } from "@/components/auth-page-shell"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { api } from "@/convex/_generated/api"
+import { useConvexAuth, useMutation, useQuery } from "convex/react"
+import { useMemo, useState, type FormEvent } from "react"
 
-type MeResponse = {
-  email: string
-}
+const DEFAULT_API_URL = process.env.NEXT_PUBLIC_TAHUNA_API_URL?.trim() || "http://localhost:3000"
 
 type BootstrapResponse = {
   user_id: string
@@ -16,48 +16,20 @@ type BootstrapResponse = {
   api_key_id: string
 }
 
-const DEFAULT_API_URL = process.env.NEXT_PUBLIC_TAHUNA_API_URL?.trim() || "http://localhost:3000"
-
 export default function ApiKeyPage() {
-  const [email, setEmail] = useState("")
+  const { isAuthenticated, isLoading } = useConvexAuth()
+  const currentUser = useQuery(api.auth.getCurrentUser)
+  const createApiKeyMutation = useMutation(api.auth.createApiKey)
+
   const [name, setName] = useState("cli")
-  const [loadingProfile, setLoadingProfile] = useState(true)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState("")
   const [result, setResult] = useState<BootstrapResponse | null>(null)
 
-  useEffect(() => {
-    let active = true
-
-    async function loadMe() {
-      try {
-        const resp = await fetch("/api/auth/get-session", { method: "GET", cache: "no-store" })
-        if (!resp.ok) {
-          return
-        }
-        const session = (await resp.json()) as { user?: { email?: string } } | null
-        const me: MeResponse = { email: session?.user?.email?.trim() || "" }
-        if (!active) {
-          return
-        }
-        setEmail(me.email ?? "")
-      } finally {
-        if (active) {
-          setLoadingProfile(false)
-        }
-      }
-    }
-
-    loadMe()
-    return () => {
-      active = false
-    }
-  }, [])
+  const email = currentUser?.email ?? ""
 
   const exportSnippet = useMemo(() => {
-    if (!result) {
-      return ""
-    }
+    if (!result) return ""
     return `export TAHUNA_API_URL=${DEFAULT_API_URL}
 export TAHUNA_API_KEY=${result.api_key}`
   }, [result])
@@ -69,18 +41,7 @@ export TAHUNA_API_KEY=${result.api_key}`
     setResult(null)
 
     try {
-      const apiKeyResp = await fetch("/api/auth/api-keys", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name,
-        }),
-      })
-
-      const data = await apiKeyResp.json()
-      if (!apiKeyResp.ok) {
-        throw new Error(data.detail || "failed to create api key")
-      }
+      const data = await createApiKeyMutation({ name })
       setResult(data as BootstrapResponse)
     } catch (err) {
       setError(err instanceof Error ? err.message : "unexpected error")
@@ -119,7 +80,7 @@ export TAHUNA_API_KEY=${result.api_key}`
           />
         </div>
 
-        <Button type="submit" disabled={busy || loadingProfile} className="w-full sm:w-auto">
+        <Button type="submit" disabled={busy || isLoading || !isAuthenticated} className="w-full sm:w-auto">
           {busy ? "Creating key..." : "Create API key"}
         </Button>
 

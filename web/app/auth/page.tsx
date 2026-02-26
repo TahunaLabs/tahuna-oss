@@ -1,23 +1,24 @@
 "use client"
 
-import { useRouter } from "next/navigation"
-import { useState, type FormEvent } from "react"
 import { AuthPageShell } from "@/components/auth-page-shell"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { useRouter } from "next/navigation"
+import { useState, type FormEvent } from "react"
 
 export default function AuthPage() {
   const router = useRouter()
   const [email, setEmail] = useState("")
   const [otp, setOTP] = useState("")
-  const [busy, setBusy] = useState(false)
+  const [sendingCode, setSendingCode] = useState(false)
+  const [verifyingCode, setVerifyingCode] = useState(false)
   const [error, setError] = useState("")
   const [needsVerification, setNeedsVerification] = useState(false)
 
   async function onRequestCode(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    setBusy(true)
+    setSendingCode(true)
     setError("")
     setNeedsVerification(false)
     setOTP("")
@@ -36,12 +37,12 @@ export default function AuthPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "unexpected error")
     } finally {
-      setBusy(false)
+      setSendingCode(false)
     }
   }
 
   async function onVerifyCode() {
-    setBusy(true)
+    setVerifyingCode(true)
     setError("")
 
     try {
@@ -61,7 +62,7 @@ export default function AuthPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "unexpected error")
     } finally {
-      setBusy(false)
+      setVerifyingCode(false)
     }
   }
 
@@ -85,8 +86,8 @@ export default function AuthPage() {
           />
         </div>
 
-        <Button type="submit" disabled={busy || needsVerification} className="w-full sm:w-auto">
-          {busy ? "Sending code..." : "Send verification code"}
+        <Button type="submit" disabled={sendingCode || needsVerification} className="w-full sm:w-auto">
+          {sendingCode ? "Sending code..." : "Send verification code"}
         </Button>
 
         {error ? <p className="text-sm text-destructive">{error}</p> : null}
@@ -112,8 +113,8 @@ export default function AuthPage() {
                   onChange={(event) => setOTP(event.target.value)}
                 />
               </div>
-              <Button type="button" onClick={onVerifyCode} disabled={busy || otp.trim().length !== 6} className="w-full sm:w-auto">
-                {busy ? "Verifying..." : "Verify and continue"}
+              <Button type="button" onClick={onVerifyCode} disabled={verifyingCode || otp.trim().length !== 6} className="w-full sm:w-auto">
+                {verifyingCode ? "Verifying..." : "Verify and continue"}
               </Button>
             </div>
           </div>

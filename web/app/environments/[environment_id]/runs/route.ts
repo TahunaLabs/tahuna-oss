@@ -1,7 +1,18 @@
-import { NextResponse } from "next/server";
 import { convexServerClient } from "@/lib/convex-server";
 import { authenticateRequest } from "@/lib/request-auth";
-import { readJSONBody } from "@/app/api/auth/_shared";
+/**
+ * CLI REST endpoint — used by the Tahuna CLI (API-key auth).
+ * The dashboard uses Convex directly via React hooks instead.
+ */
+import { NextResponse } from "next/server";
+
+async function readJSONBody(req: Request): Promise<unknown> {
+  try {
+    return await req.json();
+  } catch {
+    return null;
+  }
+}
 
 export async function POST(req: Request, { params }: { params: Promise<{ environment_id: string }> }) {
   const auth = await authenticateRequest(req);

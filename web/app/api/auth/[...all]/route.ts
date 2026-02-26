@@ -1,6 +1,3 @@
-import { getAuthHandlers } from "@/lib/auth-server";
+import { handler } from "@/lib/auth-server";
 
-const handlers = getAuthHandlers();
-
-export const GET = handlers.GET;
-export const POST = handlers.POST;
+export const { GET, POST } = handler;

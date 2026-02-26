@@ -4,57 +4,13 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { PageLoader } from "@/components/ui/spinner"
+import { api } from "@/convex/_generated/api"
+import { authClient } from "@/lib/auth-client"
+import { useConvexAuth, useMutation, useQuery } from "convex/react"
 import { Database, Key, LogOut, Play, Server, Settings, Trash2 } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useEffect, useMemo, useState, type FormEvent } from "react"
-
-type SessionResponse = {
-  user?: {
-    email?: string
-  } | null
-}
-
-type MeResponse = {
-  email: string
-}
-
-type Environment = {
-  environment_id: string
-  name: string
-  artifacts: string
-  gpu_type: string
-  gpu_count: number
-  volume_gb: number
-  framework: string
-  version: string
-}
-
-type Run = {
-  run_id: string
-  env_id: string
-  input: string
-  output: string
-  logs: string
-  status: string
-  error?: string
-  effective_gpu_type?: string
-  effective_gpu_count?: number
-  effective_volume_gb?: number
-  cancellation_requested?: boolean
-}
-
-type GPUType = {
-  id: string
-  displayName: string
-  memoryInGb: number
-  maxGpuCount: number
-}
-
-type Catalog = {
-  gpus: GPUType[]
-  images: Record<string, Record<string, string>>
-}
 
 type RunOverride = {
   gpu_type: string
@@ -81,17 +37,13 @@ function statusTone(status: string): string {
 
 export default function DashboardPage() {
   const router = useRouter()
-  const [me, setMe] = useState<MeResponse | null>(null)
-  const [loading, setLoading] = useState(true)
+  const { isAuthenticated, isLoading: authLoading } = useConvexAuth()
+
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState("")
   const [message, setMessage] = useState("")
 
   const [activeSection, setActiveSection] = useState<MainSection | UtilitySection>("environments")
-
-  const [catalog, setCatalog] = useState<Catalog | null>(null)
-  const [environments, setEnvironments] = useState<Environment[]>([])
-  const [runs, setRuns] = useState<Run[]>([])
 
   const [envName, setEnvName] = useState("Frontier Runtime")
   const [envGPUType, setEnvGPUType] = useState("")
@@ -109,6 +61,22 @@ export default function DashboardPage() {
     { id: "runs", label: "Runs", icon: Play },
   ]
 
+  // ---- Convex queries (reactive — auto-update) ----
+  const catalog = useQuery(api.catalog.getCatalog)
+  const currentUser = useQuery(api.auth.getCurrentUser)
+  const envResult = useQuery(api.environments.list)
+  const runResult = useQuery(api.runs.list)
+
+  const environments = envResult?.environments ?? []
+  const runs = runResult?.runs ?? []
+
+  // ---- Convex mutations ----
+  const createEnvMutation = useMutation(api.environments.create)
+  const removeEnvMutation = useMutation(api.environments.remove)
+  const createRunMutation = useMutation(api.runs.create)
+  const removeRunMutation = useMutation(api.runs.remove)
+
+  // ---- derived state ----
   const frameworkVersions = useMemo(() => {
     if (!catalog) return []
     return Object.keys(catalog.images[framework] || {})
@@ -150,66 +118,27 @@ export default function DashboardPage() {
     ]
   }, [environments, runs])
 
-  async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> {
-    const resp = await fetch(url, init)
-    const data = await resp.json()
-    if (!resp.ok) throw new Error(data?.detail || "request failed")
-    return data as T
-  }
+  const userEmail = currentUser?.email ?? ""
 
-  async function refreshData() {
-    const [catalogData, envData, runData] = await Promise.all([
-      fetchJSON<Catalog>("/api/dashboard/catalog"),
-      fetchJSON<{ environments: Environment[] }>("/api/dashboard/environments"),
-      fetchJSON<{ runs: Run[] }>("/api/dashboard/runs"),
-    ])
-
-    setCatalog(catalogData)
-    setEnvironments(envData.environments)
-    setRuns(runData.runs)
-
-    if (!envGPUType && catalogData.gpus.length > 0) {
-      setEnvGPUType(catalogData.gpus[0].id)
+  // ---- redirect if not authenticated ----
+  useEffect(() => {
+    if (!authLoading && !isAuthenticated) {
+      router.replace("/auth")
     }
-    if (!runEnvID && envData.environments.length > 0) {
-      setRunEnvID(envData.environments[0].environment_id)
+  }, [authLoading, isAuthenticated, router])
+
+  // ---- auto-select defaults when data arrives ----
+  useEffect(() => {
+    if (!envGPUType && catalog && catalog.gpus.length > 0) {
+      setEnvGPUType(catalog.gpus[0].id)
     }
-  }
+  }, [catalog, envGPUType])
 
   useEffect(() => {
-    let active = true
-
-    async function bootstrap() {
-      try {
-        const sessionResp = await fetch("/api/auth/get-session", { cache: "no-store" })
-        if (!sessionResp.ok) {
-          router.replace("/auth")
-          return
-        }
-        const sessionData = (await sessionResp.json()) as SessionResponse
-        const email = sessionData?.user?.email?.trim() || ""
-        if (!email) {
-          router.replace("/auth")
-          return
-        }
-
-        const meData: MeResponse = { email }
-        if (!active) return
-
-        setMe(meData)
-        await refreshData()
-      } catch (err) {
-        if (active) setError(err instanceof Error ? err.message : "unexpected error")
-      } finally {
-        if (active) setLoading(false)
-      }
+    if (!runEnvID && environments.length > 0) {
+      setRunEnvID(environments[0].environment_id)
     }
-
-    bootstrap()
-    return () => {
-      active = false
-    }
-  }, [router])
+  }, [environments, runEnvID])
 
   useEffect(() => {
     if (frameworkVersions.length > 0 && !frameworkVersions.includes(frameworkVersion)) {
@@ -223,6 +152,7 @@ export default function DashboardPage() {
     }
   }, [envGPUCount, maxGPUs])
 
+  // ---- action helpers ----
   async function withBusy(task: () => Promise<void>) {
     setBusy(true)
     setError("")
@@ -239,27 +169,21 @@ export default function DashboardPage() {
   async function createEnvironment(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     await withBusy(async () => {
-      await fetchJSON<Environment>("/api/dashboard/environments", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          name: envName,
-          gpu_type: envGPUType,
-          gpu_count: Number.parseInt(envGPUCount, 10),
-          volume_gb: Number.parseInt(envVolume, 10),
-          framework,
-          version: frameworkVersion,
-        }),
+      await createEnvMutation({
+        name: envName,
+        gpu_type: envGPUType,
+        gpu_count: Number.parseInt(envGPUCount, 10),
+        volume_gb: Number.parseInt(envVolume, 10),
+        framework,
+        version: frameworkVersion,
       })
-      await refreshData()
       setMessage("Environment created.")
     })
   }
 
   async function deleteEnvironment(envID: string) {
     await withBusy(async () => {
-      await fetchJSON(`/api/dashboard/environments?env_id=${encodeURIComponent(envID)}`, { method: "DELETE" })
-      await refreshData()
+      await removeEnvMutation({ environmentId: envID as any })
       setMessage(`Environment ${envID} deleted.`)
     })
   }
@@ -267,35 +191,29 @@ export default function DashboardPage() {
   async function launchRun(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     await withBusy(async () => {
-      const payload: Record<string, string | number> = { environment_id: runEnvID }
-      if (override.gpu_type.trim()) payload.gpu_type = override.gpu_type.trim()
-      if (override.gpu_count.trim()) payload.gpu_count = Number.parseInt(override.gpu_count, 10)
-      if (override.volume_gb.trim()) payload.volume_gb = Number.parseInt(override.volume_gb, 10)
-
-      await fetchJSON<Run>("/api/dashboard/runs", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(payload),
+      await createRunMutation({
+        environmentId: runEnvID as any,
+        gpu_type: override.gpu_type.trim() || undefined,
+        gpu_count: override.gpu_count.trim() ? Number.parseInt(override.gpu_count, 10) : undefined,
+        volume_gb: override.volume_gb.trim() ? Number.parseInt(override.volume_gb, 10) : undefined,
       })
-      await refreshData()
       setMessage("Run launched.")
     })
   }
 
   async function cancelRun(runID: string) {
     await withBusy(async () => {
-      await fetchJSON(`/api/dashboard/runs?run_id=${encodeURIComponent(runID)}`, { method: "DELETE" })
-      await refreshData()
+      await removeRunMutation({ runId: runID as any })
       setMessage(`Run ${runID} cancellation requested.`)
     })
   }
 
   async function logout() {
-    await fetch("/api/auth/sign-out", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" })
+    await authClient.signOut()
     router.replace("/auth")
   }
 
-  if (loading) {
+  if (authLoading || !isAuthenticated) {
     return <PageLoader message="Loading dashboard…" />
   }
 
@@ -304,7 +222,7 @@ export default function DashboardPage() {
       <aside className="fixed inset-y-0 left-0 z-40 flex w-60 flex-col border-r border-border bg-background">
         <div className="px-5 pt-6 pb-4">
           <p className="text-xs uppercase tracking-[0.2em] text-primary/90 font-semibold">Tahuna</p>
-          <p className="mt-1.5 text-sm text-foreground/60 truncate">{me?.email}</p>
+          <p className="mt-1.5 text-sm text-foreground/60 truncate">{userEmail}</p>
         </div>
 
         <nav className="flex-1 px-3 space-y-0.5 overflow-y-auto">
