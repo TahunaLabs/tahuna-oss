@@ -1,8 +1,8 @@
+import { Section, SectionContainer } from "@/components/section"
+import { SectionHeading } from "@/components/section-heading"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
 import { IconBox } from "@/components/ui/icon-box"
-import { Section, SectionContainer } from "@/components/ui/section"
-import { SectionHeading } from "@/components/ui/section-heading"
 import { BookOpen, Box, Cpu, Scale, Shield } from "lucide-react"
 
 export function Layers() {

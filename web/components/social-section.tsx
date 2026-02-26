@@ -1,10 +1,10 @@
 "use client"
 
+import { Section, SectionContainer } from "@/components/section"
+import { SectionHeading } from "@/components/section-heading"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
-import { Section, SectionContainer } from "@/components/ui/section"
-import { SectionHeading } from "@/components/ui/section-heading"
 import { ChevronLeft, ChevronRight, FileText, MessageSquare } from "lucide-react"
 import { useState } from "react"
 

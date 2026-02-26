@@ -1,6 +1,6 @@
+import { Section, SectionContainer } from "@/components/section"
+import { SectionHeading } from "@/components/section-heading"
 import { Card, CardContent, CardDots, CardHeader, CardTitle } from "@/components/ui/card"
-import { Section, SectionContainer } from "@/components/ui/section"
-import { SectionHeading } from "@/components/ui/section-heading"
 import { WaitlistForm } from "./waitlist-form"
 
 export function Waitlist() {

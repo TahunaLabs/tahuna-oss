@@ -1,5 +1,5 @@
-import { Section, SectionContainer } from "@/components/ui/section"
-import { SectionHeading } from "@/components/ui/section-heading"
+import { Section, SectionContainer } from "@/components/section"
+import { SectionHeading } from "@/components/section-heading"
 
 export function Manifesto() {
   return (

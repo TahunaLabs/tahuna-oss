@@ -1,5 +1,5 @@
+import { Section, SectionContainer } from "@/components/section"
 import { Button } from "@/components/ui/button"
-import { Section, SectionContainer } from "@/components/ui/section"
 import { ArrowRight } from "lucide-react"
 import Link from "next/link"
 

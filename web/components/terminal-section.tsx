@@ -1,9 +1,10 @@
 "use client"
 
+import { Section, SectionContainer } from "@/components/section"
+import { SectionHeading } from "@/components/section-heading"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardDots, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { Section, SectionContainer } from "@/components/ui/section"
-import { SectionHeading } from "@/components/ui/section-heading"
+import { CommandPill, TabToggle } from "@/components/ui/tab-toggle"
 import { Check, Copy } from "lucide-react"
 import { useState } from "react"
 
@@ -15,6 +16,11 @@ export function TerminalSection() {
     mac: "curl -fsSL https://Tahuna.dev/install | sh",
     windows: "irm https://Tahuna.dev/install | iex",
   }
+
+  const tabOptions = [
+    { value: "mac" as const, label: "Mac/Linux" },
+    { value: "windows" as const, label: "Windows" },
+  ]
 
   const handleCopy = () => {
     navigator.clipboard.writeText(commands[activeTab])
@@ -106,28 +112,13 @@ export function TerminalSection() {
             {/* Install command */}
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
               <Badge variant="ghost">Install</Badge>
-              <Card variant="pill" className="flex items-center gap-1">
-                <button
-                  onClick={() => setActiveTab("mac")}
-                  className={`text-xs font-mono px-4 py-2 transition-colors ${activeTab === "mac"
-                    ? "bg-foreground/10 text-foreground"
-                    : "text-muted-foreground hover:text-foreground"
-                    }`}
-                >
-                  Mac/Linux
-                </button>
-                <button
-                  onClick={() => setActiveTab("windows")}
-                  className={`text-xs font-mono px-4 py-2 transition-colors ${activeTab === "windows"
-                    ? "bg-foreground/10 text-foreground"
-                    : "text-muted-foreground hover:text-foreground"
-                    }`}
-                >
-                  Windows
-                </button>
-              </Card>
-              <Card variant="pill" className="flex items-center gap-2 px-5 py-2.5 flex-1 min-w-0">
-                <code className="text-sm font-mono text-foreground/80 truncate">
+              <TabToggle
+                options={tabOptions}
+                value={activeTab}
+                onChange={setActiveTab}
+              />
+              <CommandPill className="flex-1 min-w-0">
+                <code className="truncate">
                   {commands[activeTab]}
                 </code>
                 <button
@@ -141,7 +132,7 @@ export function TerminalSection() {
                     <Copy className="h-4 w-4" />
                   )}
                 </button>
-              </Card>
+              </CommandPill>
             </div>
           </div>
         </div>
