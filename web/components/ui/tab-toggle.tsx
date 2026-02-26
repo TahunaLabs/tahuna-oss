@@ -38,7 +38,7 @@ function TabToggle<T extends string>({
           key={option.value}
           onClick={() => onChange(option.value)}
           className={cn(
-            "text-xs font-mono px-4 py-2 transition-colors",
+            "cursor-pointer text-xs font-mono px-4 py-2 transition-colors",
             value === option.value
               ? "bg-foreground/10 text-foreground"
               : "text-muted-foreground hover:text-foreground",
