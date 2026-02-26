@@ -3,7 +3,7 @@
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Spinner } from "@/components/ui/spinner"
+import { PageLoader } from "@/components/ui/spinner"
 import { Database, Key, LogOut, Play, Server, Settings, Trash2 } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
@@ -296,12 +296,7 @@ export default function DashboardPage() {
   }
 
   if (loading) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center gap-3">
-        <Spinner size="lg" />
-        <p className="text-sm text-muted-foreground">Loading dashboard…</p>
-      </div>
-    )
+    return <PageLoader message="Loading dashboard…" />
   }
 
   return (
@@ -317,43 +312,42 @@ export default function DashboardPage() {
             const Icon = item.icon
             const active = activeSection === item.id
             return (
-              <button
+              <Button
                 key={item.id}
-                type="button"
-                className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${active ? "bg-primary/10 text-primary" : "text-foreground/70 hover:bg-secondary/60 hover:text-foreground"}`}
+                variant="ghost"
+                className={`w-full justify-start gap-3 rounded-lg px-3 py-2.5 text-sm font-medium ${active ? "bg-primary/10 text-primary hover:bg-primary/10" : "text-foreground/70 hover:bg-secondary/60 hover:text-foreground"}`}
                 onClick={() => setActiveSection(item.id)}
               >
                 <Icon className="h-4 w-4 shrink-0" />
                 {item.label}
-              </button>
+              </Button>
             )
           })}
         </nav>
 
         <div className="border-t border-border px-3 py-3 space-y-0.5">
-          <Link
-            href="/api-key"
-            className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-foreground/70 hover:bg-secondary/60 hover:text-foreground transition-colors"
-          >
-            <Key className="h-4 w-4 shrink-0" />
-            API Key
-          </Link>
-          <button
-            type="button"
-            className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${activeSection === "settings" ? "bg-primary/10 text-primary" : "text-foreground/70 hover:bg-secondary/60 hover:text-foreground"}`}
+          <Button variant="ghost" asChild className="w-full justify-start gap-3 rounded-lg px-3 py-2.5 text-sm text-foreground/70 hover:bg-secondary/60 hover:text-foreground">
+            <Link href="/api-key">
+              <Key className="h-4 w-4 shrink-0" />
+              API Key
+            </Link>
+          </Button>
+          <Button
+            variant="ghost"
+            className={`w-full justify-start gap-3 rounded-lg px-3 py-2.5 text-sm font-medium ${activeSection === "settings" ? "bg-primary/10 text-primary hover:bg-primary/10" : "text-foreground/70 hover:bg-secondary/60 hover:text-foreground"}`}
             onClick={() => setActiveSection("settings")}
           >
             <Settings className="h-4 w-4 shrink-0" />
             Settings
-          </button>
-          <button
-            type="button"
-            className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-rose-300/80 hover:bg-rose-900/20 hover:text-rose-200 transition-colors"
+          </Button>
+          <Button
+            variant="ghost"
+            className="w-full justify-start gap-3 rounded-lg px-3 py-2.5 text-sm text-rose-300/80 hover:bg-rose-900/20 hover:text-rose-200"
             onClick={logout}
           >
             <LogOut className="h-4 w-4 shrink-0" />
             Logout
-          </button>
+          </Button>
         </div>
       </aside>
 
