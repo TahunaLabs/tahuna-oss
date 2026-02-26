@@ -1,4 +1,9 @@
-import { Box, Scale, BookOpen, Cpu, Shield } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
+import { Card, CardContent } from "@/components/ui/card"
+import { IconBox } from "@/components/ui/icon-box"
+import { Section, SectionContainer } from "@/components/ui/section"
+import { SectionHeading } from "@/components/ui/section-heading"
+import { BookOpen, Box, Cpu, Scale, Shield } from "lucide-react"
 
 export function Layers() {
   const layers = [
@@ -45,9 +50,9 @@ export function Layers() {
   ]
 
   return (
-    <section id="layers" className="py-24 md:py-32 px-6 bg-background/15 backdrop-blur-sm">
-      <div className="mx-auto max-w-4xl">
-        <h2 className="text-3xl md:text-4xl font-medium tracking-tight mb-4">The Stack</h2>
+    <Section variant="blurred" id="layers">
+      <SectionContainer size="md">
+        <SectionHeading variant="medium" className="mb-4">The Stack</SectionHeading>
 
         <p className="text-lg text-muted-foreground leading-relaxed mb-16 max-w-3xl">
           Everything you need to go from idea to specific intelligence — no PhD required.
@@ -55,29 +60,31 @@ export function Layers() {
 
         <div className="space-y-8">
           {layers.map((layer, index) => (
-            <div key={layer.title} className="relative rounded-lg p-8 border border-border overflow-hidden">
+            <Card key={layer.title} className="relative">
               <div className="absolute inset-0 bg-background/50 backdrop-blur-sm -z-10" />
-              <div className="flex items-start gap-4 mb-4 relative z-10">
-                <div className="p-2 bg-secondary rounded-md">
-                  <layer.icon className="h-5 w-5" />
+              <CardContent className="p-8">
+                <div className="flex items-start gap-4 mb-4 relative z-10">
+                  <IconBox>
+                    <layer.icon className="h-5 w-5" />
+                  </IconBox>
+                  <div>
+                    <Badge variant="ghost" className="mb-1 block">
+                      Layer {index + 1}
+                    </Badge>
+                    <h3 className="text-xl font-medium">
+                      {layer.title}: <span className="text-muted-foreground font-normal">{layer.subtitle}</span>
+                    </h3>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-xs font-mono text-muted-foreground uppercase tracking-wider mb-1">
-                    Layer {index + 1}
-                  </p>
-                  <h3 className="text-xl font-medium">
-                    {layer.title}: <span className="text-muted-foreground font-normal">{layer.subtitle}</span>
-                  </h3>
-                </div>
-              </div>
 
-              <p className="text-muted-foreground mb-4 relative z-10">{layer.description}</p>
+                <p className="text-muted-foreground mb-4 relative z-10">{layer.description}</p>
 
-              <p className="text-sm font-medium italic relative z-10">{layer.tagline}</p>
-            </div>
+                <p className="text-sm font-medium italic relative z-10">{layer.tagline}</p>
+              </CardContent>
+            </Card>
           ))}
         </div>
-      </div>
-    </section>
+      </SectionContainer>
+    </Section>
   )
 }

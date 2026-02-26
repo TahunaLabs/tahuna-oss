@@ -1,7 +1,12 @@
 "use client"
 
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent } from "@/components/ui/card"
+import { Section, SectionContainer } from "@/components/ui/section"
+import { SectionHeading } from "@/components/ui/section-heading"
+import { ChevronLeft, ChevronRight, FileText, MessageSquare } from "lucide-react"
 import { useState } from "react"
-import { ChevronLeft, ChevronRight, MessageSquare, FileText } from "lucide-react"
 
 const projects = [
   {
@@ -62,19 +67,17 @@ export function SocialSection() {
   }
 
   return (
-    <section className="py-20 md:py-28 px-6 border-t border-border">
-      <div className="mx-auto max-w-7xl">
+    <Section>
+      <SectionContainer>
         {/* Header */}
         <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-6 mb-12">
           <div>
-            <p className="text-xs font-mono uppercase tracking-widest text-muted-foreground mb-3">
-              Social
-            </p>
-            <h2 className="text-3xl md:text-4xl font-serif tracking-tight text-foreground leading-tight">
+            <Badge variant="ghost" className="mb-3 block">Social</Badge>
+            <SectionHeading className="leading-tight">
               Explore
               <br />
               <span className="italic">With</span> Us
-            </h2>
+            </SectionHeading>
           </div>
 
           <div className="flex items-center gap-6">
@@ -82,20 +85,24 @@ export function SocialSection() {
               See how people are building with Tahuna
             </p>
             <div className="hidden md:flex items-center gap-2">
-              <button
+              <Button
+                variant="outline"
+                size="icon-sm"
                 onClick={scrollLeft}
-                className="p-2 border border-border rounded-sm text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors"
                 aria-label="Scroll left"
+                className="rounded-sm"
               >
                 <ChevronLeft className="h-4 w-4" />
-              </button>
-              <button
+              </Button>
+              <Button
+                variant="outline"
+                size="icon-sm"
                 onClick={scrollRight}
-                className="p-2 border border-border rounded-sm text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors"
                 aria-label="Scroll right"
+                className="rounded-sm"
               >
                 <ChevronRight className="h-4 w-4" />
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -103,9 +110,9 @@ export function SocialSection() {
         {/* Cards grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {projects.map((project, index) => (
-            <div
+            <Card
               key={index}
-              className="bg-card border border-border rounded-lg overflow-hidden flex flex-col min-h-[380px] relative group hover:border-foreground/20 transition-colors"
+              className="flex flex-col min-h-[380px] relative group hover:border-foreground/20 transition-colors"
             >
               {/* Wave pattern background */}
               <div className="absolute inset-0 opacity-10">
@@ -119,7 +126,7 @@ export function SocialSection() {
               </div>
 
               {/* Card content */}
-              <div className="relative flex flex-col flex-1 p-5">
+              <CardContent className="relative flex flex-col flex-1">
                 <div className="flex-1 flex flex-col justify-center">
                   <h3 className="text-base font-serif text-foreground text-center leading-snug mb-3">
                     {project.title}
@@ -153,19 +160,17 @@ export function SocialSection() {
                   {project.net !== null && (
                     <div className="flex items-center justify-between">
                       {project.badge && (
-                        <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground border border-border rounded px-2 py-0.5">
-                          {project.badge}
-                        </span>
+                        <Badge>{project.badge}</Badge>
                       )}
                       <span className="text-xs text-muted-foreground ml-auto">~{Math.abs(project.net)}</span>
                     </div>
                   )}
                 </div>
-              </div>
-            </div>
+              </CardContent>
+            </Card>
           ))}
         </div>
-      </div>
-    </section>
+      </SectionContainer>
+    </Section>
   )
 }

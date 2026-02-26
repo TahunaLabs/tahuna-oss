@@ -1,3 +1,6 @@
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent } from "@/components/ui/card"
 import Link from "next/link"
 import type { ReactNode } from "react"
 
@@ -20,23 +23,24 @@ export function AuthPageShell({ eyebrow, title, subtitle, children }: AuthPageSh
             <Link href="/auth" className="text-muted-foreground hover:text-foreground transition-colors">
               Sign In
             </Link>
-            <Link
-              href="/api-key"
-              className="text-foreground border border-foreground/30 rounded-full px-4 py-1.5 hover:bg-foreground/5 transition-colors"
-            >
-              API Key
-            </Link>
+            <Button variant="pill" size="sm" asChild className="px-4 py-1.5 h-auto">
+              <Link href="/api-key">
+                API Key
+              </Link>
+            </Button>
           </div>
         </div>
       </header>
 
       <main className="flex-1 px-6 py-16 md:py-24">
         <div className="mx-auto max-w-3xl">
-          <p className="text-xs tracking-[0.22em] uppercase text-primary mb-4">{eyebrow}</p>
+          <Badge variant="ghost" className="text-primary mb-4 block tracking-[0.22em]">{eyebrow}</Badge>
           <h1 className="font-serif text-4xl md:text-6xl tracking-tight leading-[0.95] text-foreground mb-6">{title}</h1>
           <p className="text-lg text-foreground/80 max-w-2xl">{subtitle}</p>
 
-          <div className="mt-10 rounded-xl border border-border bg-card/80 backdrop-blur-sm p-6 md:p-8">{children}</div>
+          <Card variant="elevated" className="mt-10">
+            <CardContent className="p-6 md:p-8">{children}</CardContent>
+          </Card>
         </div>
       </main>
     </div>

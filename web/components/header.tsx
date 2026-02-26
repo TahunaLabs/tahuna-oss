@@ -1,8 +1,9 @@
 "use client"
 
+import { Button } from "@/components/ui/button"
+import { Menu, X } from "lucide-react"
 import Link from "next/link"
 import { useEffect, useState } from "react"
-import { Menu, X } from "lucide-react"
 
 export function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
@@ -61,12 +62,11 @@ export function Header() {
               {link.label}
             </Link>
           ))}
-          <Link
-            href="/api-key"
-            className="text-sm font-medium text-foreground border border-foreground/30 rounded-full px-5 py-2 hover:bg-foreground/5 transition-colors"
-          >
-            Get API Key
-          </Link>
+          <Button variant="pill" size="sm" asChild className="px-5 py-2 h-auto">
+            <Link href="/api-key">
+              Get API Key
+            </Link>
+          </Button>
         </div>
 
         {/* Mobile Menu Button */}
@@ -92,13 +92,11 @@ export function Header() {
               {link.label}
             </Link>
           ))}
-          <Link
-            href="/api-key"
-            className="block text-sm font-medium text-foreground border border-foreground/30 rounded-full px-5 py-2 text-center hover:bg-foreground/5 transition-colors"
-            onClick={() => setMobileMenuOpen(false)}
-          >
-            Get API Key
-          </Link>
+          <Button variant="pill" asChild className="w-full justify-center px-5 py-2 h-auto">
+            <Link href="/api-key" onClick={() => setMobileMenuOpen(false)}>
+              Get API Key
+            </Link>
+          </Button>
         </div>
       )}
     </header>

@@ -1,3 +1,4 @@
+import { StatusDot } from "@/components/ui/status-dot"
 import Link from "next/link"
 
 export function Footer() {
@@ -10,7 +11,7 @@ export function Footer() {
               Tahuna
             </Link>
             <div className="flex items-center gap-2">
-              <div className="w-1.5 h-1.5 rounded-full bg-green-400" />
+              <StatusDot variant="success" size="sm" />
               <span className="text-xs text-muted-foreground">All Systems Operational</span>
             </div>
           </div>

@@ -1,7 +1,11 @@
 "use client"
 
+import { Badge } from "@/components/ui/badge"
+import { Card, CardContent, CardDots, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import { Section, SectionContainer } from "@/components/ui/section"
+import { SectionHeading } from "@/components/ui/section-heading"
+import { Check, Copy } from "lucide-react"
 import { useState } from "react"
-import { Copy, Check } from "lucide-react"
 
 export function TerminalSection() {
   const [copiedCommand, setCopiedCommand] = useState(false)
@@ -19,40 +23,28 @@ export function TerminalSection() {
   }
 
   return (
-    <section className="py-20 md:py-28 px-6 border-t border-border">
-      <div className="mx-auto max-w-7xl">
+    <Section>
+      <SectionContainer>
         <div className="flex flex-col lg:flex-row gap-12 lg:gap-20">
           {/* Left side - Label and heading */}
           <div className="lg:w-1/3 shrink-0">
             <div className="flex items-center gap-2 mb-4">
-              <span className="text-xs font-mono uppercase tracking-widest text-foreground bg-secondary px-2 py-1">
-                Install
-              </span>
-              <span className="text-xs font-mono uppercase tracking-widest text-muted-foreground">
-                Tahuna
-              </span>
+              <Badge variant="filled">Install</Badge>
+              <Badge variant="ghost">Tahuna</Badge>
             </div>
-            <h2 className="text-3xl md:text-4xl font-serif tracking-tight text-foreground">
-              Available in the terminal
-            </h2>
+            <SectionHeading>Available in the terminal</SectionHeading>
           </div>
 
           {/* Right side - Terminal mockup and install command */}
           <div className="lg:w-2/3">
             {/* Terminal window */}
-            <div className="bg-card border border-border rounded-lg overflow-hidden mb-8">
-              {/* Terminal header */}
-              <div className="flex items-center gap-2 px-4 py-3 border-b border-border">
-                <div className="flex gap-1.5">
-                  <div className="w-3 h-3 rounded-full bg-muted-foreground/30" />
-                  <div className="w-3 h-3 rounded-full bg-muted-foreground/30" />
-                  <div className="w-3 h-3 rounded-full bg-muted-foreground/30" />
-                </div>
-                <span className="text-xs font-mono text-muted-foreground ml-2">Tahuna</span>
-              </div>
+            <Card className="mb-8">
+              <CardHeader>
+                <CardDots />
+                <CardTitle className="ml-2">Tahuna</CardTitle>
+              </CardHeader>
 
-              {/* Terminal content */}
-              <div className="p-5 font-mono text-sm space-y-3 min-h-[280px]">
+              <CardContent className="font-mono text-sm space-y-3 min-h-[280px]">
                 <div className="flex items-start gap-2">
                   <span className="text-primary shrink-0">{">"}</span>
                   <span className="text-foreground/80">Tahuna train</span>
@@ -100,26 +92,21 @@ export function TerminalSection() {
                     <span className="text-muted-foreground">(+15.9%)</span>
                   </div>
                 </div>
+              </CardContent>
 
-                {/* Bottom bar */}
-                <div className="flex items-center justify-between pt-4 border-t border-border mt-4">
-                  <div className="bg-muted px-3 py-1 rounded text-xs text-muted-foreground">
-                    training
-                  </div>
-                  <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                    <span>episode 1/500</span>
-                    <span>ETA 2h 14m</span>
-                  </div>
+              <CardFooter>
+                <Badge variant="status">training</Badge>
+                <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                  <span>episode 1/500</span>
+                  <span>ETA 2h 14m</span>
                 </div>
-              </div>
-            </div>
+              </CardFooter>
+            </Card>
 
             {/* Install command */}
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-              <span className="text-xs font-mono uppercase tracking-widest text-muted-foreground">
-                Install
-              </span>
-              <div className="flex items-center gap-1 bg-card border border-border rounded-full overflow-hidden">
+              <Badge variant="ghost">Install</Badge>
+              <Card variant="pill" className="flex items-center gap-1">
                 <button
                   onClick={() => setActiveTab("mac")}
                   className={`text-xs font-mono px-4 py-2 transition-colors ${activeTab === "mac"
@@ -138,8 +125,8 @@ export function TerminalSection() {
                 >
                   Windows
                 </button>
-              </div>
-              <div className="flex items-center gap-2 bg-card border border-border rounded-full px-5 py-2.5 flex-1 min-w-0">
+              </Card>
+              <Card variant="pill" className="flex items-center gap-2 px-5 py-2.5 flex-1 min-w-0">
                 <code className="text-sm font-mono text-foreground/80 truncate">
                   {commands[activeTab]}
                 </code>
@@ -154,11 +141,11 @@ export function TerminalSection() {
                     <Copy className="h-4 w-4" />
                   )}
                 </button>
-              </div>
+              </Card>
             </div>
           </div>
         </div>
-      </div>
-    </section>
+      </SectionContainer>
+    </Section>
   )
 }

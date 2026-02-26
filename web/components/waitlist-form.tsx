@@ -2,13 +2,13 @@
 
 import type React from "react"
 
-import { useState } from "react"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Textarea } from "@/components/ui/textarea"
 import { Checkbox } from "@/components/ui/checkbox"
+import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
 import { CheckCircle2 } from "lucide-react"
+import { useState } from "react"
 
 export function WaitlistForm() {
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -57,14 +57,13 @@ export function WaitlistForm() {
             type="email"
             placeholder="you@company.com"
             required
-            className="bg-background border-border"
           />
         </div>
         <div className="space-y-2">
           <Label htmlFor="name" className="text-sm font-medium">
             Name
           </Label>
-          <Input id="name" type="text" placeholder="Ada Lovelace" required className="bg-background border-border" />
+          <Input id="name" type="text" placeholder="Ada Lovelace" required />
         </div>
       </div>
 
@@ -77,7 +76,6 @@ export function WaitlistForm() {
             id="organization"
             type="text"
             placeholder="Company, lab, or project name"
-            className="bg-background border-border"
           />
         </div>
         <div className="space-y-2">
@@ -88,7 +86,6 @@ export function WaitlistForm() {
             id="role"
             type="text"
             placeholder="e.g. ML engineer, founder, head of ops"
-            className="bg-background border-border"
           />
         </div>
       </div>
@@ -101,7 +98,7 @@ export function WaitlistForm() {
           id="usecase"
           placeholder="Tell us about the workflows, tools, or domains where you want agents to learn and improve over time."
           rows={4}
-          className="bg-background border-border resize-none"
+          className="resize-none"
         />
       </div>
 
