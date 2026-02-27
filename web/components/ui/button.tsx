@@ -20,6 +20,12 @@ const buttonVariants = cva(
           'hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50',
         link: 'text-primary underline-offset-4 hover:underline',
         pill: 'bg-card border border-border rounded-full text-foreground hover:bg-foreground/5',
+        sidebar:
+          'w-full justify-start gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-foreground/70 hover:bg-secondary/60 hover:text-foreground',
+        'sidebar-active':
+          'w-full justify-start gap-3 rounded-lg px-3 py-2.5 text-sm font-medium bg-primary/10 text-primary hover:bg-primary/10',
+        'sidebar-danger':
+          'w-full justify-start gap-3 rounded-lg px-3 py-2.5 text-sm text-rose-300/80 hover:bg-rose-900/20 hover:text-rose-200',
       },
       size: {
         default: 'h-9 px-4 py-2 has-[>svg]:px-3',

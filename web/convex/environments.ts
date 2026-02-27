@@ -5,16 +5,11 @@ import { shortId } from "./ids";
 
 // ---------- helpers ----------
 
+import { authComponent } from "./auth";
+
 async function requireUser(ctx: any) {
-  const identity = await ctx.auth.getUserIdentity();
-  if (!identity) throw new Error("Not authenticated");
-
-  const user = await ctx.db
-    .query("users")
-    .withIndex("by_email", (q: any) => q.eq("email", identity.email!.toLowerCase()))
-    .first();
-
-  if (!user) throw new Error("User not found");
+  const user = await authComponent.getAuthUser(ctx);
+  if (!user) throw new Error("Not authenticated");
   return user;
 }
 
@@ -26,12 +21,12 @@ export const list = query({
     const user = await requireUser(ctx);
     const rows = await ctx.db
       .query("environments")
-      .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .withIndex("by_user", (q) => q.eq("userId", String(user._id)))
       .collect();
 
     return {
       environments: rows
-        .sort((a, b) => b.createdAt - a.createdAt)
+        .sort((a, b) => b._creationTime - a._creationTime)
         .map((row) => ({
           environment_id: String(row._id),
           name: row.name,
@@ -51,7 +46,7 @@ export const get = query({
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
     const row = await ctx.db.get(args.environmentId);
-    if (!row || row.userId !== user._id) {
+    if (!row || row.userId !== String(user._id)) {
       throw new Error("environment not found");
     }
     return {
@@ -92,7 +87,7 @@ export const create = mutation({
     }
 
     const envId = await ctx.db.insert("environments", {
-      userId: user._id,
+      userId: String(user._id),
       name: args.name,
       artifacts: `environments/${shortId()}/artifacts`,
       gpuType: args.gpu_type,
@@ -100,7 +95,6 @@ export const create = mutation({
       volumeGb: args.volume_gb,
       framework: args.framework,
       version: args.version,
-      createdAt: Date.now(),
     });
 
     const env = await ctx.db.get(envId);
@@ -126,7 +120,7 @@ export const remove = mutation({
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
     const env = await ctx.db.get(args.environmentId);
-    if (!env || env.userId !== user._id) {
+    if (!env || env.userId !== String(user._id)) {
       throw new Error("environment not found");
     }
 
@@ -135,7 +129,7 @@ export const remove = mutation({
       .withIndex("by_environment", (q) => q.eq("environmentId", args.environmentId))
       .collect();
 
-    if (runs.some((r) => r.userId === user._id)) {
+    if (runs.some((r) => r.userId === String(user._id))) {
       throw new Error("environment still has runs; delete them first");
     }
 
@@ -147,7 +141,7 @@ export const remove = mutation({
 // ---------- internal (for CLI proxy routes that pass userId explicitly) ----------
 
 export const internalList = internalQuery({
-  args: { userId: v.id("users") },
+  args: { userId: v.string() },
   handler: async (ctx, args) => {
     const rows = await ctx.db
       .query("environments")
@@ -156,7 +150,7 @@ export const internalList = internalQuery({
 
     return {
       environments: rows
-        .sort((a, b) => b.createdAt - a.createdAt)
+        .sort((a, b) => b._creationTime - a._creationTime)
         .map((row) => ({
           environment_id: String(row._id),
           name: row.name,
@@ -172,7 +166,7 @@ export const internalList = internalQuery({
 });
 
 export const internalGet = internalQuery({
-  args: { userId: v.id("users"), environmentId: v.id("environments") },
+  args: { userId: v.string(), environmentId: v.id("environments") },
   handler: async (ctx, args) => {
     const row = await ctx.db.get(args.environmentId);
     if (!row || row.userId !== args.userId) {
@@ -193,7 +187,7 @@ export const internalGet = internalQuery({
 
 export const internalCreate = internalMutation({
   args: {
-    userId: v.id("users"),
+    userId: v.string(),
     name: v.string(),
     gpu_type: v.string(),
     gpu_count: v.number(),
@@ -223,7 +217,6 @@ export const internalCreate = internalMutation({
       volumeGb: args.volume_gb,
       framework: args.framework,
       version: args.version,
-      createdAt: Date.now(),
     });
 
     const env = await ctx.db.get(envId);
@@ -245,7 +238,7 @@ export const internalCreate = internalMutation({
 });
 
 export const internalRemove = internalMutation({
-  args: { userId: v.id("users"), environmentId: v.id("environments") },
+  args: { userId: v.string(), environmentId: v.id("environments") },
   handler: async (ctx, args) => {
     const env = await ctx.db.get(args.environmentId);
     if (!env || env.userId !== args.userId) {

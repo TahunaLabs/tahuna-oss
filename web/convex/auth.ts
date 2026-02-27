@@ -64,62 +64,37 @@ export const getCurrentUser = query({
   },
 });
 
-async function ensureUserByEmail(ctx: any, emailRaw: string) {
-  const email = emailRaw.trim().toLowerCase();
-  let user = await ctx.db
-    .query("users")
-    .withIndex("by_email", (q: any) => q.eq("email", email))
-    .first();
 
-  if (!user) {
-    const id = await ctx.db.insert("users", {
-      email,
-      role: "member",
-      orgId: "solo",
-      createdAt: Date.now(),
-    });
-    user = await ctx.db.get(id);
-  }
-
-  if (!user) {
-    throw new Error("failed to ensure user");
-  }
-  return user;
-}
-
-export const upsertUserByEmail = mutation({
-  args: { email: v.string() },
-  handler: async (ctx, args) => {
-    const user = await ensureUserByEmail(ctx, args.email);
-    return {
-      user_id: user._id,
-      email: user.email,
-      role: user.role,
-      org_id: user.orgId,
-    };
-  },
-});
 
 export const createApiKey = mutation({
   args: {
     name: v.string(),
   },
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("Not authenticated");
+    const user = await authComponent.getAuthUser(ctx);
+    if (!user) throw new Error("Not authenticated");
+    const name = args.name.trim() || "cli";
 
-    const user = await ensureUserByEmail(ctx, identity.email!);
+    const existingKeys = await ctx.db
+      .query("apiKeys")
+      .withIndex("by_user", (q) => q.eq("userId", String(user._id)))
+      .filter((q) => q.eq(q.field("name"), name))
+      .collect();
+
+    const hasActiveKey = existingKeys.some((k) => !k.revokedAt);
+    if (hasActiveKey) {
+      throw new Error(`An active API key with the name "${name}" already exists`);
+    }
 
     const plaintext = `tk_${shortId()}${shortId()}`;
     const keyHash = await sha256Hex(plaintext);
     const keyPrefix = plaintext.slice(0, 10);
 
     const apiKeyId = await ctx.db.insert("apiKeys", {
-      userId: user._id,
-      name: args.name.trim() || "cli",
+      userId: String(user._id),
+      name,
       keyPrefix,
       keyHash,
-      createdAt: Date.now(),
     });
 
     return {
@@ -144,16 +119,54 @@ export const authByApiKey = mutation({
     }
 
     await ctx.db.patch(key._id, { lastUsedAt: Date.now() });
-    const user = await ctx.db.get(key.userId);
-    if (!user) {
-      return null;
-    }
-
+    // Because user is managed by BetterAuth component, we can't fetch it natively here easily.
+    // Instead, BetterAuth `authByApiKey` might not return full user object natively without `authComponent`.
+    // For now, we return basic fields. The CLI or API usage typically needs the userId.
     return {
       userId: key.userId,
-      email: user.email,
-      role: user.role,
-      orgId: user.orgId,
+      email: "api-user@tahuna.local", // We will refactor this depending on BetterAuth user querying if needed
+      role: "member",
+      orgId: "solo",
     };
+  },
+});
+
+export const listApiKeys = query({
+  args: {},
+  handler: async (ctx) => {
+    const user = await authComponent.getAuthUser(ctx);
+    if (!user) throw new Error("Not authenticated");
+
+    const keys = await ctx.db
+      .query("apiKeys")
+      .withIndex("by_user", (q) => q.eq("userId", String(user._id)))
+      .order("desc")
+      .collect();
+
+    return keys.map((key) => ({
+      _id: key._id,
+      name: key.name,
+      keyPrefix: key.keyPrefix,
+      createdAt: key._creationTime,
+      lastUsedAt: key.lastUsedAt,
+      revokedAt: key.revokedAt,
+    }));
+  },
+});
+
+export const revokeApiKey = mutation({
+  args: {
+    id: v.id("apiKeys"),
+  },
+  handler: async (ctx, args) => {
+    const user = await authComponent.getAuthUser(ctx);
+    if (!user) throw new Error("Not authenticated");
+    const key = await ctx.db.get(args.id);
+
+    if (!key) throw new Error("API key not found");
+    if (key.userId !== String(user._id)) throw new Error("Unauthorized");
+    if (key.revokedAt) throw new Error("API key already revoked");
+
+    await ctx.db.patch(args.id, { revokedAt: Date.now() });
   },
 });

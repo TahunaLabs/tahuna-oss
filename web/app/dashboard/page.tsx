@@ -1,11 +1,12 @@
 "use client"
 
 import { SectionHeading } from "@/components/section-heading"
-import { Badge } from "@/components/ui/badge"
+import { Badge, statusVariant } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Select } from "@/components/ui/select"
 import { PageLoader } from "@/components/ui/spinner"
 import { api } from "@/convex/_generated/api"
 import { authClient } from "@/lib/auth-client"
@@ -17,17 +18,6 @@ import { useEffect, useMemo, useState, type FormEvent } from "react"
 
 type MainSection = "data" | "environments" | "runs"
 type UtilitySection = "settings"
-
-const selectClasses =
-  "w-full rounded-lg border border-border bg-card px-4 py-2 text-sm font-mono text-foreground/80 outline-none transition-[color,box-shadow,border-color] focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
-
-function statusVariant(status: string): string {
-  if (status === "running" || status === "provisioning") return "text-emerald-300 border-emerald-600/50 bg-emerald-900/20"
-  if (status === "queued" || status === "cancelling") return "text-amber-200 border-amber-500/40 bg-amber-900/20"
-  if (status === "succeeded" || status === "completed") return "text-cyan-200 border-cyan-500/40 bg-cyan-900/20"
-  if (status === "failed" || status === "cancelled") return "text-rose-200 border-rose-500/40 bg-rose-900/20"
-  return "text-foreground/90 border-border bg-card/80"
-}
 
 export default function DashboardPage() {
   const router = useRouter()
@@ -183,21 +173,20 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen text-foreground bg-background">
-      <aside className="fixed inset-y-0 left-0 z-40 flex w-60 flex-col border-r border-border bg-background">
-        <div className="px-5 pt-6 pb-4">
+      <aside className="fixed inset-y-0 left-0 z-40 flex w-64 flex-col border-r border-border bg-background">
+        <div className="px-5 pt-7 pb-5">
           <p className="text-xs uppercase tracking-[0.2em] text-primary/90 font-semibold">Tahuna</p>
           <p className="mt-1.5 text-sm text-muted-foreground truncate">{userEmail}</p>
         </div>
 
-        <nav className="flex-1 px-3 space-y-0.5 overflow-y-auto">
+        <nav className="flex-1 px-4 space-y-1 overflow-y-auto">
           {primaryNav.map((item) => {
             const Icon = item.icon
             const active = activeSection === item.id
             return (
               <Button
                 key={item.id}
-                variant="ghost"
-                className={`w-full justify-start gap-3 rounded-lg px-3 py-2.5 text-sm font-medium ${active ? "bg-primary/10 text-primary hover:bg-primary/10" : "text-foreground/70 hover:bg-secondary/60 hover:text-foreground"}`}
+                variant={active ? "sidebar-active" : "sidebar"}
                 onClick={() => setActiveSection(item.id)}
               >
                 <Icon className="h-4 w-4 shrink-0" />
@@ -207,24 +196,22 @@ export default function DashboardPage() {
           })}
         </nav>
 
-        <div className="border-t border-border px-3 py-3 space-y-0.5">
-          <Button variant="ghost" asChild className="w-full justify-start gap-3 rounded-lg px-3 py-2.5 text-sm text-foreground/70 hover:bg-secondary/60 hover:text-foreground">
+        <div className="border-t border-border px-4 py-4 space-y-1">
+          <Button variant="sidebar" asChild>
             <Link href="/api-key">
               <Key className="h-4 w-4 shrink-0" />
               API Key
             </Link>
           </Button>
           <Button
-            variant="ghost"
-            className={`w-full justify-start gap-3 rounded-lg px-3 py-2.5 text-sm font-medium ${activeSection === "settings" ? "bg-primary/10 text-primary hover:bg-primary/10" : "text-foreground/70 hover:bg-secondary/60 hover:text-foreground"}`}
+            variant={activeSection === "settings" ? "sidebar-active" : "sidebar"}
             onClick={() => setActiveSection("settings")}
           >
             <Settings className="h-4 w-4 shrink-0" />
             Settings
           </Button>
           <Button
-            variant="ghost"
-            className="w-full justify-start gap-3 rounded-lg px-3 py-2.5 text-sm text-rose-300/80 hover:bg-rose-900/20 hover:text-rose-200"
+            variant="sidebar-danger"
             onClick={logout}
           >
             <LogOut className="h-4 w-4 shrink-0" />
@@ -233,8 +220,8 @@ export default function DashboardPage() {
         </div>
       </aside>
 
-      <main className="ml-60 min-h-screen">
-        <div className="px-8 py-8 max-w-6xl">
+      <main className="ml-64 min-h-screen">
+        <div className="px-10 py-10 max-w-6xl">
           {error ? <p className="mb-6 rounded-md border border-destructive/60 bg-destructive/10 px-4 py-3 text-sm text-destructive">{error}</p> : null}
           {message ? <p className="mb-6 rounded-md border border-primary/50 bg-primary/10 px-4 py-3 text-sm text-primary">{message}</p> : null}
 
@@ -242,7 +229,7 @@ export default function DashboardPage() {
           {activeSection === "data" ? (
             <section>
               <SectionHeading variant="medium" className="mb-2">Data</SectionHeading>
-              <p className="text-base text-muted-foreground mb-8">Backend-backed storage references for environments and runs.</p>
+              <p className="text-base text-muted-foreground mb-10">Backend-backed storage references for environments and runs.</p>
 
               {dataRows.length === 0 ? (
                 <p className="text-sm text-muted-foreground py-12 text-center">No data assets yet. Create an environment or run first.</p>
@@ -280,7 +267,7 @@ export default function DashboardPage() {
               </div>
 
               <Card className="p-6">
-                <form onSubmit={createEnvironment} className="space-y-4">
+                <form onSubmit={createEnvironment} className="space-y-5">
                   <div className="space-y-2">
                     <Label htmlFor="env-name">Name</Label>
                     <Input id="env-name" value={envName} onChange={(event) => setEnvName(event.target.value)} required />
@@ -289,29 +276,27 @@ export default function DashboardPage() {
                   <div className="grid gap-3 md:grid-cols-2">
                     <div className="space-y-2">
                       <Label htmlFor="gpu-type">GPU</Label>
-                      <select
+                      <Select
                         id="gpu-type"
-                        className={selectClasses}
                         value={envGPUType}
                         onChange={(event) => setEnvGPUType(event.target.value)}
                       >
                         {(catalog?.gpus || []).map((gpu) => (
                           <option key={gpu.id} value={gpu.id}>{gpu.displayName} ({gpu.id})</option>
                         ))}
-                      </select>
+                      </Select>
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="framework">Framework</Label>
-                      <select
+                      <Select
                         id="framework"
-                        className={selectClasses}
                         value={framework}
                         onChange={(event) => setFramework(event.target.value)}
                       >
                         {Object.keys(catalog?.images || {}).map((key) => (
                           <option key={key} value={key}>{key}</option>
                         ))}
-                      </select>
+                      </Select>
                     </div>
                   </div>
 
@@ -334,16 +319,15 @@ export default function DashboardPage() {
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="version">Version</Label>
-                      <select
+                      <Select
                         id="version"
-                        className={selectClasses}
                         value={frameworkVersion}
                         onChange={(event) => setFrameworkVersion(event.target.value)}
                       >
                         {frameworkVersions.map((version) => (
                           <option key={version} value={version}>{version}</option>
                         ))}
-                      </select>
+                      </Select>
                     </div>
                   </div>
 
@@ -394,7 +378,7 @@ export default function DashboardPage() {
           {activeSection === "runs" ? (
             <section>
               <SectionHeading variant="medium" className="mb-2">Runs</SectionHeading>
-              <p className="text-base text-muted-foreground mb-8">Monitor your training runs. Launch a run from an environment.</p>
+              <p className="text-base text-muted-foreground mb-10">Monitor your training runs. Launch a run from an environment.</p>
 
               {environments.length === 0 ? (
                 <p className="text-sm text-muted-foreground py-12 text-center">Create an environment first to launch runs.</p>
@@ -417,7 +401,7 @@ export default function DashboardPage() {
                         <tr key={run.run_id} className="border-b last:border-b-0 border-border/40 align-top">
                           <td className="px-4 py-3 font-mono text-xs">{run.run_id}</td>
                           <td className="px-4 py-3">
-                            <Badge className={statusVariant(run.status)}>{run.status}</Badge>
+                            <Badge variant={statusVariant(run.status)}>{run.status}</Badge>
                           </td>
                           <td className="px-4 py-3 font-mono text-xs">{run.env_id}</td>
                           <td className="px-4 py-3 text-sm text-muted-foreground">{run.effective_gpu_type || "-"} / {run.effective_gpu_count || "-"} / {run.effective_volume_gb || "-"}GB</td>

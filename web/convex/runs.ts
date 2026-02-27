@@ -13,16 +13,12 @@ const provisionPool = new Workpool(components.workpool, {
 
 // ---------- helpers ----------
 
+import { authComponent } from "./auth";
+
 async function requireUser(ctx: any) {
-  const identity = await ctx.auth.getUserIdentity();
-  if (!identity) throw new Error("Not authenticated");
+  const user = await authComponent.getAuthUser(ctx);
+  if (!user) throw new Error("Not authenticated");
 
-  const user = await ctx.db
-    .query("users")
-    .withIndex("by_email", (q: any) => q.eq("email", identity.email!.toLowerCase()))
-    .first();
-
-  if (!user) throw new Error("User not found");
   return user;
 }
 
@@ -51,11 +47,11 @@ export const list = query({
     const user = await requireUser(ctx);
     const rows = await ctx.db
       .query("runs")
-      .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .withIndex("by_user", (q) => q.eq("userId", String(user._id)))
       .collect();
 
     return {
-      runs: rows.sort((a, b) => b.createdAt - a.createdAt).map(toRunResponse),
+      runs: rows.sort((a, b) => b._creationTime - a._creationTime).map(toRunResponse),
     };
   },
 });
@@ -65,7 +61,7 @@ export const get = query({
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
     const row = await ctx.db.get(args.runId);
-    if (!row || row.userId !== user._id) {
+    if (!row || row.userId !== String(user._id)) {
       throw new Error("run not found");
     }
     return toRunResponse(row);
@@ -77,7 +73,7 @@ export const getLogs = query({
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
     const row = await ctx.db.get(args.runId);
-    if (!row || row.userId !== user._id) {
+    if (!row || row.userId !== String(user._id)) {
       throw new Error("run not found");
     }
     return {
@@ -99,13 +95,13 @@ export const create = mutation({
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
     const env = await ctx.db.get(args.environmentId);
-    if (!env || env.userId !== user._id) {
+    if (!env || env.userId !== String(user._id)) {
       throw new Error("environment not found");
     }
 
     const now = Date.now();
     const runId = await ctx.db.insert("runs", {
-      userId: user._id,
+      userId: String(user._id),
       environmentId: args.environmentId,
       input: `runs/${args.environmentId}/${now}/input`,
       output: `runs/${args.environmentId}/${now}/output`,
@@ -115,7 +111,6 @@ export const create = mutation({
       effectiveGpuType: args.gpu_type || env.gpuType,
       effectiveGpuCount: args.gpu_count || env.gpuCount,
       effectiveVolumeGb: args.volume_gb || env.volumeGb,
-      createdAt: now,
       updatedAt: now,
     });
 
@@ -123,7 +118,6 @@ export const create = mutation({
       runId,
       status: "queued",
       message: "run queued for execution",
-      createdAt: now,
       metadata: {
         gpu_type: args.gpu_type || env.gpuType,
         gpu_count: args.gpu_count || env.gpuCount,
@@ -156,7 +150,6 @@ export const remove = mutation({
         runId: args.runId,
         status: "cancelling",
         message: "cancellation requested",
-        createdAt: Date.now(),
       });
       return { cancel_requested: true, run_id: String(args.runId) };
     }
@@ -169,7 +162,7 @@ export const remove = mutation({
 // ---------- internal (for CLI proxy routes that pass userId explicitly) ----------
 
 export const internalList = internalQuery({
-  args: { userId: v.id("users") },
+  args: { userId: v.string() },
   handler: async (ctx, args) => {
     const rows = await ctx.db
       .query("runs")
@@ -177,13 +170,13 @@ export const internalList = internalQuery({
       .collect();
 
     return {
-      runs: rows.sort((a, b) => b.createdAt - a.createdAt).map(toRunResponse),
+      runs: rows.sort((a, b) => b._creationTime - a._creationTime).map(toRunResponse),
     };
   },
 });
 
 export const internalGet = internalQuery({
-  args: { userId: v.id("users"), runId: v.id("runs") },
+  args: { userId: v.string(), runId: v.id("runs") },
   handler: async (ctx, args) => {
     const row = await ctx.db.get(args.runId);
     if (!row || row.userId !== args.userId) {
@@ -195,7 +188,7 @@ export const internalGet = internalQuery({
 
 export const internalCreate = internalMutation({
   args: {
-    userId: v.id("users"),
+    userId: v.string(),
     environmentId: v.id("environments"),
     gpu_type: v.optional(v.string()),
     gpu_count: v.optional(v.number()),
@@ -219,7 +212,6 @@ export const internalCreate = internalMutation({
       effectiveGpuType: args.gpu_type || env.gpuType,
       effectiveGpuCount: args.gpu_count || env.gpuCount,
       effectiveVolumeGb: args.volume_gb || env.volumeGb,
-      createdAt: now,
       updatedAt: now,
     });
 
@@ -227,7 +219,6 @@ export const internalCreate = internalMutation({
       runId,
       status: "queued",
       message: "run queued for execution",
-      createdAt: now,
       metadata: {
         gpu_type: args.gpu_type || env.gpuType,
         gpu_count: args.gpu_count || env.gpuCount,
@@ -242,7 +233,7 @@ export const internalCreate = internalMutation({
 });
 
 export const internalRemove = internalMutation({
-  args: { userId: v.id("users"), runId: v.id("runs") },
+  args: { userId: v.string(), runId: v.id("runs") },
   handler: async (ctx, args) => {
     const row = await ctx.db.get(args.runId);
     if (!row || row.userId !== args.userId) {
@@ -259,7 +250,6 @@ export const internalRemove = internalMutation({
         runId: args.runId,
         status: "cancelling",
         message: "cancellation requested",
-        createdAt: Date.now(),
       });
       return { cancel_requested: true, run_id: String(args.runId) };
     }
@@ -298,7 +288,6 @@ export const markRunning = internalMutation({
       runId: args.runId,
       status: "running",
       message: "pod running",
-      createdAt: Date.now(),
     });
   },
 });
@@ -320,7 +309,6 @@ export const completeRun = internalMutation({
       runId: args.runId,
       status: terminal,
       message: terminal === "completed" ? "run completed" : "run cancelled",
-      createdAt: Date.now(),
     });
   },
 });

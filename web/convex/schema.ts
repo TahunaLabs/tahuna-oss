@@ -2,19 +2,12 @@ import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
 export default defineSchema({
-  users: defineTable({
-    email: v.string(),
-    role: v.string(),
-    orgId: v.string(),
-    createdAt: v.number(),
-  }).index("by_email", ["email"]),
 
   apiKeys: defineTable({
-    userId: v.id("users"),
+    userId: v.string(),
     name: v.string(),
     keyPrefix: v.string(),
     keyHash: v.string(),
-    createdAt: v.number(),
     revokedAt: v.optional(v.number()),
     lastUsedAt: v.optional(v.number()),
   })
@@ -22,7 +15,7 @@ export default defineSchema({
     .index("by_hash", ["keyHash"]),
 
   environments: defineTable({
-    userId: v.id("users"),
+    userId: v.string(),
     name: v.string(),
     artifacts: v.string(),
     gpuType: v.string(),
@@ -30,11 +23,10 @@ export default defineSchema({
     volumeGb: v.number(),
     framework: v.string(),
     version: v.string(),
-    createdAt: v.number(),
   }).index("by_user", ["userId"]),
 
   runs: defineTable({
-    userId: v.id("users"),
+    userId: v.string(),
     environmentId: v.id("environments"),
     input: v.string(),
     output: v.string(),
@@ -46,7 +38,6 @@ export default defineSchema({
     effectiveGpuCount: v.optional(v.number()),
     effectiveVolumeGb: v.optional(v.number()),
     cancellationRequested: v.boolean(),
-    createdAt: v.number(),
     updatedAt: v.number(),
   })
     .index("by_user", ["userId"])
@@ -57,6 +48,5 @@ export default defineSchema({
     status: v.string(),
     message: v.string(),
     metadata: v.optional(v.any()),
-    createdAt: v.number(),
   }).index("by_run", ["runId"]),
 });
