@@ -70,7 +70,7 @@ export default function AuthPage() {
     <AuthPageShell
       eyebrow="Account Access"
       title="Sign in or sign up"
-      subtitle="Use your email and a one-time verification code. New and returning users use the same flow."
+      subtitle="Simply enter your email and we'll send a magic code to your inbox."
     >
       <form onSubmit={onRequestCode} className="space-y-5">
         <div className="space-y-2">
