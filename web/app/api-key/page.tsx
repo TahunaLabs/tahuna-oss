@@ -14,7 +14,6 @@ import { formatDistanceToNow } from "date-fns"
 import { Trash2 } from "lucide-react"
 import { useMemo, useState, type FormEvent } from "react"
 
-const DEFAULT_API_URL = process.env.NEXT_PUBLIC_CONVEX_SITE_URL?.trim() || "https://your-deployment.convex.site"
 
 type BootstrapResponse = {
   user_id: string
@@ -36,8 +35,7 @@ export default function ApiKeyPage() {
 
   const exportSnippet = useMemo(() => {
     if (!result) return ""
-    return `export TAHUNA_API_URL=${DEFAULT_API_URL}
-export TAHUNA_API_KEY=${result.api_key}`
+    return `export TAHUNA_API_KEY=${result.api_key}`
   }, [result])
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
