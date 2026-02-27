@@ -145,9 +145,9 @@ export const listApiKeys = query({
 
     return keys.map((key) => ({
       _id: key._id,
+      _creationTime: key._creationTime,
       name: key.name,
       keyPrefix: key.keyPrefix,
-      createdAt: key._creationTime,
       lastUsedAt: key.lastUsedAt,
       revokedAt: key.revokedAt,
     }));

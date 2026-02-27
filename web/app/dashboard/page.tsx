@@ -14,7 +14,7 @@ import { useConvexAuth, useMutation, useQuery } from "convex/react"
 import { Database, Key, LogOut, Play, Server, Settings, Trash2 } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { useEffect, useMemo, useState, type FormEvent } from "react"
+import { useMemo, useState, type FormEvent } from "react"
 
 type MainSection = "data" | "environments" | "runs"
 type UtilitySection = "settings"
@@ -28,13 +28,15 @@ export default function DashboardPage() {
   const [message, setMessage] = useState("")
 
   const [activeSection, setActiveSection] = useState<MainSection | UtilitySection>("environments")
-
+  
+  // Base fields that user can manually override. 
+  // If undefined/empty, we derive defaults below based on fetched catalog.
+  const [explicitEnvGPUType, setExplicitEnvGPUType] = useState("")
+  const [explicitEnvGPUCount, setExplicitEnvGPUCount] = useState("")
   const [envName, setEnvName] = useState("Frontier Runtime")
-  const [envGPUType, setEnvGPUType] = useState("")
-  const [envGPUCount, setEnvGPUCount] = useState("1")
   const [envVolume, setEnvVolume] = useState("120")
   const [framework, setFramework] = useState("pt")
-  const [frameworkVersion, setFrameworkVersion] = useState("")
+  const [explicitFrameworkVersion, setExplicitFrameworkVersion] = useState("")
 
   const primaryNav: { id: MainSection; label: string; icon: typeof Database }[] = [
     { id: "data", label: "Data", icon: Database },
@@ -63,11 +65,22 @@ export default function DashboardPage() {
     return Object.keys(catalog.images[framework] || {})
   }, [catalog, framework])
 
+  // Derive final values (or use explicitly set ones)
+  const envGPUType = explicitEnvGPUType || (catalog?.gpus.length ? catalog.gpus[0].id : "")
+  
   const selectedGPU = useMemo(() => {
     return catalog?.gpus.find((g) => g.id === envGPUType) ?? null
   }, [catalog, envGPUType])
 
   const maxGPUs = selectedGPU?.maxGpuCount || 8
+
+  // Constrain GPU count directly instead of via useEffect synchronization
+  const rawGPUCount = explicitEnvGPUCount || "1"
+  const envGPUCountValidation = Number.parseInt(rawGPUCount, 10)
+  const envGPUCount = envGPUCountValidation > maxGPUs ? String(maxGPUs) : rawGPUCount
+
+  // Pick first version safely
+  const frameworkVersion = explicitFrameworkVersion || (frameworkVersions.length ? frameworkVersions[0] : "")
 
   const dataRows = useMemo(() => {
     return [
@@ -87,25 +100,6 @@ export default function DashboardPage() {
   const userEmail = currentUser?.email ?? ""
 
   // ---- Server handles redirect via layout.tsx ----
-
-  // ---- auto-select defaults when data arrives ----
-  useEffect(() => {
-    if (!envGPUType && catalog && catalog.gpus.length > 0) {
-      setEnvGPUType(catalog.gpus[0].id)
-    }
-  }, [catalog, envGPUType])
-
-  useEffect(() => {
-    if (frameworkVersions.length > 0 && !frameworkVersions.includes(frameworkVersion)) {
-      setFrameworkVersion(frameworkVersions[0])
-    }
-  }, [frameworkVersions, frameworkVersion])
-
-  useEffect(() => {
-    if (Number.parseInt(envGPUCount, 10) > maxGPUs) {
-      setEnvGPUCount(String(maxGPUs))
-    }
-  }, [envGPUCount, maxGPUs])
 
   // ---- action helpers ----
   async function withBusy(task: () => Promise<void>) {
@@ -274,7 +268,7 @@ export default function DashboardPage() {
                       <Select
                         id="gpu-type"
                         value={envGPUType}
-                        onChange={(event) => setEnvGPUType(event.target.value)}
+                        onChange={(event) => setExplicitEnvGPUType(event.target.value)}
                       >
                         {(catalog?.gpus || []).map((gpu) => (
                           <option key={gpu.id} value={gpu.id}>{gpu.displayName} ({gpu.id})</option>
@@ -304,7 +298,7 @@ export default function DashboardPage() {
                         min={1}
                         max={maxGPUs}
                         value={envGPUCount}
-                        onChange={(event) => setEnvGPUCount(event.target.value)}
+                        onChange={(event) => setExplicitEnvGPUCount(event.target.value)}
                       />
                       {selectedGPU ? <p className="text-xs text-muted-foreground">Max for this GPU: {selectedGPU.maxGpuCount}</p> : null}
                     </div>
@@ -317,7 +311,7 @@ export default function DashboardPage() {
                       <Select
                         id="version"
                         value={frameworkVersion}
-                        onChange={(event) => setFrameworkVersion(event.target.value)}
+                        onChange={(event) => setExplicitFrameworkVersion(event.target.value)}
                       >
                         {frameworkVersions.map((version) => (
                           <option key={version} value={version}>{version}</option>

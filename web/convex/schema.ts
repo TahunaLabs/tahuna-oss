@@ -38,7 +38,6 @@ export default defineSchema({
     effectiveGpuCount: v.optional(v.number()),
     effectiveVolumeGb: v.optional(v.number()),
     cancellationRequested: v.boolean(),
-    updatedAt: v.number(),
   })
     .index("by_user", ["userId"])
     .index("by_environment", ["environmentId"]),

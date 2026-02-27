@@ -127,7 +127,6 @@ export const create = mutation({
       effectiveGpuType: args.gpu_type || env.gpuType,
       effectiveGpuCount: args.gpu_count || env.gpuCount,
       effectiveVolumeGb: args.volume_gb || env.volumeGb,
-      updatedAt: now,
     });
 
     await ctx.db.insert("runEvents", {
@@ -160,7 +159,6 @@ export const remove = mutation({
       await ctx.db.patch(args.runId, {
         status: "cancelling",
         cancellationRequested: true,
-        updatedAt: Date.now(),
       });
       await ctx.db.insert("runEvents", {
         runId: args.runId,
@@ -228,7 +226,6 @@ export const internalCreate = internalMutation({
       effectiveGpuType: args.gpu_type || env.gpuType,
       effectiveGpuCount: args.gpu_count || env.gpuCount,
       effectiveVolumeGb: args.volume_gb || env.volumeGb,
-      updatedAt: now,
     });
 
     await ctx.db.insert("runEvents", {
@@ -260,7 +257,6 @@ export const internalRemove = internalMutation({
       await ctx.db.patch(args.runId, {
         status: "cancelling",
         cancellationRequested: true,
-        updatedAt: Date.now(),
       });
       await ctx.db.insert("runEvents", {
         runId: args.runId,
@@ -291,14 +287,13 @@ export const markRunning = internalMutation({
     const row = await ctx.db.get(args.runId);
     if (!row || row.cancellationRequested || TERMINAL_STATUSES.has(row.status)) {
       if (row?.cancellationRequested) {
-        await ctx.db.patch(args.runId, { status: "cancelled", updatedAt: Date.now() });
+        await ctx.db.patch(args.runId, { status: "cancelled" });
       }
       return;
     }
 
     await ctx.db.patch(args.runId, {
       status: "running",
-      updatedAt: Date.now(),
     });
     await ctx.db.insert("runEvents", {
       runId: args.runId,
@@ -319,7 +314,6 @@ export const completeRun = internalMutation({
     const terminal = row.cancellationRequested ? "cancelled" : "completed";
     await ctx.db.patch(args.runId, {
       status: terminal,
-      updatedAt: Date.now(),
     });
     await ctx.db.insert("runEvents", {
       runId: args.runId,

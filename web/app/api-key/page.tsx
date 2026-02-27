@@ -135,7 +135,7 @@ export TAHUNA_API_KEY=${result.api_key}`
                       </div>
                       <div className="font-mono text-xs text-muted-foreground">{key.keyPrefix}••••••••••••••••••••</div>
                       <div className="text-[11px] text-muted-foreground/70">
-                        Created {formatDistanceToNow(key.createdAt, { addSuffix: true })}
+                        Created {formatDistanceToNow(key._creationTime, { addSuffix: true })}
                         {key.lastUsedAt && !isRevoked ? ` • Last used ${formatDistanceToNow(key.lastUsedAt, { addSuffix: true })}` : ""}
                       </div>
                     </div>
