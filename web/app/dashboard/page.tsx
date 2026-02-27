@@ -10,14 +10,18 @@ import { Select } from "@/components/ui/select"
 import { PageLoader } from "@/components/ui/spinner"
 import { api } from "@/convex/_generated/api"
 import { authClient } from "@/lib/auth-client"
-import { useConvexAuth, useMutation, useQuery } from "convex/react"
+import { useAction, useConvexAuth, useMutation, useQuery } from "convex/react"
 import { Database, Key, LogOut, Play, Server, Settings, Trash2 } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { useMemo, useState, type FormEvent } from "react"
+import { useEffect, useMemo, useState, type FormEvent } from "react"
 
 type MainSection = "data" | "environments" | "runs"
 type UtilitySection = "settings"
+
+// Local types to type the derived local state
+type GPUInfo = { id: string; displayName: string; memoryInGb: number; maxGpuCount: number }
+type ImageCatalog = Record<string, Record<string, string>>
 
 export default function DashboardPage() {
   const router = useRouter()
@@ -46,9 +50,32 @@ export default function DashboardPage() {
 
   // ---- Convex queries (reactive — auto-update) ----
   const catalog = useQuery(api.catalog.getCatalog)
+  const getDynamicGpus = useAction(api.catalog.getDynamicGpus)
   const currentUser = useQuery(api.auth.getCurrentUser)
   const envResult = useQuery(api.environments.list)
   const runResult = useQuery(api.runs.list)
+
+  // Local state for fetched dynamic GPUs
+  const [dynamicGpus, setDynamicGpus] = useState<GPUInfo[]>([])
+  const [loadingGpus, setLoadingGpus] = useState(true)
+
+  useEffect(() => {
+    async function fetchGpus() {
+      try {
+        setLoadingGpus(true)
+        const gpus = await getDynamicGpus()
+        setDynamicGpus(gpus)
+      } catch (err) {
+        console.error("Failed to fetch dynamic gpus", err)
+      } finally {
+        setLoadingGpus(false)
+      }
+    }
+    // Only attempt to fetch if user is properly authenticated
+    if (isAuthenticated) {
+      fetchGpus()
+    }
+  }, [getDynamicGpus, isAuthenticated])
 
   const environments = envResult?.environments ?? []
   const runs = runResult?.runs ?? []
@@ -66,11 +93,12 @@ export default function DashboardPage() {
   }, [catalog, framework])
 
   // Derive final values (or use explicitly set ones)
-  const envGPUType = explicitEnvGPUType || (catalog?.gpus.length ? catalog.gpus[0].id : "")
+  const currentGpusList = dynamicGpus;
+  const envGPUType = explicitEnvGPUType || (currentGpusList.length ? currentGpusList[0].id : "")
   
   const selectedGPU = useMemo(() => {
-    return catalog?.gpus.find((g) => g.id === envGPUType) ?? null
-  }, [catalog, envGPUType])
+    return currentGpusList.find((g) => g.id === envGPUType) ?? null
+  }, [currentGpusList, envGPUType])
 
   const maxGPUs = selectedGPU?.maxGpuCount || 8
 
@@ -269,10 +297,15 @@ export default function DashboardPage() {
                         id="gpu-type"
                         value={envGPUType}
                         onChange={(event) => setExplicitEnvGPUType(event.target.value)}
+                        disabled={loadingGpus || currentGpusList.length === 0}
                       >
-                        {(catalog?.gpus || []).map((gpu) => (
-                          <option key={gpu.id} value={gpu.id}>{gpu.displayName} ({gpu.id})</option>
-                        ))}
+                        {currentGpusList.length === 0 ? (
+                          <option value="">{loadingGpus ? "Loading GPUs..." : "No GPUs available"}</option>
+                        ) : (
+                          currentGpusList.map((gpu) => (
+                            <option key={gpu.id} value={gpu.id}>{gpu.displayName} ({gpu.id})</option>
+                          ))
+                        )}
                       </Select>
                     </div>
                     <div className="space-y-2">
@@ -320,7 +353,7 @@ export default function DashboardPage() {
                     </div>
                   </div>
 
-                  <Button type="submit" disabled={busy}>{busy ? "Saving..." : "Create environment"}</Button>
+                  <Button type="submit" disabled={busy || currentGpusList.length === 0}>{busy ? "Saving..." : "Create environment"}</Button>
                 </form>
               </Card>
 
