@@ -4,17 +4,27 @@ import { AuthPageShell } from "@/components/auth-page-shell"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { authClient } from "@/lib/auth-client"
+import { useConvexAuth } from "convex/react"
 import { useRouter } from "next/navigation"
-import { useState, type FormEvent } from "react"
+import { useEffect, useState, type FormEvent } from "react"
 
 export default function AuthPage() {
   const router = useRouter()
+  const { isAuthenticated } = useConvexAuth()
+  
   const [email, setEmail] = useState("")
   const [otp, setOTP] = useState("")
   const [sendingCode, setSendingCode] = useState(false)
   const [verifyingCode, setVerifyingCode] = useState(false)
   const [error, setError] = useState("")
   const [needsVerification, setNeedsVerification] = useState(false)
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      router.replace("/dashboard")
+    }
+  }, [isAuthenticated, router])
 
   async function onRequestCode(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -24,14 +34,12 @@ export default function AuthPage() {
     setOTP("")
 
     try {
-      const resp = await fetch("/api/auth/email-otp/send-verification-otp", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, type: "sign-in" }),
+      const { data, error } = await authClient.emailOtp.sendVerificationOtp({
+        email,
+        type: "sign-in",
       })
-      const data = (await resp.json()) as { detail?: string }
-      if (!resp.ok) {
-        throw new Error(data.detail || "failed to request verification code")
+      if (error) {
+        throw new Error(error.message || "failed to request verification code")
       }
       setNeedsVerification(true)
     } catch (err) {
@@ -46,19 +54,15 @@ export default function AuthPage() {
     setError("")
 
     try {
-      const verifyResp = await fetch("/api/auth/sign-in/email-otp", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email,
-          otp,
-        }),
+      const { data, error } = await authClient.signIn.emailOtp({
+        email,
+        otp,
       })
-      const verifyData = (await verifyResp.json()) as { detail?: string }
-      if (!verifyResp.ok) {
-        throw new Error(verifyData.detail || "failed to verify code")
+      if (error) {
+        throw new Error(error.message || "failed to verify code")
       }
-      router.replace("/dashboard")
+      
+      router.push("/dashboard")
     } catch (err) {
       setError(err instanceof Error ? err.message : "unexpected error")
     } finally {

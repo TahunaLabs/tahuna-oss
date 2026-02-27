@@ -85,6 +85,22 @@ export const getLogs = query({
   },
 });
 
+export const internalGetLogs = internalQuery({
+  args: { userId: v.string(), runId: v.id("runs") },
+  handler: async (ctx, args) => {
+    const row = await ctx.db.get(args.runId);
+    if (!row || row.userId !== args.userId) {
+      throw new Error("run not found");
+    }
+    return {
+      run_id: String(row._id),
+      logs_path: row.logs,
+      log_file: `${row.logs}/run.log`,
+      note: "Logs are uploaded by the training pod into object storage.",
+    };
+  },
+});
+
 export const create = mutation({
   args: {
     environmentId: v.id("environments"),

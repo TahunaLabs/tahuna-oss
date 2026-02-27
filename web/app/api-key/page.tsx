@@ -14,7 +14,7 @@ import { formatDistanceToNow } from "date-fns"
 import { Trash2 } from "lucide-react"
 import { useMemo, useState, type FormEvent } from "react"
 
-const DEFAULT_API_URL = process.env.NEXT_PUBLIC_TAHUNA_API_URL?.trim() || "http://localhost:3000"
+const DEFAULT_API_URL = process.env.NEXT_PUBLIC_CONVEX_SITE_URL?.trim() || "https://your-deployment.convex.site"
 
 type BootstrapResponse = {
   user_id: string

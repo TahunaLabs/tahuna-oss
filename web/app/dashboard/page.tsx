@@ -86,12 +86,7 @@ export default function DashboardPage() {
 
   const userEmail = currentUser?.email ?? ""
 
-  // ---- redirect if not authenticated ----
-  useEffect(() => {
-    if (!authLoading && !isAuthenticated) {
-      router.replace("/auth")
-    }
-  }, [authLoading, isAuthenticated, router])
+  // ---- Server handles redirect via layout.tsx ----
 
   // ---- auto-select defaults when data arrives ----
   useEffect(() => {
