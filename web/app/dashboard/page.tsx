@@ -21,16 +21,39 @@ type MainSection = "data" | "environments" | "runs"
 type UtilitySection = "settings"
 
 type GPUInfo = { id: string; displayName: string; memoryInGb: number; maxGpuCount: number; pricePerHour?: number | null }
+type CatalogData = { images: Record<string, Record<string, string>> }
 type DataBlob = {
   data_blob_id: string
   blob_id: string
-  key: string
-  path: string
   filename: string
   content_type: string
   size: number
   download_url: string
   created_at: number
+}
+type EnvironmentRow = {
+  environment_id: string
+  name: string
+  artifacts: string
+  gpu_type: string
+  gpu_count: number
+  volume_gb: number
+  framework: string
+  version: string
+}
+type RunRow = {
+  run_id: string
+  env_id: string
+  input: string
+  output: string
+  logs: string
+  status: string
+  error: string
+  pod_id: string
+  effective_gpu_type: string
+  effective_gpu_count: number
+  effective_volume_gb: number
+  cancellation_requested: boolean
 }
 
 function formatBytes(size: number) {
@@ -64,12 +87,12 @@ export default function DashboardPage() {
     { id: "runs", label: "Runs", icon: Play },
   ]
 
-  const catalog = useQuery(api.catalog.getCatalog)
+  const catalog = useQuery(api.catalog.getCatalog) as CatalogData | undefined
   const getDynamicGpus = useAction(api.catalog.getDynamicGpus)
   const currentUser = useQuery(api.auth.getCurrentUser)
-  const dataResult = useQuery(api.data.list)
-  const envResult = useQuery(api.environments.list)
-  const runResult = useQuery(api.runs.list)
+  const dataResult = useQuery(api.data.list) as { blobs: DataBlob[] } | undefined
+  const envResult = useQuery(api.environments.list) as { environments: EnvironmentRow[] } | undefined
+  const runResult = useQuery(api.runs.list) as { runs: RunRow[] } | undefined
 
   const [dynamicGpus, setDynamicGpus] = useState<GPUInfo[]>([])
   const [loadingGpus, setLoadingGpus] = useState(true)
@@ -92,12 +115,11 @@ export default function DashboardPage() {
     }
   }, [getDynamicGpus, isAuthenticated])
 
-  const environments = envResult?.environments ?? []
-  const runs = runResult?.runs ?? []
+  const environments: EnvironmentRow[] = envResult?.environments ?? []
+  const runs: RunRow[] = runResult?.runs ?? []
 
   const createEnvMutation = useMutation(api.environments.create)
-  const completeDataUploadMutation = useMutation(api.data.completeUpload)
-  const generateDataUploadUrlMutation = useMutation(api.data.generateUploadUrl)
+  const ingestDataAction = useAction(api.data.ingest)
   const removeDataBlobMutation = useMutation(api.data.remove)
   const removeEnvMutation = useMutation(api.environments.remove)
   const createRunMutation = useMutation(api.runs.create)
@@ -179,31 +201,16 @@ export default function DashboardPage() {
     setMessage("")
 
     try {
-      const upload = await generateDataUploadUrlMutation({
-        filename: file.name,
-      })
-
-      const response = await fetch(upload.upload_url, {
-        method: "PUT",
-        headers: file.type ? { "Content-Type": file.type } : undefined,
-        body: file,
-      })
-
-      if (!response.ok) {
-        throw new Error(`upload failed with status ${response.status}`)
-      }
-
-      await completeDataUploadMutation({
-        blobId: upload.blob_id,
-        key: upload.key,
+      const bytes = await file.arrayBuffer()
+      await ingestDataAction({
         filename: file.name,
         contentType: file.type || undefined,
-        size: file.size,
+        bytes,
       })
 
       setSelectedDataFile(null)
       setDataFileInputKey((current) => current + 1)
-      setMessage(`Uploaded ${file.name} to ${upload.path}.`)
+      setMessage(`Uploaded ${file.name}.`)
     } catch (err) {
       setError(err instanceof Error ? err.message : "unexpected error")
     } finally {
@@ -306,65 +313,43 @@ export default function DashboardPage() {
             <section className="space-y-8">
               <div>
                 <SectionHeading variant="medium" className="mb-2">Data</SectionHeading>
-                <p className="text-base text-muted-foreground">Ingest files into your shared R2 bucket with deterministic user-scoped paths.</p>
+                <p className="text-base text-muted-foreground">Ingest files into managed storage and review everything uploaded for this user.</p>
               </div>
 
-              <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-                <Card className="p-6">
-                  <h3 className="text-lg font-semibold text-foreground">Ingest data to R2</h3>
-                  <p className="mt-2 text-sm text-muted-foreground">
-                    Uploaded files are stored at <span className="font-mono text-xs text-foreground/80">[user_id]/data/[blob_id]</span>.
-                  </p>
+              <Card className="max-w-3xl p-6">
+                <h3 className="text-lg font-semibold text-foreground">Ingest data</h3>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  Files are uploaded through Tahuna and attached to your account.
+                </p>
 
-                  <form onSubmit={uploadData} className="mt-5 space-y-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="data-file">File</Label>
-                      <Input
-                        key={dataFileInputKey}
-                        id="data-file"
-                        type="file"
-                        disabled={uploadingData}
-                        onChange={(event) => setSelectedDataFile(event.target.files?.[0] ?? null)}
-                      />
+                <form onSubmit={uploadData} className="mt-5 space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="data-file">File</Label>
+                    <Input
+                      key={dataFileInputKey}
+                      id="data-file"
+                      type="file"
+                      disabled={uploadingData}
+                      onChange={(event) => setSelectedDataFile(event.target.files?.[0] ?? null)}
+                    />
+                  </div>
+
+                  {selectedDataFile ? (
+                    <div className="rounded-xl border border-border/70 bg-background/45 px-4 py-3">
+                      <p className="text-sm font-medium text-foreground">{selectedDataFile.name}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {formatBytes(selectedDataFile.size)}{selectedDataFile.type ? ` | ${selectedDataFile.type}` : ""}
+                      </p>
                     </div>
-
-                    {selectedDataFile ? (
-                      <div className="rounded-xl border border-border/70 bg-background/45 px-4 py-3">
-                        <p className="text-sm font-medium text-foreground">{selectedDataFile.name}</p>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          {formatBytes(selectedDataFile.size)}{selectedDataFile.type ? ` | ${selectedDataFile.type}` : ""}
-                        </p>
-                      </div>
-                    ) : (
-                      <p className="text-sm text-muted-foreground">Choose a file to push through Convex-managed R2 uploads.</p>
-                    )}
-
-                    <Button type="submit" disabled={!selectedDataFile || uploadingData}>
-                      {uploadingData ? "Uploading..." : "Ingest data"}
-                    </Button>
-                  </form>
-                </Card>
-
-                <Card className="p-6">
-                  <h3 className="text-lg font-semibold text-foreground">Environment mounts</h3>
-                  <p className="mt-2 text-sm text-muted-foreground">
-                    Each environment resolves to <span className="font-mono text-xs text-foreground/80">[user_id]/environment/[environment_id]</span>.
-                  </p>
-
-                  {environments.length === 0 ? (
-                    <p className="mt-5 text-sm text-muted-foreground">Create an environment to reserve its storage path.</p>
                   ) : (
-                    <div className="mt-5 space-y-3">
-                      {environments.map((env) => (
-                        <div key={env.environment_id} className="rounded-xl border border-border/70 bg-background/45 px-4 py-3">
-                          <p className="text-sm font-medium text-foreground">{env.name}</p>
-                          <p className="mt-1 font-mono text-xs text-muted-foreground">{env.artifacts}</p>
-                        </div>
-                      ))}
-                    </div>
+                    <p className="text-sm text-muted-foreground">Choose a file to ingest.</p>
                   )}
-                </Card>
-              </div>
+
+                  <Button type="submit" disabled={!selectedDataFile || uploadingData}>
+                    {uploadingData ? "Uploading..." : "Ingest data"}
+                  </Button>
+                </form>
+              </Card>
 
               {dataBlobs.length === 0 ? (
                 <Card className="p-6">
@@ -376,7 +361,6 @@ export default function DashboardPage() {
                     <thead>
                       <tr className="border-b border-border text-left">
                         <th className="px-4 py-3 text-sm font-medium text-muted-foreground">File</th>
-                        <th className="px-4 py-3 text-sm font-medium text-muted-foreground">Path</th>
                         <th className="px-4 py-3 text-sm font-medium text-muted-foreground">Size</th>
                         <th className="px-4 py-3 text-sm font-medium text-muted-foreground">Uploaded</th>
                         <th className="px-4 py-3 text-sm font-medium text-muted-foreground">Actions</th>
@@ -389,7 +373,6 @@ export default function DashboardPage() {
                             <p className="text-sm text-foreground">{blob.filename}</p>
                             {blob.content_type ? <p className="mt-1 text-xs text-muted-foreground">{blob.content_type}</p> : null}
                           </td>
-                          <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{blob.path}</td>
                           <td className="px-4 py-3 text-sm text-muted-foreground">{formatBytes(blob.size)}</td>
                           <td className="px-4 py-3 text-sm text-muted-foreground">{new Date(blob.created_at).toLocaleString()}</td>
                           <td className="px-4 py-3">

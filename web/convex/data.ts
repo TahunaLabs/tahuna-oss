@@ -1,7 +1,7 @@
 import { R2 } from "@convex-dev/r2";
 import { v } from "convex/values";
-import { components } from "./_generated/api";
-import { mutation, query } from "./_generated/server";
+import { components, internal } from "./_generated/api";
+import { action, internalMutation, mutation, query } from "./_generated/server";
 import { authComponent } from "./auth";
 import { shortId } from "./ids";
 
@@ -32,8 +32,6 @@ export const list = query({
         .map(async (row) => ({
           data_blob_id: String(row._id),
           blob_id: row.blobId,
-          key: row.key,
-          path: row.path,
           filename: row.filename,
           content_type: row.contentType || "",
           size: row.size || 0,
@@ -46,28 +44,42 @@ export const list = query({
   },
 });
 
-export const generateUploadUrl = mutation({
+export const ingest: any = action({
   args: {
     filename: v.string(),
+    contentType: v.optional(v.string()),
+    bytes: v.bytes(),
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<{ data_blob_id: string; blob_id: string; filename: string }> => {
     const user = await requireUser(ctx);
     const blobId = shortId("blob");
     const path = buildDataPath(String(user._id), blobId);
-    const { key, url } = await r2.generateUploadUrl(path);
+
+    const key = await r2.store(ctx, new Uint8Array(args.bytes), {
+      key: path,
+      type: args.contentType,
+    });
+
+    const dataBlobId = (await ctx.runMutation(internal.data._recordIngestedBlob, {
+      userId: String(user._id),
+      blobId,
+      key,
+      filename: args.filename,
+      contentType: args.contentType,
+      size: args.bytes.byteLength,
+    })) as string;
 
     return {
+      data_blob_id: String(dataBlobId),
       blob_id: blobId,
       filename: args.filename,
-      key,
-      path,
-      upload_url: url,
     };
   },
 });
 
-export const completeUpload = mutation({
+export const _recordIngestedBlob = internalMutation({
   args: {
+    userId: v.string(),
     blobId: v.string(),
     key: v.string(),
     filename: v.string(),
@@ -75,50 +87,24 @@ export const completeUpload = mutation({
     size: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    const user = await requireUser(ctx);
-    const expectedPath = buildDataPath(String(user._id), args.blobId);
-    if (args.key !== expectedPath) {
-      throw new Error("upload key does not match the authenticated user");
-    }
-
     const existing = await ctx.db
       .query("dataBlobs")
       .withIndex("by_key", (q) => q.eq("key", args.key))
       .first();
 
     if (existing) {
-      if (existing.userId !== String(user._id)) {
-        throw new Error("blob not found");
-      }
-
-      await ctx.db.patch(existing._id, {
-        filename: args.filename,
-        contentType: args.contentType,
-        size: args.size,
-      });
-
-      return {
-        data_blob_id: String(existing._id),
-        blob_id: existing.blobId,
-        path: existing.path,
-      };
+      return existing._id;
     }
 
-    const dataBlobId = await ctx.db.insert("dataBlobs", {
-      userId: String(user._id),
+    return await ctx.db.insert("dataBlobs", {
+      userId: args.userId,
       blobId: args.blobId,
       key: args.key,
-      path: expectedPath,
+      path: buildDataPath(args.userId, args.blobId),
       filename: args.filename,
       contentType: args.contentType,
       size: args.size,
     });
-
-    return {
-      data_blob_id: String(dataBlobId),
-      blob_id: args.blobId,
-      path: expectedPath,
-    };
   },
 });
 

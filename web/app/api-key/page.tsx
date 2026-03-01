@@ -21,11 +21,20 @@ type BootstrapResponse = {
   api_key_id: string
 }
 
+type ApiKeyRecord = {
+  _id: string
+  _creationTime: number
+  name: string
+  keyPrefix: string
+  lastUsedAt?: number
+  revokedAt?: number
+}
+
 export default function ApiKeyPage() {
   const { isAuthenticated, isLoading } = useConvexAuth()
   const createApiKeyMutation = useMutation(api.auth.createApiKey)
   const revokeApiKeyMutation = useMutation(api.auth.revokeApiKey)
-  const apiKeys = useQuery(api.auth.listApiKeys)
+  const apiKeys = useQuery(api.auth.listApiKeys) as ApiKeyRecord[] | undefined
 
   const [name, setName] = useState("cli")
   const [busy, setBusy] = useState(false)
