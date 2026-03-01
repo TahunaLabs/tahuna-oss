@@ -4,11 +4,11 @@
   "private": true,
   "packageManager": "bun@1.1.20",
   "scripts": {
-    "build": "next build",
+    "build": "bun --bun next build",
     "convex:codegen": "convex codegen",
     "convex:deploy": "convex deploy",
     "convex:dev": "convex dev",
-    "dev": "next dev",
+    "dev": "bun --bun next dev",
     "lint": "eslint .",
     "start": "next start"
   },
