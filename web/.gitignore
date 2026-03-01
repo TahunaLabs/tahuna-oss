@@ -1,5 +1,4 @@
 node_modules/
 .next/
-convex/_generated/
 tsconfig.tsbuildinfo
 .env.local
