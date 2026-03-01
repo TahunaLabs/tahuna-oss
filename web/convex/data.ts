@@ -18,12 +18,30 @@ function buildDataPrefix(userId: string) {
   return `${userId}/data/`;
 }
 
-function buildDataPath(userId: string, blobId: string) {
-  return `${buildDataPrefix(userId)}${blobId}`;
+function encodeFilename(filename: string) {
+  return encodeURIComponent(filename.trim() || "file");
 }
 
-function toBlobId(key: string) {
-  return key.split("/").pop() ?? key;
+function decodeFilename(encoded: string) {
+  try {
+    return decodeURIComponent(encoded);
+  } catch {
+    return encoded;
+  }
+}
+
+function buildDataPath(userId: string, blobId: string, filename: string) {
+  return `${buildDataPrefix(userId)}${blobId}__${encodeFilename(filename)}`;
+}
+
+function parseKey(key: string) {
+  const leaf = key.split("/").pop() ?? key;
+  const [blobId, ...filenameParts] = leaf.split("__");
+  const encodedFilename = filenameParts.join("__");
+  return {
+    blobId,
+    filename: encodedFilename ? decodeFilename(encodedFilename) : blobId,
+  };
 }
 
 const callbacks: R2Callbacks = {} as R2Callbacks;
@@ -42,15 +60,18 @@ export const { syncMetadata } = r2.clientApi<DataModel>({
 });
 
 export const generateUploadUrl = mutation({
-  args: {},
-  handler: async (ctx) => {
+  args: {
+    filename: v.string(),
+  },
+  handler: async (ctx, args) => {
     const user = await requireUser(ctx);
     const blobId = shortId("blob");
-    const key = buildDataPath(String(user._id), blobId);
+    const key = buildDataPath(String(user._id), blobId, args.filename);
     const upload = await r2.generateUploadUrl(key);
 
     return {
       blob_id: blobId,
+      filename: args.filename,
       key: upload.key,
       url: upload.url,
     };
@@ -64,6 +85,7 @@ export const list = query({
     const prefix = buildDataPrefix(String(user._id));
     const blobs: Array<{
       blob_id: string;
+      filename: string;
       key: string;
       content_type: string;
       size: number;
@@ -78,8 +100,10 @@ export const list = query({
       const result = await r2.listMetadata(ctx, 100, cursor);
       for (const item of result.page) {
         if (!item.key.startsWith(prefix)) continue;
+        const parsed = parseKey(item.key);
         blobs.push({
-          blob_id: toBlobId(item.key),
+          blob_id: parsed.blobId,
+          filename: parsed.filename,
           key: item.key,
           content_type: item.contentType || "",
           size: item.size || 0,

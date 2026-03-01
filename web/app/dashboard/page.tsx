@@ -24,6 +24,7 @@ type GPUInfo = { id: string; displayName: string; memoryInGb: number; maxGpuCoun
 type CatalogData = { images: Record<string, Record<string, string>> }
 type DataBlob = {
   blob_id: string
+  filename: string
   key: string
   content_type: string
   size: number
@@ -76,7 +77,7 @@ export default function DashboardPage() {
   const [explicitEnvGPUType, setExplicitEnvGPUType] = useState("")
   const [explicitEnvGPUCount, setExplicitEnvGPUCount] = useState("")
   const [selectedImageKey, setSelectedImageKey] = useState("")
-  const [selectedDataFile, setSelectedDataFile] = useState<File | null>(null)
+  const [selectedDataFiles, setSelectedDataFiles] = useState<File[]>([])
   const [uploadingData, setUploadingData] = useState(false)
   const [dataFileInputKey, setDataFileInputKey] = useState(0)
 
@@ -193,30 +194,32 @@ export default function DashboardPage() {
 
   async function uploadData(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!selectedDataFile) return
+    if (selectedDataFiles.length === 0) return
 
-    const file = selectedDataFile
     setUploadingData(true)
     setError("")
     setMessage("")
 
     try {
-      const upload = await generateDataUploadUrlMutation({})
-      const response = await fetch(upload.url, {
-        method: "PUT",
-        headers: file.type ? { "Content-Type": file.type } : undefined,
-        body: file,
-      })
+      for (const file of selectedDataFiles) {
+        const upload = await generateDataUploadUrlMutation({ filename: file.name })
+        const response = await fetch(upload.url, {
+          method: "PUT",
+          headers: file.type ? { "Content-Type": file.type } : undefined,
+          body: file,
+        })
 
-      if (!response.ok) {
-        throw new Error(`upload failed with status ${response.status}`)
+        if (!response.ok) {
+          throw new Error(`upload failed with status ${response.status}`)
+        }
+
+        await syncDataMetadataMutation({ key: upload.key })
       }
 
-      await syncDataMetadataMutation({ key: upload.key })
-
-      setSelectedDataFile(null)
+      const uploadedCount = selectedDataFiles.length
+      setSelectedDataFiles([])
       setDataFileInputKey((current) => current + 1)
-      setMessage(`Uploaded ${file.name}.`)
+      setMessage(uploadedCount === 1 ? "Uploaded 1 file." : `Uploaded ${uploadedCount} files.`)
     } catch (err) {
       const message = err instanceof Error ? err.message : "unexpected error"
       setError(message === "Failed to fetch" ? "Upload failed. Check the R2 bucket CORS policy for PUT requests from this app origin." : message)
@@ -336,23 +339,30 @@ export default function DashboardPage() {
                       key={dataFileInputKey}
                       id="data-file"
                       type="file"
+                      multiple
                       disabled={uploadingData}
-                      onChange={(event) => setSelectedDataFile(event.target.files?.[0] ?? null)}
+                      onChange={(event) => setSelectedDataFiles(Array.from(event.target.files ?? []))}
                     />
                   </div>
 
-                  {selectedDataFile ? (
+                  {selectedDataFiles.length > 0 ? (
                     <div className="rounded-xl border border-border/70 bg-background/45 px-4 py-3">
-                      <p className="text-sm font-medium text-foreground">{selectedDataFile.name}</p>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        {formatBytes(selectedDataFile.size)}{selectedDataFile.type ? ` | ${selectedDataFile.type}` : ""}
-                      </p>
+                      <div className="space-y-2">
+                        {selectedDataFiles.map((file) => (
+                          <div key={`${file.name}-${file.size}-${file.lastModified}`} className="flex items-start justify-between gap-4">
+                            <p className="text-sm font-medium text-foreground">{file.name}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {formatBytes(file.size)}{file.type ? ` | ${file.type}` : ""}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   ) : (
-                    <p className="text-sm text-muted-foreground">Choose a file to ingest.</p>
+                    <p className="text-sm text-muted-foreground">Choose one or more files to ingest.</p>
                   )}
 
-                  <Button type="submit" disabled={!selectedDataFile || uploadingData}>
+                  <Button type="submit" disabled={selectedDataFiles.length === 0 || uploadingData}>
                     {uploadingData ? "Uploading..." : "Ingest data"}
                   </Button>
                 </form>
@@ -377,7 +387,7 @@ export default function DashboardPage() {
                       {dataBlobs.map((blob) => (
                         <tr key={blob.key} className="border-b last:border-b-0 border-border/40 align-top">
                           <td className="px-4 py-3">
-                            <p className="text-sm text-foreground">{blob.blob_id}</p>
+                            <p className="text-sm text-foreground">{blob.filename}</p>
                             {blob.content_type ? <p className="mt-1 text-xs text-muted-foreground">{blob.content_type}</p> : null}
                           </td>
                           <td className="px-4 py-3 text-sm text-muted-foreground">{formatBytes(blob.size)}</td>
