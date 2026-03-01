@@ -23,9 +23,8 @@ type UtilitySection = "settings"
 type GPUInfo = { id: string; displayName: string; memoryInGb: number; maxGpuCount: number; pricePerHour?: number | null }
 type CatalogData = { images: Record<string, Record<string, string>> }
 type DataBlob = {
-  data_blob_id: string
   blob_id: string
-  filename: string
+  key: string
   content_type: string
   size: number
   download_url: string
@@ -119,11 +118,12 @@ export default function DashboardPage() {
   const runs: RunRow[] = runResult?.runs ?? []
 
   const createEnvMutation = useMutation(api.environments.create)
-  const ingestDataAction = useAction(api.data.ingest)
+  const generateDataUploadUrlMutation = useMutation(api.data.generateUploadUrl)
   const removeDataBlobMutation = useMutation(api.data.remove)
   const removeEnvMutation = useMutation(api.environments.remove)
   const createRunMutation = useMutation(api.runs.create)
   const removeRunMutation = useMutation(api.runs.remove)
+  const syncDataMetadataMutation = useMutation(api.data.syncMetadata)
 
   const frameworkOptions = useMemo(() => {
     if (!catalog) return []
@@ -201,27 +201,34 @@ export default function DashboardPage() {
     setMessage("")
 
     try {
-      const bytes = await file.arrayBuffer()
-      await ingestDataAction({
-        filename: file.name,
-        contentType: file.type || undefined,
-        bytes,
+      const upload = await generateDataUploadUrlMutation({})
+      const response = await fetch(upload.url, {
+        method: "PUT",
+        headers: file.type ? { "Content-Type": file.type } : undefined,
+        body: file,
       })
+
+      if (!response.ok) {
+        throw new Error(`upload failed with status ${response.status}`)
+      }
+
+      await syncDataMetadataMutation({ key: upload.key })
 
       setSelectedDataFile(null)
       setDataFileInputKey((current) => current + 1)
       setMessage(`Uploaded ${file.name}.`)
     } catch (err) {
-      setError(err instanceof Error ? err.message : "unexpected error")
+      const message = err instanceof Error ? err.message : "unexpected error"
+      setError(message === "Failed to fetch" ? "Upload failed. Check the R2 bucket CORS policy for PUT requests from this app origin." : message)
     } finally {
       setUploadingData(false)
     }
   }
 
-  async function deleteDataBlob(dataBlobId: string, filename: string) {
+  async function deleteDataBlob(key: string, blobId: string) {
     await withBusy(async () => {
-      await removeDataBlobMutation({ dataBlobId: dataBlobId as any })
-      setMessage(`Deleted ${filename}.`)
+      await removeDataBlobMutation({ key })
+      setMessage(`Deleted ${blobId}.`)
     })
   }
 
@@ -368,9 +375,9 @@ export default function DashboardPage() {
                     </thead>
                     <tbody>
                       {dataBlobs.map((blob) => (
-                        <tr key={blob.data_blob_id} className="border-b last:border-b-0 border-border/40 align-top">
+                        <tr key={blob.key} className="border-b last:border-b-0 border-border/40 align-top">
                           <td className="px-4 py-3">
-                            <p className="text-sm text-foreground">{blob.filename}</p>
+                            <p className="text-sm text-foreground">{blob.blob_id}</p>
                             {blob.content_type ? <p className="mt-1 text-xs text-muted-foreground">{blob.content_type}</p> : null}
                           </td>
                           <td className="px-4 py-3 text-sm text-muted-foreground">{formatBytes(blob.size)}</td>
@@ -383,7 +390,7 @@ export default function DashboardPage() {
                                   Open
                                 </a>
                               </Button>
-                              <Button variant="outline" size="sm" onClick={() => deleteDataBlob(blob.data_blob_id, blob.filename)} disabled={busy}>
+                              <Button variant="outline" size="sm" onClick={() => deleteDataBlob(blob.key, blob.blob_id)} disabled={busy}>
                                 <Trash2 className="h-3.5 w-3.5" />
                               </Button>
                             </div>
