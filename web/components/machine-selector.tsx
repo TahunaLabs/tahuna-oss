@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { cn } from "@/lib/utils"
-import { ChevronDown, Cpu, Search, Sparkles, Zap } from "lucide-react"
+import { ChevronDown, Cpu, Search, Zap } from "lucide-react"
 import { useMemo, useState } from "react"
 
 type MachineInfo = {
@@ -13,6 +13,7 @@ type MachineInfo = {
   displayName: string
   memoryInGb: number
   maxGpuCount: number
+  pricePerHour?: number | null
 }
 
 type MachineSelectorProps = {
@@ -23,16 +24,16 @@ type MachineSelectorProps = {
   disabled?: boolean
 }
 
-type MachineTab = "gpu" | "cpu" | "ipu"
+type MachineTab = "gpu" | "cpu"
 
 const machineTabs: { id: MachineTab; label: string; icon: typeof Zap }[] = [
   { id: "gpu", label: "GPU", icon: Zap },
   { id: "cpu", label: "CPU", icon: Cpu },
-  { id: "ipu", label: "IPU", icon: Sparkles },
 ]
 
 function formatMachineMeta(machine: MachineInfo) {
-  return `${machine.memoryInGb} GB VRAM | Up to ${machine.maxGpuCount} GPUs`
+  const price = typeof machine.pricePerHour === "number" ? `$${machine.pricePerHour.toFixed(2)}/hr` : "Pricing unavailable"
+  return `${machine.memoryInGb} GB VRAM | Up to ${machine.maxGpuCount} GPUs | ${price}`
 }
 
 export function MachineSelector({
@@ -118,7 +119,7 @@ export function MachineSelector({
               />
             </div>
 
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 gap-2">
               {machineTabs.map((tab) => {
                 const Icon = tab.icon
                 const isActive = activeTab === tab.id
@@ -146,7 +147,7 @@ export function MachineSelector({
 
             {activeTab !== "gpu" ? (
               <div className="rounded-xl border border-dashed border-border/70 bg-background/40 px-4 py-8 text-center text-sm text-muted-foreground">
-                {activeTab.toUpperCase()} machines are not available in Tahuna yet.
+                CPU machines are not available in Tahuna yet.
               </div>
             ) : filteredMachines.length === 0 ? (
               <div className="rounded-xl border border-dashed border-border/70 bg-background/40 px-4 py-8 text-center text-sm text-muted-foreground">

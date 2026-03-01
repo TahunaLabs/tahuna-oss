@@ -20,7 +20,7 @@ import { useEffect, useMemo, useState, type FormEvent } from "react"
 type MainSection = "data" | "environments" | "runs"
 type UtilitySection = "settings"
 
-type GPUInfo = { id: string; displayName: string; memoryInGb: number; maxGpuCount: number }
+type GPUInfo = { id: string; displayName: string; memoryInGb: number; maxGpuCount: number; pricePerHour?: number | null }
 
 export default function DashboardPage() {
   const router = useRouter()
@@ -34,10 +34,7 @@ export default function DashboardPage() {
 
   const [explicitEnvGPUType, setExplicitEnvGPUType] = useState("")
   const [explicitEnvGPUCount, setExplicitEnvGPUCount] = useState("")
-  const [envName, setEnvName] = useState("Frontier Runtime")
-  const [envVolume, setEnvVolume] = useState("120")
-  const [framework, setFramework] = useState("pt")
-  const [explicitFrameworkVersion, setExplicitFrameworkVersion] = useState("")
+  const [selectedImageKey, setSelectedImageKey] = useState("")
 
   const primaryNav: { id: MainSection; label: string; icon: typeof Database }[] = [
     { id: "data", label: "Data", icon: Database },
@@ -80,10 +77,18 @@ export default function DashboardPage() {
   const createRunMutation = useMutation(api.runs.create)
   const removeRunMutation = useMutation(api.runs.remove)
 
-  const frameworkVersions = useMemo(() => {
+  const frameworkOptions = useMemo(() => {
     if (!catalog) return []
-    return Object.keys(catalog.images[framework] || {})
-  }, [catalog, framework])
+
+    return Object.entries(catalog.images).flatMap(([framework, versions]) =>
+      Object.keys(versions).map((version) => ({
+        key: `${framework}:${version}`,
+        framework,
+        version,
+        label: `${framework.toUpperCase()} ${version}`,
+      })),
+    )
+  }, [catalog])
 
   const currentGpusList = dynamicGpus
   const envGPUType = explicitEnvGPUType || (currentGpusList.length ? currentGpusList[0].id : "")
@@ -97,7 +102,15 @@ export default function DashboardPage() {
   const envGPUCountValidation = Number.parseInt(rawGPUCount, 10)
   const envGPUCount = envGPUCountValidation > maxGPUs ? String(maxGPUs) : rawGPUCount
 
-  const frameworkVersion = explicitFrameworkVersion || (frameworkVersions.length ? frameworkVersions[0] : "")
+  const imageSelection = useMemo(() => {
+    return frameworkOptions.find((option) => option.key === selectedImageKey) ?? frameworkOptions[0] ?? null
+  }, [frameworkOptions, selectedImageKey])
+
+  const environmentName = useMemo(() => {
+    const machineLabel = selectedGPU?.displayName ?? "Training"
+    const frameworkLabel = imageSelection?.label ?? "Environment"
+    return `${machineLabel} · ${frameworkLabel}`
+  }, [imageSelection, selectedGPU])
 
   const dataRows = useMemo(() => {
     return [
@@ -133,12 +146,12 @@ export default function DashboardPage() {
     event.preventDefault()
     await withBusy(async () => {
       await createEnvMutation({
-        name: envName,
+        name: environmentName,
         gpu_type: envGPUType,
         gpu_count: Number.parseInt(envGPUCount, 10),
-        volume_gb: Number.parseInt(envVolume, 10),
-        framework,
-        version: frameworkVersion,
+        volume_gb: 120,
+        framework: imageSelection?.framework ?? "pt",
+        version: imageSelection?.version ?? "",
       })
       setMessage("Environment created.")
     })
@@ -269,11 +282,6 @@ export default function DashboardPage() {
 
               <Card className="p-6">
                 <form onSubmit={createEnvironment} className="space-y-6">
-                  <div className="space-y-2">
-                    <Label htmlFor="env-name">Name</Label>
-                    <Input id="env-name" value={envName} onChange={(event) => setEnvName(event.target.value)} required />
-                  </div>
-
                   <MachineSelector
                     machines={currentGpusList}
                     value={envGPUType}
@@ -282,28 +290,16 @@ export default function DashboardPage() {
                     disabled={currentGpusList.length === 0 && !loadingGpus}
                   />
 
-                  <div className="grid gap-3 xl:grid-cols-4 md:grid-cols-2">
+                  <div className="grid gap-3 xl:grid-cols-2 md:grid-cols-2">
                     <div className="space-y-2">
                       <Label htmlFor="framework">Framework</Label>
                       <Select
                         id="framework"
-                        value={framework}
-                        onChange={(event) => setFramework(event.target.value)}
+                        value={imageSelection?.key ?? ""}
+                        onChange={(event) => setSelectedImageKey(event.target.value)}
                       >
-                        {Object.keys(catalog?.images || {}).map((key) => (
-                          <option key={key} value={key}>{key}</option>
-                        ))}
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="version">Version</Label>
-                      <Select
-                        id="version"
-                        value={frameworkVersion}
-                        onChange={(event) => setExplicitFrameworkVersion(event.target.value)}
-                      >
-                        {frameworkVersions.map((version) => (
-                          <option key={version} value={version}>{version}</option>
+                        {frameworkOptions.map((option) => (
+                          <option key={option.key} value={option.key}>{option.label}</option>
                         ))}
                       </Select>
                     </div>
@@ -319,13 +315,11 @@ export default function DashboardPage() {
                       />
                       {selectedGPU ? <p className="text-xs text-muted-foreground">Max for this machine: {selectedGPU.maxGpuCount}</p> : null}
                     </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="volume">Volume (GB)</Label>
-                      <Input id="volume" type="number" min={1} value={envVolume} onChange={(event) => setEnvVolume(event.target.value)} />
-                    </div>
                   </div>
 
-                  <Button type="submit" disabled={busy || currentGpusList.length === 0}>{busy ? "Saving..." : "Create environment"}</Button>
+                  <Button type="submit" disabled={busy || currentGpusList.length === 0 || !imageSelection}>
+                    {busy ? "Saving..." : "Create environment"}
+                  </Button>
                 </form>
               </Card>
 

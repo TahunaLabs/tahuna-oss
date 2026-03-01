@@ -48,6 +48,28 @@ export const getDynamicGpus = action({
         return [];
       }
 
+      const extractHourlyPrice = (cloud: any): number | null => {
+        if (!cloud || typeof cloud !== "object") return null;
+        const candidates = [
+          cloud.lowestPrice,
+          cloud.price,
+          cloud.pricePerGpu,
+          cloud.pricePerHr,
+          cloud.pricePerHour,
+          cloud.spotPrice,
+        ];
+
+        for (const candidate of candidates) {
+          if (typeof candidate === "number" && Number.isFinite(candidate)) return candidate;
+          if (typeof candidate === "string") {
+            const parsed = Number.parseFloat(candidate);
+            if (Number.isFinite(parsed)) return parsed;
+          }
+        }
+
+        return null;
+      };
+
       // Filter to only include GPUs that actually have stock and aren't 'unknown'
       const remoteGpus = json.data.gpuTypes
         .filter((g: any) => g.id !== "unknown" && (g.secureCloud || g.communityCloud))
@@ -56,6 +78,7 @@ export const getDynamicGpus = action({
           displayName: g.displayName,
           memoryInGb: g.memoryInGb,
           maxGpuCount: g.maxGpuCount || 1,
+          pricePerHour: extractHourlyPrice(g.communityCloud) ?? extractHourlyPrice(g.secureCloud),
         }));
 
       // Sort by memory size descending, then alphabetically by name to present nice options
