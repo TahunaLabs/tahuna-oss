@@ -52,3 +52,6 @@ cli/tahuna-cli
 web/.next/
 web/node_modules/
 web/tsconfig.tsbuildinfo
+
+
+*/.convex/*

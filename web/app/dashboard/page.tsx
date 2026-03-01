@@ -1,5 +1,6 @@
 "use client"
 
+import { MachineSelector } from "@/components/machine-selector"
 import { SectionHeading } from "@/components/section-heading"
 import { Badge, statusVariant } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -19,9 +20,7 @@ import { useEffect, useMemo, useState, type FormEvent } from "react"
 type MainSection = "data" | "environments" | "runs"
 type UtilitySection = "settings"
 
-// Local types to type the derived local state
 type GPUInfo = { id: string; displayName: string; memoryInGb: number; maxGpuCount: number }
-type ImageCatalog = Record<string, Record<string, string>>
 
 export default function DashboardPage() {
   const router = useRouter()
@@ -32,9 +31,7 @@ export default function DashboardPage() {
   const [message, setMessage] = useState("")
 
   const [activeSection, setActiveSection] = useState<MainSection | UtilitySection>("environments")
-  
-  // Base fields that user can manually override. 
-  // If undefined/empty, we derive defaults below based on fetched catalog.
+
   const [explicitEnvGPUType, setExplicitEnvGPUType] = useState("")
   const [explicitEnvGPUCount, setExplicitEnvGPUCount] = useState("")
   const [envName, setEnvName] = useState("Frontier Runtime")
@@ -48,14 +45,12 @@ export default function DashboardPage() {
     { id: "runs", label: "Runs", icon: Play },
   ]
 
-  // ---- Convex queries (reactive — auto-update) ----
   const catalog = useQuery(api.catalog.getCatalog)
   const getDynamicGpus = useAction(api.catalog.getDynamicGpus)
   const currentUser = useQuery(api.auth.getCurrentUser)
   const envResult = useQuery(api.environments.list)
   const runResult = useQuery(api.runs.list)
 
-  // Local state for fetched dynamic GPUs
   const [dynamicGpus, setDynamicGpus] = useState<GPUInfo[]>([])
   const [loadingGpus, setLoadingGpus] = useState(true)
 
@@ -71,7 +66,7 @@ export default function DashboardPage() {
         setLoadingGpus(false)
       }
     }
-    // Only attempt to fetch if user is properly authenticated
+
     if (isAuthenticated) {
       fetchGpus()
     }
@@ -80,34 +75,28 @@ export default function DashboardPage() {
   const environments = envResult?.environments ?? []
   const runs = runResult?.runs ?? []
 
-  // ---- Convex mutations ----
   const createEnvMutation = useMutation(api.environments.create)
   const removeEnvMutation = useMutation(api.environments.remove)
   const createRunMutation = useMutation(api.runs.create)
   const removeRunMutation = useMutation(api.runs.remove)
 
-  // ---- derived state ----
   const frameworkVersions = useMemo(() => {
     if (!catalog) return []
     return Object.keys(catalog.images[framework] || {})
   }, [catalog, framework])
 
-  // Derive final values (or use explicitly set ones)
-  const currentGpusList = dynamicGpus;
+  const currentGpusList = dynamicGpus
   const envGPUType = explicitEnvGPUType || (currentGpusList.length ? currentGpusList[0].id : "")
-  
+
   const selectedGPU = useMemo(() => {
     return currentGpusList.find((g) => g.id === envGPUType) ?? null
   }, [currentGpusList, envGPUType])
 
   const maxGPUs = selectedGPU?.maxGpuCount || 8
-
-  // Constrain GPU count directly instead of via useEffect synchronization
   const rawGPUCount = explicitEnvGPUCount || "1"
   const envGPUCountValidation = Number.parseInt(rawGPUCount, 10)
   const envGPUCount = envGPUCountValidation > maxGPUs ? String(maxGPUs) : rawGPUCount
 
-  // Pick first version safely
   const frameworkVersion = explicitFrameworkVersion || (frameworkVersions.length ? frameworkVersions[0] : "")
 
   const dataRows = useMemo(() => {
@@ -127,9 +116,6 @@ export default function DashboardPage() {
 
   const userEmail = currentUser?.email ?? ""
 
-  // ---- Server handles redirect via layout.tsx ----
-
-  // ---- action helpers ----
   async function withBusy(task: () => Promise<void>) {
     setBusy(true)
     setError("")
@@ -242,7 +228,6 @@ export default function DashboardPage() {
           {error ? <p className="mb-6 rounded-md border border-destructive/60 bg-destructive/10 px-4 py-3 text-sm text-destructive">{error}</p> : null}
           {message ? <p className="mb-6 rounded-md border border-primary/50 bg-primary/10 px-4 py-3 text-sm text-primary">{message}</p> : null}
 
-          {/* ───── Data ───── */}
           {activeSection === "data" ? (
             <section>
               <SectionHeading variant="medium" className="mb-2">Data</SectionHeading>
@@ -275,7 +260,6 @@ export default function DashboardPage() {
             </section>
           ) : null}
 
-          {/* ───── Environments ───── */}
           {activeSection === "environments" ? (
             <section className="space-y-8">
               <div>
@@ -284,30 +268,21 @@ export default function DashboardPage() {
               </div>
 
               <Card className="p-6">
-                <form onSubmit={createEnvironment} className="space-y-5">
+                <form onSubmit={createEnvironment} className="space-y-6">
                   <div className="space-y-2">
                     <Label htmlFor="env-name">Name</Label>
                     <Input id="env-name" value={envName} onChange={(event) => setEnvName(event.target.value)} required />
                   </div>
 
-                  <div className="grid gap-3 md:grid-cols-2">
-                    <div className="space-y-2">
-                      <Label htmlFor="gpu-type">GPU</Label>
-                      <Select
-                        id="gpu-type"
-                        value={envGPUType}
-                        onChange={(event) => setExplicitEnvGPUType(event.target.value)}
-                        disabled={loadingGpus || currentGpusList.length === 0}
-                      >
-                        {currentGpusList.length === 0 ? (
-                          <option value="">{loadingGpus ? "Loading GPUs..." : "No GPUs available"}</option>
-                        ) : (
-                          currentGpusList.map((gpu) => (
-                            <option key={gpu.id} value={gpu.id}>{gpu.displayName} ({gpu.id})</option>
-                          ))
-                        )}
-                      </Select>
-                    </div>
+                  <MachineSelector
+                    machines={currentGpusList}
+                    value={envGPUType}
+                    loading={loadingGpus}
+                    onChange={setExplicitEnvGPUType}
+                    disabled={currentGpusList.length === 0 && !loadingGpus}
+                  />
+
+                  <div className="grid gap-3 xl:grid-cols-4 md:grid-cols-2">
                     <div className="space-y-2">
                       <Label htmlFor="framework">Framework</Label>
                       <Select
@@ -320,25 +295,6 @@ export default function DashboardPage() {
                         ))}
                       </Select>
                     </div>
-                  </div>
-
-                  <div className="grid gap-3 md:grid-cols-3">
-                    <div className="space-y-2">
-                      <Label htmlFor="gpu-count">GPU Count</Label>
-                      <Input
-                        id="gpu-count"
-                        type="number"
-                        min={1}
-                        max={maxGPUs}
-                        value={envGPUCount}
-                        onChange={(event) => setExplicitEnvGPUCount(event.target.value)}
-                      />
-                      {selectedGPU ? <p className="text-xs text-muted-foreground">Max for this GPU: {selectedGPU.maxGpuCount}</p> : null}
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="volume">Volume (GB)</Label>
-                      <Input id="volume" type="number" min={1} value={envVolume} onChange={(event) => setEnvVolume(event.target.value)} />
-                    </div>
                     <div className="space-y-2">
                       <Label htmlFor="version">Version</Label>
                       <Select
@@ -350,6 +306,22 @@ export default function DashboardPage() {
                           <option key={version} value={version}>{version}</option>
                         ))}
                       </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="gpu-count">GPU Count</Label>
+                      <Input
+                        id="gpu-count"
+                        type="number"
+                        min={1}
+                        max={maxGPUs}
+                        value={envGPUCount}
+                        onChange={(event) => setExplicitEnvGPUCount(event.target.value)}
+                      />
+                      {selectedGPU ? <p className="text-xs text-muted-foreground">Max for this machine: {selectedGPU.maxGpuCount}</p> : null}
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="volume">Volume (GB)</Label>
+                      <Input id="volume" type="number" min={1} value={envVolume} onChange={(event) => setEnvVolume(event.target.value)} />
                     </div>
                   </div>
 
@@ -396,7 +368,6 @@ export default function DashboardPage() {
             </section>
           ) : null}
 
-          {/* ───── Runs ───── */}
           {activeSection === "runs" ? (
             <section>
               <SectionHeading variant="medium" className="mb-2">Runs</SectionHeading>
@@ -434,6 +405,7 @@ export default function DashboardPage() {
                               disabled={busy || !["queued", "provisioning", "running", "cancelling"].includes(run.status)}
                               onClick={() => cancelRun(run.run_id)}
                             >
+                              <Trash2 className="h-3.5 w-3.5" />
                               Cancel
                             </Button>
                           </td>
@@ -446,7 +418,6 @@ export default function DashboardPage() {
             </section>
           ) : null}
 
-          {/* ───── Settings ───── */}
           {activeSection === "settings" ? (
             <section>
               <SectionHeading variant="medium" className="mb-2">Settings</SectionHeading>
