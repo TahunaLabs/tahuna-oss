@@ -25,6 +25,18 @@ export default defineSchema({
     version: v.string(),
   }).index("by_user", ["userId"]),
 
+  dataBlobs: defineTable({
+    userId: v.string(),
+    blobId: v.string(),
+    key: v.string(),
+    path: v.string(),
+    filename: v.string(),
+    contentType: v.optional(v.string()),
+    size: v.optional(v.number()),
+  })
+    .index("by_user", ["userId"])
+    .index("by_key", ["key"]),
+
   runs: defineTable({
     userId: v.string(),
     environmentId: v.id("environments"),

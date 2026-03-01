@@ -1,7 +1,6 @@
 import { v } from "convex/values";
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { images } from "./catalog";
-import { shortId } from "./ids";
 
 // ---------- helpers ----------
 
@@ -11,6 +10,10 @@ async function requireUser(ctx: any) {
   const user = await authComponent.getAuthUser(ctx);
   if (!user) throw new Error("Not authenticated");
   return user;
+}
+
+function environmentPath(userId: string, environmentId: string) {
+  return `${userId}/environment/${environmentId}`;
 }
 
 // ---------- public (auth via ctx.auth) ----------
@@ -30,7 +33,7 @@ export const list = query({
         .map((row) => ({
           environment_id: String(row._id),
           name: row.name,
-          artifacts: row.artifacts,
+          artifacts: environmentPath(row.userId, String(row._id)),
           gpu_type: row.gpuType,
           gpu_count: row.gpuCount,
           volume_gb: row.volumeGb,
@@ -52,7 +55,7 @@ export const get = query({
     return {
       environment_id: String(row._id),
       name: row.name,
-      artifacts: row.artifacts,
+      artifacts: environmentPath(row.userId, String(row._id)),
       gpu_type: row.gpuType,
       gpu_count: row.gpuCount,
       volume_gb: row.volumeGb,
@@ -89,12 +92,16 @@ export const create = mutation({
     const envId = await ctx.db.insert("environments", {
       userId: String(user._id),
       name: args.name,
-      artifacts: `environments/${shortId()}/artifacts`,
+      artifacts: "",
       gpuType: args.gpu_type,
       gpuCount: args.gpu_count,
       volumeGb: args.volume_gb,
       framework: args.framework,
       version: args.version,
+    });
+
+    await ctx.db.patch(envId, {
+      artifacts: environmentPath(String(user._id), String(envId)),
     });
 
     const env = await ctx.db.get(envId);
@@ -105,7 +112,7 @@ export const create = mutation({
     return {
       environment_id: String(env._id),
       name: env.name,
-      artifacts: env.artifacts,
+      artifacts: environmentPath(env.userId, String(env._id)),
       gpu_type: env.gpuType,
       gpu_count: env.gpuCount,
       volume_gb: env.volumeGb,
@@ -154,7 +161,7 @@ export const internalList = internalQuery({
         .map((row) => ({
           environment_id: String(row._id),
           name: row.name,
-          artifacts: row.artifacts,
+          artifacts: environmentPath(row.userId, String(row._id)),
           gpu_type: row.gpuType,
           gpu_count: row.gpuCount,
           volume_gb: row.volumeGb,
@@ -175,7 +182,7 @@ export const internalGet = internalQuery({
     return {
       environment_id: String(row._id),
       name: row.name,
-      artifacts: row.artifacts,
+      artifacts: environmentPath(row.userId, String(row._id)),
       gpu_type: row.gpuType,
       gpu_count: row.gpuCount,
       volume_gb: row.volumeGb,
@@ -211,12 +218,16 @@ export const internalCreate = internalMutation({
     const envId = await ctx.db.insert("environments", {
       userId: args.userId,
       name: args.name,
-      artifacts: `environments/${shortId()}/artifacts`,
+      artifacts: "",
       gpuType: args.gpu_type,
       gpuCount: args.gpu_count,
       volumeGb: args.volume_gb,
       framework: args.framework,
       version: args.version,
+    });
+
+    await ctx.db.patch(envId, {
+      artifacts: environmentPath(args.userId, String(envId)),
     });
 
     const env = await ctx.db.get(envId);
@@ -227,7 +238,7 @@ export const internalCreate = internalMutation({
     return {
       environment_id: String(env._id),
       name: env.name,
-      artifacts: env.artifacts,
+      artifacts: environmentPath(env.userId, String(env._id)),
       gpu_type: env.gpuType,
       gpu_count: env.gpuCount,
       volume_gb: env.volumeGb,

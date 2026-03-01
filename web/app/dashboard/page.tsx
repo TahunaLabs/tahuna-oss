@@ -12,7 +12,7 @@ import { PageLoader } from "@/components/ui/spinner"
 import { api } from "@/convex/_generated/api"
 import { authClient } from "@/lib/auth-client"
 import { useAction, useConvexAuth, useMutation, useQuery } from "convex/react"
-import { Database, Key, LogOut, Play, Server, Settings, Trash2 } from "lucide-react"
+import { Database, Download, Key, LogOut, Play, Server, Settings, Trash2 } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useEffect, useMemo, useState, type FormEvent } from "react"
@@ -21,6 +21,25 @@ type MainSection = "data" | "environments" | "runs"
 type UtilitySection = "settings"
 
 type GPUInfo = { id: string; displayName: string; memoryInGb: number; maxGpuCount: number; pricePerHour?: number | null }
+type DataBlob = {
+  data_blob_id: string
+  blob_id: string
+  key: string
+  path: string
+  filename: string
+  content_type: string
+  size: number
+  download_url: string
+  created_at: number
+}
+
+function formatBytes(size: number) {
+  if (size <= 0) return "0 B"
+  const units = ["B", "KB", "MB", "GB", "TB"]
+  const unitIndex = Math.min(Math.floor(Math.log(size) / Math.log(1024)), units.length - 1)
+  const value = size / 1024 ** unitIndex
+  return `${value >= 10 || unitIndex === 0 ? value.toFixed(0) : value.toFixed(1)} ${units[unitIndex]}`
+}
 
 export default function DashboardPage() {
   const router = useRouter()
@@ -35,6 +54,9 @@ export default function DashboardPage() {
   const [explicitEnvGPUType, setExplicitEnvGPUType] = useState("")
   const [explicitEnvGPUCount, setExplicitEnvGPUCount] = useState("")
   const [selectedImageKey, setSelectedImageKey] = useState("")
+  const [selectedDataFile, setSelectedDataFile] = useState<File | null>(null)
+  const [uploadingData, setUploadingData] = useState(false)
+  const [dataFileInputKey, setDataFileInputKey] = useState(0)
 
   const primaryNav: { id: MainSection; label: string; icon: typeof Database }[] = [
     { id: "data", label: "Data", icon: Database },
@@ -45,6 +67,7 @@ export default function DashboardPage() {
   const catalog = useQuery(api.catalog.getCatalog)
   const getDynamicGpus = useAction(api.catalog.getDynamicGpus)
   const currentUser = useQuery(api.auth.getCurrentUser)
+  const dataResult = useQuery(api.data.list)
   const envResult = useQuery(api.environments.list)
   const runResult = useQuery(api.runs.list)
 
@@ -73,6 +96,9 @@ export default function DashboardPage() {
   const runs = runResult?.runs ?? []
 
   const createEnvMutation = useMutation(api.environments.create)
+  const completeDataUploadMutation = useMutation(api.data.completeUpload)
+  const generateDataUploadUrlMutation = useMutation(api.data.generateUploadUrl)
+  const removeDataBlobMutation = useMutation(api.data.remove)
   const removeEnvMutation = useMutation(api.environments.remove)
   const createRunMutation = useMutation(api.runs.create)
   const removeRunMutation = useMutation(api.runs.remove)
@@ -112,22 +138,8 @@ export default function DashboardPage() {
     return `${machineLabel} · ${frameworkLabel}`
   }, [imageSelection, selectedGPU])
 
-  const dataRows = useMemo(() => {
-    return [
-      ...environments.map((env) => ({
-        kind: "Environment artifacts",
-        owner: env.environment_id,
-        path: env.artifacts,
-      })),
-      ...runs.flatMap((run) => [
-        { kind: "Run input", owner: run.run_id, path: run.input },
-        { kind: "Run output", owner: run.run_id, path: run.output },
-        { kind: "Run logs", owner: run.run_id, path: run.logs },
-      ]),
-    ]
-  }, [environments, runs])
-
   const userEmail = currentUser?.email ?? ""
+  const dataBlobs: DataBlob[] = dataResult?.blobs ?? []
 
   async function withBusy(task: () => Promise<void>) {
     setBusy(true)
@@ -154,6 +166,55 @@ export default function DashboardPage() {
         version: imageSelection?.version ?? "",
       })
       setMessage("Environment created.")
+    })
+  }
+
+  async function uploadData(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!selectedDataFile) return
+
+    const file = selectedDataFile
+    setUploadingData(true)
+    setError("")
+    setMessage("")
+
+    try {
+      const upload = await generateDataUploadUrlMutation({
+        filename: file.name,
+      })
+
+      const response = await fetch(upload.upload_url, {
+        method: "PUT",
+        headers: file.type ? { "Content-Type": file.type } : undefined,
+        body: file,
+      })
+
+      if (!response.ok) {
+        throw new Error(`upload failed with status ${response.status}`)
+      }
+
+      await completeDataUploadMutation({
+        blobId: upload.blob_id,
+        key: upload.key,
+        filename: file.name,
+        contentType: file.type || undefined,
+        size: file.size,
+      })
+
+      setSelectedDataFile(null)
+      setDataFileInputKey((current) => current + 1)
+      setMessage(`Uploaded ${file.name} to ${upload.path}.`)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "unexpected error")
+    } finally {
+      setUploadingData(false)
+    }
+  }
+
+  async function deleteDataBlob(dataBlobId: string, filename: string) {
+    await withBusy(async () => {
+      await removeDataBlobMutation({ dataBlobId: dataBlobId as any })
+      setMessage(`Deleted ${filename}.`)
     })
   }
 
@@ -242,28 +303,108 @@ export default function DashboardPage() {
           {message ? <p className="mb-6 rounded-md border border-primary/50 bg-primary/10 px-4 py-3 text-sm text-primary">{message}</p> : null}
 
           {activeSection === "data" ? (
-            <section>
-              <SectionHeading variant="medium" className="mb-2">Data</SectionHeading>
-              <p className="text-base text-muted-foreground mb-10">Backend-backed storage references for environments and runs.</p>
+            <section className="space-y-8">
+              <div>
+                <SectionHeading variant="medium" className="mb-2">Data</SectionHeading>
+                <p className="text-base text-muted-foreground">Ingest files into your shared R2 bucket with deterministic user-scoped paths.</p>
+              </div>
 
-              {dataRows.length === 0 ? (
-                <p className="text-sm text-muted-foreground py-12 text-center">No data assets yet. Create an environment or run first.</p>
+              <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+                <Card className="p-6">
+                  <h3 className="text-lg font-semibold text-foreground">Ingest data to R2</h3>
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    Uploaded files are stored at <span className="font-mono text-xs text-foreground/80">[user_id]/data/[blob_id]</span>.
+                  </p>
+
+                  <form onSubmit={uploadData} className="mt-5 space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="data-file">File</Label>
+                      <Input
+                        key={dataFileInputKey}
+                        id="data-file"
+                        type="file"
+                        disabled={uploadingData}
+                        onChange={(event) => setSelectedDataFile(event.target.files?.[0] ?? null)}
+                      />
+                    </div>
+
+                    {selectedDataFile ? (
+                      <div className="rounded-xl border border-border/70 bg-background/45 px-4 py-3">
+                        <p className="text-sm font-medium text-foreground">{selectedDataFile.name}</p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {formatBytes(selectedDataFile.size)}{selectedDataFile.type ? ` | ${selectedDataFile.type}` : ""}
+                        </p>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">Choose a file to push through Convex-managed R2 uploads.</p>
+                    )}
+
+                    <Button type="submit" disabled={!selectedDataFile || uploadingData}>
+                      {uploadingData ? "Uploading..." : "Ingest data"}
+                    </Button>
+                  </form>
+                </Card>
+
+                <Card className="p-6">
+                  <h3 className="text-lg font-semibold text-foreground">Environment mounts</h3>
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    Each environment resolves to <span className="font-mono text-xs text-foreground/80">[user_id]/environment/[environment_id]</span>.
+                  </p>
+
+                  {environments.length === 0 ? (
+                    <p className="mt-5 text-sm text-muted-foreground">Create an environment to reserve its storage path.</p>
+                  ) : (
+                    <div className="mt-5 space-y-3">
+                      {environments.map((env) => (
+                        <div key={env.environment_id} className="rounded-xl border border-border/70 bg-background/45 px-4 py-3">
+                          <p className="text-sm font-medium text-foreground">{env.name}</p>
+                          <p className="mt-1 font-mono text-xs text-muted-foreground">{env.artifacts}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </Card>
+              </div>
+
+              {dataBlobs.length === 0 ? (
+                <Card className="p-6">
+                  <p className="text-sm text-muted-foreground">No ingested files yet.</p>
+                </Card>
               ) : (
                 <Card className="overflow-hidden">
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b border-border text-left">
-                        <th className="px-4 py-3 text-sm font-medium text-muted-foreground">Type</th>
-                        <th className="px-4 py-3 text-sm font-medium text-muted-foreground">Owner</th>
+                        <th className="px-4 py-3 text-sm font-medium text-muted-foreground">File</th>
                         <th className="px-4 py-3 text-sm font-medium text-muted-foreground">Path</th>
+                        <th className="px-4 py-3 text-sm font-medium text-muted-foreground">Size</th>
+                        <th className="px-4 py-3 text-sm font-medium text-muted-foreground">Uploaded</th>
+                        <th className="px-4 py-3 text-sm font-medium text-muted-foreground">Actions</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {dataRows.map((row) => (
-                        <tr key={`${row.kind}-${row.owner}-${row.path}`} className="border-b last:border-b-0 border-border/40">
-                          <td className="px-4 py-3 text-sm">{row.kind}</td>
-                          <td className="px-4 py-3 font-mono text-xs">{row.owner}</td>
-                          <td className="px-4 py-3 font-mono text-xs">{row.path}</td>
+                      {dataBlobs.map((blob) => (
+                        <tr key={blob.data_blob_id} className="border-b last:border-b-0 border-border/40 align-top">
+                          <td className="px-4 py-3">
+                            <p className="text-sm text-foreground">{blob.filename}</p>
+                            {blob.content_type ? <p className="mt-1 text-xs text-muted-foreground">{blob.content_type}</p> : null}
+                          </td>
+                          <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{blob.path}</td>
+                          <td className="px-4 py-3 text-sm text-muted-foreground">{formatBytes(blob.size)}</td>
+                          <td className="px-4 py-3 text-sm text-muted-foreground">{new Date(blob.created_at).toLocaleString()}</td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-2">
+                              <Button variant="outline" size="sm" asChild>
+                                <a href={blob.download_url} target="_blank" rel="noreferrer">
+                                  <Download className="h-3.5 w-3.5" />
+                                  Open
+                                </a>
+                              </Button>
+                              <Button variant="outline" size="sm" onClick={() => deleteDataBlob(blob.data_blob_id, blob.filename)} disabled={busy}>
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                          </td>
                         </tr>
                       ))}
                     </tbody>
