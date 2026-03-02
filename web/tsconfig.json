@@ -23,10 +23,14 @@
       }
     ],
     "paths": {
+      "@convex/*": [
+        "./convex/*"
+      ],
       "@/*": [
         "./*"
       ]
-    }
+    },
+    "baseUrl": "."
   },
   "include": [
     "next-env.d.ts",

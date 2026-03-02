@@ -1,7 +1,7 @@
 import { Section, SectionContainer } from "@/components/section"
 import { SectionHeading } from "@/components/section-heading"
 import { Card, CardContent, CardDots, CardHeader, CardTitle } from "@/components/ui/card"
-import { WaitlistForm } from "./waitlist-form"
+import { WaitlistForm } from "@/components/waitlist-form"
 
 export function Waitlist() {
   return (

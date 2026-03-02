@@ -3,13 +3,13 @@ import { convex } from "@convex-dev/better-auth/plugins";
 import { betterAuth } from "better-auth/minimal";
 import { emailOTP } from "better-auth/plugins";
 import { v } from "convex/values";
-import { components } from "./_generated/api";
-import { DataModel } from "./_generated/dataModel";
-import { mutation, query, type ActionCtx, type MutationCtx, type QueryCtx } from "./_generated/server";
-import authConfig from "./auth.config";
-import { sha256Hex } from "./crypto";
-import { shortId } from "./ids";
-import { sendOtpEmail } from "./resend";
+import { components } from "@convex/_generated/api";
+import type { DataModel } from "@convex/_generated/dataModel";
+import { mutation, query, type ActionCtx, type MutationCtx, type QueryCtx } from "@convex/_generated/server";
+import authConfig from "@convex/auth.config";
+import { sha256Hex } from "@convex/crypto";
+import { shortId } from "@convex/ids";
+import { sendOtpEmail } from "@convex/resend";
 
 const siteUrl = process.env.SITE_URL || process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
 
@@ -26,7 +26,7 @@ export const createAuth = (ctx: GenericCtx<DataModel>) => {
     plugins: [
       emailOTP({
         async sendVerificationOTP({ email, otp }) {
-          await sendOtpEmail(ctx, { email, otp });
+          await sendOtpEmail(ctx as MutationCtx, { email, otp });
         },
       }),
       convex({ authConfig }),

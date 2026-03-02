@@ -1,8 +1,8 @@
 import { v } from "convex/values";
-import type { Doc, Id } from "./_generated/dataModel";
-import { internalMutation, internalQuery, mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
-import { requireUser } from "./auth";
-import { images } from "./catalog";
+import type { Doc, Id } from "@convex/_generated/dataModel";
+import { internalMutation, internalQuery, mutation, query, type MutationCtx, type QueryCtx } from "@convex/_generated/server";
+import { requireUser } from "@convex/auth";
+import { images } from "@convex/catalog";
 
 function environmentPath(userId: string, environmentId: string) {
   return `${userId}/environment/${environmentId}`;

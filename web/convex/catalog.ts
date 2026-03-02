@@ -1,4 +1,4 @@
-import { action, query } from "./_generated/server";
+import { action, query } from "@convex/_generated/server";
 
 export const images: Record<string, Record<string, string>> = {
   pt: {
@@ -12,6 +12,31 @@ export const getCatalog = query({
   args: {},
   handler: async () => ({ images }),
 });
+
+type RunpodCloudPricing = {
+  lowestPrice?: number | string | null;
+  price?: number | string | null;
+  pricePerGpu?: number | string | null;
+  pricePerHr?: number | string | null;
+  pricePerHour?: number | string | null;
+  spotPrice?: number | string | null;
+};
+
+type RunpodGpuType = {
+  id: string;
+  displayName: string;
+  memoryInGb: number;
+  maxGpuCount?: number | null;
+  secureCloud?: RunpodCloudPricing | null;
+  communityCloud?: RunpodCloudPricing | null;
+};
+
+type RunpodGraphqlResponse = {
+  data?: {
+    gpuTypes?: RunpodGpuType[];
+  };
+  errors?: unknown;
+};
 
 export const getDynamicGpus = action({
   args: {},
@@ -42,13 +67,13 @@ export const getDynamicGpus = action({
          return [];
       }
 
-      const json = await res.json();
+      const json = (await res.json()) as RunpodGraphqlResponse;
       if (json.errors) {
         console.warn("GraphQL errors from RunPod API:", json.errors);
         return [];
       }
 
-      const extractHourlyPrice = (cloud: any): number | null => {
+      const extractHourlyPrice = (cloud: RunpodCloudPricing | null | undefined): number | null => {
         if (!cloud || typeof cloud !== "object") return null;
         const candidates = [
           cloud.lowestPrice,
@@ -71,9 +96,10 @@ export const getDynamicGpus = action({
       };
 
       // Filter to only include GPUs that actually have stock and aren't 'unknown'
-      const remoteGpus = json.data.gpuTypes
-        .filter((g: any) => g.id !== "unknown" && (g.secureCloud || g.communityCloud))
-        .map((g: any) => ({
+      const gpuTypes = json.data?.gpuTypes ?? [];
+      const remoteGpus = gpuTypes
+        .filter((g) => g.id !== "unknown" && (g.secureCloud || g.communityCloud))
+        .map((g) => ({
           id: g.id,
           displayName: g.displayName,
           memoryInGb: g.memoryInGb,
@@ -82,7 +108,7 @@ export const getDynamicGpus = action({
         }));
 
       // Sort by memory size descending, then alphabetically by name to present nice options
-      remoteGpus.sort((a: any, b: any) => {
+      remoteGpus.sort((a, b) => {
         if (b.memoryInGb !== a.memoryInGb) {
           return b.memoryInGb - a.memoryInGb;
         }

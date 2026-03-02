@@ -1,5 +1,5 @@
 import { httpRouter } from "convex/server";
-import { authComponent, createAuth } from "./auth";
+import { authComponent, createAuth } from "@convex/auth";
 import {
     createEnvironment,
     createRun,
@@ -11,7 +11,7 @@ import {
     optionsHandler,
     removeEnvironment,
     removeRun,
-} from "./cli";
+} from "@convex/cli";
 
 const http = httpRouter();
 

@@ -1,9 +1,9 @@
 import { Workpool } from "@convex-dev/workpool";
 import { v } from "convex/values";
-import { components, internal } from "./_generated/api";
-import type { Doc, Id } from "./_generated/dataModel";
-import { internalAction, internalMutation, internalQuery, mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
-import { requireUser } from "./auth";
+import { components, internal } from "@convex/_generated/api";
+import type { Doc, Id } from "@convex/_generated/dataModel";
+import { internalAction, internalMutation, internalQuery, mutation, query, type MutationCtx, type QueryCtx } from "@convex/_generated/server";
+import { requireUser } from "@convex/auth";
 
 const ACTIVE_STATUSES = new Set(["queued", "provisioning", "running", "cancelling"]);
 const TERMINAL_STATUSES = new Set(["completed", "failed", "cancelled"]);

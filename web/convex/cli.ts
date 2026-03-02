@@ -1,5 +1,5 @@
-import { api, internal } from "./_generated/api";
-import { ActionCtx, httpAction } from "./_generated/server";
+import { api, internal } from "@convex/_generated/api";
+import { ActionCtx, httpAction } from "@convex/_generated/server";
 
 // Helper to authenticate CLI requests via the API keys
 async function authenticateApiRequest(ctx: ActionCtx, request: Request): Promise<string | null> {
