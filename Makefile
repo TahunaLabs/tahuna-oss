@@ -1,27 +1,22 @@
-.PHONY: install run install-web install-cli run-web run-web-app run-convex run-cli web cli build test fmt dev tree
+.DEFAULT_GOAL := help
 
-install: install-web install-cli
+.PHONY: help install-web run-web install-cli run-cli
 
-run:
-	@trap 'kill 0' INT TERM EXIT; \
-	$(MAKE) run-convex & \
-	$(MAKE) run-web-app & \
-	wait
+help:
+	@echo "Available targets:"
+	@echo "  install-web  Install web dependencies"
+	@echo "  run-web      Run Convex + Next.js dev server"
+	@echo "  install-cli  Install CLI dependencies"
+	@echo "  run-cli      Run the CLI"
 
 install-web:
 	cd web && bun install
 
 run-web:
 	@trap 'kill 0' INT TERM EXIT; \
-	$(MAKE) run-convex & \
-	$(MAKE) run-web-app & \
+	cd web && bun run convex:dev & \
+	cd web && bun run dev & \
 	wait
-
-run-web-app:
-	cd web && bun run dev
-
-run-convex:
-	cd web && bun run convex:dev
 
 install-cli:
 	cd cli && go mod download
@@ -31,26 +26,3 @@ run-cli:
 	if [ -f cli/.env.local ]; then . cli/.env.local; fi; \
 	set +a; \
 	cd cli && go run .
-
-web: run-web
-cli: run-cli
-
-build:
-	cd web && bun run build
-	cd cli && go build .
-
-test:
-	cd cli && go test ./...
-
-fmt:
-	cd cli && gofmt -w *.go
-
-dev: run-web
-
-tree:
-	@echo "monorepo/"
-	@echo "├── web (Next.js + Convex)"
-	@echo "├── cli (standalone Go CLI)"
-	@echo "├── libs"
-	@echo "├── proto"
-	@echo "└── infra"
