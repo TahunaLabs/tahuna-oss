@@ -2,8 +2,8 @@ import { R2, type R2Callbacks } from "@convex-dev/r2";
 import { v } from "convex/values";
 import { components } from "./_generated/api";
 import type { DataModel } from "./_generated/dataModel";
-import { mutation, query } from "./_generated/server";
-import { requireUser } from "./auth-helpers";
+import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
+import { requireUser } from "./auth";
 import { shortId } from "./ids";
 
 const r2 = new R2(components.r2);

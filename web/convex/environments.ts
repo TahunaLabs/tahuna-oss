@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internalMutation, internalQuery, mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
-import { requireUser } from "./auth-helpers";
+import { requireUser } from "./auth";
 import { images } from "./catalog";
 
 function environmentPath(userId: string, environmentId: string) {

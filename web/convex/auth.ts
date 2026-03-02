@@ -1,18 +1,19 @@
-import { type GenericCtx } from "@convex-dev/better-auth";
+import { createClient, type GenericCtx } from "@convex-dev/better-auth";
 import { convex } from "@convex-dev/better-auth/plugins";
 import { betterAuth } from "better-auth/minimal";
 import { emailOTP } from "better-auth/plugins";
 import { v } from "convex/values";
+import { components } from "./_generated/api";
 import { DataModel } from "./_generated/dataModel";
-import { mutation, query } from "./_generated/server";
+import { mutation, query, type ActionCtx, type MutationCtx, type QueryCtx } from "./_generated/server";
 import authConfig from "./auth.config";
-import { authComponent } from "./auth-component";
-import { requireUser } from "./auth-helpers";
 import { sha256Hex } from "./crypto";
 import { shortId } from "./ids";
 import { sendOtpEmail } from "./resend";
 
 const siteUrl = process.env.SITE_URL || process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
+
+export const authComponent = createClient<DataModel>(components.betterAuth);
 
 export const createAuth = (ctx: GenericCtx<DataModel>) => {
   return betterAuth({
@@ -39,6 +40,12 @@ export const getCurrentUser = query({
     return authComponent.getAuthUser(ctx);
   },
 });
+
+export async function requireUser(ctx: GenericCtx<DataModel> | QueryCtx | MutationCtx | ActionCtx) {
+  const user = await authComponent.getAuthUser(ctx);
+  if (!user) throw new Error("Not authenticated");
+  return user;
+}
 
 export const createApiKey = mutation({
   args: {
