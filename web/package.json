@@ -8,7 +8,7 @@
     "convex:codegen": "convex codegen",
     "convex:deploy": "convex deploy",
     "convex:dev": "convex dev",
-    "dev": "bun --bun next dev",
+    "dev": "next dev",
     "lint": "eslint .",
     "start": "next start"
   },

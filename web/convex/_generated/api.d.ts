@@ -12,6 +12,7 @@ import type * as auth from "../auth.js";
 import type * as catalog from "../catalog.js";
 import type * as cli from "../cli.js";
 import type * as crypto from "../crypto.js";
+import type * as data from "../data.js";
 import type * as environments from "../environments.js";
 import type * as http from "../http.js";
 import type * as ids from "../ids.js";
@@ -28,6 +29,7 @@ declare const fullApi: ApiFromModules<{
   catalog: typeof catalog;
   cli: typeof cli;
   crypto: typeof crypto;
+  data: typeof data;
   environments: typeof environments;
   http: typeof http;
   ids: typeof ids;
@@ -2036,6 +2038,130 @@ export declare const components: {
     adapterTest: {
       runCustomTests: FunctionReference<"action", "internal", any, any>;
       runTests: FunctionReference<"action", "internal", any, any>;
+    };
+  };
+  r2: {
+    lib: {
+      deleteMetadata: FunctionReference<
+        "mutation",
+        "internal",
+        { bucket: string; key: string },
+        null
+      >;
+      deleteObject: FunctionReference<
+        "mutation",
+        "internal",
+        {
+          accessKeyId: string;
+          bucket: string;
+          endpoint: string;
+          key: string;
+          secretAccessKey: string;
+        },
+        null
+      >;
+      deleteR2Object: FunctionReference<
+        "action",
+        "internal",
+        {
+          accessKeyId: string;
+          bucket: string;
+          endpoint: string;
+          key: string;
+          secretAccessKey: string;
+        },
+        null
+      >;
+      getMetadata: FunctionReference<
+        "query",
+        "internal",
+        {
+          accessKeyId: string;
+          bucket: string;
+          endpoint: string;
+          key: string;
+          secretAccessKey: string;
+        },
+        {
+          bucket: string;
+          bucketLink: string;
+          contentType?: string;
+          key: string;
+          lastModified: string;
+          link: string;
+          sha256?: string;
+          size?: number;
+          url: string;
+        } | null
+      >;
+      listMetadata: FunctionReference<
+        "query",
+        "internal",
+        {
+          accessKeyId: string;
+          bucket: string;
+          cursor?: string;
+          endpoint: string;
+          limit?: number;
+          secretAccessKey: string;
+        },
+        {
+          continueCursor: string;
+          isDone: boolean;
+          page: Array<{
+            bucket: string;
+            bucketLink: string;
+            contentType?: string;
+            key: string;
+            lastModified: string;
+            link: string;
+            sha256?: string;
+            size?: number;
+            url: string;
+          }>;
+          pageStatus?: null | "SplitRecommended" | "SplitRequired";
+          splitCursor?: null | string;
+        }
+      >;
+      store: FunctionReference<
+        "action",
+        "internal",
+        {
+          accessKeyId: string;
+          bucket: string;
+          endpoint: string;
+          secretAccessKey: string;
+          url: string;
+        },
+        any
+      >;
+      syncMetadata: FunctionReference<
+        "action",
+        "internal",
+        {
+          accessKeyId: string;
+          bucket: string;
+          endpoint: string;
+          key: string;
+          onComplete?: string;
+          secretAccessKey: string;
+        },
+        null
+      >;
+      upsertMetadata: FunctionReference<
+        "mutation",
+        "internal",
+        {
+          bucket: string;
+          contentType?: string;
+          key: string;
+          lastModified: string;
+          link: string;
+          sha256?: string;
+          size?: number;
+        },
+        { isNew: boolean }
+      >;
     };
   };
   workpool: {
