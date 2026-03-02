@@ -25,4 +25,5 @@ Copy `.env.example` to `.env.local` and set:
 
 - Dashboard and CLI routes are served by Next route handlers.
 - Convex functions live under `web/convex`.
+- OTP emails are sent through the Convex Resend component.
 - Legacy Go backend/worker/provisioner has been removed.

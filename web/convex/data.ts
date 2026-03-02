@@ -3,16 +3,10 @@ import { v } from "convex/values";
 import { components } from "./_generated/api";
 import type { DataModel } from "./_generated/dataModel";
 import { mutation, query } from "./_generated/server";
-import { authComponent } from "./auth";
+import { requireUser } from "./auth-helpers";
 import { shortId } from "./ids";
 
 const r2 = new R2(components.r2);
-
-async function requireUser(ctx: any) {
-  const user = await authComponent.getAuthUser(ctx);
-  if (!user) throw new Error("Not authenticated");
-  return user;
-}
 
 function buildDataPrefix(userId: string) {
   return `${userId}/data/`;
@@ -44,7 +38,7 @@ function parseKey(key: string) {
   };
 }
 
-const callbacks: R2Callbacks = {} as R2Callbacks;
+const callbacks: R2Callbacks = {};
 
 export const { syncMetadata } = r2.clientApi<DataModel>({
   callbacks,
