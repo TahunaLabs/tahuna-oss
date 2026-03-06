@@ -115,9 +115,8 @@ function formatBytes(size: number) {
 
 function BottomHalfEmptyMessage({ children }: { children: ReactNode }) {
   return (
-    <div className="grid flex-1 grid-rows-2">
-      <div />
-      <p className="self-center justify-self-center px-5 text-sm text-muted-foreground">{children}</p>
+    <div className="flex h-full items-center justify-center">
+      <p className="px-5 text-center text-sm text-muted-foreground">{children}</p>
     </div>
   )
 }
@@ -472,8 +471,8 @@ export default function DashboardPage() {
 
           <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col pb-6">
             {activeSection === "data" ? (
-              <section className="flex h-full flex-col gap-3">
-                <Card variant="dashboard" className="p-4">
+              <section className="grid h-full min-h-0 grid-rows-[25%_75%] gap-3">
+                <Card variant="dashboard" className="h-full overflow-y-auto p-4">
                   <h3 className="text-sm font-semibold">Ingest data</h3>
                   <form onSubmit={uploadData} className="mt-3 space-y-2.5">
                     <div className="space-y-1.5">
@@ -512,7 +511,7 @@ export default function DashboardPage() {
                 {dataBlobs.length === 0 ? (
                   <BottomHalfEmptyMessage>No ingested files yet.</BottomHalfEmptyMessage>
                 ) : (
-                  <Card variant="dashboard" className="overflow-hidden">
+                  <Card variant="dashboard" className="h-full overflow-hidden">
                     <Table variant="dashboard">
                       <TableHeader variant="dashboard">
                         <TableRow variant="dashboard-head">
@@ -561,8 +560,8 @@ export default function DashboardPage() {
             ) : null}
 
             {activeSection === "environments" ? (
-              <section className="flex h-full flex-col gap-3">
-                <Card variant="dashboard" className="p-4">
+              <section className="grid h-full min-h-0 grid-rows-[40%_60%] gap-3">
+                <Card variant="dashboard" className="h-full overflow-y-auto p-4">
                   <form onSubmit={createEnvironment} className="space-y-3">
                     <div className="space-y-1.5">
                       <Label htmlFor="environment-name">Environment name</Label>
@@ -626,7 +625,7 @@ export default function DashboardPage() {
                 {environments.length === 0 ? (
                   <BottomHalfEmptyMessage>No environments yet.</BottomHalfEmptyMessage>
                 ) : (
-                  <Card variant="dashboard" className="overflow-hidden">
+                  <Card variant="dashboard" className="h-full overflow-hidden">
                     <Table variant="dashboard">
                       <TableHeader variant="dashboard">
                         <TableRow variant="dashboard-head">
@@ -679,13 +678,14 @@ export default function DashboardPage() {
             ) : null}
 
             {activeSection === "runs" ? (
-              <section className="flex h-full flex-col gap-3">
+              <section className="grid h-full min-h-0 grid-rows-[25%_75%] gap-3">
+                <div />
                 {environments.length === 0 ? (
                   <BottomHalfEmptyMessage>Create an environment first to launch runs.</BottomHalfEmptyMessage>
                 ) : runs.length === 0 ? (
                   <BottomHalfEmptyMessage>No runs yet. Go to Runs and start one.</BottomHalfEmptyMessage>
                 ) : (
-                  <Card variant="dashboard" className="overflow-hidden">
+                  <Card variant="dashboard" className="h-full overflow-hidden">
                     <Table variant="dashboard">
                       <TableHeader variant="dashboard">
                         <TableRow variant="dashboard-head">
