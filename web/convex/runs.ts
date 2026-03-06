@@ -1,5 +1,5 @@
 import { Workpool } from "@convex-dev/workpool";
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { components, internal } from "@convex/_generated/api";
 import type { Doc, Id } from "@convex/_generated/dataModel";
 import { internalAction, internalMutation, internalQuery, mutation, query, type MutationCtx, type QueryCtx } from "@convex/_generated/server";
@@ -7,6 +7,29 @@ import { requireUser } from "@convex/auth";
 
 const ACTIVE_STATUSES = new Set(["queued", "provisioning", "running", "cancelling"]);
 const TERMINAL_STATUSES = new Set(["completed", "failed", "cancelled"]);
+const runResponseValidator = v.object({
+  run_id: v.string(),
+  env_id: v.string(),
+  input: v.string(),
+  output: v.string(),
+  logs: v.string(),
+  status: v.string(),
+  error: v.string(),
+  pod_id: v.string(),
+  effective_gpu_type: v.string(),
+  effective_gpu_count: v.number(),
+  effective_volume_gb: v.number(),
+  cancellation_requested: v.boolean(),
+});
+const listRunsResponseValidator = v.object({
+  runs: v.array(runResponseValidator),
+});
+const runLogsResponseValidator = v.object({
+  run_id: v.string(),
+  logs_path: v.string(),
+  log_file: v.string(),
+  note: v.string(),
+});
 
 const provisionPool = new Workpool(components.workpool, {
   maxParallelism: 3,
@@ -42,9 +65,9 @@ async function listByUserId(ctx: QueryCtx, userId: string) {
 }
 
 async function getOwnedRun(ctx: QueryCtx | MutationCtx, userId: string, runId: Id<"runs">) {
-  const row = await ctx.db.get(runId);
+  const row = await ctx.db.get("runs", runId);
   if (!row || row.userId !== userId) {
-    throw new Error("run not found");
+    throw new ConvexError("run not found");
   }
   return row;
 }
@@ -54,9 +77,9 @@ async function getOwnedEnvironment(
   userId: string,
   environmentId: Id<"environments">,
 ) {
-  const env = await ctx.db.get(environmentId);
+  const env = await ctx.db.get("environments", environmentId);
   if (!env || env.userId !== userId) {
-    throw new Error("environment not found");
+    throw new ConvexError("environment not found");
   }
   return env;
 }
@@ -82,9 +105,9 @@ async function createRunForUserId(
     logs: `runs/${args.environmentId}/${now}/logs`,
     status: "queued",
     cancellationRequested: false,
-    effectiveGpuType: args.gpu_type || env.gpuType,
-    effectiveGpuCount: args.gpu_count || env.gpuCount,
-    effectiveVolumeGb: args.volume_gb || env.volumeGb,
+    effectiveGpuType: args.gpu_type ?? env.gpuType,
+    effectiveGpuCount: args.gpu_count ?? env.gpuCount,
+    effectiveVolumeGb: args.volume_gb ?? env.volumeGb,
   });
 
   await ctx.db.insert("runEvents", {
@@ -93,15 +116,15 @@ async function createRunForUserId(
     message: "run queued for execution",
     metadata: {
       gpu_type: args.gpu_type || env.gpuType,
-      gpu_count: args.gpu_count || env.gpuCount,
-      volume_gb: args.volume_gb || env.volumeGb,
+      gpu_count: args.gpu_count ?? env.gpuCount,
+      volume_gb: args.volume_gb ?? env.volumeGb,
     },
   });
 
   await provisionPool.enqueueAction(ctx, internal.runs.provisionRun, { runId });
-  const row = await ctx.db.get(runId);
+  const row = await ctx.db.get("runs", runId);
   if (!row) {
-    throw new Error("failed to create run");
+    throw new ConvexError("failed to create run");
   }
   return toRunResponse(row);
 }
@@ -110,7 +133,7 @@ async function removeRunForUserId(ctx: MutationCtx, userId: string, runId: Id<"r
   const row = await getOwnedRun(ctx, userId, runId);
 
   if (ACTIVE_STATUSES.has(row.status)) {
-    await ctx.db.patch(runId, {
+    await ctx.db.patch("runs", runId, {
       status: "cancelling",
       cancellationRequested: true,
     });
@@ -122,7 +145,7 @@ async function removeRunForUserId(ctx: MutationCtx, userId: string, runId: Id<"r
     return { cancel_requested: true, run_id: String(runId) };
   }
 
-  await ctx.db.delete(runId);
+  await ctx.db.delete("runs", runId);
   return { deleted: true, run_id: String(runId) };
 }
 
@@ -130,6 +153,7 @@ async function removeRunForUserId(ctx: MutationCtx, userId: string, runId: Id<"r
 
 export const list = query({
   args: {},
+  returns: listRunsResponseValidator,
   handler: async (ctx) => {
     const user = await requireUser(ctx);
     return listByUserId(ctx, String(user._id));
@@ -138,6 +162,7 @@ export const list = query({
 
 export const get = query({
   args: { runId: v.id("runs") },
+  returns: runResponseValidator,
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
     const row = await getOwnedRun(ctx, String(user._id), args.runId);
@@ -147,6 +172,7 @@ export const get = query({
 
 export const getLogs = query({
   args: { runId: v.id("runs") },
+  returns: runLogsResponseValidator,
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
     const row = await getOwnedRun(ctx, String(user._id), args.runId);
@@ -161,6 +187,7 @@ export const getLogs = query({
 
 export const internalGetLogs = internalQuery({
   args: { userId: v.string(), runId: v.id("runs") },
+  returns: runLogsResponseValidator,
   handler: async (ctx, args) => {
     const row = await getOwnedRun(ctx, args.userId, args.runId);
     return {
@@ -179,6 +206,7 @@ export const create = mutation({
     gpu_count: v.optional(v.number()),
     volume_gb: v.optional(v.number()),
   },
+  returns: runResponseValidator,
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
     return createRunForUserId(ctx, {
@@ -193,6 +221,10 @@ export const create = mutation({
 
 export const remove = mutation({
   args: { runId: v.id("runs") },
+  returns: v.union(
+    v.object({ cancel_requested: v.boolean(), run_id: v.string() }),
+    v.object({ deleted: v.boolean(), run_id: v.string() }),
+  ),
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
     return removeRunForUserId(ctx, String(user._id), args.runId);
@@ -203,6 +235,7 @@ export const remove = mutation({
 
 export const internalList = internalQuery({
   args: { userId: v.string() },
+  returns: listRunsResponseValidator,
   handler: async (ctx, args) => {
     return listByUserId(ctx, args.userId);
   },
@@ -210,6 +243,7 @@ export const internalList = internalQuery({
 
 export const internalGet = internalQuery({
   args: { userId: v.string(), runId: v.id("runs") },
+  returns: runResponseValidator,
   handler: async (ctx, args) => {
     const row = await getOwnedRun(ctx, args.userId, args.runId);
     return toRunResponse(row);
@@ -224,6 +258,7 @@ export const internalCreate = internalMutation({
     gpu_count: v.optional(v.number()),
     volume_gb: v.optional(v.number()),
   },
+  returns: runResponseValidator,
   handler: async (ctx, args) => {
     return createRunForUserId(ctx, args);
   },
@@ -231,6 +266,10 @@ export const internalCreate = internalMutation({
 
 export const internalRemove = internalMutation({
   args: { userId: v.string(), runId: v.id("runs") },
+  returns: v.union(
+    v.object({ cancel_requested: v.boolean(), run_id: v.string() }),
+    v.object({ deleted: v.boolean(), run_id: v.string() }),
+  ),
   handler: async (ctx, args) => {
     return removeRunForUserId(ctx, args.userId, args.runId);
   },
@@ -240,24 +279,27 @@ export const internalRemove = internalMutation({
 
 export const provisionRun = internalAction({
   args: { runId: v.id("runs") },
+  returns: v.null(),
   handler: async (ctx, args) => {
     await ctx.runMutation(internal.runs.markRunning, { runId: args.runId });
     await ctx.scheduler.runAfter(30_000, internal.runs.completeRun, { runId: args.runId });
+    return null;
   },
 });
 
 export const markRunning = internalMutation({
   args: { runId: v.id("runs") },
+  returns: v.null(),
   handler: async (ctx, args) => {
-    const row = await ctx.db.get(args.runId);
+    const row = await ctx.db.get("runs", args.runId);
     if (!row || row.cancellationRequested || TERMINAL_STATUSES.has(row.status)) {
       if (row?.cancellationRequested) {
-        await ctx.db.patch(args.runId, { status: "cancelled" });
+        await ctx.db.patch("runs", args.runId, { status: "cancelled" });
       }
-      return;
+      return null;
     }
 
-    await ctx.db.patch(args.runId, {
+    await ctx.db.patch("runs", args.runId, {
       status: "running",
     });
     await ctx.db.insert("runEvents", {
@@ -265,19 +307,21 @@ export const markRunning = internalMutation({
       status: "running",
       message: "pod running",
     });
+    return null;
   },
 });
 
 export const completeRun = internalMutation({
   args: { runId: v.id("runs") },
+  returns: v.null(),
   handler: async (ctx, args) => {
-    const row = await ctx.db.get(args.runId);
+    const row = await ctx.db.get("runs", args.runId);
     if (!row || TERMINAL_STATUSES.has(row.status)) {
-      return;
+      return null;
     }
 
     const terminal = row.cancellationRequested ? "cancelled" : "completed";
-    await ctx.db.patch(args.runId, {
+    await ctx.db.patch("runs", args.runId, {
       status: terminal,
     });
     await ctx.db.insert("runEvents", {
@@ -285,5 +329,6 @@ export const completeRun = internalMutation({
       status: terminal,
       message: terminal === "completed" ? "run completed" : "run cancelled",
     });
+    return null;
   },
 });
