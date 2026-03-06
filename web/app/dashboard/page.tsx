@@ -560,8 +560,8 @@ export default function DashboardPage() {
             ) : null}
 
             {activeSection === "environments" ? (
-              <section className="grid h-full min-h-0 grid-rows-[40%_60%] gap-3">
-                <Card variant="dashboard" className="h-full overflow-y-auto p-4">
+              <section className="flex h-full min-h-0 flex-col gap-3">
+                <Card variant="dashboard" className="shrink-0 p-4">
                   <form onSubmit={createEnvironment} className="space-y-3">
                     <div className="space-y-1.5">
                       <Label htmlFor="environment-name">Environment name</Label>
@@ -625,7 +625,7 @@ export default function DashboardPage() {
                 {environments.length === 0 ? (
                   <BottomHalfEmptyMessage>No environments yet.</BottomHalfEmptyMessage>
                 ) : (
-                  <Card variant="dashboard" className="h-full overflow-hidden">
+                  <Card variant="dashboard" className="min-h-0 flex-1 overflow-hidden">
                     <Table variant="dashboard">
                       <TableHeader variant="dashboard">
                         <TableRow variant="dashboard-head">
