@@ -12,11 +12,12 @@ Start here for project onboarding and workflow status:
 Implemented now:
 - CLI/browser auth flow via `tahuna login` (no manual dashboard key copy required)
 - CLI + backend API contract alignment under `/api/*`
-- Environment + run CRUD flows (CLI and dashboard)
+- Environment init/list/show/delete + run lifecycle flows (CLI and dashboard)
+- First-class training UX via `tahuna train` and `tahuna train -d`
+- Project-linked initialization via `tahuna init .` and `tahuna init <project-name>`
 - Data blob upload/list/remove in dashboard
 
 Still pending:
-- `train` command UX (`train`, `train -d`, config overrides)
 - Full `tahuna init` bootstrap (`.`/new project, data dir, `config.yml`)
 - Local project state file (`.tahuna/` or `tahuna.yml`) for defaults
 - CLI sync commands (code/data/env vars)
@@ -89,6 +90,36 @@ go run . login
 ```
 
 This opens the browser, completes auth, and saves `TAHUNA_API_KEY` to `.env.local` in the current working directory.
+
+### Train command
+
+From `cli/`:
+
+```bash
+go run . train
+go run . train -d
+go run . train --gpu-type "<gpu>" --gpu-count 2 --volume-gb 120
+```
+
+- `train` creates a run and watches status in foreground.
+- `train -d` creates a run and exits immediately after printing run summary.
+
+### Init + Train flow
+
+```bash
+# Existing repo
+go run . init .
+go run . train
+
+# New repo directory
+go run . init new-project
+cd new-project
+go run /Users/pazuzzu/Desktop/gigi/boob-ai/cli train -d
+```
+
+- `init` creates/selects the project directory, creates an environment, and links it in `.tahuna/environment_id`.
+- `train` uses the linked environment automatically.
+- `env create` is intentionally removed; environment creation is done via `init`.
 
 ## Why this architecture
 

@@ -1,0 +1,4 @@
+project: "test_ml_project"
+entrypoint: "train.py"
+data:
+  path: "data"

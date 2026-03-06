@@ -1,0 +1,4 @@
+data_dir: "data"
+config_yaml: "config.yaml"
+train_entrypoint: "train.py"
+requirements: "requirements.txt"

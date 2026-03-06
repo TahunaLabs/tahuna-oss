@@ -1,0 +1,13 @@
+project: test_ml_project
+entrypoint: train.py
+command:
+  - python
+  - train.py
+  - --epochs
+  - "3"
+data:
+  path: data
+resources:
+  gpu_type: NVIDIA GeForce RTX 4090
+  gpu_count: 1
+  volume_gb: 80

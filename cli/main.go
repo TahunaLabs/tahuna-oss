@@ -28,10 +28,13 @@ import (
 )
 
 const (
-	defaultAPIURL = "http://localhost:3000"
-	cliVersion    = "0.1.0"
-	apiPrefix     = "/api"
-	cReset        = "\033[0m"
+	defaultAPIURL    = "http://localhost:3000"
+	cliVersion       = "0.1.0"
+	apiPrefix        = "/api"
+	projectStateDir  = ".tahuna"
+	projectEnvIDFile = "environment_id"
+	projectCfgFile   = "project.yaml"
+	cReset           = "\033[0m"
 	// AMP frontend palette mapping:
 	// background #0b1d1f, foreground #e8e0d4, primary/accent #c8a84e, muted #8a9a93
 	cAmpWord  = "\033[38;5;44m"  // blue-green wordmark
@@ -45,8 +48,7 @@ const (
 
 func main() {
 	if len(os.Args) < 2 {
-		printHeader()
-		must(guidedSetup())
+		handleInit([]string{"."})
 		return
 	}
 
@@ -55,14 +57,14 @@ func main() {
 		handleEnvironment(os.Args[2:])
 	case "run":
 		handleRun(os.Args[2:])
+	case "train":
+		train(os.Args[2:])
 	case "shell":
 		must(runShell())
 	case "init", "start":
-		printHeader()
-		must(guidedSetup())
+		handleInit(os.Args[2:])
 	case "up":
-		printHeader()
-		must(guidedSetup())
+		handleInit([]string{"."})
 	case "login":
 		must(login())
 	case "version":
@@ -81,8 +83,9 @@ func usage() {
 Usage:
   tahuna shell
   tahuna login
-  tahuna init
-  tahuna env create|list|show|delete ...
+  tahuna init [.]|[project-name]
+  tahuna train [-d] [--gpu-type <gpu>] [--gpu-count <n>] [--volume-gb <n>]
+  tahuna env list|show|delete ...
   tahuna run create|list|show|watch|logs|delete ...
   tahuna up
   tahuna version
@@ -92,7 +95,7 @@ Environment:
   TAHUNA_API_KEY   Auth token (set automatically by "tahuna login")
 
 Tip:
-  Run "tahuna" with no args to launch the guided setup flow (same as "tahuna init").
+  Run "tahuna" with no args to initialize the current project (same as "tahuna init .").
 `)
 }
 
@@ -194,16 +197,18 @@ func openBrowser(rawURL string) error {
 }
 
 func defaultEnvFilePath() string {
-	wd, err := os.Getwd()
-	if err == nil {
-		local := filepath.Join(wd, ".env.local")
-		return local
+	home, err := os.UserHomeDir()
+	if err != nil || strings.TrimSpace(home) == "" {
+		return "tahuna.config.env"
 	}
-	return ".env.local"
+	return filepath.Join(home, ".config", "tahuna", "config.env")
 }
 
 func saveTokenToEnvFile(token string) error {
 	path := defaultEnvFilePath()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
 	existing, err := os.ReadFile(path)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
@@ -346,30 +351,133 @@ func serverDot() string {
 }
 
 func apiURL() string {
-	if v := os.Getenv("TAHUNA_API_URL"); v != "" {
+	if v := lookupConfigValue("TAHUNA_API_URL"); v != "" {
+		return strings.TrimRight(v, "/")
+	}
+	// Convex site URL is the backend endpoint for HTTP actions (/api/*).
+	if v := lookupConfigValue("CONVEX_SITE_URL"); v != "" {
+		return strings.TrimRight(v, "/")
+	}
+	if v := lookupConfigValue("NEXT_PUBLIC_CONVEX_SITE_URL"); v != "" {
 		return strings.TrimRight(v, "/")
 	}
 	return defaultAPIURL
 }
 
-func guidedSetup() error {
-	gpus, versionsByFramework, err := fetchCatalog()
+func handleInit(args []string) {
+	printHeader()
+	target := "."
+	if len(args) > 1 {
+		must(errors.New("usage: tahuna init [.]|[project-name]"))
+	}
+	if len(args) == 1 && strings.TrimSpace(args[0]) != "" {
+		target = strings.TrimSpace(args[0])
+	}
+	must(initProject(target))
+}
+
+func initProject(target string) error {
+	projectPath, created, err := prepareProjectPath(target)
+	if err != nil {
+		return err
+	}
+	if err := os.Chdir(projectPath); err != nil {
+		return err
+	}
+	if created {
+		fmt.Printf("%sCreated project directory:%s %s\n", cAmpWord, cReset, projectPath)
+	}
+
+	projectCfg, frameworkKey, err := collectProjectInitConfig()
 	if err != nil {
 		return err
 	}
 
-	name := promptString("Environment name", "")
+	envName := filepath.Base(projectPath)
+	if envName == "." || envName == string(filepath.Separator) || strings.TrimSpace(envName) == "" {
+		envName = "tahuna-project"
+	}
+
+	envID, err := guidedSetup(envName, frameworkKey)
+	if err != nil {
+		return err
+	}
+	if err := saveLinkedEnvironmentID(envID); err != nil {
+		return fmt.Errorf("project initialized, but failed to save environment link: %w", err)
+	}
+	if err := saveProjectConfig(projectCfg); err != nil {
+		return fmt.Errorf("project initialized, but failed to save project config: %w", err)
+	}
+	if err := ensureProjectFile(projectCfg.ConfigYAMLPath, defaultConfigYAMLTemplate(projectCfg)); err != nil {
+		return fmt.Errorf("failed to create config yaml: %w", err)
+	}
+	if err := ensureProjectFile(projectCfg.RequirementsPath, defaultRequirementsTemplate()); err != nil {
+		return fmt.Errorf("failed to create requirements file: %w", err)
+	}
+	if err := ensureProjectFile(projectCfg.TrainEntrypoint, defaultTrainEntrypointTemplate(projectCfg)); err != nil {
+		return fmt.Errorf("failed to create train entrypoint: %w", err)
+	}
+	if err := os.MkdirAll(projectCfg.DataDir, 0o755); err != nil {
+		return fmt.Errorf("failed to create data directory: %w", err)
+	}
+	if err := ensureFrameworkDependency(projectCfg.RequirementsPath, frameworkKey); err != nil {
+		return fmt.Errorf("failed to update requirements: %w", err)
+	}
+
+	return nil
+}
+
+func prepareProjectPath(target string) (string, bool, error) {
+	if target == "." {
+		cwd, err := os.Getwd()
+		return cwd, false, err
+	}
+
+	base, err := os.Getwd()
+	if err != nil {
+		return "", false, err
+	}
+	projectPath := target
+	if !filepath.IsAbs(projectPath) {
+		projectPath = filepath.Join(base, projectPath)
+	}
+	projectPath = filepath.Clean(projectPath)
+
+	info, statErr := os.Stat(projectPath)
+	if statErr == nil {
+		if !info.IsDir() {
+			return "", false, fmt.Errorf("path exists and is not a directory: %s", projectPath)
+		}
+		return projectPath, false, nil
+	}
+	if !errors.Is(statErr, os.ErrNotExist) {
+		return "", false, statErr
+	}
+	if err := os.MkdirAll(projectPath, 0o755); err != nil {
+		return "", false, err
+	}
+	return projectPath, true, nil
+}
+
+func guidedSetup(environmentName, frameworkHint string) (string, error) {
+	gpus, versionsByFramework, err := fetchCatalog()
+	if err != nil {
+		return "", err
+	}
+
+	frameworks := sortedKeys(versionsByFramework)
+	framework := strings.TrimSpace(frameworkHint)
+	if framework == "" || versionsByFramework[framework] == nil {
+		framework = promptChoice("Framework", frameworks, 0)
+	}
+	versions := versionsByFramework[framework]
+	version := promptChoice("Framework version", versions, 0)
 	gpuType := promptChoice("GPU type", gpus, 0)
 	gpuCount := promptInt("GPU count", 1)
 	volumeGB := promptInt("Volume (GB)", 80)
 
-	frameworks := sortedKeys(versionsByFramework)
-	framework := promptChoice("Framework", frameworks, 0)
-	versions := versionsByFramework[framework]
-	version := promptChoice("Framework version", versions, 0)
-
 	envPayload := map[string]any{
-		"name":      name,
+		"name":      environmentName,
 		"gpu_type":  gpuType,
 		"gpu_count": gpuCount,
 		"volume_gb": volumeGB,
@@ -378,32 +486,12 @@ func guidedSetup() error {
 	}
 	env, err := doJSON(http.MethodPost, "/environments", envPayload)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	envID := asString(env["environment_id"])
-	fmt.Printf("\n%sEnvironment created:%s %s\n", cAmpWord, cReset, envID)
-	fmt.Printf("%sArtifacts path:%s      %s\n", cAmpMuted, cReset, asString(env["artifacts"]))
-
-	if !promptYesNo("\nStart a run now?", true) {
-		fmt.Println("\nDone. Next: tahuna run create --environment-id <environment_id>")
-		return nil
-	}
-
-	runResp, err := doJSON(http.MethodPost, "/environments/"+envID+"/runs", map[string]any{})
-	if err != nil {
-		return err
-	}
-	runID := asString(runResp["run_id"])
-	fmt.Printf("\n%sRun created:%s         %s\n", cAmpWord, cReset, runID)
-	printTrainPreview(envID, runID)
-
-	if promptYesNo("Watch this run now?", true) {
-		return monitorRun(runID, 5)
-	}
-
-	fmt.Println("\nDone. Next: tahuna run watch --id <run_id>")
-	return nil
+	fmt.Printf("\n%sEnvironment created%s\n", cAmpWord, cReset)
+	return envID, nil
 }
 
 func handleEnvironment(args []string) {
@@ -412,14 +500,14 @@ func handleEnvironment(args []string) {
 		os.Exit(1)
 	}
 	switch args[0] {
-	case "create":
-		environmentCreate(args[1:])
 	case "list":
 		environmentList(args[1:])
 	case "show":
 		environmentShow(args[1:])
 	case "delete":
 		environmentDelete(args[1:])
+	case "create":
+		must(errors.New("`tahuna env create` is removed; use `tahuna init .` or `tahuna init <project-name>`"))
 	default:
 		fmt.Printf("unknown environment subcommand: %s\n", args[0])
 		os.Exit(1)
@@ -557,6 +645,39 @@ func runCreate(args []string) {
 	}
 }
 
+func train(args []string) {
+	fs := flag.NewFlagSet("train", flag.ExitOnError)
+	gpuType := fs.String("gpu-type", "", "Override GPU type")
+	gpuCount := fs.Int("gpu-count", 0, "Override GPU count")
+	volumeGB := fs.Int("volume-gb", 0, "Override volume size")
+	detached := fs.Bool("detached", false, "Create run and exit immediately")
+	fs.BoolVar(detached, "d", false, "Create run and exit immediately")
+	fs.Parse(args)
+
+	resolvedEnvironmentID, err := resolveEnvironmentID()
+	must(err)
+
+	payload := map[string]any{}
+	if *gpuType != "" {
+		payload["gpu_type"] = *gpuType
+	}
+	if *gpuCount > 0 {
+		payload["gpu_count"] = *gpuCount
+	}
+	if *volumeGB > 0 {
+		payload["volume_gb"] = *volumeGB
+	}
+
+	resp, err := doJSON(http.MethodPost, "/environments/"+resolvedEnvironmentID+"/runs", payload)
+	must(err)
+
+	printTrainRunSummary(resp)
+	if *detached {
+		return
+	}
+	must(monitorRun(asString(resp["run_id"]), 5))
+}
+
 func runShow(args []string) {
 	fs := flag.NewFlagSet("run show", flag.ExitOnError)
 	id := fs.String("id", "", "Run ID")
@@ -608,6 +729,298 @@ func runDelete(args []string) {
 	printJSON(resp)
 }
 
+func resolveEnvironmentID() (string, error) {
+	linkedEnvironmentID, err := loadLinkedEnvironmentID()
+	if err != nil {
+		return "", err
+	}
+	if linkedEnvironmentID != "" {
+		return linkedEnvironmentID, nil
+	}
+
+	resp, err := doJSON(http.MethodGet, "/environments", nil)
+	if err != nil {
+		return "", err
+	}
+
+	raw, ok := resp["environments"].([]any)
+	if !ok {
+		return "", errors.New("invalid environments response")
+	}
+	if len(raw) == 0 {
+		return "", errors.New("no environments found; run `tahuna init .` first")
+	}
+	return "", errors.New("no linked environment in this project; run `tahuna init .` first")
+}
+
+func projectEnvironmentFilePath() string {
+	return filepath.Join(projectStateDir, projectEnvIDFile)
+}
+
+type projectConfig struct {
+	DataDir          string
+	ConfigYAMLPath   string
+	TrainEntrypoint  string
+	RequirementsPath string
+}
+
+func collectProjectInitConfig() (projectConfig, string, error) {
+	cfg := projectConfig{
+		DataDir:          "data",
+		ConfigYAMLPath:   "config.yaml",
+		TrainEntrypoint:  "train.py",
+		RequirementsPath: "requirements.txt",
+	}
+
+	if fileExists(cfg.TrainEntrypoint) {
+		fmt.Printf("✓ Found %s%s%s\n", cAmpGold, cfg.TrainEntrypoint, cReset)
+		cfg.TrainEntrypoint = choosePathWhenFound("Entrypoint script", cfg.TrainEntrypoint, "train.py")
+	} else {
+		fmt.Printf("%s?%s No train.py found\n", cAmpGold, cReset)
+		cfg.TrainEntrypoint = choosePathWhenMissing("Entrypoint script", "train.py")
+	}
+
+	if dirExists(cfg.DataDir) {
+		fmt.Printf("✓ Found %s%s/%s\n", cAmpGold, cfg.DataDir, cReset)
+		cfg.DataDir = choosePathWhenFound("Data directory", cfg.DataDir, "data")
+	} else {
+		fmt.Printf("%s?%s No data/ directory\n", cAmpGold, cReset)
+		cfg.DataDir = choosePathWhenMissing("Data directory", "data")
+	}
+
+	if fileExists("config.yaml") {
+		cfg.ConfigYAMLPath = "config.yaml"
+		fmt.Printf("✓ Found %sconfig.yaml%s\n", cAmpGold, cReset)
+		cfg.ConfigYAMLPath = choosePathWhenFound("Config file", cfg.ConfigYAMLPath, "config.yaml")
+	} else if fileExists("config.yml") {
+		cfg.ConfigYAMLPath = "config.yml"
+		fmt.Printf("✓ Found %sconfig.yml%s\n", cAmpGold, cReset)
+		cfg.ConfigYAMLPath = choosePathWhenFound("Config file", cfg.ConfigYAMLPath, "config.yaml")
+	} else {
+		fmt.Printf("%s?%s No config yaml found\n", cAmpGold, cReset)
+		cfg.ConfigYAMLPath = choosePathWhenMissing("Config file", "config.yaml")
+	}
+
+	if fileExists(cfg.RequirementsPath) {
+		fmt.Printf("✓ Found %srequirements.txt%s\n", cAmpGold, cReset)
+		cfg.RequirementsPath = choosePathWhenFound("Requirements file", cfg.RequirementsPath, "requirements.txt")
+	} else {
+		fmt.Printf("%s?%s No requirements.txt found\n", cAmpGold, cReset)
+		cfg.RequirementsPath = choosePathWhenMissing("Requirements file", "requirements.txt")
+	}
+
+	framework := detectFramework(cfg)
+	if framework == "" {
+		framework = promptChoice("No framework detected. PyTorch or TensorFlow?", []string{"pt", "tf"}, 0)
+	} else {
+		fmt.Printf("✓ Detected framework %s%s%s\n", cAmpGold, framework, cReset)
+	}
+
+	return cfg, framework, nil
+}
+
+func choosePathWhenFound(label, detectedPath, defaultCreatePath string) string {
+	choice := promptChoice(
+		label,
+		[]string{
+			fmt.Sprintf("%s (detected)", detectedPath),
+			"Enter path",
+			"Create new",
+		},
+		0,
+	)
+	if choice == fmt.Sprintf("%s (detected)", detectedPath) {
+		return detectedPath
+	}
+	if choice == "Create new" {
+		return promptPath(label+" path", defaultCreatePath)
+	}
+	return promptPath(label+" path", detectedPath)
+}
+
+func choosePathWhenMissing(label, defaultCreatePath string) string {
+	choice := promptChoice(
+		label,
+		[]string{
+			fmt.Sprintf("Create %s", defaultCreatePath),
+			"Enter path",
+		},
+		0,
+	)
+	if choice == "Enter path" {
+		return promptPath(label+" path", defaultCreatePath)
+	}
+	return filepath.Clean(defaultCreatePath)
+}
+
+func promptPath(label, defaultValue string) string {
+	value := strings.TrimSpace(promptString(label, defaultValue))
+	if value == "" {
+		value = defaultValue
+	}
+	return filepath.Clean(value)
+}
+
+func detectFramework(cfg projectConfig) string {
+	candidates := []string{}
+	if cfg.ConfigYAMLPath != "" {
+		candidates = append(candidates, cfg.ConfigYAMLPath)
+	}
+	if cfg.RequirementsPath != "" {
+		candidates = append(candidates, cfg.RequirementsPath)
+	}
+	for _, path := range candidates {
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		lower := strings.ToLower(string(raw))
+		if strings.Contains(lower, "tensorflow") || strings.Contains(lower, "keras") {
+			return "tf"
+		}
+		if strings.Contains(lower, "torch") || strings.Contains(lower, "pytorch") {
+			return "pt"
+		}
+	}
+	return ""
+}
+
+func ensureFrameworkDependency(requirementsPath, framework string) error {
+	dep := ""
+	switch framework {
+	case "pt":
+		dep = "torch"
+	case "tf":
+		dep = "tensorflow"
+	default:
+		return nil
+	}
+
+	if strings.TrimSpace(requirementsPath) == "" {
+		return nil
+	}
+	if err := ensureProjectFile(requirementsPath, defaultRequirementsTemplate()); err != nil {
+		return err
+	}
+
+	raw, err := os.ReadFile(requirementsPath)
+	if err != nil {
+		return err
+	}
+	lower := strings.ToLower(string(raw))
+	if strings.Contains(lower, dep) {
+		return nil
+	}
+
+	content := string(raw)
+	if content != "" && !strings.HasSuffix(content, "\n") {
+		content += "\n"
+	}
+	content += dep + "\n"
+	return os.WriteFile(requirementsPath, []byte(content), 0o644)
+}
+
+func fileExists(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && !info.IsDir()
+}
+
+func dirExists(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && info.IsDir()
+}
+
+func projectConfigFilePath() string {
+	return filepath.Join(projectStateDir, projectCfgFile)
+}
+
+func saveProjectConfig(cfg projectConfig) error {
+	if err := os.MkdirAll(projectStateDir, 0o755); err != nil {
+		return err
+	}
+	body := fmt.Sprintf(
+		"data_dir: %q\nconfig_yaml: %q\ntrain_entrypoint: %q\nrequirements: %q\n",
+		cfg.DataDir,
+		cfg.ConfigYAMLPath,
+		cfg.TrainEntrypoint,
+		cfg.RequirementsPath,
+	)
+	return os.WriteFile(projectConfigFilePath(), []byte(body), 0o600)
+}
+
+func ensureProjectFile(path, content string) error {
+	if strings.TrimSpace(path) == "" {
+		return nil
+	}
+	if _, err := os.Stat(path); err == nil {
+		return nil
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	dir := filepath.Dir(path)
+	if dir != "." && dir != "" {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return err
+		}
+	}
+	return os.WriteFile(path, []byte(content), 0o644)
+}
+
+func defaultConfigYAMLTemplate(cfg projectConfig) string {
+	return fmt.Sprintf("project: %q\nentrypoint: %q\ndata:\n  path: %q\n", filepath.Base(mustGetwd()), cfg.TrainEntrypoint, cfg.DataDir)
+}
+
+func defaultRequirementsTemplate() string {
+	return "# Add Python dependencies here\n"
+}
+
+func defaultTrainEntrypointTemplate(cfg projectConfig) string {
+	return fmt.Sprintf("print(\"Tahuna training entrypoint\")\nprint(\"data dir: %s\")\n", cfg.DataDir)
+}
+
+func mustGetwd() string {
+	wd, err := os.Getwd()
+	if err != nil {
+		return "."
+	}
+	return wd
+}
+
+func saveLinkedEnvironmentID(environmentID string) error {
+	if strings.TrimSpace(environmentID) == "" {
+		return errors.New("environment id is empty")
+	}
+	if err := os.MkdirAll(projectStateDir, 0o755); err != nil {
+		return err
+	}
+	content := strings.TrimSpace(environmentID) + "\n"
+	return os.WriteFile(projectEnvironmentFilePath(), []byte(content), 0o600)
+}
+
+func loadLinkedEnvironmentID() (string, error) {
+	raw, err := os.ReadFile(projectEnvironmentFilePath())
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return "", nil
+		}
+		return "", err
+	}
+	return strings.TrimSpace(string(raw)), nil
+}
+
+func printTrainRunSummary(resp map[string]any) {
+	runID := asString(resp["run_id"])
+	envID := asString(resp["env_id"])
+	status := asString(resp["status"])
+	if status == "" {
+		status = "queued"
+	}
+
+	fmt.Printf("Run created: %s\n", runID)
+	fmt.Printf("Environment: %s\n", envID)
+	fmt.Printf("Status: %s\n", status)
+}
+
 func monitorRun(runID string, interval int) error {
 	for {
 		resp, err := doJSON(http.MethodGet, "/runs/"+runID, nil)
@@ -623,19 +1036,6 @@ func monitorRun(runID string, interval int) error {
 		time.Sleep(time.Duration(interval) * time.Second)
 	}
 	return nil
-}
-
-func printTrainPreview(envID, runID string) {
-	lines := []string{
-		fmt.Sprintf("%s>%s Tahuna train --environment %s", cAmpGold, cReset, envID),
-		"",
-		fmt.Sprintf("  %sSetting up post-training pipeline...%s", cAmpMuted, cReset),
-		"",
-		fmt.Sprintf("  %s✓%s Loading environment and artifacts", cAmpGreen, cReset),
-		fmt.Sprintf("  %s✓%s Launching run %s%s%s", cAmpGreen, cReset, cAmpGold, runID, cReset),
-		fmt.Sprintf("  %s✓%s Waiting for pod allocation", cAmpGreen, cReset),
-	}
-	printPanel("Tahuna", lines, "training", "episode 1/500  ETA --")
 }
 
 func printRunPanel(runID, status, errMsg string) {
@@ -793,12 +1193,12 @@ func promptString(label, defaultValue string) string {
 	}
 
 	prompt := promptui.Prompt{
-		Label:    fmt.Sprintf("%s%s%s", cAmpText, label, cReset),
+		Label:    label,
 		Default:  defaultValue,
 		Validate: validate,
 		Templates: &promptui.PromptTemplates{
 			Prompt:  "{{ . }} ",
-			Success: fmt.Sprintf("%s✔%s {{ . | faint }} ", cAmpWord, cReset),
+			Success: "✓ {{ . }} ",
 		},
 	}
 
@@ -828,7 +1228,7 @@ func promptChoice(label string, options []string, defaultIndex int) string {
 		must(errors.New("no options available for " + label))
 	}
 	prompt := promptui.Select{
-		Label:     fmt.Sprintf("%s%s%s", cAmpText, label, cReset),
+		Label:     label,
 		Items:     options,
 		CursorPos: defaultIndex,
 		HideHelp:  true,
@@ -837,22 +1237,12 @@ func promptChoice(label string, options []string, defaultIndex int) string {
 			Label:    "{{ . }}",
 			Active:   fmt.Sprintf("%s>%s {{ . }}", cAmpGold, cReset),
 			Inactive: fmt.Sprintf("%s  {{ . }}%s", cAmpMuted, cReset),
-			Selected: fmt.Sprintf("%s✔%s {{ .Label }}: %s{{ . }}%s", cAmpWord, cReset, cAmpText, cReset),
+			Selected: "✓ {{ .Label }}: {{ . }}",
 		},
 	}
 	_, value, err := prompt.Run()
 	must(err)
 	return value
-}
-
-func promptYesNo(label string, defaultYes bool) bool {
-	defaultIndex := 0
-	options := []string{"Yes", "No"}
-	if !defaultYes {
-		defaultIndex = 1
-	}
-	answer := promptChoice(label, options, defaultIndex)
-	return answer == "Yes"
 }
 
 func sortedKeys(m map[string][]string) []string {
@@ -888,7 +1278,7 @@ func doJSON(method, path string, payload map[string]any) (map[string]any, error)
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	if key := strings.TrimSpace(os.Getenv("TAHUNA_API_KEY")); key != "" {
+	if key := lookupConfigValue("TAHUNA_API_KEY"); key != "" {
 		req.Header.Set("Authorization", "Bearer "+key)
 	}
 
@@ -906,7 +1296,17 @@ func doJSON(method, path string, payload map[string]any) (map[string]any, error)
 	var out map[string]any
 	if len(raw) > 0 {
 		if err := json.Unmarshal(raw, &out); err != nil {
-			return nil, err
+			snippet := strings.TrimSpace(string(raw))
+			if len(snippet) > 140 {
+				snippet = snippet[:140] + "..."
+			}
+			return nil, fmt.Errorf(
+				"api response was not JSON (%s %s -> %d). check TAHUNA_API_URL and that Tahuna web+convex are running. body starts with: %q",
+				method,
+				baseURL+requestPath,
+				resp.StatusCode,
+				snippet,
+			)
 		}
 	} else {
 		out = map[string]any{}
@@ -921,6 +1321,67 @@ func doJSON(method, path string, payload map[string]any) (map[string]any, error)
 	}
 
 	return out, nil
+}
+
+func lookupConfigValue(key string) string {
+	if key == "" {
+		return ""
+	}
+	if v := strings.TrimSpace(os.Getenv(key)); v != "" {
+		return v
+	}
+
+	for _, path := range candidateEnvFiles() {
+		if v, ok := readKeyFromEnvFile(path, key); ok {
+			return v
+		}
+	}
+	return ""
+}
+
+func candidateEnvFiles() []string {
+	candidates := []string{}
+	seen := map[string]struct{}{}
+	add := func(path string) {
+		if path == "" {
+			return
+		}
+		clean := filepath.Clean(path)
+		if _, ok := seen[clean]; ok {
+			return
+		}
+		seen[clean] = struct{}{}
+		candidates = append(candidates, clean)
+	}
+
+	// Primary CLI config file (global, CLI-only).
+	add(defaultEnvFilePath())
+
+	return candidates
+}
+
+func readKeyFromEnvFile(path, key string) (string, bool) {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return "", false
+	}
+	prefix := key + "="
+	for _, line := range strings.Split(string(raw), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		if !strings.HasPrefix(trimmed, prefix) {
+			continue
+		}
+		value := strings.TrimSpace(strings.TrimPrefix(trimmed, prefix))
+		value = strings.Trim(value, `"'`)
+		if value == "" {
+			return "", false
+		}
+		return value, true
+	}
+	return "", false
 }
 
 func normalizedAPIPath(path string) string {

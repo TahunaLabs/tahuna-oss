@@ -61,13 +61,15 @@ Legend:
 ### Workflow 1 status
 
 Setup:
-- `[~]` `tahuna init` exists and launches guided flow (`cli/main.go`)
-- `[ ]` project path selection (`.` or empty) not implemented
-- `[ ]` new repo creation (`npx create-next`) not implemented
+- `[~]` `tahuna init` supports `init .` and `init <project-name>` with guided environment creation + project env linking
+- `[x]` project path selection (`.`) implemented
+- `[~]` new project directory creation implemented (full repo bootstrap like `npx create-next` still pending)
+- `[x]` project file detection/selection prompts in `init` (entrypoint/data/config/requirements) with default creation paths
+- `[x]` framework detection prompt in `init` (auto-detect from config/requirements with fallback prompt)
 - `[x]` framework/version selection exists in CLI prompts
 - `[ ]` framework persistence for future provisioning is not explicit beyond environment records
-- `[ ]` data directory configuration in CLI not implemented
-- `[ ]` `config.yml` generation/management not implemented
+- `[x]` data directory configuration in CLI `init` implemented
+- `[x]` config/requirements/entrypoint generation in CLI `init` implemented (basic templates)
 - `[x]` environment creation flow exists (CLI + Convex `environments`)
 
 Run:
@@ -76,7 +78,7 @@ Run:
 - `[~]` data upload exists in dashboard (`web/app/dashboard/page.tsx`, `web/convex/data.ts`)
 - `[ ]` codebase sync (Convex-style) not implemented in CLI
 - `[ ]` env var sync (Convex-style) not implemented in CLI
-- `[ ]` `train` / `train -d` command model not implemented (current model is `run create/watch/show/logs`)
+- `[x]` `train` / `train -d` command model implemented with optional runtime overrides (`--gpu-type`, `--gpu-count`, `--volume-gb`)
 - `[x]` run listing/show/watch/logs/delete exist
 - `[ ]` live loss/metrics stream not implemented
 - `[~]` terminal UI includes branded panels and status, but not full split static+interactive dashboard behavior
@@ -110,8 +112,9 @@ Contract fixes applied on 2026-03-06:
    - `/api/catalog` now returns both `images` and `gpus`.
    - GPU list uses dynamic Runpod data when available, with a fallback value.
 
-Remaining operational note:
-- CLI still defaults to `TAHUNA_API_URL=http://localhost:3000`, which assumes a host exposing the Convex HTTP API at `/api/*`.
+Current operational note:
+- CLI API URL resolution order is: `TAHUNA_API_URL` -> `CONVEX_SITE_URL` -> `NEXT_PUBLIC_CONVEX_SITE_URL` -> default `http://localhost:3000`.
+- CLI auth token is read from env vars or global config file `~/.config/tahuna/config.env`.
 
 ## 5) What Does What (Code Map)
 
@@ -120,11 +123,12 @@ Remaining operational note:
 - [`cli/main.go`](/Users/pazuzzu/Desktop/gigi/boob-ai/cli/main.go)
   - command entrypoint and parsing
   - browser-based login (`tahuna login`) with local callback
-  - guided setup (`init`)
+  - guided setup (`init`) with local project file prompts/scaffolding
   - interactive shell mode (`shell`)
-  - environment commands: `create/list/show/delete`
-  - run commands: `create/list/show/watch/logs/delete`
-  - HTTP client (`doJSON`) with `TAHUNA_API_URL` + `TAHUNA_API_KEY`
+  - environment commands: `list/show/delete` (`create` intentionally removed; creation via `init`)
+  - train commands: `train`, `train -d` with optional overrides
+  - run commands: `create/list/show/watch/logs/delete` (backward compatible)
+  - HTTP client (`doJSON`) with standalone config resolution (`~/.config/tahuna/config.env` + env vars)
 
 ### Web App (`/web`)
 
@@ -173,17 +177,24 @@ Most realistic current path:
 1. Run web + Convex locally.
 2. Run `tahuna login` from CLI.
 3. Browser opens auth flow and redirects back to local CLI callback.
-4. CLI stores auth token in `.env.local` (current CLI working directory).
-5. Use CLI + dashboard to create environments, upload data, and run jobs.
+4. CLI stores auth token in `~/.config/tahuna/config.env`.
+5. Use `tahuna init .` (or `tahuna init <project-name>`) then `tahuna train` / `tahuna train -d`.
+6. Use CLI + dashboard to inspect runs/data.
 
 ## 7) Suggested Next Milestone (to unblock CLI-first phase)
 
 If we prioritize your stated unblock (CLI flow first), the shortest path is:
 
-1. Implement `train` command layer as an opinionated wrapper around run create/watch.
+1. Expand `train` UX with local project defaults/state integration.
 2. Add local project bootstrap pieces (`tahuna init` repo/data/config flow).
 3. Add state file in project root (`.tahuna/` or `tahuna.yml`) to persist framework/data defaults.
 4. Implement sync commands for data/code/env vars from CLI.
+
+Update (completed 2026-03-06):
+- `tahuna init .` initializes current project, and `tahuna init <project-name>` creates/selects a project directory, then links created environment to `.tahuna/environment_id`.
+- `tahuna init` now collects local project setup inputs first (entrypoint/data/config/requirements), auto-detects framework when possible, then prompts machine/runtime settings.
+- `tahuna train` requires a linked `.tahuna/environment_id` from `init`, creates a run through existing `/api/environments/{env_id}/runs`, prints concise summary, and monitors in foreground.
+- `tahuna train -d` creates a run and exits immediately after summary output.
 
 ---
 

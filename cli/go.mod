@@ -1,4 +1,4 @@
-module tahuna-cli
+module tahuna
 
 go 1.22
 
