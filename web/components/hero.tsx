@@ -19,17 +19,15 @@ export function Hero() {
             <span>For The Frontier</span>
           </h1>
 
-          <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-10">
-            <div className="max-w-md">
-              <p className="text-lg md:text-xl text-foreground/80 leading-relaxed mb-3">
-                Tahuna is the frontier training substrate that lets you wield the full power of leading models.
-              </p>
-              <p className="text-base text-muted-foreground">
-                Pay as you go, with no markup for individuals.
-              </p>
-            </div>
+          <div className="max-w-md">
+            <p className="text-lg md:text-xl text-foreground/80 leading-relaxed mb-3">
+              Tahuna is the frontier training substrate that lets you wield the full power of leading models.
+            </p>
+            <p className="text-base text-muted-foreground">
+              Pay as you go, with no markup for individuals.
+            </p>
 
-            <Button variant="pill" size="lg" asChild className="self-start px-8 py-3.5 h-auto bg-primary/15 text-primary border-primary/30 hover:bg-primary/25">
+            <Button variant="pill" size="lg" asChild className="mt-8 px-8 py-3.5 h-auto bg-primary/15 text-primary border-primary/30 hover:bg-primary/25">
               <Link href="/auth">
                 Get Started
                 <ArrowRight className="h-4 w-4" />
