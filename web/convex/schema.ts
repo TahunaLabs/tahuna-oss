@@ -12,6 +12,7 @@ export default defineSchema({
     lastUsedAt: v.optional(v.number()),
   })
     .index("by_user", ["userId"])
+    .index("by_user_and_name", ["userId", "name"])
     .index("by_hash", ["keyHash"]),
 
   environments: defineTable({
@@ -40,6 +41,7 @@ export default defineSchema({
     cancellationRequested: v.boolean(),
   })
     .index("by_user", ["userId"])
+    .index("by_user_and_environment", ["userId", "environmentId"])
     .index("by_environment", ["environmentId"]),
 
   runEvents: defineTable({
