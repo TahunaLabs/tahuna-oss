@@ -31,7 +31,7 @@ export function Header() {
     <header className="sticky top-0 z-50 bg-background/90 backdrop-blur-md border-b border-border">
       <nav className="mx-auto max-w-7xl px-6 py-4 flex items-center justify-between">
         {/* Logo */}
-        <Link href="/" className="text-2xl font-serif font-semibold tracking-tight text-foreground">
+        <Link href="/" className="text-logo text-2xl font-serif font-semibold tracking-tight">
           Tahuna
         </Link>
 

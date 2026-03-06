@@ -393,7 +393,7 @@ export default function DashboardPage() {
     >
       <header className="flex h-12 items-center justify-between border-b border-border px-5">
         <div className="flex items-center">
-          <span className="font-serif text-[18px] font-bold tracking-[0.01em] text-muted-foreground">Tahuna</span>
+          <span className="text-logo font-serif text-[18px] font-bold tracking-[0.01em]">Tahuna</span>
         </div>
 
         <div className="flex items-center gap-4">

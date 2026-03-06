@@ -23,6 +23,7 @@
   --border: #d6e2e0;
   --input: #d6e2e0;
   --ring: #c8a84e;
+  --logo: var(--ring);
   --radius: 0.5rem;
 }
 
@@ -48,6 +49,7 @@
   --border: #1e3e40;
   --input: #1e3e40;
   --ring: #c8a84e;
+  --logo: var(--ring);
 }
 
 .landing-theme {
@@ -77,6 +79,7 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  --color-logo: var(--logo);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
