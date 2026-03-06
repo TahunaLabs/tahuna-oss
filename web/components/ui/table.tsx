@@ -7,7 +7,7 @@ const tableVariants = cva("w-full caption-bottom text-sm", {
   variants: {
     variant: {
       default: "",
-      dashboard: "text-left text-sm text-[#0d0d0d]",
+      dashboard: "text-left text-sm text-[#0d0d0d] dark:text-[#d8e6df]",
     },
   },
   defaultVariants: {
@@ -19,7 +19,7 @@ const tableHeaderVariants = cva("", {
   variants: {
     variant: {
       default: "[&_tr]:border-b",
-      dashboard: "border-b border-[#e5e5e5] text-[#6e6e80]",
+      dashboard: "border-b border-[#e5e5e5] text-[#6e6e80] dark:border-[#275156] dark:text-[#8ca7a5]",
     },
   },
   defaultVariants: {
@@ -32,7 +32,7 @@ const tableRowVariants = cva("", {
     variant: {
       default:
         "border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted",
-      dashboard: "border-b border-[#f1f1f1] last:border-0",
+      dashboard: "border-b border-[#f1f1f1] last:border-0 dark:border-[#1f4447]",
       "dashboard-head": "",
     },
   },

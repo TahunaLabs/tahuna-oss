@@ -23,7 +23,7 @@ const dropdownMenuContentVariants = cva(
       variant: {
         default: "w-72 bg-popover p-4",
         dashboard:
-          "w-[var(--radix-dropdown-menu-trigger-width)] space-y-3 rounded-lg border-[#e5e5e5] bg-white p-3 text-[#0d0d0d]",
+          "w-[var(--radix-dropdown-menu-trigger-width)] space-y-3 rounded-lg border-[#e5e5e5] bg-white p-3 text-[#0d0d0d] dark:border-[#275156] dark:bg-[#102729] dark:text-[#d8e6df]",
       },
     },
     defaultVariants: { variant: "default" },

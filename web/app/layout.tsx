@@ -1,4 +1,5 @@
 import { ConvexClientProvider } from "@/components/convex-client-provider"
+import { ThemeProvider } from "@/components/theme-provider"
 import { getToken } from "@/lib/auth-server"
 import { Analytics } from "@vercel/analytics/next"
 import type { Metadata } from "next"
@@ -29,7 +30,9 @@ export default async function RootLayout({
   return (
     <html lang="en" className={`${geist.variable} ${geistMono.variable} ${cormorant.variable}`}>
       <body className="font-sans antialiased">
-        <ConvexClientProvider initialToken={token}>{children}</ConvexClientProvider>
+        <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false} storageKey="tahuna-theme">
+          <ConvexClientProvider initialToken={token}>{children}</ConvexClientProvider>
+        </ThemeProvider>
         <Analytics />
       </body>
     </html>

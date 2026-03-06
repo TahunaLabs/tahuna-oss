@@ -27,27 +27,27 @@ const buttonVariants = cva(
         'sidebar-danger':
           'w-full justify-start gap-3 rounded-lg px-3 py-2.5 text-sm text-rose-300/80 hover:bg-rose-900/20 hover:text-rose-200',
         'dashboard-nav':
-          'h-8 w-full justify-start gap-2.5 px-2 text-[13.5px] font-normal text-[#6e6e80] hover:bg-[#f4f4f4] hover:text-[#0d0d0d]',
+          'h-8 w-full justify-start gap-2.5 px-2 text-[13.5px] font-normal text-[#6e6e80] hover:bg-[#f4f4f4] hover:text-[#0d0d0d] dark:text-[#8ca7a5] dark:hover:bg-[#153235] dark:hover:text-[#d8e6df]',
         'dashboard-nav-active':
-          'h-8 w-full justify-start gap-2.5 px-2 text-left text-[13.5px] font-medium bg-[#ececec] text-[#0d0d0d]',
+          'h-8 w-full justify-start gap-2.5 px-2 text-left text-[13.5px] font-medium bg-[#ececec] text-[#0d0d0d] dark:bg-[#1a3d40] dark:text-[#d8ebe8]',
         'dashboard-logout':
-          'h-8 w-full justify-start gap-2.5 px-2 text-[13px] font-normal text-[#6e6e80] hover:bg-[#f4f4f4] hover:text-[#0d0d0d]',
+          'h-8 w-full justify-start gap-2.5 px-2 text-[13px] font-normal text-[#6e6e80] hover:bg-[#f4f4f4] hover:text-[#0d0d0d] dark:text-[#8ca7a5] dark:hover:bg-[#153235] dark:hover:text-[#d8e6df]',
         'dashboard-top-link':
-          'h-auto px-0 text-[13.5px] font-normal text-[#6e6e80] hover:bg-transparent hover:text-[#0d0d0d]',
+          'h-auto px-0 text-[13.5px] font-normal text-[#6e6e80] hover:bg-transparent hover:text-[#0d0d0d] dark:text-[#8ca7a5] dark:hover:text-[#d8e6df]',
         'dashboard-icon':
-          'h-[30px] w-[30px] p-0 text-[#6e6e80] hover:bg-[#f4f4f4] hover:text-[#0d0d0d]',
+          'h-[30px] w-[30px] p-0 text-[#6e6e80] hover:bg-[#f4f4f4] hover:text-[#0d0d0d] dark:text-[#8ca7a5] dark:hover:bg-[#153235] dark:hover:text-[#d8e6df]',
         'dashboard-primary':
-          'bg-[#0d0d0d] text-white hover:bg-[#222]',
+          'bg-[#0d0d0d] text-white hover:bg-[#222] dark:bg-[#2a8f8e] dark:text-[#eaf7f6] dark:hover:bg-[#247a79]',
         'dashboard-outline':
-          'h-8 border border-[#e5e5e5] bg-white text-[#0d0d0d] shadow-none hover:bg-[#f8f8f8]',
+          'h-8 border border-[#e5e5e5] bg-white text-[#0d0d0d] shadow-none hover:bg-[#f8f8f8] dark:border-[#275156] dark:bg-[#102729] dark:text-[#d8e6df] dark:hover:bg-[#173337]',
         'dashboard-outline-icon':
-          'h-8 border border-[#e5e5e5] bg-white px-2 text-[#0d0d0d] shadow-none hover:bg-[#f8f8f8]',
+          'h-8 border border-[#e5e5e5] bg-white px-2 text-[#0d0d0d] shadow-none hover:bg-[#f8f8f8] dark:border-[#275156] dark:bg-[#102729] dark:text-[#d8e6df] dark:hover:bg-[#173337]',
         'dashboard-tab':
-          'h-9 rounded-md border border-[#e5e5e5] bg-white text-xs tracking-[0.1em] text-[#6e6e80] shadow-none hover:bg-[#f8f8f8] disabled:opacity-45',
+          'h-9 rounded-md border border-[#e5e5e5] bg-white text-xs tracking-[0.1em] text-[#6e6e80] shadow-none hover:bg-[#f8f8f8] disabled:opacity-45 dark:border-[#275156] dark:bg-[#102729] dark:text-[#8fb2af] dark:hover:bg-[#153235]',
         'dashboard-tab-active':
-          'h-9 rounded-md border border-[#e5e5e5] bg-[#f4f4f4] text-xs tracking-[0.1em] text-[#0d0d0d] shadow-none hover:bg-[#f0f0f0] disabled:opacity-45',
+          'h-9 rounded-md border border-[#e5e5e5] bg-[#f4f4f4] text-xs tracking-[0.1em] text-[#0d0d0d] shadow-none hover:bg-[#f0f0f0] disabled:opacity-45 dark:border-[#2f6668] dark:bg-[#1a3d40] dark:text-[#d8ebe8] dark:hover:bg-[#20484b]',
         'dashboard-machine-trigger':
-          'h-auto w-full justify-between gap-4 rounded-lg border border-[#e5e5e5] bg-white px-4 py-3 text-left font-normal text-[#0d0d0d] shadow-none hover:bg-[#f8f8f8] disabled:opacity-60',
+          'h-auto w-full justify-between gap-4 rounded-lg border border-[#e5e5e5] bg-white px-4 py-3 text-left font-normal text-[#0d0d0d] shadow-none hover:bg-[#f8f8f8] disabled:opacity-60 dark:border-[#275156] dark:bg-[#102729] dark:text-[#d8e6df] dark:hover:bg-[#173337]',
       },
       size: {
         default: 'h-9 px-4 py-2 has-[>svg]:px-3',

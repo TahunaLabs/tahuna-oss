@@ -39,7 +39,7 @@ function formatMachineMeta(machine: MachineInfo) {
 
 function MachineSelectorEmptyState({ children }: { children: ReactNode }) {
   return (
-    <div className="rounded-lg border border-dashed border-[#e5e5e5] bg-[#fafafa] px-4 py-8 text-center text-sm text-[#6e6e80]">
+    <div className="rounded-lg border border-dashed border-[#e5e5e5] bg-[#fafafa] px-4 py-8 text-center text-sm text-[#6e6e80] dark:border-[#2f6668] dark:bg-[#122d30] dark:text-[#8ca7a5]">
       {children}
     </div>
   )
@@ -104,12 +104,12 @@ export function MachineSelector({
                   </>
                 ) : null}
               </div>
-              <p className="mt-1 text-sm text-[#6e6e80]">
+              <p className="mt-1 text-sm text-[#6e6e80] dark:text-[#8ca7a5]">
                 {selectedMachine ? formatMachineMeta(selectedMachine) : "Choose a machine to run your training environment."}
               </p>
             </div>
             <ChevronDown
-              className={cn("h-4 w-4 shrink-0 text-[#6e6e80] transition-transform", open ? "rotate-180" : "")}
+              className={cn("h-4 w-4 shrink-0 text-[#6e6e80] transition-transform dark:text-[#8ca7a5]", open ? "rotate-180" : "")}
             />
           </Button>
         </DropdownMenuTrigger>
@@ -119,10 +119,9 @@ export function MachineSelector({
           variant="dashboard"
           align="start"
           sideOffset={8}
-          onOpenAutoFocus={(event) => event.preventDefault()}
         >
           <div className="relative">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#6e6e80]" />
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#6e6e80] dark:text-[#8ca7a5]" />
             <Input
               variant="dashboard"
               value={query}
@@ -177,8 +176,8 @@ export function MachineSelector({
                     className={cn(
                       "w-full rounded-lg border px-4 py-3 text-left transition",
                       isSelected
-                        ? "border-[#d0d0d0] bg-[#f4f4f4]"
-                        : "border-[#e5e5e5] bg-white hover:bg-[#f8f8f8]",
+                        ? "border-[#d0d0d0] bg-[#f4f4f4] dark:border-[#2f6668] dark:bg-[#1a3d40]"
+                        : "border-[#e5e5e5] bg-white hover:bg-[#f8f8f8] dark:border-[#275156] dark:bg-[#102729] dark:hover:bg-[#173337]",
                     )}
                   >
                     <div className="flex items-start justify-between gap-4">
@@ -189,7 +188,7 @@ export function MachineSelector({
                             GPU
                           </Badge>
                         </div>
-                        <p className="mt-1 text-xs uppercase tracking-[0.22em] text-[#8e8ea0]">
+                        <p className="mt-1 text-xs uppercase tracking-[0.22em] text-[#8e8ea0] dark:text-[#6f9a97]">
                           {machine.id}
                         </p>
                       </div>
@@ -199,7 +198,7 @@ export function MachineSelector({
                         </Badge>
                       ) : null}
                     </div>
-                    <p className="mt-2 text-sm text-[#6e6e80]">{formatMachineMeta(machine)}</p>
+                    <p className="mt-2 text-sm text-[#6e6e80] dark:text-[#8ca7a5]">{formatMachineMeta(machine)}</p>
                   </button>
                 )
               })}

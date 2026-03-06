@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label"
 import { Notice } from "@/components/ui/notice"
 import { Select } from "@/components/ui/select"
 import { PageLoader } from "@/components/ui/spinner"
+import { Switch } from "@/components/ui/switch"
 import {
   Table,
   TableBody,
@@ -26,14 +27,17 @@ import {
   Download,
   Key,
   LogOut,
+  Moon,
   Play,
   Server,
   Settings,
   Sparkles,
+  Sun,
   Trash2,
 } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
+import { useTheme } from "next-themes"
 import { useEffect, useMemo, useState, type ComponentType, type FormEvent, type ReactNode } from "react"
 
 type MainSection = "data" | "environments" | "runs"
@@ -132,7 +136,7 @@ function SidebarSection({
 }) {
   return (
     <section>
-      <p className="px-2 pb-1 pt-2 text-[11px] font-medium tracking-[0.01em] text-[#8e8ea0]">{label}</p>
+      <p className="px-2 pb-1 pt-2 text-[11px] font-medium tracking-[0.01em] text-[#8e8ea0] dark:text-[#6f9a97]">{label}</p>
       <div className="space-y-0.5">
         {items.map((item) => {
           const Icon = item.icon
@@ -169,8 +173,10 @@ function SidebarSection({
 
 export default function DashboardPage() {
   const router = useRouter()
+  const { resolvedTheme, setTheme } = useTheme()
   const { isAuthenticated, isLoading: authLoading } = useConvexAuth()
 
+  const [mounted, setMounted] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState("")
   const [message, setMessage] = useState("")
@@ -193,6 +199,10 @@ export default function DashboardPage() {
 
   const [dynamicGpus, setDynamicGpus] = useState<GPUInfo[]>([])
   const [loadingGpus, setLoadingGpus] = useState(true)
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   useEffect(() => {
     if (!isAuthenticated) return
@@ -272,6 +282,7 @@ export default function DashboardPage() {
   const userEmail = currentUser?.email ?? ""
   const userInitial = userEmail.trim().charAt(0).toUpperCase() || "U"
   const dataBlobs: DataBlob[] = dataResult?.blobs ?? []
+  const isDark = mounted && resolvedTheme === "dark"
 
   async function withBusy(task: () => Promise<void>) {
     setBusy(true)
@@ -380,21 +391,34 @@ export default function DashboardPage() {
 
   return (
     <div
-      className="h-screen overflow-hidden bg-white text-[#0d0d0d]"
+      className="h-screen overflow-hidden bg-white text-[#0d0d0d] dark:bg-[#0b1d1f] dark:text-[#d8e6df]"
       style={{
         fontFamily:
           "ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif",
       }}
     >
-      <header className="flex h-12 items-center justify-between border-b border-[#e5e5e5] px-5">
-        <div className="flex items-center gap-1.5 text-[13.5px] text-[#6e6e80]">
-          <div className="flex h-5 w-5 items-center justify-center rounded-[4px] bg-[#0d0d0d] text-white">
+      <header className="flex h-12 items-center justify-between border-b border-[#e5e5e5] px-5 dark:border-[#1f4447]">
+        <div className="flex items-center gap-1.5 text-[13.5px] text-[#6e6e80] dark:text-[#8ca7a5]">
+          <div className="flex h-5 w-5 items-center justify-center rounded-[4px] bg-[#0d0d0d] text-white dark:bg-[#2a8f8e] dark:text-[#eaf7f6]">
             <Sparkles className="h-3 w-3" />
           </div>
-          <span className="font-medium text-[#0d0d0d]">Dashboard</span>
+          <span className="font-medium text-[#0d0d0d] dark:text-[#d8e6df]">Dashboard</span>
         </div>
 
         <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            {isDark ? (
+              <Moon className="h-3.5 w-3.5 text-[#8ca7a5]" />
+            ) : (
+              <Sun className="h-3.5 w-3.5 text-[#6e6e80]" />
+            )}
+            <Switch
+              id="dashboard-theme"
+              aria-label="Toggle dark theme"
+              checked={isDark}
+              onCheckedChange={(checked) => setTheme(checked ? "dark" : "light")}
+            />
+          </div>
           <Button type="button" variant="dashboard-top-link" size="none">
             Dashboard
           </Button>
@@ -411,21 +435,21 @@ export default function DashboardPage() {
           >
             <Settings className="h-4 w-4" />
           </Button>
-          <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[#0d0d0d] text-xs font-semibold text-white">
+          <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[#0d0d0d] text-xs font-semibold text-white dark:bg-[#2a8f8e] dark:text-[#eaf7f6]">
             {userInitial}
           </div>
         </div>
       </header>
 
       <div className="flex h-[calc(100vh-3rem)]">
-        <aside className="flex h-full w-[168px] shrink-0 flex-col gap-0.5 overflow-y-auto border-r border-[#e5e5e5] bg-white p-2">
+        <aside className="flex h-full w-[168px] shrink-0 flex-col gap-0.5 overflow-y-auto border-r border-[#e5e5e5] bg-white p-2 dark:border-[#1f4447] dark:bg-[#0f2628]">
           <SidebarSection
             label="Features"
             items={FEATURE_ITEMS}
             activeSection={activeSection}
             onSelect={setActiveSection}
           />
-          <div className="my-1 h-px bg-[#e5e5e5]" />
+          <div className="my-1 h-px bg-[#e5e5e5] dark:bg-[#1f4447]" />
           <SidebarSection
             label="Account"
             items={ACCOUNT_ITEMS}

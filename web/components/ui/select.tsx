@@ -10,7 +10,7 @@ const selectVariants = cva(
       variant: {
         default: '',
         dashboard:
-          'rounded-md border-[#e5e5e5] bg-white px-3 font-sans text-[#0d0d0d]',
+          'rounded-md border-[#e5e5e5] bg-white px-3 font-sans text-[#0d0d0d] dark:border-[#275156] dark:bg-[#102729] dark:text-[#d8e6df]',
       },
     },
     defaultVariants: { variant: 'default' },
