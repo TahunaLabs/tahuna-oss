@@ -1,8 +1,23 @@
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import type { Doc, Id } from "@convex/_generated/dataModel";
 import { internalMutation, internalQuery, mutation, query, type MutationCtx, type QueryCtx } from "@convex/_generated/server";
 import { requireUser } from "@convex/auth";
 import { images } from "@convex/catalog";
+
+const environmentResponseValidator = v.object({
+  environment_id: v.string(),
+  name: v.string(),
+  artifacts: v.string(),
+  gpu_type: v.string(),
+  gpu_count: v.number(),
+  volume_gb: v.number(),
+  framework: v.string(),
+  version: v.string(),
+});
+
+const listEnvironmentsResponseValidator = v.object({
+  environments: v.array(environmentResponseValidator),
+});
 
 function environmentPath(userId: string, environmentId: string) {
   return `${userId}/environment/${environmentId}`;
@@ -15,15 +30,15 @@ function validateEnvironmentPayload(args: {
   version: string;
 }) {
   if (args.gpu_count < 1 || args.volume_gb < 1) {
-    throw new Error("invalid environment payload");
+    throw new ConvexError("invalid environment payload");
   }
 
   const versions = images[args.framework];
   if (!versions) {
-    throw new Error(`unsupported framework: ${args.framework}`);
+    throw new ConvexError(`unsupported framework: ${args.framework}`);
   }
   if (!versions[args.version]) {
-    throw new Error(`unsupported version for framework ${args.framework}: ${args.version}`);
+    throw new ConvexError(`unsupported version for framework ${args.framework}: ${args.version}`);
   }
 }
 
@@ -56,9 +71,9 @@ async function getOwnedEnvironment(
   userId: string,
   environmentId: Id<"environments">,
 ) {
-  const row = await ctx.db.get(environmentId);
+  const row = await ctx.db.get("environments", environmentId);
   if (!row || row.userId !== userId) {
-    throw new Error("environment not found");
+    throw new ConvexError("environment not found");
   }
   return row;
 }
@@ -88,13 +103,13 @@ async function createEnvironmentForUserId(
     version: args.version,
   });
 
-  await ctx.db.patch(envId, {
+  await ctx.db.patch("environments", envId, {
     artifacts: environmentPath(args.userId, String(envId)),
   });
 
-  const env = await ctx.db.get(envId);
+  const env = await ctx.db.get("environments", envId);
   if (!env) {
-    throw new Error("failed to create environment");
+    throw new ConvexError("failed to create environment");
   }
 
   return toEnvironmentResponse(env);
@@ -103,16 +118,16 @@ async function createEnvironmentForUserId(
 async function removeEnvironmentForUserId(ctx: MutationCtx, userId: string, environmentId: Id<"environments">) {
   await getOwnedEnvironment(ctx, userId, environmentId);
 
-  const runs = await ctx.db
+  const existingRun = await ctx.db
     .query("runs")
-    .withIndex("by_environment", (q) => q.eq("environmentId", environmentId))
-    .collect();
+    .withIndex("by_user_and_environment", (q) => q.eq("userId", userId).eq("environmentId", environmentId))
+    .first();
 
-  if (runs.some((r) => r.userId === userId)) {
-    throw new Error("environment still has runs; delete them first");
+  if (existingRun) {
+    throw new ConvexError("environment still has runs; delete them first");
   }
 
-  await ctx.db.delete(environmentId);
+  await ctx.db.delete("environments", environmentId);
   return { deleted: true, environment_id: String(environmentId) };
 }
 
@@ -120,6 +135,7 @@ async function removeEnvironmentForUserId(ctx: MutationCtx, userId: string, envi
 
 export const list = query({
   args: {},
+  returns: listEnvironmentsResponseValidator,
   handler: async (ctx) => {
     const user = await requireUser(ctx);
     return listByUserId(ctx, String(user._id));
@@ -128,6 +144,7 @@ export const list = query({
 
 export const get = query({
   args: { environmentId: v.id("environments") },
+  returns: environmentResponseValidator,
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
     const row = await getOwnedEnvironment(ctx, String(user._id), args.environmentId);
@@ -144,6 +161,7 @@ export const create = mutation({
     framework: v.string(),
     version: v.string(),
   },
+  returns: environmentResponseValidator,
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
     return createEnvironmentForUserId(ctx, {
@@ -160,6 +178,7 @@ export const create = mutation({
 
 export const remove = mutation({
   args: { environmentId: v.id("environments") },
+  returns: v.object({ deleted: v.boolean(), environment_id: v.string() }),
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
     return removeEnvironmentForUserId(ctx, String(user._id), args.environmentId);
@@ -170,6 +189,7 @@ export const remove = mutation({
 
 export const internalList = internalQuery({
   args: { userId: v.string() },
+  returns: listEnvironmentsResponseValidator,
   handler: async (ctx, args) => {
     return listByUserId(ctx, args.userId);
   },
@@ -177,6 +197,7 @@ export const internalList = internalQuery({
 
 export const internalGet = internalQuery({
   args: { userId: v.string(), environmentId: v.id("environments") },
+  returns: environmentResponseValidator,
   handler: async (ctx, args) => {
     const row = await getOwnedEnvironment(ctx, args.userId, args.environmentId);
     return toEnvironmentResponse(row);
@@ -193,6 +214,7 @@ export const internalCreate = internalMutation({
     framework: v.string(),
     version: v.string(),
   },
+  returns: environmentResponseValidator,
   handler: async (ctx, args) => {
     return createEnvironmentForUserId(ctx, args);
   },
@@ -200,6 +222,7 @@ export const internalCreate = internalMutation({
 
 export const internalRemove = internalMutation({
   args: { userId: v.string(), environmentId: v.id("environments") },
+  returns: v.object({ deleted: v.boolean(), environment_id: v.string() }),
   handler: async (ctx, args) => {
     return removeEnvironmentForUserId(ctx, args.userId, args.environmentId);
   },
