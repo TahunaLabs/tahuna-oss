@@ -1,4 +1,5 @@
 import { action, query } from "@convex/_generated/server";
+import { v } from "convex/values";
 
 export const images: Record<string, Record<string, string>> = {
   pt: {
@@ -10,6 +11,9 @@ export const images: Record<string, Record<string, string>> = {
 
 export const getCatalog = query({
   args: {},
+  returns: v.object({
+    images: v.record(v.string(), v.record(v.string(), v.string())),
+  }),
   handler: async () => ({ images }),
 });
 
@@ -40,6 +44,15 @@ type RunpodGraphqlResponse = {
 
 export const getDynamicGpus = action({
   args: {},
+  returns: v.array(
+    v.object({
+      id: v.string(),
+      displayName: v.string(),
+      memoryInGb: v.number(),
+      maxGpuCount: v.number(),
+      pricePerHour: v.optional(v.number()),
+    }),
+  ),
   handler: async () => {
     const apiKey = process.env.RUNPOD_API_KEY;
     if (!apiKey) {
@@ -73,8 +86,8 @@ export const getDynamicGpus = action({
         return [];
       }
 
-      const extractHourlyPrice = (cloud: RunpodCloudPricing | null | undefined): number | null => {
-        if (!cloud || typeof cloud !== "object") return null;
+      const extractHourlyPrice = (cloud: RunpodCloudPricing | null | undefined): number | undefined => {
+        if (!cloud || typeof cloud !== "object") return undefined;
         const candidates = [
           cloud.lowestPrice,
           cloud.price,
@@ -92,7 +105,7 @@ export const getDynamicGpus = action({
           }
         }
 
-        return null;
+        return undefined;
       };
 
       // Filter to only include GPUs that actually have stock and aren't 'unknown'
