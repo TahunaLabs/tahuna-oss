@@ -1,7 +1,6 @@
 import { Footer } from "@/components/footer"
 import { Header } from "@/components/header"
 import { Hero } from "@/components/hero"
-import { Layers } from "@/components/layers"
 import { Manifesto } from "@/components/manifesto"
 import { TerminalSection } from "@/components/terminal-section"
 import { Waitlist } from "@/components/waitlist"
@@ -20,7 +19,6 @@ export default async function Home() {
         <Hero />
         <TerminalSection />
         <Manifesto />
-        <Layers />
         <Waitlist />
       </main>
       <Footer />

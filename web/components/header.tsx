@@ -3,16 +3,29 @@
 import { Button } from "@/components/ui/button"
 import { Menu, X } from "lucide-react"
 import Link from "next/link"
-import { useState } from "react"
+import { usePathname } from "next/navigation"
+import { useState, type MouseEvent } from "react"
 
 export function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const pathname = usePathname()
 
   const navLinks = [
     { label: "Manifesto", href: "/#manifesto" },
-    { label: "The Stack", href: "/#layers" },
     { label: "Get in Touch", href: "/#waitlist" },
   ]
+
+  const handleAnchorClick = (href: string) => (event: MouseEvent<HTMLAnchorElement>) => {
+    if (pathname !== "/" || !href.startsWith("/#")) return
+
+    const targetId = href.slice(2)
+    const section = document.getElementById(targetId)
+    if (!section) return
+
+    event.preventDefault()
+    section.scrollIntoView({ behavior: "smooth", block: "start" })
+    window.history.replaceState(null, "", href)
+  }
 
   return (
     <header className="sticky top-0 z-50 bg-background/90 backdrop-blur-md border-b border-border">
@@ -28,6 +41,7 @@ export function Header() {
             <Link
               key={link.label}
               href={link.href}
+              onClick={handleAnchorClick(link.href)}
               className="text-sm text-muted-foreground hover:text-foreground transition-colors"
             >
               {link.label}
@@ -57,8 +71,11 @@ export function Header() {
             <Link
               key={link.label}
               href={link.href}
+              onClick={(event) => {
+                handleAnchorClick(link.href)(event)
+                setMobileMenuOpen(false)
+              }}
               className="block text-sm text-muted-foreground hover:text-foreground"
-              onClick={() => setMobileMenuOpen(false)}
             >
               {link.label}
             </Link>

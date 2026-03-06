@@ -5,45 +5,18 @@ export function Manifesto() {
   return (
     <Section variant="blurred" id="manifesto">
       <SectionContainer size="md">
-        <SectionHeading variant="display" className="mb-12">
-          Vibe Research.
-        </SectionHeading>
-
-        <div className="space-y-6 text-lg text-muted-foreground leading-relaxed max-w-3xl">
+        <div className="space-y-6 text-lg text-muted-foreground leading-relaxed">
+          <SectionHeading variant="display" className="max-w-4xl">
+            A gentler control plane.
+          </SectionHeading>
           <p>
-            You can&apos;t prompt your way into high-quality agentic behavior. And you can&apos;t
-            brute-force it with scale alone. The last decade was defined by throwing larger volumes
-            of compute at larger monolithic systems — but intelligence shouldn&apos;t be frozen in
-            training data or updated in slow, expensive cycles.
-          </p>
-
-          <p>
-            We&apos;re betting against brute-force scaling. Where others chase size, we&apos;re
-            building adaptability-first systems — efficient AI that continually learns.
-          </p>
-
-          <p>
-            Post-training the mechanism that makes this possible. It takes something that
-            works &ldquo;okay&rdquo; in simple settings and makes it robust enough to handle
-            long-horizon, multi-step tasks reliably. This is exactly how the frontier labs are
-            building their next generation of models — and the results speak for themselves.
-          </p>
-
-          <p className="text-foreground font-medium">
-            Tahuna brings this capability to everyone. Train, evaluate, and iterate on agentic
-            reasoners — with clean reward signals, rigorous evaluation, and continuous improvement
-            loops — without needing a research lab to do it.
-          </p>
-
-          <p>
-            The recipe is becoming clear: RL, evaluators, synthetic data, and iterative refinement.
-            We&apos;re making it accessible, fun, and scalable.
+            Not another infrastructure hell. Not a wall of knobs. More like a quiet field where models learn to move with you. You point, it listens. You shift, it follows. Push code, the training follows. The heavy machinery stays out of sight, no headaches, no config spirals. Just progress arriving in small, inevitable waves. Fast starts. Calm loops. A little room for whims.
           </p>
         </div>
 
-        <div className="mt-16 pt-8 border-t border-border">
-          <p className="text-lg italic text-muted-foreground leading-relaxed">
-            Two Senior ML Engineers. One mission: make the frontier accessible.
+        <div className="mt-8 rounded-xl border border-border bg-background px-4 py-3">
+          <p className="font-mono text-xs text-muted-foreground">
+            init {" > "} align {" > "} converge {" > "} emerge
           </p>
         </div>
       </SectionContainer>
