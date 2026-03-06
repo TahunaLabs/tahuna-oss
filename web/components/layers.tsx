@@ -1,7 +1,7 @@
 import { Section, SectionContainer } from "@/components/section"
 import { SectionHeading } from "@/components/section-heading"
 import { Badge } from "@/components/ui/badge"
-import { Card, CardContent } from "@/components/ui/card"
+import { Card, CardContent, CardDots, CardHeader, CardTitle } from "@/components/ui/card"
 import { IconBox } from "@/components/ui/icon-box"
 import { BookOpen, Box, Cpu, Scale, Shield } from "lucide-react"
 
@@ -62,15 +62,17 @@ export function Layers() {
           {layers.map((layer, index) => (
             <Card key={layer.title} className="relative">
               <div className="absolute inset-0 bg-background/50 backdrop-blur-sm -z-10" />
-              <CardContent className="p-8">
-                <div className="flex items-start gap-4 mb-4 relative z-10">
+              <CardHeader>
+                <CardDots />
+                <CardTitle className="ml-2">Layer {index + 1}</CardTitle>
+              </CardHeader>
+              <CardContent className="p-7">
+                <div className="relative z-10 mb-4 flex items-start gap-4">
                   <IconBox>
                     <layer.icon className="h-5 w-5" />
                   </IconBox>
                   <div>
-                    <Badge variant="ghost" className="mb-1 block">
-                      Layer {index + 1}
-                    </Badge>
+                    <Badge variant="ghost" className="mb-1 block">Stack</Badge>
                     <h3 className="text-xl font-medium">
                       {layer.title}: <span className="text-muted-foreground font-normal">{layer.subtitle}</span>
                     </h3>

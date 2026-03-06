@@ -14,7 +14,7 @@ export default async function Home() {
   }
 
   return (
-    <div className="min-h-screen landing-page-bg">
+    <div className="landing-theme min-h-screen landing-page-bg">
       <Header />
       <main>
         <Hero />

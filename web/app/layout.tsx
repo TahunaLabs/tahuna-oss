@@ -3,6 +3,7 @@ import { ThemeProvider } from "@/components/theme-provider"
 import { getToken } from "@/lib/auth-server"
 import { Analytics } from "@vercel/analytics/next"
 import type { Metadata } from "next"
+import { cookies } from "next/headers"
 import { Cormorant_Garamond, Geist, Geist_Mono } from "next/font/google"
 import type React from "react"
 import "./globals.css"
@@ -26,11 +27,13 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode
 }>) {
-  const token = await getToken();
+  const token = await getToken()
+  const themeCookie = (await cookies()).get("tahuna-theme")?.value
+  const initialTheme = themeCookie === "dark" ? "dark" : "light"
   return (
-    <html lang="en" className={`${geist.variable} ${geistMono.variable} ${cormorant.variable}`}>
+    <html lang="en" className={`${geist.variable} ${geistMono.variable} ${cormorant.variable} ${initialTheme}`}>
       <body className="font-sans antialiased">
-        <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false} storageKey="tahuna-theme">
+        <ThemeProvider initialTheme={initialTheme}>
           <ConvexClientProvider initialToken={token}>{children}</ConvexClientProvider>
         </ThemeProvider>
         <Analytics />

@@ -1,6 +1,7 @@
 "use client"
 
 import { MachineSelector } from "@/components/machine-selector"
+import { useTheme } from "@/components/theme-provider"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -31,13 +32,11 @@ import {
   Play,
   Server,
   Settings,
-  Sparkles,
   Sun,
   Trash2,
 } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { useTheme } from "next-themes"
 import { useEffect, useMemo, useState, type ComponentType, type FormEvent, type ReactNode } from "react"
 
 type MainSection = "data" | "environments" | "runs"
@@ -136,7 +135,7 @@ function SidebarSection({
 }) {
   return (
     <section>
-      <p className="px-2 pb-1 pt-2 text-[11px] font-medium tracking-[0.01em] text-[#8e8ea0] dark:text-[#6f9a97]">{label}</p>
+      <p className="px-2 pb-1 pt-2 text-[11px] font-medium tracking-[0.01em] text-muted-foreground">{label}</p>
       <div className="space-y-0.5">
         {items.map((item) => {
           const Icon = item.icon
@@ -176,7 +175,6 @@ export default function DashboardPage() {
   const { resolvedTheme, setTheme } = useTheme()
   const { isAuthenticated, isLoading: authLoading } = useConvexAuth()
 
-  const [mounted, setMounted] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState("")
   const [message, setMessage] = useState("")
@@ -199,10 +197,6 @@ export default function DashboardPage() {
 
   const [dynamicGpus, setDynamicGpus] = useState<GPUInfo[]>([])
   const [loadingGpus, setLoadingGpus] = useState(true)
-
-  useEffect(() => {
-    setMounted(true)
-  }, [])
 
   useEffect(() => {
     if (!isAuthenticated) return
@@ -282,7 +276,7 @@ export default function DashboardPage() {
   const userEmail = currentUser?.email ?? ""
   const userInitial = userEmail.trim().charAt(0).toUpperCase() || "U"
   const dataBlobs: DataBlob[] = dataResult?.blobs ?? []
-  const isDark = mounted && resolvedTheme === "dark"
+  const isDark = resolvedTheme === "dark"
 
   async function withBusy(task: () => Promise<void>) {
     setBusy(true)
@@ -391,26 +385,23 @@ export default function DashboardPage() {
 
   return (
     <div
-      className="h-screen overflow-hidden bg-white text-[#0d0d0d] dark:bg-[#0b1d1f] dark:text-[#d8e6df]"
+      className="h-screen overflow-hidden bg-background text-foreground"
       style={{
         fontFamily:
           "ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif",
       }}
     >
-      <header className="flex h-12 items-center justify-between border-b border-[#e5e5e5] px-5 dark:border-[#1f4447]">
-        <div className="flex items-center gap-1.5 text-[13.5px] text-[#6e6e80] dark:text-[#8ca7a5]">
-          <div className="flex h-5 w-5 items-center justify-center rounded-[4px] bg-[#0d0d0d] text-white dark:bg-[#2a8f8e] dark:text-[#eaf7f6]">
-            <Sparkles className="h-3 w-3" />
-          </div>
-          <span className="font-medium text-[#0d0d0d] dark:text-[#d8e6df]">Dashboard</span>
+      <header className="flex h-12 items-center justify-between border-b border-border px-5">
+        <div className="flex items-center">
+          <span className="font-serif text-[18px] font-bold tracking-[0.01em] text-muted-foreground">Tahuna</span>
         </div>
 
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
             {isDark ? (
-              <Moon className="h-3.5 w-3.5 text-[#8ca7a5]" />
+              <Moon className="h-3.5 w-3.5 text-muted-foreground" />
             ) : (
-              <Sun className="h-3.5 w-3.5 text-[#6e6e80]" />
+              <Sun className="h-3.5 w-3.5 text-muted-foreground" />
             )}
             <Switch
               id="dashboard-theme"
@@ -435,21 +426,21 @@ export default function DashboardPage() {
           >
             <Settings className="h-4 w-4" />
           </Button>
-          <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[#0d0d0d] text-xs font-semibold text-white dark:bg-[#2a8f8e] dark:text-[#eaf7f6]">
+          <div className="flex h-7 w-7 items-center justify-center rounded-full bg-secondary text-xs font-semibold text-secondary-foreground">
             {userInitial}
           </div>
         </div>
       </header>
 
       <div className="flex h-[calc(100vh-3rem)]">
-        <aside className="flex h-full w-[168px] shrink-0 flex-col gap-0.5 overflow-y-auto border-r border-[#e5e5e5] bg-white p-2 dark:border-[#1f4447] dark:bg-[#0f2628]">
+        <aside className="flex h-full w-[168px] shrink-0 flex-col gap-0.5 overflow-y-auto border-r border-border bg-card p-2">
           <SidebarSection
             label="Features"
             items={FEATURE_ITEMS}
             activeSection={activeSection}
             onSelect={setActiveSection}
           />
-          <div className="my-1 h-px bg-[#e5e5e5] dark:bg-[#1f4447]" />
+          <div className="my-1 h-px bg-border" />
           <SidebarSection
             label="Account"
             items={ACCOUNT_ITEMS}
@@ -470,18 +461,18 @@ export default function DashboardPage() {
           </div>
         </aside>
 
-        <main className="relative flex min-h-0 flex-1 flex-col overflow-y-auto px-5 py-6">
-          <h1 className="mb-6 text-[17px] font-semibold">{PAGE_TITLES[activeSection]}</h1>
+        <main className="relative flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-5">
+          <h1 className="mb-5 text-[17px] font-semibold">{PAGE_TITLES[activeSection]}</h1>
 
           {error ? <Notice variant="error" className="mb-4">{error}</Notice> : null}
           {message ? <Notice className="mb-4">{message}</Notice> : null}
 
-          <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col pb-8">
+          <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col pb-6">
             {activeSection === "data" ? (
-              <section className="flex h-full flex-col gap-4">
-                <Card variant="dashboard" className="p-5">
+              <section className="flex h-full flex-col gap-3">
+                <Card variant="dashboard" className="p-4">
                   <h3 className="text-sm font-semibold">Ingest data</h3>
-                  <form onSubmit={uploadData} className="mt-4 space-y-3">
+                  <form onSubmit={uploadData} className="mt-3 space-y-2.5">
                     <div className="space-y-1.5">
                       <Label htmlFor="data-file">Files</Label>
                       <Input
@@ -496,7 +487,7 @@ export default function DashboardPage() {
                     </div>
 
                     {selectedDataFiles.length > 0 ? (
-                      <div className="rounded-lg border border-border p-3">
+                      <div className="rounded-lg border border-border p-2.5">
                         {selectedDataFiles.map((file) => (
                           <p key={`${file.name}-${file.size}-${file.lastModified}`} className="text-sm text-muted-foreground">
                             {file.name} ({formatBytes(file.size)})
@@ -567,9 +558,9 @@ export default function DashboardPage() {
             ) : null}
 
             {activeSection === "environments" ? (
-              <section className="flex h-full flex-col gap-4">
-                <Card variant="dashboard" className="p-5">
-                  <form onSubmit={createEnvironment} className="space-y-4">
+              <section className="flex h-full flex-col gap-3">
+                <Card variant="dashboard" className="p-4">
+                  <form onSubmit={createEnvironment} className="space-y-3">
                     <MachineSelector
                       machines={dynamicGpus}
                       value={envGPUType}
@@ -578,7 +569,7 @@ export default function DashboardPage() {
                       disabled={dynamicGpus.length === 0 && !loadingGpus}
                     />
 
-                    <div className="grid gap-3 md:grid-cols-2">
+                    <div className="grid gap-2.5 md:grid-cols-2">
                       <div className="space-y-1.5">
                         <Label htmlFor="framework">Framework</Label>
                         <Select
@@ -673,7 +664,7 @@ export default function DashboardPage() {
             ) : null}
 
             {activeSection === "runs" ? (
-              <section className="flex h-full flex-col gap-4">
+              <section className="flex h-full flex-col gap-3">
                 {environments.length === 0 ? (
                   <BottomHalfEmptyMessage>Create an environment first to launch runs.</BottomHalfEmptyMessage>
                 ) : runs.length === 0 ? (

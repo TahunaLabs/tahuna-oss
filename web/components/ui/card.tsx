@@ -14,8 +14,7 @@ const cardVariants = cva("overflow-hidden", {
       elevated:
         "bg-card/80 backdrop-blur-sm border border-border rounded-xl",
       pill: "bg-card border border-border rounded-full",
-      dashboard:
-        "rounded-lg border border-[#e5e5e5] bg-white text-[#0d0d0d] dark:border-[#275156] dark:bg-[#102729] dark:text-[#d8e6df]",
+      dashboard: "rounded-lg border border-border bg-card text-foreground",
     },
   },
   defaultVariants: { variant: "default" },

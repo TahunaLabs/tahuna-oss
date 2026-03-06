@@ -4,6 +4,30 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
+  --background: #f6f9f8;
+  --foreground: #162123;
+  --card: #ffffff;
+  --card-foreground: #162123;
+  --popover: #ffffff;
+  --popover-foreground: #162123;
+  --primary: #c8a84e;
+  --primary-foreground: #1a1c12;
+  --secondary: #e9f0ef;
+  --secondary-foreground: #1e3133;
+  --muted: #eef4f3;
+  --muted-foreground: #5f7473;
+  --accent: #c8a84e;
+  --accent-foreground: #1a1c12;
+  --destructive: #c0392b;
+  --destructive-foreground: #f7f9f9;
+  --border: #d6e2e0;
+  --input: #d6e2e0;
+  --ring: #c8a84e;
+  --radius: 0.5rem;
+}
+
+.dark,
+.landing-theme {
   /* AMP-inspired dark teal palette */
   --background: #0b1d1f;
   --foreground: #e8e0d4;
@@ -24,7 +48,10 @@
   --border: #1e3e40;
   --input: #1e3e40;
   --ring: #c8a84e;
-  --radius: 0.5rem;
+}
+
+.landing-theme {
+  color-scheme: dark;
 }
 
 @theme inline {
