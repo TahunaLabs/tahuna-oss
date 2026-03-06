@@ -3,24 +3,28 @@ import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
-const badgeVariants = cva("inline-flex items-center font-mono uppercase", {
+const badgeVariants = cva("inline-flex items-center font-mono", {
   variants: {
     variant: {
       default:
-        "text-[10px] tracking-wider text-muted-foreground border border-border rounded px-2 py-0.5",
+        "rounded border border-border px-2 py-0.5 text-[10px] uppercase tracking-wider text-muted-foreground",
       filled:
-        "text-xs tracking-widest text-foreground bg-secondary px-2 py-1",
-      ghost: "text-xs tracking-widest text-muted-foreground",
+        "bg-secondary px-2 py-1 text-xs uppercase tracking-widest text-foreground",
+      ghost: "text-xs uppercase tracking-widest text-muted-foreground",
       status:
-        "bg-muted px-3 py-1 rounded text-xs text-muted-foreground",
+        "rounded bg-muted px-3 py-1 text-xs uppercase text-muted-foreground",
       "status-success":
-        "text-[10px] tracking-wider border rounded px-2 py-0.5 text-emerald-300 border-emerald-600/50 bg-emerald-900/20",
+        "rounded border border-emerald-600/50 bg-emerald-900/20 px-2 py-0.5 text-[10px] uppercase tracking-wider text-emerald-300",
       "status-warning":
-        "text-[10px] tracking-wider border rounded px-2 py-0.5 text-amber-200 border-amber-500/40 bg-amber-900/20",
+        "rounded border border-amber-500/40 bg-amber-900/20 px-2 py-0.5 text-[10px] uppercase tracking-wider text-amber-200",
       "status-info":
-        "text-[10px] tracking-wider border rounded px-2 py-0.5 text-cyan-200 border-cyan-500/40 bg-cyan-900/20",
+        "rounded border border-cyan-500/40 bg-cyan-900/20 px-2 py-0.5 text-[10px] uppercase tracking-wider text-cyan-200",
       "status-error":
-        "text-[10px] tracking-wider border rounded px-2 py-0.5 text-rose-200 border-rose-500/40 bg-rose-900/20",
+        "rounded border border-rose-500/40 bg-rose-900/20 px-2 py-0.5 text-[10px] uppercase tracking-wider text-rose-200",
+      "dashboard-chip":
+        "rounded-full border border-[#dcdcdc] bg-[#f8f8f8] px-2 py-0.5 text-[9px] normal-case tracking-normal text-[#4d4d59]",
+      "dashboard-run-status":
+        "rounded-full border border-border px-2.5 py-1 text-[11px] capitalize tracking-normal text-muted-foreground",
     },
   },
   defaultVariants: { variant: "default" },

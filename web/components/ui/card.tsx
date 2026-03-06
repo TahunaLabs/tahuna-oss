@@ -14,6 +14,7 @@ const cardVariants = cva("overflow-hidden", {
       elevated:
         "bg-card/80 backdrop-blur-sm border border-border rounded-xl",
       pill: "bg-card border border-border rounded-full",
+      dashboard: "bg-white border border-[#e5e5e5] rounded-lg text-[#0d0d0d]",
     },
   },
   defaultVariants: { variant: "default" },
@@ -127,4 +128,3 @@ function CardFooter({
 export {
     Card, CardContent, CardDots, CardFooter, CardHeader, CardTitle, cardVariants
 }
-

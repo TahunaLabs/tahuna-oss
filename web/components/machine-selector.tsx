@@ -4,10 +4,10 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
 import { ChevronDown, Cpu, Search, Zap } from "lucide-react"
-import { useMemo, useState } from "react"
+import { useMemo, useState, type ReactNode } from "react"
 
 type MachineInfo = {
   id: string
@@ -35,6 +35,14 @@ const machineTabs: { id: MachineTab; label: string; icon: typeof Zap }[] = [
 function formatMachineMeta(machine: MachineInfo) {
   const price = typeof machine.pricePerHour === "number" ? `$${machine.pricePerHour.toFixed(2)}/hr` : "Pricing unavailable"
   return `${machine.memoryInGb} GB VRAM | Up to ${machine.maxGpuCount} GPUs | ${price}`
+}
+
+function MachineSelectorEmptyState({ children }: { children: ReactNode }) {
+  return (
+    <div className="rounded-lg border border-dashed border-[#e5e5e5] bg-[#fafafa] px-4 py-8 text-center text-sm text-[#6e6e80]">
+      {children}
+    </div>
+  )
 }
 
 export function MachineSelector({
@@ -69,19 +77,16 @@ export function MachineSelector({
   return (
     <div className="space-y-2">
       <Label htmlFor="machine-selector-trigger">Machine</Label>
-      <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger asChild>
-          <button
+      <DropdownMenu open={open} onOpenChange={setOpen} modal={false}>
+        <DropdownMenuTrigger asChild>
+          <Button
             id="machine-selector-trigger"
             type="button"
             aria-expanded={open}
             aria-controls="machine-selector-panel"
+            variant="dashboard-machine-trigger"
+            size="none"
             disabled={!canExpand}
-            className={cn(
-              "flex w-full items-center justify-between gap-4 rounded-lg border border-[#e5e5e5] bg-white px-4 py-3 text-left transition",
-              "disabled:cursor-not-allowed disabled:opacity-60",
-              canExpand ? "hover:bg-[#f8f8f8]" : "",
-            )}
           >
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
@@ -90,10 +95,10 @@ export function MachineSelector({
                 </p>
                 {selectedMachine ? (
                   <>
-                    <Badge variant="default" className="rounded-full border-[#dcdcdc] bg-[#f8f8f8] px-2 py-0.5 text-[9px] text-[#4d4d59]">
+                    <Badge variant="dashboard-chip">
                       GPU
                     </Badge>
-                    <Badge variant="default" className="rounded-full border-[#dcdcdc] bg-[#f8f8f8] px-2 py-0.5 text-[9px] text-[#4d4d59]">
+                    <Badge variant="dashboard-chip">
                       {selectedMachine.id}
                     </Badge>
                   </>
@@ -106,23 +111,24 @@ export function MachineSelector({
             <ChevronDown
               className={cn("h-4 w-4 shrink-0 text-[#6e6e80] transition-transform", open ? "rotate-180" : "")}
             />
-          </button>
-        </PopoverTrigger>
+          </Button>
+        </DropdownMenuTrigger>
 
-        <PopoverContent
+        <DropdownMenuContent
           id="machine-selector-panel"
+          variant="dashboard"
           align="start"
           sideOffset={8}
           onOpenAutoFocus={(event) => event.preventDefault()}
-          className="z-50 w-[var(--radix-popover-trigger-width)] space-y-3 rounded-lg border-[#e5e5e5] bg-white p-3"
         >
           <div className="relative">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#6e6e80]" />
             <Input
+              variant="dashboard"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Search machines..."
-              className="rounded-md border-[#e5e5e5] bg-white pl-9 font-sans text-[#0d0d0d]"
+              className="pl-9"
             />
           </div>
 
@@ -135,15 +141,11 @@ export function MachineSelector({
                 <Button
                   key={tab.id}
                   type="button"
-                  variant="outline"
-                  size="sm"
+                  variant={isActive ? "dashboard-tab-active" : "dashboard-tab"}
+                  size="none"
                   disabled={isDisabled}
                   onClick={() => setActiveTab(tab.id)}
-                  className={cn(
-                    "h-9 rounded-md border-[#e5e5e5] bg-white text-xs tracking-[0.1em] text-[#6e6e80]",
-                    isActive ? "bg-[#f4f4f4] text-[#0d0d0d] hover:bg-[#f0f0f0]" : "hover:bg-[#f8f8f8]",
-                    isDisabled ? "opacity-45" : "",
-                  )}
+                  className="w-full"
                 >
                   <Icon className="h-3.5 w-3.5" />
                   {tab.label}
@@ -153,13 +155,13 @@ export function MachineSelector({
           </div>
 
           {activeTab !== "gpu" ? (
-            <div className="rounded-lg border border-dashed border-[#e5e5e5] bg-[#fafafa] px-4 py-8 text-center text-sm text-[#6e6e80]">
+            <MachineSelectorEmptyState>
               CPU machines are not available in Tahuna yet.
-            </div>
+            </MachineSelectorEmptyState>
           ) : filteredMachines.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-[#e5e5e5] bg-[#fafafa] px-4 py-8 text-center text-sm text-[#6e6e80]">
+            <MachineSelectorEmptyState>
               {loading ? "Loading available machines..." : "No machines match your search."}
-            </div>
+            </MachineSelectorEmptyState>
           ) : (
             <div className="max-h-80 space-y-2 overflow-y-auto pr-1">
               {filteredMachines.map((machine) => {
@@ -183,10 +185,7 @@ export function MachineSelector({
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
                           <p className="truncate text-sm font-semibold text-foreground">{machine.displayName}</p>
-                          <Badge
-                            variant="default"
-                            className="rounded-full border-[#dcdcdc] bg-[#f8f8f8] px-2 py-0.5 text-[9px] text-[#4d4d59]"
-                          >
+                          <Badge variant="dashboard-chip">
                             GPU
                           </Badge>
                         </div>
@@ -195,7 +194,7 @@ export function MachineSelector({
                         </p>
                       </div>
                       {isSelected ? (
-                        <Badge variant="default" className="rounded-full border-[#dcdcdc] bg-[#f8f8f8] px-2 py-0.5 text-[9px] text-[#4d4d59]">
+                        <Badge variant="dashboard-chip">
                           Selected
                         </Badge>
                       ) : null}
@@ -206,8 +205,8 @@ export function MachineSelector({
               })}
             </div>
           )}
-        </PopoverContent>
-      </Popover>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </div>
   )
 }
