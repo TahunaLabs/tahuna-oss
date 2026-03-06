@@ -2,7 +2,7 @@ import { createClient, type GenericCtx } from "@convex-dev/better-auth";
 import { convex } from "@convex-dev/better-auth/plugins";
 import { betterAuth } from "better-auth/minimal";
 import { emailOTP } from "better-auth/plugins";
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { components } from "@convex/_generated/api";
 import type { DataModel } from "@convex/_generated/dataModel";
 import { mutation, query, type ActionCtx, type MutationCtx, type QueryCtx } from "@convex/_generated/server";
@@ -12,6 +12,14 @@ import { shortId } from "@convex/ids";
 import { sendOtpEmail } from "@convex/resend";
 
 const siteUrl = process.env.SITE_URL || process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
+const apiKeyListItemValidator = v.object({
+  _id: v.id("apiKeys"),
+  _creationTime: v.number(),
+  name: v.string(),
+  keyPrefix: v.string(),
+  lastUsedAt: v.optional(v.number()),
+  revokedAt: v.optional(v.number()),
+});
 
 export const authComponent = createClient<DataModel>(components.betterAuth);
 
@@ -36,6 +44,7 @@ export const createAuth = (ctx: GenericCtx<DataModel>) => {
 
 export const getCurrentUser = query({
   args: {},
+  returns: v.any(),
   handler: async (ctx) => {
     return authComponent.getAuthUser(ctx);
   },
@@ -51,6 +60,11 @@ export const createApiKey = mutation({
   args: {
     name: v.string(),
   },
+  returns: v.object({
+    user_id: v.string(),
+    api_key: v.string(),
+    api_key_id: v.string(),
+  }),
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
     const name = args.name.trim() || "cli";
@@ -63,7 +77,7 @@ export const createApiKey = mutation({
 
     const hasActiveKey = existingKeys.some((k) => !k.revokedAt);
     if (hasActiveKey) {
-      throw new Error(`An active API key with the name "${name}" already exists`);
+      throw new ConvexError(`An active API key with the name "${name}" already exists`);
     }
 
     const plaintext = `tk_${shortId()}${shortId()}`;
@@ -87,6 +101,7 @@ export const createApiKey = mutation({
 
 export const authByApiKey = mutation({
   args: { apiKey: v.string() },
+  returns: v.union(v.object({ userId: v.string() }), v.null()),
   handler: async (ctx, args) => {
     const apiKey = args.apiKey.trim();
     if (!apiKey) {
@@ -103,7 +118,7 @@ export const authByApiKey = mutation({
       return null;
     }
 
-    await ctx.db.patch(key._id, { lastUsedAt: Date.now() });
+    await ctx.db.patch("apiKeys", key._id, { lastUsedAt: Date.now() });
     return {
       userId: key.userId,
     };
@@ -112,6 +127,7 @@ export const authByApiKey = mutation({
 
 export const listApiKeys = query({
   args: {},
+  returns: v.array(apiKeyListItemValidator),
   handler: async (ctx) => {
     const user = await requireUser(ctx);
 
@@ -136,14 +152,16 @@ export const revokeApiKey = mutation({
   args: {
     id: v.id("apiKeys"),
   },
+  returns: v.null(),
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
-    const key = await ctx.db.get(args.id);
+    const key = await ctx.db.get("apiKeys", args.id);
 
-    if (!key) throw new Error("API key not found");
-    if (key.userId !== String(user._id)) throw new Error("Unauthorized");
-    if (key.revokedAt) throw new Error("API key already revoked");
+    if (!key) throw new ConvexError("API key not found");
+    if (key.userId !== String(user._id)) throw new ConvexError("Unauthorized");
+    if (key.revokedAt) throw new ConvexError("API key already revoked");
 
-    await ctx.db.patch(args.id, { revokedAt: Date.now() });
+    await ctx.db.patch("apiKeys", args.id, { revokedAt: Date.now() });
+    return null;
   },
 });
