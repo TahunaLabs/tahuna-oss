@@ -1,5 +1,5 @@
 import { R2, type R2Callbacks } from "@convex-dev/r2";
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { components } from "@convex/_generated/api";
 import type { DataModel } from "@convex/_generated/dataModel";
 import { mutation, query, type MutationCtx, type QueryCtx } from "@convex/_generated/server";
@@ -48,7 +48,7 @@ export const { syncMetadata } = r2.clientApi<DataModel>({
   onUpload: async (ctx, _bucket, key) => {
     const user = await requireUser(ctx);
     if (!key.startsWith(buildDataPrefix(String(user._id)))) {
-      throw new Error("invalid upload key");
+      throw new ConvexError("invalid upload key");
     }
   },
 });
@@ -57,6 +57,12 @@ export const generateUploadUrl = mutation({
   args: {
     filename: v.string(),
   },
+  returns: v.object({
+    blob_id: v.string(),
+    filename: v.string(),
+    key: v.string(),
+    url: v.string(),
+  }),
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
     const blobId = shortId("blob");
@@ -74,6 +80,19 @@ export const generateUploadUrl = mutation({
 
 export const list = query({
   args: {},
+  returns: v.object({
+    blobs: v.array(
+      v.object({
+        blob_id: v.string(),
+        filename: v.string(),
+        key: v.string(),
+        content_type: v.string(),
+        size: v.number(),
+        download_url: v.string(),
+        created_at: v.number(),
+      }),
+    ),
+  }),
   handler: async (ctx) => {
     const user = await requireUser(ctx);
     const prefix = buildDataPrefix(String(user._id));
@@ -120,10 +139,11 @@ export const remove = mutation({
   args: {
     key: v.string(),
   },
+  returns: v.object({ deleted: v.boolean(), key: v.string() }),
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
     if (!args.key.startsWith(buildDataPrefix(String(user._id)))) {
-      throw new Error("blob not found");
+      throw new ConvexError("blob not found");
     }
 
     await r2.deleteObject(ctx, args.key);
