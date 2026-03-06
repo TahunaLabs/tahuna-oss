@@ -110,8 +110,13 @@ function formatBytes(size: number) {
   return `${value >= 10 || unitIndex === 0 ? value.toFixed(0) : value.toFixed(1)} ${units[unitIndex]}`
 }
 
-function EmptyCardMessage({ children }: { children: ReactNode }) {
-  return <p className="p-5 text-sm text-muted-foreground">{children}</p>
+function BottomHalfEmptyMessage({ children }: { children: ReactNode }) {
+  return (
+    <div className="grid flex-1 grid-rows-2">
+      <div />
+      <p className="self-center justify-self-center px-5 text-sm text-muted-foreground">{children}</p>
+    </div>
+  )
 }
 
 function SidebarSection({
@@ -447,9 +452,9 @@ export default function DashboardPage() {
           {error ? <Notice variant="error" className="mb-4">{error}</Notice> : null}
           {message ? <Notice className="mb-4">{message}</Notice> : null}
 
-          <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col justify-center pb-8">
+          <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col pb-8">
             {activeSection === "data" ? (
-              <section className="space-y-4">
+              <section className="flex h-full flex-col gap-4">
                 <Card variant="dashboard" className="p-5">
                   <h3 className="text-sm font-semibold">Ingest data</h3>
                   <form onSubmit={uploadData} className="mt-4 space-y-3">
@@ -486,10 +491,10 @@ export default function DashboardPage() {
                   </form>
                 </Card>
 
-                <Card variant="dashboard" className="overflow-hidden">
-                  {dataBlobs.length === 0 ? (
-                    <EmptyCardMessage>No ingested files yet.</EmptyCardMessage>
-                  ) : (
+                {dataBlobs.length === 0 ? (
+                  <BottomHalfEmptyMessage>No ingested files yet.</BottomHalfEmptyMessage>
+                ) : (
+                  <Card variant="dashboard" className="overflow-hidden">
                     <Table variant="dashboard">
                       <TableHeader variant="dashboard">
                         <TableRow variant="dashboard-head">
@@ -532,13 +537,13 @@ export default function DashboardPage() {
                         ))}
                       </TableBody>
                     </Table>
-                  )}
-                </Card>
+                  </Card>
+                )}
               </section>
             ) : null}
 
             {activeSection === "environments" ? (
-              <section className="space-y-4">
+              <section className="flex h-full flex-col gap-4">
                 <Card variant="dashboard" className="p-5">
                   <form onSubmit={createEnvironment} className="space-y-4">
                     <MachineSelector
@@ -588,10 +593,10 @@ export default function DashboardPage() {
                   </form>
                 </Card>
 
-                <Card variant="dashboard" className="overflow-hidden">
-                  {environments.length === 0 ? (
-                    <EmptyCardMessage>No environments yet.</EmptyCardMessage>
-                  ) : (
+                {environments.length === 0 ? (
+                  <BottomHalfEmptyMessage>No environments yet.</BottomHalfEmptyMessage>
+                ) : (
+                  <Card variant="dashboard" className="overflow-hidden">
                     <Table variant="dashboard">
                       <TableHeader variant="dashboard">
                         <TableRow variant="dashboard-head">
@@ -638,19 +643,19 @@ export default function DashboardPage() {
                         ))}
                       </TableBody>
                     </Table>
-                  )}
-                </Card>
+                  </Card>
+                )}
               </section>
             ) : null}
 
             {activeSection === "runs" ? (
-              <section className="space-y-4">
-                <Card variant="dashboard" className="overflow-hidden">
-                  {environments.length === 0 ? (
-                    <EmptyCardMessage>Create an environment first to launch runs.</EmptyCardMessage>
-                  ) : runs.length === 0 ? (
-                    <EmptyCardMessage>No runs yet. Go to Runs and start one.</EmptyCardMessage>
-                  ) : (
+              <section className="flex h-full flex-col gap-4">
+                {environments.length === 0 ? (
+                  <BottomHalfEmptyMessage>Create an environment first to launch runs.</BottomHalfEmptyMessage>
+                ) : runs.length === 0 ? (
+                  <BottomHalfEmptyMessage>No runs yet. Go to Runs and start one.</BottomHalfEmptyMessage>
+                ) : (
+                  <Card variant="dashboard" className="overflow-hidden">
                     <Table variant="dashboard">
                       <TableHeader variant="dashboard">
                         <TableRow variant="dashboard-head">
@@ -692,8 +697,8 @@ export default function DashboardPage() {
                         ))}
                       </TableBody>
                     </Table>
-                  )}
-                </Card>
+                  </Card>
+                )}
               </section>
             ) : null}
           </div>
