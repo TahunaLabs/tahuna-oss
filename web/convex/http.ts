@@ -2,8 +2,10 @@ import { httpRouter } from "convex/server";
 import { authComponent, createAuth } from "@convex/auth";
 import {
     createEnvironment,
+    createRunFromEnvironment,
     createRun,
     getCatalog,
+    getEnvironment,
     getRunOrLogs,
     health,
     listEnvironments,
@@ -25,6 +27,8 @@ http.route({ path: "/api/catalog", method: "GET", handler: getCatalog });
 // Environments (REST)
 http.route({ path: "/api/environments", method: "GET", handler: listEnvironments });
 http.route({ path: "/api/environments", method: "POST", handler: createEnvironment });
+http.route({ pathPrefix: "/api/environments/", method: "GET", handler: getEnvironment });
+http.route({ pathPrefix: "/api/environments/", method: "POST", handler: createRunFromEnvironment });
 // Route prefix for environments deletion e.g. /api/environments/{env_id}
 http.route({ pathPrefix: "/api/environments/", method: "DELETE", handler: removeEnvironment });
 

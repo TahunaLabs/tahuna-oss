@@ -6,12 +6,21 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { authClient } from "@/lib/auth-client"
 import { useConvexAuth } from "convex/react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { useEffect, useState, type FormEvent } from "react"
+
+function resolveRedirectPath(rawRedirect: string | null) {
+  if (!rawRedirect) return "/dashboard"
+  if (!rawRedirect.startsWith("/")) return "/dashboard"
+  if (rawRedirect.startsWith("//")) return "/dashboard"
+  return rawRedirect
+}
 
 export default function AuthPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { isAuthenticated } = useConvexAuth()
+  const redirectPath = resolveRedirectPath(searchParams.get("redirect"))
   
   const [email, setEmail] = useState("")
   const [otp, setOTP] = useState("")
@@ -22,9 +31,9 @@ export default function AuthPage() {
 
   useEffect(() => {
     if (isAuthenticated) {
-      router.replace("/dashboard")
+      router.replace(redirectPath)
     }
-  }, [isAuthenticated, router])
+  }, [isAuthenticated, redirectPath, router])
 
   async function onRequestCode(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -62,7 +71,7 @@ export default function AuthPage() {
         throw new Error(error.message || "failed to verify code")
       }
       
-      router.push("/dashboard")
+      router.push(redirectPath)
     } catch (err) {
       setError(err instanceof Error ? err.message : "unexpected error")
     } finally {

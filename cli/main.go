@@ -3,14 +3,19 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	neturl "net/url"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -25,6 +30,7 @@ import (
 const (
 	defaultAPIURL = "http://localhost:3000"
 	cliVersion    = "0.1.0"
+	apiPrefix     = "/api"
 	cReset        = "\033[0m"
 	// AMP frontend palette mapping:
 	// background #0b1d1f, foreground #e8e0d4, primary/accent #c8a84e, muted #8a9a93
@@ -57,6 +63,8 @@ func main() {
 	case "up":
 		printHeader()
 		must(guidedSetup())
+	case "login":
+		must(login())
 	case "version":
 		fmt.Printf("tahuna %s\n", cliVersion)
 	case "-h", "--help", "help":
@@ -72,6 +80,7 @@ func usage() {
 
 Usage:
   tahuna shell
+  tahuna login
   tahuna init
   tahuna env create|list|show|delete ...
   tahuna run create|list|show|watch|logs|delete ...
@@ -80,11 +89,144 @@ Usage:
 
 Environment:
   TAHUNA_API_URL   API base URL (default: http://localhost:3000)
-  TAHUNA_API_KEY   API key from the API key manager (sent as Bearer token)
+  TAHUNA_API_KEY   Auth token (set automatically by "tahuna login")
 
 Tip:
   Run "tahuna" with no args to launch the guided setup flow (same as "tahuna init").
 `)
+}
+
+func login() error {
+	printHeader()
+
+	state := fmt.Sprintf("st_%d", time.Now().UnixNano())
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return err
+	}
+	defer listener.Close()
+
+	callbackURL := fmt.Sprintf("http://%s/callback", listener.Addr().String())
+	authURL := fmt.Sprintf("%s/auth/cli?state=%s&callback=%s",
+		browserBaseURL(),
+		neturl.QueryEscape(state),
+		neturl.QueryEscape(callbackURL),
+	)
+
+	tokenCh := make(chan string, 1)
+	errCh := make(chan error, 1)
+	mux := http.NewServeMux()
+	server := &http.Server{
+		Handler:      mux,
+		ReadTimeout:  5 * time.Second,
+		WriteTimeout: 5 * time.Second,
+	}
+
+	mux.HandleFunc("/callback", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		gotState := strings.TrimSpace(r.URL.Query().Get("state"))
+		token := strings.TrimSpace(r.URL.Query().Get("token"))
+		if gotState == "" || gotState != state {
+			http.Error(w, "invalid state", http.StatusBadRequest)
+			return
+		}
+		if token == "" {
+			http.Error(w, "missing token", http.StatusBadRequest)
+			return
+		}
+
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		_, _ = w.Write([]byte("Tahuna CLI login complete. You can close this tab."))
+
+		select {
+		case tokenCh <- token:
+		default:
+		}
+
+		go func() {
+			_ = server.Shutdown(context.Background())
+		}()
+	})
+
+	go func() {
+		if serveErr := server.Serve(listener); serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {
+			errCh <- serveErr
+		}
+	}()
+
+	if openErr := openBrowser(authURL); openErr != nil {
+		fmt.Printf("%sCould not open browser automatically.%s\n", cAmpMuted, cReset)
+	}
+
+	fmt.Printf("%sOpen this URL to continue login:%s %s\n", cAmpMuted, cReset, authURL)
+	fmt.Printf("%sWaiting for authentication callback...%s\n", cAmpMuted, cReset)
+
+	select {
+	case token := <-tokenCh:
+		os.Setenv("TAHUNA_API_KEY", token)
+		if writeErr := saveTokenToEnvFile(token); writeErr != nil {
+			return fmt.Errorf("logged in, but failed to persist token: %w", writeErr)
+		}
+		fmt.Printf("%sLogin successful.%s Token saved to %s\n", cAmpGreen, cReset, defaultEnvFilePath())
+		return nil
+	case serveErr := <-errCh:
+		return serveErr
+	case <-time.After(5 * time.Minute):
+		return errors.New("login timed out")
+	}
+}
+
+func openBrowser(rawURL string) error {
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "darwin":
+		cmd = exec.Command("open", rawURL)
+	case "windows":
+		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", rawURL)
+	default:
+		cmd = exec.Command("xdg-open", rawURL)
+	}
+	return cmd.Start()
+}
+
+func defaultEnvFilePath() string {
+	wd, err := os.Getwd()
+	if err == nil {
+		local := filepath.Join(wd, ".env.local")
+		return local
+	}
+	return ".env.local"
+}
+
+func saveTokenToEnvFile(token string) error {
+	path := defaultEnvFilePath()
+	existing, err := os.ReadFile(path)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+
+	lines := []string{}
+	if len(existing) > 0 {
+		for _, line := range strings.Split(string(existing), "\n") {
+			trimmed := strings.TrimSpace(line)
+			if trimmed == "" || strings.HasPrefix(trimmed, "TAHUNA_API_KEY=") {
+				continue
+			}
+			lines = append(lines, line)
+		}
+	}
+
+	lines = append(lines, "TAHUNA_API_KEY="+token)
+	output := strings.Join(lines, "\n")
+	if output != "" && !strings.HasSuffix(output, "\n") {
+		output += "\n"
+	}
+
+	return os.WriteFile(path, []byte(output), 0o600)
 }
 
 func printHeader() {
@@ -732,7 +874,16 @@ func doJSON(method, path string, payload map[string]any) (map[string]any, error)
 		body = bytes.NewReader(raw)
 	}
 
-	req, err := http.NewRequest(method, apiURL()+path, body)
+	baseURL := apiURL()
+	requestPath := normalizedAPIPath(path)
+	if strings.HasSuffix(baseURL, apiPrefix) {
+		requestPath = strings.TrimPrefix(requestPath, apiPrefix)
+		if requestPath == "" {
+			requestPath = "/"
+		}
+	}
+
+	req, err := http.NewRequest(method, baseURL+requestPath, body)
 	if err != nil {
 		return nil, err
 	}
@@ -770,6 +921,27 @@ func doJSON(method, path string, payload map[string]any) (map[string]any, error)
 	}
 
 	return out, nil
+}
+
+func normalizedAPIPath(path string) string {
+	if path == "" {
+		return apiPrefix
+	}
+	if !strings.HasPrefix(path, "/") {
+		path = "/" + path
+	}
+	if strings.HasPrefix(path, apiPrefix+"/") || path == apiPrefix {
+		return path
+	}
+	return apiPrefix + path
+}
+
+func browserBaseURL() string {
+	base := strings.TrimRight(apiURL(), "/")
+	if strings.HasSuffix(base, apiPrefix) {
+		base = strings.TrimSuffix(base, apiPrefix)
+	}
+	return base
 }
 
 func printJSON(v any) {

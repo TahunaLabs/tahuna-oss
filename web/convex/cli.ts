@@ -48,7 +48,20 @@ export const health = httpAction(async () => {
 export const getCatalog = httpAction(async (ctx) => {
   try {
     const data = await ctx.runQuery(api.catalog.getCatalog);
-    return new Response(JSON.stringify(data), {
+    let dynamicGpus: Array<{ id: string }> = [];
+    try {
+      dynamicGpus = await ctx.runAction(api.catalog.getDynamicGpus);
+    } catch {
+      dynamicGpus = [];
+    }
+
+    const gpus = dynamicGpus.map((gpu) => gpu.id).filter(Boolean);
+    const fallbackGpus = ["NVIDIA GeForce RTX 4090"];
+
+    return new Response(JSON.stringify({
+      ...data,
+      gpus: gpus.length > 0 ? gpus : fallbackGpus,
+    }), {
       status: 200,
       headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
     });
@@ -159,6 +172,94 @@ export const removeEnvironment = httpAction(async (ctx, request) => {
     });
   } catch (err) {
     const detail = err instanceof Error ? err.message : "failed to delete environment";
+    return new Response(JSON.stringify({ detail }), {
+      status: 400,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+});
+
+export const getEnvironment = httpAction(async (ctx, request) => {
+  const userId = await authenticateApiRequest(ctx, request);
+  if (!userId) {
+    return new Response(JSON.stringify({ detail: "authentication required" }), {
+      status: 401,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+
+  const url = new URL(request.url);
+  const parts = url.pathname.split("/").filter(Boolean);
+  const environmentId = parts[parts.length - 1];
+
+  if (!environmentId || environmentId === "environments") {
+    return new Response(JSON.stringify({ detail: "env_id is required" }), {
+      status: 400,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+
+  try {
+    const data = await ctx.runQuery(internal.environments.internalGet, {
+      userId,
+      environmentId: environmentId as any,
+    });
+    return new Response(JSON.stringify(data), {
+      status: 200,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : "failed to load environment";
+    return new Response(JSON.stringify({ detail }), {
+      status: 404,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+});
+
+export const createRunFromEnvironment = httpAction(async (ctx, request) => {
+  const userId = await authenticateApiRequest(ctx, request);
+  if (!userId) {
+    return new Response(JSON.stringify({ detail: "authentication required" }), {
+      status: 401,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+
+  const url = new URL(request.url);
+  const parts = url.pathname.split("/").filter(Boolean);
+  // Pattern: /api/environments/{env_id}/runs
+  const envIdx = parts.findIndex((part) => part === "environments");
+  const environmentId = envIdx >= 0 ? parts[envIdx + 1] : "";
+  const tail = parts[parts.length - 1];
+  if (!environmentId || tail !== "runs") {
+    return new Response(JSON.stringify({ detail: "path must be /api/environments/{env_id}/runs" }), {
+      status: 400,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    body = null;
+  }
+
+  try {
+    const data = await ctx.runMutation(internal.runs.internalCreate, {
+      userId,
+      environmentId: environmentId as any,
+      gpu_type: body?.gpu_type,
+      gpu_count: body?.gpu_count,
+      volume_gb: body?.volume_gb,
+    });
+    return new Response(JSON.stringify(data), {
+      status: 200,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : "failed to create run";
     return new Response(JSON.stringify({ detail }), {
       status: 400,
       headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
