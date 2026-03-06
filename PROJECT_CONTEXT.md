@@ -74,9 +74,9 @@ Setup:
 
 Run:
 - `[~]` CLI supports interactive shell mode (`tahuna shell`) and run lifecycle commands
-- `[ ]` local directory data sync from CLI not implemented
+- `[ ]` local directory data sync from CLI to R2 not implemented
 - `[~]` data upload exists in dashboard (`web/app/dashboard/page.tsx`, `web/convex/data.ts`)
-- `[ ]` codebase sync (Convex-style) not implemented in CLI
+- `[ ]` codebase sync from CLI to environment artifacts R2 not implemented
 - `[ ]` env var sync (Convex-style) not implemented in CLI
 - `[x]` `train` / `train -d` command model implemented with optional runtime overrides (`--gpu-type`, `--gpu-count`, `--volume-gb`)
 - `[x]` run listing/show/watch/logs/delete exist
@@ -185,16 +185,22 @@ Most realistic current path:
 
 If we prioritize your stated unblock (CLI flow first), the shortest path is:
 
-1. Expand `train` UX with local project defaults/state integration.
-2. Add local project bootstrap pieces (`tahuna init` repo/data/config flow).
-3. Add state file in project root (`.tahuna/` or `tahuna.yml`) to persist framework/data defaults.
-4. Implement sync commands for data/code/env vars from CLI.
+1. Implement pre-run sync pipeline in CLI:
+   - Sync code to environment artifacts R2.
+   - Sync local data dir to data R2.
+2. Trigger that sync automatically whenever a run is created (`tahuna train` and `tahuna run create`) before calling run creation.
+3. Keep run creation payload minimal/backward-compatible (do not inline code/data blobs in payload).
+4. Add explicit manual sync commands after auto-sync is stable.
 
 Update (completed 2026-03-06):
 - `tahuna init .` initializes current project, and `tahuna init <project-name>` creates/selects a project directory, then links created environment to `.tahuna/environment_id`.
 - `tahuna init` now collects local project setup inputs first (entrypoint/data/config/requirements), auto-detects framework when possible, then prompts machine/runtime settings.
 - `tahuna train` requires a linked `.tahuna/environment_id` from `init`, creates a run through existing `/api/environments/{env_id}/runs`, prints concise summary, and monitors in foreground.
 - `tahuna train -d` creates a run and exits immediately after summary output.
+
+Clarification (agreed direction):
+- Code/data sync must happen via R2 before run launch, not inside run creation payload fields.
+- This pre-run sync should run automatically on run creation paths.
 
 ---
 
