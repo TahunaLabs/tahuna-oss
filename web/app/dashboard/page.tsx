@@ -1,6 +1,7 @@
 "use client"
 
-import { Badge, statusVariant } from "@/components/ui/badge"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -11,51 +12,21 @@ import { api } from "@convex/_generated/api"
 import { authClient } from "@/lib/auth-client"
 import { useAction, useConvexAuth, useMutation, useQuery } from "convex/react"
 import {
-  AppWindow,
-  ArrowRight,
-  BarChart3,
-  Bot,
-  Boxes,
-  CheckCircle2,
-  ChevronDown,
-  ChevronsLeft,
   Database,
   Download,
-  ImageIcon,
   Key,
-  List,
   LogOut,
-  MessageSquare,
-  Mic,
   Play,
-  Plus,
   Server,
   Settings,
-  SlidersHorizontal,
   Sparkles,
   Trash2,
-  Video,
 } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useEffect, useMemo, useState, type FormEvent } from "react"
 
-type MainSection = "chat" | "data" | "environments" | "runs"
-type UtilitySection = "settings"
-type PlaceholderSection =
-  | "agent-builder"
-  | "audio"
-  | "images"
-  | "videos"
-  | "assistants"
-  | "usage"
-  | "chatgpt-apps"
-  | "logs"
-  | "batches"
-  | "evaluation"
-  | "fine-tuning"
-
-type DashboardSection = MainSection | UtilitySection | PlaceholderSection
+type MainSection = "data" | "environments" | "runs"
 
 type GPUInfo = { id: string; displayName: string; memoryInGb: number; maxGpuCount: number; pricePerHour?: number | null }
 type CatalogData = { images: Record<string, Record<string, string>> }
@@ -94,9 +65,10 @@ type RunRow = {
 }
 
 type SidebarItem = {
-  id: DashboardSection
+  id: string
   label: string
   icon: React.ComponentType<{ className?: string }>
+  section?: MainSection
   href?: string
 }
 
@@ -108,40 +80,14 @@ function formatBytes(size: number) {
   return `${value >= 10 || unitIndex === 0 ? value.toFixed(0) : value.toFixed(1)} ${units[unitIndex]}`
 }
 
-function pageTitle(section: DashboardSection) {
+function pageTitle(section: MainSection) {
   switch (section) {
-    case "chat":
-      return "Chat prompts"
     case "data":
       return "Storage"
     case "environments":
       return "Environments"
     case "runs":
-      return "Batches"
-    case "settings":
-      return "Settings"
-    case "agent-builder":
-      return "Agent Builder"
-    case "audio":
-      return "Audio"
-    case "images":
-      return "Images"
-    case "videos":
-      return "Videos"
-    case "assistants":
-      return "Assistants"
-    case "usage":
-      return "Usage"
-    case "chatgpt-apps":
-      return "ChatGPT Apps"
-    case "logs":
-      return "Logs"
-    case "batches":
-      return "Batches"
-    case "evaluation":
-      return "Evaluation"
-    case "fine-tuning":
-      return "Fine-tuning"
+      return "Runs"
     default:
       return "Dashboard"
   }
@@ -150,36 +96,35 @@ function pageTitle(section: DashboardSection) {
 function SidebarSection({ label, items, activeSection, onSelect }: {
   label: string
   items: SidebarItem[]
-  activeSection: DashboardSection
-  onSelect: (section: DashboardSection) => void
+  activeSection: MainSection
+  onSelect: (section: MainSection) => void
 }) {
   return (
     <div>
       <div className="px-2 pb-1 pt-2 text-[11px] font-medium tracking-[0.01em] text-[#8e8ea0]">{label}</div>
       <div className="space-y-0.5">
         {items.map((item) => {
-          const active = activeSection === item.id
+          const active = item.section ? activeSection === item.section : false
           const Icon = item.icon
 
           if (item.href) {
             return (
-              <Link
-                key={item.id}
-                href={item.href}
-                className="flex h-8 items-center gap-2.5 rounded-md px-2 text-[13.5px] text-[#6e6e80] transition hover:bg-[#f4f4f4] hover:text-[#0d0d0d]"
-              >
-                <Icon className="h-[15px] w-[15px]" />
-                {item.label}
-              </Link>
+              <Button key={item.id} asChild variant="ghost" className="h-8 w-full justify-start gap-2.5 px-2 text-[13.5px] font-normal text-[#6e6e80] hover:bg-[#f4f4f4] hover:text-[#0d0d0d]">
+                <Link href={item.href}>
+                  <Icon className="h-[15px] w-[15px]" />
+                  {item.label}
+                </Link>
+              </Button>
             )
           }
 
           return (
-            <button
+            <Button
               key={item.id}
               type="button"
-              onClick={() => onSelect(item.id)}
-              className={`flex h-8 w-full items-center gap-2.5 rounded-md px-2 text-left text-[13.5px] transition ${
+              variant="ghost"
+              onClick={() => onSelect(item.section!)}
+              className={`h-8 w-full justify-start gap-2.5 px-2 text-left text-[13.5px] font-normal transition ${
                 active
                   ? "bg-[#ececec] font-medium text-[#0d0d0d]"
                   : "text-[#6e6e80] hover:bg-[#f4f4f4] hover:text-[#0d0d0d]"
@@ -187,66 +132,9 @@ function SidebarSection({ label, items, activeSection, onSelect }: {
             >
               <Icon className="h-[15px] w-[15px]" />
               {item.label}
-            </button>
+            </Button>
           )
         })}
-      </div>
-    </div>
-  )
-}
-
-function PlaceholderView({ title }: { title: string }) {
-  return (
-    <div className="mx-auto w-full max-w-3xl rounded-2xl border border-[#e5e5e5] bg-white p-8 text-center">
-      <p className="text-sm text-[#6e6e80]">{title} UI is not wired in this app yet.</p>
-    </div>
-  )
-}
-
-function ChatEmptyState() {
-  return (
-    <div className="flex flex-col items-center gap-5 text-center">
-      <div className="flex h-12 w-12 items-center justify-center rounded-full border-[1.5px] border-[#e5e5e5] text-[#8e8ea0]">
-        <MessageSquare className="h-5 w-5" />
-      </div>
-      <div className="text-[15px] font-medium text-[#0d0d0d]">Create a chat prompt</div>
-      <div className="flex flex-wrap items-center justify-center gap-2">
-        <button
-          type="button"
-          className="inline-flex h-9 items-center gap-1.5 rounded-full bg-[#0d0d0d] px-4 text-[13.5px] font-medium text-white transition hover:opacity-90"
-        >
-          <Plus className="h-3.5 w-3.5" />
-          Create
-        </button>
-        <div className="flex h-9 items-center gap-1.5 rounded-full border border-[#e5e5e5] bg-white px-2 pl-3.5">
-          <input
-            placeholder="Generate..."
-            className="w-28 border-0 bg-transparent text-[13.5px] text-[#8e8ea0] outline-none"
-          />
-          <button
-            type="button"
-            className="flex h-6 w-6 items-center justify-center rounded-full bg-[#8e8ea0] text-white transition hover:bg-[#555]"
-          >
-            <ArrowRight className="h-3 w-3" />
-          </button>
-        </div>
-      </div>
-      <div className="flex flex-wrap justify-center gap-2">
-        {[
-          "Trip planner",
-          "Image generator",
-          "Code debugger",
-          "Research assistant",
-          "Decision helper",
-        ].map((tag) => (
-          <button
-            key={tag}
-            type="button"
-            className="rounded-full border border-[#d9d9e3] bg-white px-3.5 py-1.5 text-[13px] text-[#0d0d0d] transition hover:border-[#c5c5d2] hover:bg-[#f4f4f4]"
-          >
-            {tag}
-          </button>
-        ))}
       </div>
     </div>
   )
@@ -260,7 +148,7 @@ export default function DashboardPage() {
   const [error, setError] = useState("")
   const [message, setMessage] = useState("")
 
-  const [activeSection, setActiveSection] = useState<DashboardSection>("chat")
+  const [activeSection, setActiveSection] = useState<MainSection>("environments")
 
   const [explicitEnvGPUType, setExplicitEnvGPUType] = useState("")
   const [explicitEnvGPUCount, setExplicitEnvGPUCount] = useState("")
@@ -269,27 +157,14 @@ export default function DashboardPage() {
   const [uploadingData, setUploadingData] = useState(false)
   const [dataFileInputKey, setDataFileInputKey] = useState(0)
 
-  const createItems: SidebarItem[] = [
-    { id: "chat", label: "Chat", icon: MessageSquare },
-    { id: "agent-builder", label: "Agent Builder", icon: Bot },
-    { id: "audio", label: "Audio", icon: Mic },
-    { id: "images", label: "Images", icon: ImageIcon },
-    { id: "videos", label: "Videos", icon: Video },
-    { id: "assistants", label: "Assistants", icon: Boxes },
+  const featureItems: SidebarItem[] = [
+    { id: "data", label: "Storage", icon: Database, section: "data" },
+    { id: "environments", label: "Environments", icon: Server, section: "environments" },
+    { id: "runs", label: "Runs", icon: Play, section: "runs" },
   ]
 
-  const manageItems: SidebarItem[] = [
-    { id: "usage", label: "Usage", icon: BarChart3 },
-    { id: "settings", label: "API keys", icon: Key, href: "/api-key" },
-    { id: "chatgpt-apps", label: "ChatGPT Apps", icon: AppWindow },
-    { id: "logs", label: "Logs", icon: List },
-    { id: "data", label: "Storage", icon: Database },
-    { id: "environments", label: "Batches", icon: Server },
-  ]
-
-  const optimizeItems: SidebarItem[] = [
-    { id: "evaluation", label: "Evaluation", icon: CheckCircle2 },
-    { id: "runs", label: "Fine-tuning", icon: SlidersHorizontal },
+  const utilityItems: SidebarItem[] = [
+    { id: "api-keys", label: "API keys", icon: Key, href: "/api-key" },
   ]
 
   const catalog = useQuery(api.catalog.getCatalog) as CatalogData | undefined
@@ -473,73 +348,55 @@ export default function DashboardPage() {
 
   return (
     <div className="h-screen overflow-hidden bg-white text-[#0d0d0d]" style={{ fontFamily: "ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" }}>
-      <div className="flex h-full">
+      <header className="flex h-12 items-center justify-between border-b border-[#e5e5e5] px-5">
+        <div className="flex items-center gap-1.5 text-[13.5px] text-[#6e6e80]">
+          <div className="flex h-5 w-5 items-center justify-center rounded-[4px] bg-[#0d0d0d] text-white">
+            <Sparkles className="h-3 w-3" />
+          </div>
+          <span className="font-medium text-[#0d0d0d]">Dashboard</span>
+        </div>
+
+        <div className="flex items-center gap-4">
+          <Button type="button" variant="ghost" className="h-auto px-0 text-[13.5px] font-normal text-[#6e6e80] hover:bg-transparent hover:text-[#0d0d0d]">Dashboard</Button>
+          <Button asChild variant="ghost" className="h-auto px-0 text-[13.5px] font-normal text-[#6e6e80] hover:bg-transparent hover:text-[#0d0d0d]">
+            <a href="https://platform.openai.com/docs" target="_blank" rel="noreferrer">API Docs</a>
+          </Button>
+          <Button type="button" variant="ghost" onClick={() => router.push("/api-key")} className="h-[30px] w-[30px] p-0 text-[#6e6e80] hover:bg-[#f4f4f4] hover:text-[#0d0d0d]">
+            <Settings className="h-4 w-4" />
+          </Button>
+          <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[#0d0d0d] text-xs font-semibold text-white">{userInitial}</div>
+        </div>
+      </header>
+
+      <div className="flex h-[calc(100vh-3rem)]">
         <aside className="flex h-full w-[168px] shrink-0 flex-col gap-0.5 overflow-y-auto border-r border-[#e5e5e5] bg-white p-2">
-          <SidebarSection label="Create" items={createItems} activeSection={activeSection} onSelect={setActiveSection} />
-
+          <SidebarSection label="Features" items={featureItems} activeSection={activeSection} onSelect={setActiveSection} />
           <div className="my-1 h-px bg-[#e5e5e5]" />
-          <SidebarSection label="Manage" items={manageItems} activeSection={activeSection} onSelect={setActiveSection} />
-
-          <div className="my-1 h-px bg-[#e5e5e5]" />
-          <SidebarSection label="Optimize" items={optimizeItems} activeSection={activeSection} onSelect={setActiveSection} />
+          <SidebarSection label="Account" items={utilityItems} activeSection={activeSection} onSelect={setActiveSection} />
 
           <div className="mt-auto pt-2">
-            <button
+            <Button
               type="button"
+              variant="ghost"
               onClick={logout}
-              className="flex h-8 w-full items-center gap-2.5 rounded-md px-2 text-[13px] text-[#6e6e80] transition hover:bg-[#f4f4f4] hover:text-[#0d0d0d]"
+              className="h-8 w-full justify-start gap-2.5 px-2 text-[13px] font-normal text-[#6e6e80] hover:bg-[#f4f4f4] hover:text-[#0d0d0d]"
             >
               <LogOut className="h-[15px] w-[15px]" />
               Sign out
-            </button>
-            <button
-              type="button"
-              className="mt-0.5 flex h-8 w-full items-center gap-2.5 rounded-md px-2 text-[13px] text-[#6e6e80] transition hover:bg-[#f4f4f4] hover:text-[#0d0d0d]"
-            >
-              <ChevronsLeft className="h-[15px] w-[15px]" />
-            </button>
+            </Button>
           </div>
         </aside>
 
-        <div className="flex min-w-0 flex-1 flex-col">
-          <header className="flex h-12 shrink-0 items-center justify-between border-b border-[#e5e5e5] px-5">
-            <div className="flex items-center gap-1.5 text-[13.5px] text-[#6e6e80]">
-              <button type="button" className="flex items-center gap-1 text-[#0d0d0d]">
-                <div className="flex h-5 w-5 items-center justify-center rounded-[4px] bg-[#0d0d0d] text-white">
-                  <Sparkles className="h-3 w-3" />
-                </div>
-                <span className="font-medium">Personal</span>
-                <ChevronDown className="h-3 w-3 text-[#aaa]" />
-              </button>
-              <span className="px-0.5 text-base font-light text-[#e5e5e5]">/</span>
-              <button type="button" className="flex items-center gap-1 hover:text-[#0d0d0d]">
-                <span>Default project</span>
-                <ChevronDown className="h-3 w-3 text-[#aaa]" />
-              </button>
-            </div>
-
-            <div className="flex items-center gap-4">
-              <button type="button" className="text-[13.5px] text-[#6e6e80] transition hover:text-[#0d0d0d]">Dashboard</button>
-              <a href="https://platform.openai.com/docs" target="_blank" rel="noreferrer" className="text-[13.5px] text-[#6e6e80] transition hover:text-[#0d0d0d]">API Docs</a>
-              <button type="button" onClick={() => setActiveSection("settings")} className="flex h-[30px] w-[30px] items-center justify-center rounded-md text-[#6e6e80] transition hover:bg-[#f4f4f4] hover:text-[#0d0d0d]">
-                <Settings className="h-4 w-4" />
-              </button>
-              <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[#19c37d] text-xs font-semibold text-white">{userInitial}</div>
-            </div>
-          </header>
-
-          <main className="relative flex min-h-0 flex-1 flex-col overflow-y-auto px-5 py-6">
+        <main className="relative flex min-h-0 flex-1 flex-col overflow-y-auto px-5 py-6">
             <h1 className="mb-6 text-[17px] font-semibold">{pageTitle(activeSection)}</h1>
 
             {error ? <p className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p> : null}
-            {message ? <p className="mb-4 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{message}</p> : null}
+            {message ? <p className="mb-4 rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-foreground">{message}</p> : null}
 
             <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col justify-center pb-8">
-              {activeSection === "chat" ? <ChatEmptyState /> : null}
-
               {activeSection === "data" ? (
                 <section className="space-y-4">
-                  <Card className="border-[#e5e5e5] p-5">
+                  <Card className="border-[#e5e5e5] bg-white p-5 text-[#0d0d0d]">
                     <h3 className="text-sm font-semibold">Ingest data</h3>
                     <form onSubmit={uploadData} className="mt-4 space-y-3">
                       <div className="space-y-1.5">
@@ -548,33 +405,34 @@ export default function DashboardPage() {
                           key={dataFileInputKey}
                           id="data-file"
                           type="file"
+                          className="rounded-md border-[#e5e5e5] bg-white px-3 font-sans text-[#0d0d0d]"
                           multiple
                           disabled={uploadingData}
                           onChange={(event) => setSelectedDataFiles(Array.from(event.target.files ?? []))}
                         />
                       </div>
                       {selectedDataFiles.length > 0 ? (
-                        <div className="rounded-lg border border-[#e5e5e5] p-3">
+                        <div className="rounded-lg border border-border p-3">
                           {selectedDataFiles.map((file) => (
-                            <p key={`${file.name}-${file.size}-${file.lastModified}`} className="text-sm text-[#6e6e80]">
+                            <p key={`${file.name}-${file.size}-${file.lastModified}`} className="text-sm text-muted-foreground">
                               {file.name} ({formatBytes(file.size)})
                             </p>
                           ))}
                         </div>
                       ) : null}
-                      <button
+                      <Button
                         type="submit"
                         disabled={selectedDataFiles.length === 0 || uploadingData}
-                        className="inline-flex h-9 items-center rounded-md bg-[#0d0d0d] px-4 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-40"
+                        className="bg-[#0d0d0d] text-white hover:bg-[#222]"
                       >
                         {uploadingData ? "Uploading..." : "Ingest data"}
-                      </button>
+                      </Button>
                     </form>
                   </Card>
 
-                  <Card className="overflow-hidden border-[#e5e5e5]">
+                  <Card className="overflow-hidden border-[#e5e5e5] bg-white text-[#0d0d0d]">
                     {dataBlobs.length === 0 ? (
-                      <p className="p-5 text-sm text-[#6e6e80]">No ingested files yet.</p>
+                      <p className="p-5 text-sm text-muted-foreground">No ingested files yet.</p>
                     ) : (
                       <table className="w-full text-left text-sm">
                         <thead className="border-b border-[#e5e5e5] text-[#6e6e80]">
@@ -589,17 +447,19 @@ export default function DashboardPage() {
                           {dataBlobs.map((blob) => (
                             <tr key={blob.key} className="border-b border-[#f1f1f1] last:border-0">
                               <td className="px-4 py-3">{blob.filename}</td>
-                              <td className="px-4 py-3 text-[#6e6e80]">{formatBytes(blob.size)}</td>
-                              <td className="px-4 py-3 text-[#6e6e80]">{new Date(blob.created_at).toLocaleString()}</td>
+                              <td className="px-4 py-3 text-muted-foreground">{formatBytes(blob.size)}</td>
+                              <td className="px-4 py-3 text-muted-foreground">{new Date(blob.created_at).toLocaleString()}</td>
                               <td className="px-4 py-3">
                                 <div className="flex items-center gap-2">
-                                  <a href={blob.download_url} target="_blank" rel="noreferrer" className="inline-flex h-8 items-center gap-1 rounded-md border border-[#e5e5e5] px-2.5 text-[#0d0d0d]">
-                                    <Download className="h-3.5 w-3.5" />
-                                    Open
-                                  </a>
-                                  <button type="button" onClick={() => deleteDataBlob(blob.key, blob.blob_id)} disabled={busy} className="inline-flex h-8 items-center rounded-md border border-[#e5e5e5] px-2 text-[#0d0d0d] disabled:opacity-40">
+                                  <Button asChild type="button" variant="outline" size="sm">
+                                    <a href={blob.download_url} target="_blank" rel="noreferrer">
+                                      <Download className="h-3.5 w-3.5" />
+                                      Open
+                                    </a>
+                                  </Button>
+                                  <Button type="button" variant="outline" size="sm" onClick={() => deleteDataBlob(blob.key, blob.blob_id)} disabled={busy} className="px-2">
                                     <Trash2 className="h-3.5 w-3.5" />
-                                  </button>
+                                  </Button>
                                 </div>
                               </td>
                             </tr>
@@ -613,7 +473,7 @@ export default function DashboardPage() {
 
               {activeSection === "environments" ? (
                 <section className="space-y-4">
-                  <Card className="border-[#e5e5e5] p-5">
+                  <Card className="border-[#e5e5e5] bg-white p-5 text-[#0d0d0d]">
                     <form onSubmit={createEnvironment} className="space-y-4">
                       <MachineSelector
                         machines={currentGpusList}
@@ -626,7 +486,12 @@ export default function DashboardPage() {
                       <div className="grid gap-3 md:grid-cols-2">
                         <div className="space-y-1.5">
                           <Label htmlFor="framework">Framework</Label>
-                          <Select id="framework" value={imageSelection?.key ?? ""} onChange={(event) => setSelectedImageKey(event.target.value)}>
+                          <Select
+                            id="framework"
+                            value={imageSelection?.key ?? ""}
+                            className="rounded-md border-[#e5e5e5] bg-white px-3 font-sans text-[#0d0d0d]"
+                            onChange={(event) => setSelectedImageKey(event.target.value)}
+                          >
                             {frameworkOptions.map((option) => (
                               <option key={option.key} value={option.key}>{option.label}</option>
                             ))}
@@ -639,25 +504,26 @@ export default function DashboardPage() {
                             type="number"
                             min={1}
                             max={maxGPUs}
+                            className="rounded-md border-[#e5e5e5] bg-white px-3 font-sans text-[#0d0d0d]"
                             value={envGPUCount}
                             onChange={(event) => setExplicitEnvGPUCount(event.target.value)}
                           />
                         </div>
                       </div>
 
-                      <button
+                      <Button
                         type="submit"
                         disabled={busy || currentGpusList.length === 0 || !imageSelection}
-                        className="inline-flex h-9 items-center rounded-md bg-[#0d0d0d] px-4 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-40"
+                        className="bg-[#0d0d0d] text-white hover:bg-[#222]"
                       >
                         {busy ? "Saving..." : "Create environment"}
-                      </button>
+                      </Button>
                     </form>
                   </Card>
 
-                  <Card className="overflow-hidden border-[#e5e5e5]">
+                  <Card className="overflow-hidden border-[#e5e5e5] bg-white text-[#0d0d0d]">
                     {environments.length === 0 ? (
-                      <p className="p-5 text-sm text-[#6e6e80]">No environments yet.</p>
+                      <p className="p-5 text-sm text-muted-foreground">No environments yet.</p>
                     ) : (
                       <table className="w-full text-left text-sm">
                         <thead className="border-b border-[#e5e5e5] text-[#6e6e80]">
@@ -673,16 +539,16 @@ export default function DashboardPage() {
                             <tr key={env.environment_id} className="border-b border-[#f1f1f1] last:border-0">
                               <td className="px-4 py-3 font-mono text-xs">{env.environment_id}</td>
                               <td className="px-4 py-3">{env.name}</td>
-                              <td className="px-4 py-3 text-[#6e6e80]">{env.framework}:{env.version} | {env.gpu_type} x{env.gpu_count} | {env.volume_gb}GB</td>
+                              <td className="px-4 py-3 text-muted-foreground">{env.framework}:{env.version} | {env.gpu_type} x{env.gpu_count} | {env.volume_gb}GB</td>
                               <td className="px-4 py-3">
                                 <div className="flex items-center gap-2">
-                                  <button type="button" onClick={() => launchRun(env.environment_id)} disabled={busy} className="inline-flex h-8 items-center gap-1 rounded-md border border-[#e5e5e5] px-2.5 disabled:opacity-40">
+                                  <Button type="button" variant="outline" size="sm" onClick={() => launchRun(env.environment_id)} disabled={busy}>
                                     <Play className="h-3.5 w-3.5" />
                                     Run
-                                  </button>
-                                  <button type="button" onClick={() => deleteEnvironment(env.environment_id)} disabled={busy} className="inline-flex h-8 items-center rounded-md border border-[#e5e5e5] px-2 disabled:opacity-40">
+                                  </Button>
+                                  <Button type="button" variant="outline" size="sm" onClick={() => deleteEnvironment(env.environment_id)} disabled={busy} className="px-2">
                                     <Trash2 className="h-3.5 w-3.5" />
-                                  </button>
+                                  </Button>
                                 </div>
                               </td>
                             </tr>
@@ -696,11 +562,11 @@ export default function DashboardPage() {
 
               {activeSection === "runs" ? (
                 <section className="space-y-4">
-                  <Card className="overflow-hidden border-[#e5e5e5]">
+                  <Card className="overflow-hidden border-[#e5e5e5] bg-white text-[#0d0d0d]">
                     {environments.length === 0 ? (
-                      <p className="p-5 text-sm text-[#6e6e80]">Create an environment first to launch runs.</p>
+                      <p className="p-5 text-sm text-muted-foreground">Create an environment first to launch runs.</p>
                     ) : runs.length === 0 ? (
-                      <p className="p-5 text-sm text-[#6e6e80]">No runs yet. Go to Batches and start one.</p>
+                      <p className="p-5 text-sm text-muted-foreground">No runs yet. Go to Runs and start one.</p>
                     ) : (
                       <table className="w-full text-left text-sm">
                         <thead className="border-b border-[#e5e5e5] text-[#6e6e80]">
@@ -717,20 +583,21 @@ export default function DashboardPage() {
                             <tr key={run.run_id} className="border-b border-[#f1f1f1] last:border-0 align-top">
                               <td className="px-4 py-3 font-mono text-xs">{run.run_id}</td>
                               <td className="px-4 py-3">
-                                <Badge variant={statusVariant(run.status)}>{run.status}</Badge>
+                                <Badge variant="default" className="rounded-full px-2.5 py-1 text-[11px] capitalize tracking-normal">{run.status}</Badge>
                               </td>
                               <td className="px-4 py-3 font-mono text-xs">{run.env_id}</td>
-                              <td className="px-4 py-3 text-[#6e6e80]">{run.effective_gpu_type || "-"} / {run.effective_gpu_count || "-"} / {run.effective_volume_gb || "-"}GB</td>
+                              <td className="px-4 py-3 text-muted-foreground">{run.effective_gpu_type || "-"} / {run.effective_gpu_count || "-"} / {run.effective_volume_gb || "-"}GB</td>
                               <td className="px-4 py-3">
-                                <button
+                                <Button
                                   type="button"
+                                  variant="outline"
+                                  size="sm"
                                   disabled={busy || !["queued", "provisioning", "running", "cancelling"].includes(run.status)}
                                   onClick={() => cancelRun(run.run_id)}
-                                  className="inline-flex h-8 items-center gap-1 rounded-md border border-[#e5e5e5] px-2.5 disabled:opacity-40"
                                 >
                                   <Trash2 className="h-3.5 w-3.5" />
                                   Cancel
-                                </button>
+                                </Button>
                               </td>
                             </tr>
                           ))}
@@ -741,24 +608,8 @@ export default function DashboardPage() {
                 </section>
               ) : null}
 
-              {activeSection === "settings" ? <PlaceholderView title="Settings" /> : null}
-
-              {[
-                "agent-builder",
-                "audio",
-                "images",
-                "videos",
-                "assistants",
-                "usage",
-                "chatgpt-apps",
-                "logs",
-                "batches",
-                "evaluation",
-                "fine-tuning",
-              ].includes(activeSection) ? <PlaceholderView title={pageTitle(activeSection)} /> : null}
             </div>
-          </main>
-        </div>
+        </main>
       </div>
     </div>
   )
