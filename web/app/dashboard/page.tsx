@@ -181,6 +181,7 @@ export default function DashboardPage() {
 
   const [activeSection, setActiveSection] = useState<MainSection>("environments")
 
+  const [environmentNameInput, setEnvironmentNameInput] = useState("")
   const [explicitEnvGPUType, setExplicitEnvGPUType] = useState("")
   const [explicitEnvGPUCount, setExplicitEnvGPUCount] = useState("")
   const [selectedImageKey, setSelectedImageKey] = useState("")
@@ -267,7 +268,7 @@ export default function DashboardPage() {
     return frameworkOptions.find((option) => option.key === selectedImageKey) ?? frameworkOptions[0] ?? null
   }, [frameworkOptions, selectedImageKey])
 
-  const environmentName = useMemo(() => {
+  const defaultEnvironmentName = useMemo(() => {
     const machineLabel = selectedGPU?.displayName ?? "Training"
     const frameworkLabel = imageSelection?.label ?? "Environment"
     return `${machineLabel} · ${frameworkLabel}`
@@ -294,6 +295,7 @@ export default function DashboardPage() {
   async function createEnvironment(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     await withBusy(async () => {
+      const environmentName = environmentNameInput.trim() || defaultEnvironmentName
       await createEnvMutation({
         name: environmentName,
         gpu_type: envGPUType,
@@ -302,6 +304,7 @@ export default function DashboardPage() {
         framework: imageSelection?.framework ?? "pt",
         version: imageSelection?.version ?? "",
       })
+      setEnvironmentNameInput("")
       setMessage("Environment created.")
     })
   }
@@ -561,6 +564,18 @@ export default function DashboardPage() {
               <section className="flex h-full flex-col gap-3">
                 <Card variant="dashboard" className="p-4">
                   <form onSubmit={createEnvironment} className="space-y-3">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="environment-name">Environment name</Label>
+                      <Input
+                        id="environment-name"
+                        type="text"
+                        variant="dashboard"
+                        placeholder={defaultEnvironmentName}
+                        value={environmentNameInput}
+                        onChange={(event) => setEnvironmentNameInput(event.target.value)}
+                      />
+                    </div>
+
                     <MachineSelector
                       machines={dynamicGpus}
                       value={envGPUType}
