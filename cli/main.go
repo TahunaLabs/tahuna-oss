@@ -52,7 +52,7 @@ const (
 
 func main() {
 	if len(os.Args) < 2 {
-		handleInit([]string{"."})
+		usage()
 		return
 	}
 
@@ -95,16 +95,24 @@ Usage:
   tahuna version
 
 Environment:
-  TAHUNA_API_URL   API base URL (default: http://localhost:3000)
-  TAHUNA_API_KEY   Auth token (set automatically by "tahuna login")
+  TAHUNA_API_URL      API base URL (default: http://localhost:3000)
+  TAHUNA_BROWSER_URL  Browser auth URL base for "tahuna login" (optional)
+  TAHUNA_API_KEY      Auth token (set automatically by "tahuna login")
 
 Tip:
-  Run "tahuna" with no args to initialize the current project (same as "tahuna init .").
+  Run "tahuna init ." to initialize the current project.
 `)
 }
 
 func login() error {
 	printHeader()
+
+	resolvedBrowserBase := resolveLoginBrowserBaseURL()
+	if lookupConfigValue("TAHUNA_BROWSER_URL") == "" {
+		if err := saveConfigValues(map[string]string{"TAHUNA_BROWSER_URL": resolvedBrowserBase}); err != nil {
+			return fmt.Errorf("failed to persist browser URL: %w", err)
+		}
+	}
 
 	state := fmt.Sprintf("st_%d", time.Now().UnixNano())
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
@@ -115,7 +123,7 @@ func login() error {
 
 	callbackURL := fmt.Sprintf("http://%s/callback", listener.Addr().String())
 	authURL := fmt.Sprintf("%s/auth/cli?state=%s&callback=%s",
-		browserBaseURL(),
+		resolvedBrowserBase,
 		neturl.QueryEscape(state),
 		neturl.QueryEscape(callbackURL),
 	)
@@ -209,33 +217,7 @@ func defaultEnvFilePath() string {
 }
 
 func saveTokenToEnvFile(token string) error {
-	path := defaultEnvFilePath()
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
-	existing, err := os.ReadFile(path)
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return err
-	}
-
-	lines := []string{}
-	if len(existing) > 0 {
-		for _, line := range strings.Split(string(existing), "\n") {
-			trimmed := strings.TrimSpace(line)
-			if trimmed == "" || strings.HasPrefix(trimmed, "TAHUNA_API_KEY=") {
-				continue
-			}
-			lines = append(lines, line)
-		}
-	}
-
-	lines = append(lines, "TAHUNA_API_KEY="+token)
-	output := strings.Join(lines, "\n")
-	if output != "" && !strings.HasSuffix(output, "\n") {
-		output += "\n"
-	}
-
-	return os.WriteFile(path, []byte(output), 0o600)
+	return saveConfigValues(map[string]string{"TAHUNA_API_KEY": token})
 }
 
 func printHeader() {
@@ -1708,11 +1690,146 @@ func normalizedAPIPath(path string) string {
 }
 
 func browserBaseURL() string {
+	if v := lookupConfigValue("TAHUNA_BROWSER_URL"); v != "" {
+		base := strings.TrimRight(v, "/")
+		if strings.HasSuffix(base, apiPrefix) {
+			base = strings.TrimSuffix(base, apiPrefix)
+		}
+		return base
+	}
+
 	base := strings.TrimRight(apiURL(), "/")
 	if strings.HasSuffix(base, apiPrefix) {
 		base = strings.TrimSuffix(base, apiPrefix)
 	}
+	// Convex backend hosts serve /api routes but not Next.js app routes like /auth/cli.
+	// Default to local web app URL unless browser base is explicitly configured.
+	if strings.Contains(base, ".convex.cloud") {
+		return defaultAPIURL
+	}
 	return base
+}
+
+func resolveLoginBrowserBaseURL() string {
+	if v := lookupConfigValue("TAHUNA_BROWSER_URL"); strings.TrimSpace(v) != "" {
+		return cleanBrowserBaseURL(v)
+	}
+
+	candidates := loginBrowserCandidates()
+	for _, candidate := range candidates {
+		if loginRouteAvailable(candidate) {
+			return candidate
+		}
+	}
+
+	if len(candidates) > 0 {
+		return candidates[0]
+	}
+	return defaultAPIURL
+}
+
+func loginBrowserCandidates() []string {
+	rawCandidates := []string{browserBaseURL(), defaultAPIURL}
+	candidates := []string{}
+	seen := map[string]struct{}{}
+	for _, raw := range rawCandidates {
+		clean := cleanBrowserBaseURL(raw)
+		if clean == "" {
+			continue
+		}
+		if _, exists := seen[clean]; exists {
+			continue
+		}
+		seen[clean] = struct{}{}
+		candidates = append(candidates, clean)
+	}
+	return candidates
+}
+
+func cleanBrowserBaseURL(raw string) string {
+	base := strings.TrimSpace(strings.TrimRight(raw, "/"))
+	if strings.HasSuffix(base, apiPrefix) {
+		base = strings.TrimSuffix(base, apiPrefix)
+	}
+	return base
+}
+
+func loginRouteAvailable(base string) bool {
+	client := &http.Client{Timeout: 3 * time.Second}
+	req, err := http.NewRequest(http.MethodGet, cleanBrowserBaseURL(base)+"/auth/cli", nil)
+	if err != nil {
+		return false
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return false
+	}
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+	return !strings.Contains(strings.ToLower(string(body)), "no matching routes found")
+}
+
+func saveConfigValues(values map[string]string) error {
+	if len(values) == 0 {
+		return nil
+	}
+
+	path := defaultEnvFilePath()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+
+	existing, err := os.ReadFile(path)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+
+	filtered := []string{}
+	if len(existing) > 0 {
+		for _, line := range strings.Split(string(existing), "\n") {
+			trimmed := strings.TrimSpace(line)
+			if trimmed == "" {
+				continue
+			}
+
+			skip := false
+			for key := range values {
+				if strings.HasPrefix(trimmed, key+"=") {
+					skip = true
+					break
+				}
+			}
+			if skip {
+				continue
+			}
+			filtered = append(filtered, line)
+		}
+	}
+
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		value := strings.TrimSpace(values[key])
+		if value == "" {
+			continue
+		}
+		filtered = append(filtered, key+"="+value)
+	}
+
+	output := strings.Join(filtered, "\n")
+	if output != "" && !strings.HasSuffix(output, "\n") {
+		output += "\n"
+	}
+
+	return os.WriteFile(path, []byte(output), 0o600)
 }
 
 func printJSON(v any) {
