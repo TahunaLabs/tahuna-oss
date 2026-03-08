@@ -74,9 +74,9 @@ Setup:
 
 Run:
 - `[~]` CLI supports interactive shell mode (`tahuna shell`) and run lifecycle commands
-- `[ ]` local directory data sync from CLI to R2 not implemented
+- `[x]` local directory data sync from CLI to R2 implemented as automatic pre-run sync (`train`, `run create`)
 - `[~]` data upload exists in dashboard (`web/app/dashboard/page.tsx`, `web/convex/data.ts`)
-- `[ ]` codebase sync from CLI to environment artifacts R2 not implemented
+- `[x]` codebase sync from CLI to environment artifacts R2 implemented as automatic pre-run sync (`train`, `run create`)
 - `[ ]` env var sync (Convex-style) not implemented in CLI
 - `[x]` `train` / `train -d` command model implemented with optional runtime overrides (`--gpu-type`, `--gpu-count`, `--volume-gb`)
 - `[x]` run listing/show/watch/logs/delete exist
@@ -197,6 +197,10 @@ Update (completed 2026-03-06):
 - `tahuna init` now collects local project setup inputs first (entrypoint/data/config/requirements), auto-detects framework when possible, then prompts machine/runtime settings.
 - `tahuna train` requires a linked `.tahuna/environment_id` from `init`, creates a run through existing `/api/environments/{env_id}/runs`, prints concise summary, and monitors in foreground.
 - `tahuna train -d` creates a run and exits immediately after summary output.
+- `tahuna train` and `tahuna run create` now auto-sync before run creation:
+  - code archive -> environment artifacts path in R2
+  - project data directory -> data path in R2
+  - run creation payload remains minimal (runtime overrides only), with no code/data embedding.
 
 Clarification (agreed direction):
 - Code/data sync must happen via R2 before run launch, not inside run creation payload fields.

@@ -1,14 +1,18 @@
 package main
 
 import (
+	"archive/tar"
 	"bufio"
 	"bytes"
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
+	"io/fs"
+	"mime"
 	"net"
 	"net/http"
 	neturl "net/url"
@@ -615,16 +619,15 @@ func environmentDelete(args []string) {
 
 func runCreate(args []string) {
 	fs := flag.NewFlagSet("run create", flag.ExitOnError)
-	environmentID := fs.String("environment-id", "", "Environment ID")
 	gpuType := fs.String("gpu-type", "", "Override GPU type")
 	gpuCount := fs.Int("gpu-count", 0, "Override GPU count")
 	volumeGB := fs.Int("volume-gb", 0, "Override volume size")
 	watch := fs.Bool("watch", false, "Watch run status after creation")
 	monitor := fs.Bool("monitor", false, "Alias for --watch")
 	fs.Parse(args)
-	if *environmentID == "" {
-		*environmentID = promptString("Environment ID", "")
-	}
+	environmentID, err := resolveEnvironmentID()
+	must(err)
+	must(preRunSync(environmentID))
 
 	payload := map[string]any{}
 	if *gpuType != "" {
@@ -637,8 +640,9 @@ func runCreate(args []string) {
 		payload["volume_gb"] = *volumeGB
 	}
 
-	resp, err := doJSON(http.MethodPost, "/environments/"+*environmentID+"/runs", payload)
+	resp, err := doJSON(http.MethodPost, "/environments/"+environmentID+"/runs", payload)
 	must(err)
+	fmt.Println("run created")
 	printJSON(resp)
 	if *watch || *monitor {
 		must(monitorRun(asString(resp["run_id"]), 5))
@@ -656,6 +660,7 @@ func train(args []string) {
 
 	resolvedEnvironmentID, err := resolveEnvironmentID()
 	must(err)
+	must(preRunSync(resolvedEnvironmentID))
 
 	payload := map[string]any{}
 	if *gpuType != "" {
@@ -671,11 +676,130 @@ func train(args []string) {
 	resp, err := doJSON(http.MethodPost, "/environments/"+resolvedEnvironmentID+"/runs", payload)
 	must(err)
 
+	fmt.Println("run created")
 	printTrainRunSummary(resp)
 	if *detached {
 		return
 	}
 	must(monitorRun(asString(resp["run_id"]), 5))
+}
+
+func preRunSync(environmentID string) error {
+	fmt.Println("syncing code...")
+	if err := syncCodeArchive(environmentID); err != nil {
+		return err
+	}
+
+	fmt.Println("syncing data...")
+	if err := syncDataDirectory(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func syncCodeArchive(environmentID string) error {
+	dataDir := "data"
+	if cfg, err := loadProjectConfig(); err == nil && strings.TrimSpace(cfg.DataDir) != "" {
+		dataDir = cfg.DataDir
+	}
+
+	archivePath, err := createCodeArchive(dataDir)
+	if err != nil {
+		return fmt.Errorf("code sync failed: %w", err)
+	}
+	defer os.Remove(archivePath)
+
+	upload, err := doJSON(http.MethodPost, "/sync/code/upload-url", map[string]any{
+		"environment_id": environmentID,
+		"filename":       "source.tar.gz",
+	})
+	if err != nil {
+		return fmt.Errorf("code sync failed: %w", err)
+	}
+
+	uploadURL := asString(upload["url"])
+	key := asString(upload["key"])
+	if uploadURL == "" || key == "" {
+		return errors.New("code sync failed: invalid upload URL response")
+	}
+
+	if err := uploadFileToSignedURL(archivePath, uploadURL); err != nil {
+		return fmt.Errorf("code sync failed: %w", err)
+	}
+	if _, err := doJSON(http.MethodPost, "/sync/metadata", map[string]any{"key": key}); err != nil {
+		return fmt.Errorf("code sync failed: %w", err)
+	}
+	return nil
+}
+
+func syncDataDirectory() error {
+	cfg, err := loadProjectConfig()
+	if err != nil {
+		return err
+	}
+	dataDir := strings.TrimSpace(cfg.DataDir)
+	if dataDir == "" {
+		dataDir = "data"
+	}
+
+	info, err := os.Stat(dataDir)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		return fmt.Errorf("data sync failed: %w", err)
+	}
+	if !info.IsDir() {
+		return nil
+	}
+
+	var files []string
+	err = filepath.WalkDir(dataDir, func(path string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if d.IsDir() {
+			return nil
+		}
+		if d.Type().IsRegular() {
+			files = append(files, path)
+		}
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("data sync failed: %w", err)
+	}
+
+	for _, path := range files {
+		relativePath, relErr := filepath.Rel(dataDir, path)
+		if relErr != nil {
+			return fmt.Errorf("data sync failed: %w", relErr)
+		}
+
+		upload, upErr := doJSON(http.MethodPost, "/sync/data/upload-url", map[string]any{
+			"filename":      filepath.Base(path),
+			"relative_path": filepath.ToSlash(relativePath),
+		})
+		if upErr != nil {
+			return fmt.Errorf("data sync failed: %w", upErr)
+		}
+
+		uploadURL := asString(upload["url"])
+		key := asString(upload["key"])
+		if uploadURL == "" || key == "" {
+			return errors.New("data sync failed: invalid upload URL response")
+		}
+
+		if err := uploadFileToSignedURL(path, uploadURL); err != nil {
+			return fmt.Errorf("data sync failed: %w", err)
+		}
+		if _, err := doJSON(http.MethodPost, "/sync/metadata", map[string]any{"key": key}); err != nil {
+			return fmt.Errorf("data sync failed: %w", err)
+		}
+	}
+
+	return nil
 }
 
 func runShow(args []string) {
@@ -946,6 +1070,58 @@ func saveProjectConfig(cfg projectConfig) error {
 		cfg.RequirementsPath,
 	)
 	return os.WriteFile(projectConfigFilePath(), []byte(body), 0o600)
+}
+
+func loadProjectConfig() (projectConfig, error) {
+	cfg := projectConfig{
+		DataDir:          "data",
+		ConfigYAMLPath:   "config.yaml",
+		TrainEntrypoint:  "train.py",
+		RequirementsPath: "requirements.txt",
+	}
+
+	raw, err := os.ReadFile(projectConfigFilePath())
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return cfg, nil
+		}
+		return cfg, err
+	}
+
+	for _, line := range strings.Split(string(raw), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		parts := strings.SplitN(trimmed, ":", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		key := strings.TrimSpace(parts[0])
+		value := strings.TrimSpace(parts[1])
+		value = strings.Trim(value, "\"")
+
+		switch key {
+		case "data_dir":
+			if value != "" {
+				cfg.DataDir = filepath.Clean(value)
+			}
+		case "config_yaml":
+			if value != "" {
+				cfg.ConfigYAMLPath = filepath.Clean(value)
+			}
+		case "train_entrypoint":
+			if value != "" {
+				cfg.TrainEntrypoint = filepath.Clean(value)
+			}
+		case "requirements":
+			if value != "" {
+				cfg.RequirementsPath = filepath.Clean(value)
+			}
+		}
+	}
+
+	return cfg, nil
 }
 
 func ensureProjectFile(path, content string) error {
@@ -1252,6 +1428,140 @@ func sortedKeys(m map[string][]string) []string {
 	}
 	sort.Strings(keys)
 	return keys
+}
+
+func createCodeArchive(dataDir string) (string, error) {
+	baseDir, err := os.Getwd()
+	if err != nil {
+		return "", err
+	}
+
+	tempFile, err := os.CreateTemp("", "tahuna-code-*.tar.gz")
+	if err != nil {
+		return "", err
+	}
+	archivePath := tempFile.Name()
+
+	gzipWriter := gzip.NewWriter(tempFile)
+	tarWriter := tar.NewWriter(gzipWriter)
+	wroteFiles := false
+
+	closeAll := func() error {
+		errTar := tarWriter.Close()
+		errGzip := gzipWriter.Close()
+		errFile := tempFile.Close()
+		if errTar != nil {
+			return errTar
+		}
+		if errGzip != nil {
+			return errGzip
+		}
+		return errFile
+	}
+
+	normalizedDataDir := filepath.Clean(dataDir)
+	walkErr := filepath.WalkDir(baseDir, func(path string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if path == baseDir {
+			return nil
+		}
+
+		relPath, err := filepath.Rel(baseDir, path)
+		if err != nil {
+			return err
+		}
+
+		shouldSkipDir := relPath == ".git" ||
+			strings.HasPrefix(relPath, ".git"+string(filepath.Separator)) ||
+			relPath == projectStateDir ||
+			strings.HasPrefix(relPath, projectStateDir+string(filepath.Separator)) ||
+			relPath == normalizedDataDir ||
+			strings.HasPrefix(relPath, normalizedDataDir+string(filepath.Separator))
+
+		if d.IsDir() && shouldSkipDir {
+			return filepath.SkipDir
+		}
+		if d.IsDir() {
+			return nil
+		}
+		if !d.Type().IsRegular() || (d.Type()&os.ModeSymlink) != 0 {
+			return nil
+		}
+
+		fileInfo, err := d.Info()
+		if err != nil {
+			return err
+		}
+
+		header, err := tar.FileInfoHeader(fileInfo, "")
+		if err != nil {
+			return err
+		}
+		header.Name = filepath.ToSlash(relPath)
+		if err := tarWriter.WriteHeader(header); err != nil {
+			return err
+		}
+
+		file, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		if _, err := io.Copy(tarWriter, file); err != nil {
+			_ = file.Close()
+			return err
+		}
+		if err := file.Close(); err != nil {
+			return err
+		}
+		wroteFiles = true
+		return nil
+	})
+	if walkErr != nil {
+		_ = closeAll()
+		_ = os.Remove(archivePath)
+		return "", walkErr
+	}
+	if !wroteFiles {
+		_ = closeAll()
+		_ = os.Remove(archivePath)
+		return "", errors.New("no code files found to sync")
+	}
+	if err := closeAll(); err != nil {
+		_ = os.Remove(archivePath)
+		return "", err
+	}
+	return archivePath, nil
+}
+
+func uploadFileToSignedURL(path, rawURL string) error {
+	file, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	req, err := http.NewRequest(http.MethodPut, rawURL, file)
+	if err != nil {
+		return err
+	}
+	if contentType := mime.TypeByExtension(filepath.Ext(path)); contentType != "" {
+		req.Header.Set("Content-Type", contentType)
+	}
+
+	client := &http.Client{Timeout: 30 * time.Minute}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 400))
+		return fmt.Errorf("upload failed (%d): %s", resp.StatusCode, strings.TrimSpace(string(raw)))
+	}
+	return nil
 }
 
 func doJSON(method, path string, payload map[string]any) (map[string]any, error) {

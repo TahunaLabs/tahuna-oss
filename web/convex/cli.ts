@@ -1,5 +1,8 @@
 import { api, internal } from "@convex/_generated/api";
 import { ActionCtx, httpAction } from "@convex/_generated/server";
+import { R2 } from "@convex-dev/r2";
+import { components } from "@convex/_generated/api";
+import { shortId } from "@convex/ids";
 
 // Helper to authenticate CLI requests via the API keys
 async function authenticateApiRequest(ctx: ActionCtx, request: Request): Promise<string | null> {
@@ -19,6 +22,37 @@ async function authenticateApiRequest(ctx: ActionCtx, request: Request): Promise
   }
 
   return auth.userId;
+}
+
+const r2 = new R2(components.r2);
+
+function normalizeFilename(filename: unknown) {
+  if (typeof filename !== "string") return "file";
+  const trimmed = filename.trim();
+  return trimmed || "file";
+}
+
+function encodePathSegment(value: string) {
+  return encodeURIComponent(value.trim() || "file");
+}
+
+function dataPrefix(userId: string) {
+  return `${userId}/data/`;
+}
+
+function environmentPrefix(userId: string) {
+  return `${userId}/environment/`;
+}
+
+function buildDataKey(userId: string, relativePath: string, filename: string) {
+  const blobId = shortId("blob");
+  const pathLabel = relativePath.trim() || filename;
+  return `${dataPrefix(userId)}${blobId}__${encodePathSegment(pathLabel)}`;
+}
+
+function buildCodeKey(userId: string, environmentId: string, filename: string) {
+  const artifactId = shortId("code");
+  return `${environmentPrefix(userId)}${environmentId}/artifacts/${artifactId}__${encodePathSegment(filename)}`;
 }
 
 // Ensure proper CORS for external clients (CLI/web)
@@ -69,6 +103,154 @@ export const getCatalog = httpAction(async (ctx) => {
     const detail = err instanceof Error ? err.message : "failed to load catalog";
     return new Response(JSON.stringify({ detail }), {
       status: 500,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+});
+
+// Sync
+
+export const createCodeUploadUrl = httpAction(async (ctx, request) => {
+  const userId = await authenticateApiRequest(ctx, request);
+  if (!userId) {
+    return new Response(JSON.stringify({ detail: "authentication required" }), {
+      status: 401,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    body = null;
+  }
+
+  const environmentId = typeof body?.environment_id === "string" ? body.environment_id.trim() : "";
+  if (!environmentId) {
+    return new Response(JSON.stringify({ detail: "environment_id is required" }), {
+      status: 400,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+
+  try {
+    await ctx.runQuery(internal.environments.internalGet, {
+      userId,
+      environmentId: environmentId as any,
+    });
+  } catch {
+    return new Response(JSON.stringify({ detail: "environment not found" }), {
+      status: 404,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+
+  try {
+    const filename = normalizeFilename(body?.filename);
+    const key = buildCodeKey(userId, environmentId, filename);
+    const upload = await r2.generateUploadUrl(key);
+    return new Response(JSON.stringify({
+      key: upload.key,
+      url: upload.url,
+      filename,
+      environment_id: environmentId,
+    }), {
+      status: 200,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : "failed to generate code upload URL";
+    return new Response(JSON.stringify({ detail }), {
+      status: 400,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+});
+
+export const createDataUploadUrl = httpAction(async (ctx, request) => {
+  const userId = await authenticateApiRequest(ctx, request);
+  if (!userId) {
+    return new Response(JSON.stringify({ detail: "authentication required" }), {
+      status: 401,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    body = null;
+  }
+
+  try {
+    const filename = normalizeFilename(body?.filename);
+    const relativePath =
+      typeof body?.relative_path === "string" && body.relative_path.trim() !== ""
+        ? body.relative_path
+        : filename;
+    const key = buildDataKey(userId, relativePath, filename);
+    const upload = await r2.generateUploadUrl(key);
+    return new Response(JSON.stringify({
+      key: upload.key,
+      url: upload.url,
+      filename,
+    }), {
+      status: 200,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : "failed to generate data upload URL";
+    return new Response(JSON.stringify({ detail }), {
+      status: 400,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+});
+
+export const syncObjectMetadata = httpAction(async (ctx, request) => {
+  const userId = await authenticateApiRequest(ctx, request);
+  if (!userId) {
+    return new Response(JSON.stringify({ detail: "authentication required" }), {
+      status: 401,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    body = null;
+  }
+
+  const key = typeof body?.key === "string" ? body.key.trim() : "";
+  if (!key) {
+    return new Response(JSON.stringify({ detail: "key is required" }), {
+      status: 400,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+
+  const allowedPrefixes = [dataPrefix(userId), environmentPrefix(userId)];
+  if (!allowedPrefixes.some((prefix) => key.startsWith(prefix))) {
+    return new Response(JSON.stringify({ detail: "invalid key prefix" }), {
+      status: 403,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+
+  try {
+    await r2.syncMetadata(ctx, key);
+    return new Response(JSON.stringify({ synced: true, key }), {
+      status: 200,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : "failed to sync metadata";
+    return new Response(JSON.stringify({ detail }), {
+      status: 400,
       headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
     });
   }
