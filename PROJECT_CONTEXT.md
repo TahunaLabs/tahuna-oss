@@ -1,6 +1,6 @@
 # Tahuna Project Context
 
-Last updated: 2026-03-06
+Last updated: 2026-03-08
 
 ## 1) What This Project Is
 
@@ -114,6 +114,7 @@ Contract fixes applied on 2026-03-06:
 
 Current operational note:
 - CLI API URL resolution order is: `TAHUNA_API_URL` -> `CONVEX_SITE_URL` -> `NEXT_PUBLIC_CONVEX_SITE_URL` -> default `http://localhost:3000`.
+- CLI browser login URL can be explicitly set with `TAHUNA_BROWSER_URL`; if missing, CLI auto-detects a working browser base and persists it.
 - CLI auth token is read from env vars or global config file `~/.config/tahuna/config.env`.
 
 ## 5) What Does What (Code Map)
@@ -122,12 +123,12 @@ Current operational note:
 
 - [`cli/main.go`](/Users/pazuzzu/Desktop/gigi/boob-ai/cli/main.go)
   - command entrypoint and parsing
-  - browser-based login (`tahuna login`) with local callback
+  - browser-based login (`tahuna login`) with local callback and automatic browser URL persistence (`TAHUNA_BROWSER_URL`)
   - guided setup (`init`) with local project file prompts/scaffolding
   - interactive shell mode (`shell`)
   - environment commands: `list/show/delete` (`create` intentionally removed; creation via `init`)
   - train commands: `train`, `train -d` with optional overrides
-  - run commands: `create/list/show/watch/logs/delete` (backward compatible)
+  - run commands: `create/list/show/watch/logs/delete` (`run create` uses linked `.tahuna/environment_id`, no `--environment-id`)
   - HTTP client (`doJSON`) with standalone config resolution (`~/.config/tahuna/config.env` + env vars)
 
 ### Web App (`/web`)
@@ -177,20 +178,18 @@ Most realistic current path:
 1. Run web + Convex locally.
 2. Run `tahuna login` from CLI.
 3. Browser opens auth flow and redirects back to local CLI callback.
-4. CLI stores auth token in `~/.config/tahuna/config.env`.
+4. CLI stores auth token (and auto-detected browser URL base when missing) in `~/.config/tahuna/config.env`.
 5. Use `tahuna init .` (or `tahuna init <project-name>`) then `tahuna train` / `tahuna train -d`.
 6. Use CLI + dashboard to inspect runs/data.
 
 ## 7) Suggested Next Milestone (to unblock CLI-first phase)
 
-If we prioritize your stated unblock (CLI flow first), the shortest path is:
+With pre-run sync now implemented, the next shortest path for CLI-first quality is:
 
-1. Implement pre-run sync pipeline in CLI:
-   - Sync code to environment artifacts R2.
-   - Sync local data dir to data R2.
-2. Trigger that sync automatically whenever a run is created (`tahuna train` and `tahuna run create`) before calling run creation.
-3. Keep run creation payload minimal/backward-compatible (do not inline code/data blobs in payload).
-4. Add explicit manual sync commands after auto-sync is stable.
+1. Add explicit manual sync commands (`tahuna sync code`, `tahuna sync data`) reusing the same pipeline.
+2. Add file-change awareness (skip unchanged uploads via manifest/hash).
+3. Implement env var sync and injection for runs.
+4. Add richer run observability (streamed logs/metrics in CLI).
 
 Update (completed 2026-03-06):
 - `tahuna init .` initializes current project, and `tahuna init <project-name>` creates/selects a project directory, then links created environment to `.tahuna/environment_id`.
@@ -201,6 +200,9 @@ Update (completed 2026-03-06):
   - code archive -> environment artifacts path in R2
   - project data directory -> data path in R2
   - run creation payload remains minimal (runtime overrides only), with no code/data embedding.
+- `tahuna` with no args now shows usage/help (no implicit `init .`).
+- `tahuna run create` now uses linked project environment automatically (no `--environment-id` flag).
+- `tahuna login` now auto-detects/persists `TAHUNA_BROWSER_URL` in CLI config when missing.
 
 Clarification (agreed direction):
 - Code/data sync must happen via R2 before run launch, not inside run creation payload fields.
