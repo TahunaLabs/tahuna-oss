@@ -23,6 +23,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 	"unicode/utf8"
@@ -590,7 +591,8 @@ type preparedManifest struct {
 }
 
 type syncOptions struct {
-	logProgress bool
+	logProgress   bool
+	dynamicStatus bool
 }
 
 var (
@@ -938,73 +940,59 @@ func preRunSync(environmentID string) error {
 
 func runSyncWithStatus(environmentID string, scope syncScope) error {
 	start := time.Now()
-	if !supportsDynamicStatus() {
-		if err := syncIncremental(environmentID, scope, syncOptions{logProgress: false}); err != nil {
-			return err
+	dynamic := supportsDynamicStatus()
+	if err := syncIncremental(environmentID, scope, syncOptions{
+		logProgress:   true,
+		dynamicStatus: dynamic,
+	}); err != nil {
+		if dynamic {
+			clearStatusLine()
 		}
-		printSuccessLine(fmt.Sprintf("sync complete (%s)", formatDuration(time.Since(start))))
-		return nil
+		return err
 	}
-
-	status := syncStatusText(scope)
-	frames := []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
-	printStatusLine(frames[0], status)
-
-	done := make(chan error, 1)
-	go func() {
-		done <- syncIncremental(environmentID, scope, syncOptions{logProgress: false})
-	}()
-
-	ticker := time.NewTicker(90 * time.Millisecond)
-	defer ticker.Stop()
-	frameIndex := 1
-	for {
-		select {
-		case err := <-done:
-			if err != nil {
-				clearStatusLine()
-				return err
-			}
-			fmt.Printf("\r\033[2K%s✓%s %s\n", cAmpGreen, cReset, fmt.Sprintf("sync complete (%s)", formatDuration(time.Since(start))))
-			return nil
-		case <-ticker.C:
-			printStatusLine(frames[frameIndex%len(frames)], status)
-			frameIndex++
-		}
+	if dynamic {
+		clearStatusLine()
 	}
+	printSuccessLine(fmt.Sprintf("sync complete (%s)", formatDuration(time.Since(start))))
+	return nil
 }
 
 func syncIncremental(environmentID string, scope syncScope, options syncOptions) error {
 	prepared := []preparedManifest{}
 
 	if scope.code {
-		if options.logProgress {
-			fmt.Println("syncing code...")
-		}
+		codeSpinner := newSyncPhaseSpinner("syncing code...", options)
 		codeManifest, err := prepareCodeManifest()
 		if err != nil {
+			codeSpinner.StopError()
 			return fmt.Errorf("code sync failed: %w", err)
 		}
+		if err := syncMissingBlobs(environmentID, codeManifest, options, nil); err != nil {
+			codeSpinner.StopError()
+			return fmt.Errorf("%s sync failed: %w", codeManifest.kind, err)
+		}
+		codeSpinner.StopSuccess("syncing code")
 		prepared = append(prepared, codeManifest)
 	}
 
 	if scope.data {
-		if options.logProgress {
-			fmt.Println("syncing data...")
-		}
+		dataSpinner := newSyncPhaseSpinner("syncing data...", options)
 		dataManifest, err := prepareDataManifest()
 		if err != nil {
+			dataSpinner.StopError()
 			return fmt.Errorf("data sync failed: %w", err)
 		}
+		if err := syncMissingBlobs(environmentID, dataManifest, options, func(done, total int, phase string) {
+			dataSpinner.SetMessage(formatDataSyncProgress(done, total, phase))
+		}); err != nil {
+			dataSpinner.StopError()
+			return fmt.Errorf("%s sync failed: %w", dataManifest.kind, err)
+		}
+		dataSpinner.StopSuccess("syncing data")
 		prepared = append(prepared, dataManifest)
 	}
 
-	for _, item := range prepared {
-		if err := syncMissingBlobs(environmentID, item); err != nil {
-			return fmt.Errorf("%s sync failed: %w", item.kind, err)
-		}
-	}
-
+	commitSpinner := newSyncPhaseSpinner("finalizing sync...", options)
 	commitPayload := map[string]any{
 		"environment_id": environmentID,
 	}
@@ -1015,17 +1003,21 @@ func syncIncremental(environmentID string, scope syncScope, options syncOptions)
 
 	if _, err := syncDoJSON(http.MethodPost, "/sync/commit", commitPayload); err != nil {
 		if !isMissingManifestCommitError(err) {
+			commitSpinner.StopError()
 			return err
 		}
 		for _, item := range prepared {
 			if errUpload := uploadManifest(environmentID, item); errUpload != nil {
+				commitSpinner.StopError()
 				return fmt.Errorf("%s sync failed: %w", item.kind, errUpload)
 			}
 		}
 		if _, retryErr := syncDoJSON(http.MethodPost, "/sync/commit", commitPayload); retryErr != nil {
+			commitSpinner.StopError()
 			return retryErr
 		}
 	}
+	commitSpinner.StopSuccess("finalizing sync")
 
 	for _, item := range prepared {
 		if err := saveManifestCache(item); err != nil {
@@ -1211,6 +1203,16 @@ func collectManifestEntries(kind, dataDir string) ([]syncManifestEntry, map[stri
 			normalizedDataDir = filepath.Clean(relDataDir)
 		}
 	}
+
+	gitEntries, gitFilesByID, gitErr := collectCodeEntriesWithGitIgnore(baseDir, normalizedDataDir)
+	if gitErr == nil {
+		if len(gitEntries) == 0 {
+			return nil, nil, errors.New("no code files found to sync")
+		}
+		sort.Slice(gitEntries, func(i, j int) bool { return gitEntries[i].Path < gitEntries[j].Path })
+		return gitEntries, gitFilesByID, nil
+	}
+
 	walkErr := filepath.WalkDir(baseDir, func(path string, d fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
@@ -1225,17 +1227,13 @@ func collectManifestEntries(kind, dataDir string) ([]syncManifestEntry, map[stri
 		}
 		relPath = filepath.Clean(relPath)
 
-		shouldSkipDir := relPath == ".git" ||
-			strings.HasPrefix(relPath, ".git"+string(filepath.Separator)) ||
-			relPath == projectStateDir ||
-			strings.HasPrefix(relPath, projectStateDir+string(filepath.Separator)) ||
-			relPath == normalizedDataDir ||
-			strings.HasPrefix(relPath, normalizedDataDir+string(filepath.Separator))
-
-		if d.IsDir() && shouldSkipDir {
+		if d.IsDir() && shouldSkipCodePath(relPath, normalizedDataDir) {
 			return filepath.SkipDir
 		}
 		if d.IsDir() {
+			return nil
+		}
+		if shouldSkipCodePath(relPath, normalizedDataDir) {
 			return nil
 		}
 		if !d.Type().IsRegular() || (d.Type()&os.ModeSymlink) != 0 {
@@ -1256,6 +1254,83 @@ func collectManifestEntries(kind, dataDir string) ([]syncManifestEntry, map[stri
 	}
 
 	sort.Slice(entries, func(i, j int) bool { return entries[i].Path < entries[j].Path })
+	return entries, filesByID, nil
+}
+
+func shouldSkipCodePath(relPath, normalizedDataDir string) bool {
+	if relPath == "." {
+		return false
+	}
+	if relPath == ".git" || strings.HasPrefix(relPath, ".git"+string(filepath.Separator)) {
+		return true
+	}
+	if relPath == projectStateDir || strings.HasPrefix(relPath, projectStateDir+string(filepath.Separator)) {
+		return true
+	}
+	if normalizedDataDir != "." && normalizedDataDir != "" {
+		if relPath == normalizedDataDir || strings.HasPrefix(relPath, normalizedDataDir+string(filepath.Separator)) {
+			return true
+		}
+	}
+	return false
+}
+
+func collectCodeEntriesWithGitIgnore(
+	baseDir string,
+	normalizedDataDir string,
+) ([]syncManifestEntry, map[string]string, error) {
+	cmd := exec.Command("git", "rev-parse", "--is-inside-work-tree")
+	cmd.Dir = baseDir
+	checkRaw, err := cmd.Output()
+	if err != nil || strings.TrimSpace(string(checkRaw)) != "true" {
+		return nil, nil, errors.New("not a git work tree")
+	}
+
+	listCmd := exec.Command("git", "ls-files", "-co", "--exclude-standard")
+	listCmd.Dir = baseDir
+	raw, err := listCmd.Output()
+	if err != nil {
+		return nil, nil, err
+	}
+
+	entries := []syncManifestEntry{}
+	filesByID := map[string]string{}
+	lines := strings.Split(string(raw), "\n")
+	for _, line := range lines {
+		relPath := filepath.Clean(strings.TrimSpace(line))
+		if relPath == "" || relPath == "." || strings.HasPrefix(relPath, ".."+string(filepath.Separator)) {
+			continue
+		}
+		if shouldSkipCodePath(relPath, normalizedDataDir) {
+			continue
+		}
+
+		fullPath := filepath.Join(baseDir, relPath)
+		info, statErr := os.Lstat(fullPath)
+		if statErr != nil {
+			if errors.Is(statErr, os.ErrNotExist) {
+				continue
+			}
+			return nil, nil, statErr
+		}
+		if info.IsDir() || !info.Mode().IsRegular() || (info.Mode()&os.ModeSymlink) != 0 {
+			continue
+		}
+
+		hash, size, err := fileSHA256(fullPath)
+		if err != nil {
+			return nil, nil, err
+		}
+		entries = append(entries, syncManifestEntry{
+			Path:   filepath.ToSlash(relPath),
+			SHA256: hash,
+			Size:   size,
+			Mode:   uint32(info.Mode().Perm()),
+		})
+		if _, exists := filesByID[hash]; !exists {
+			filesByID[hash] = fullPath
+		}
+	}
 	return entries, filesByID, nil
 }
 
@@ -1303,9 +1378,21 @@ func manifestEntriesEqual(a, b []syncManifestEntry) bool {
 	return true
 }
 
-func syncMissingBlobs(environmentID string, item preparedManifest) error {
+func syncMissingBlobs(
+	environmentID string,
+	item preparedManifest,
+	options syncOptions,
+	onProgress func(done, total int, phase string),
+) error {
 	hashes := uniqueSortedHashes(item.manifest.Entries)
+	totalHashes := len(hashes)
+	if onProgress != nil {
+		onProgress(0, totalHashes, "checking")
+	}
 	if len(hashes) == 0 {
+		if onProgress != nil {
+			onProgress(0, 0, "done")
+		}
 		return nil
 	}
 	sizeByHash := manifestSizesByHash(item.manifest.Entries)
@@ -1322,6 +1409,12 @@ func syncMissingBlobs(environmentID string, item preparedManifest) error {
 	missingAny, ok := resp["missing"].([]any)
 	if !ok {
 		return errors.New("invalid missing blob response")
+	}
+	totalMissing := len(missingAny)
+	existing := totalHashes - totalMissing
+	doneMissing := 0
+	if onProgress != nil {
+		onProgress(existing, totalHashes, "uploading")
 	}
 
 	for _, rawHash := range missingAny {
@@ -1360,8 +1453,111 @@ func syncMissingBlobs(environmentID string, item preparedManifest) error {
 		if _, err := syncDoJSON(http.MethodPost, "/sync/metadata", map[string]any{"key": key}); err != nil {
 			return err
 		}
+		doneMissing++
+		if onProgress != nil {
+			onProgress(existing+doneMissing, totalHashes, "uploading")
+		}
 	}
 	return nil
+}
+
+func formatDataSyncProgress(done, total int, phase string) string {
+	if total == 0 {
+		return "syncing data... [====================] 100% (0/0) up to date"
+	}
+	width := 20
+	filled := int(float64(done) / float64(total) * float64(width))
+	if filled > width {
+		filled = width
+	}
+	bar := strings.Repeat("=", filled) + strings.Repeat(" ", width-filled)
+	percent := int(float64(done) / float64(total) * 100)
+	switch phase {
+	case "checking":
+		return fmt.Sprintf("syncing data... [%s] %3d%% (%d/%d) checking remote", bar, percent, done, total)
+	case "uploading":
+		return fmt.Sprintf("syncing data... [%s] %3d%% (%d/%d) uploading", bar, percent, done, total)
+	default:
+		return fmt.Sprintf("syncing data... [%s] %3d%% (%d/%d)", bar, percent, done, total)
+	}
+}
+
+type syncPhaseSpinner struct {
+	options syncOptions
+	done    chan struct{}
+	stopped chan struct{}
+	mu      sync.RWMutex
+	message string
+}
+
+func newSyncPhaseSpinner(initialMessage string, options syncOptions) *syncPhaseSpinner {
+	sp := &syncPhaseSpinner{
+		options: options,
+		done:    make(chan struct{}),
+		stopped: make(chan struct{}),
+		message: initialMessage,
+	}
+	if !options.logProgress {
+		close(sp.stopped)
+		return sp
+	}
+	if !options.dynamicStatus {
+		fmt.Println(initialMessage)
+		close(sp.stopped)
+		return sp
+	}
+
+	frames := []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
+	go func() {
+		defer close(sp.stopped)
+		ticker := time.NewTicker(90 * time.Millisecond)
+		defer ticker.Stop()
+		frame := 0
+		for {
+			sp.mu.RLock()
+			message := sp.message
+			sp.mu.RUnlock()
+			printStatusLine(frames[frame%len(frames)], message)
+			frame++
+			select {
+			case <-sp.done:
+				return
+			case <-ticker.C:
+			}
+		}
+	}()
+	return sp
+}
+
+func (sp *syncPhaseSpinner) SetMessage(message string) {
+	sp.mu.Lock()
+	sp.message = message
+	sp.mu.Unlock()
+	if sp.options.logProgress && !sp.options.dynamicStatus {
+		fmt.Println(message)
+	}
+}
+
+func (sp *syncPhaseSpinner) StopSuccess(label string) {
+	if !sp.options.logProgress {
+		return
+	}
+	if sp.options.dynamicStatus {
+		close(sp.done)
+		<-sp.stopped
+		fmt.Printf("\r\033[2K%s✓%s %s\n", cAmpGreen, cReset, label)
+		return
+	}
+	fmt.Printf("%s✓%s %s\n", cAmpGreen, cReset, label)
+}
+
+func (sp *syncPhaseSpinner) StopError() {
+	if !sp.options.dynamicStatus || !sp.options.logProgress {
+		return
+	}
+	close(sp.done)
+	<-sp.stopped
+	clearStatusLine()
 }
 
 func uploadManifest(environmentID string, item preparedManifest) error {
