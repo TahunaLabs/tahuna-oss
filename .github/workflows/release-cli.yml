@@ -57,7 +57,10 @@ jobs:
             local binary="tahuna"
 
             mkdir -p "$out_dir"
-            CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" go build -trimpath -o "${out_dir}/${binary}" ./cli
+            (
+              cd cli
+              CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" go build -trimpath -o "../${out_dir}/${binary}" .
+            )
             tar -C "$out_dir" -czf "dist/${name}.tar.gz" "$binary"
             rm -rf "$out_dir"
           }
