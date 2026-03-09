@@ -378,6 +378,11 @@ func initProject(target string) error {
 	if created {
 		fmt.Printf("%sCreated project directory:%s %s\n", cAmpWord, cReset, projectPath)
 	}
+	if linkedEnvironmentID, err := loadLinkedEnvironmentID(); err != nil {
+		return err
+	} else if linkedEnvironmentID != "" {
+		return fmt.Errorf("project already initialized (linked environment: %s); use `tahuna train` or remove %s to reinitialize", linkedEnvironmentID, projectEnvironmentFilePath())
+	}
 
 	projectCfg, frameworkKey, err := collectProjectInitConfig()
 	if err != nil {
