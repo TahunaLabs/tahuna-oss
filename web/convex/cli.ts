@@ -1053,11 +1053,12 @@ export const getRunOrLogs = httpAction(async (ctx, request) => {
   }
 
   const url = new URL(request.url);
-  // Pattern: /api/runs/{run_id} or /api/runs/{run_id}/logs
+  // Pattern: /api/runs/{run_id} or /api/runs/{run_id}/logs or /api/runs/{run_id}/events
   const parts = url.pathname.split("/").filter(Boolean); // remove empty strings
   
   const isLogs = parts[parts.length - 1] === "logs";
-  const runId = isLogs ? parts[parts.length - 2] : parts[parts.length - 1];
+  const isEvents = parts[parts.length - 1] === "events";
+  const runId = isLogs || isEvents ? parts[parts.length - 2] : parts[parts.length - 1];
 
   if (!runId || runId === "runs") {
     return new Response(JSON.stringify({ detail: "run_id is required" }), {
@@ -1078,6 +1079,25 @@ export const getRunOrLogs = httpAction(async (ctx, request) => {
       });
     } catch (err) {
       const detail = err instanceof Error ? err.message : "failed to load run logs";
+      return new Response(JSON.stringify({ detail }), {
+        status: 404,
+        headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+      });
+    }
+  }
+
+  if (isEvents) {
+    try {
+      const data = await ctx.runQuery(internal.runs.internalGetEvents, {
+        userId,
+        runId: runId as any,
+      });
+      return new Response(JSON.stringify(data), {
+        status: 200,
+        headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+      });
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : "failed to load run events";
       return new Response(JSON.stringify({ detail }), {
         status: 404,
         headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),

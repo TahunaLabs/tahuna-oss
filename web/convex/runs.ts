@@ -13,6 +13,7 @@ import {
   type QueryCtx,
 } from "@convex/_generated/server";
 import { requireUser } from "@convex/auth";
+import { images } from "./catalog";
 
 const ACTIVE_STATUSES = new Set(["queued", "provisioning", "running", "cancelling"]);
 const TERMINAL_STATUSES = new Set(["completed", "failed", "cancelled"]);
@@ -42,6 +43,16 @@ const runLogsResponseValidator = v.object({
   log_file: v.string(),
   note: v.string(),
 });
+const runEventResponseValidator = v.object({
+  status: v.string(),
+  message: v.string(),
+  created_at: v.number(),
+  metadata: v.optional(v.any()),
+});
+const runEventsResponseValidator = v.object({
+  run_id: v.string(),
+  events: v.array(runEventResponseValidator),
+});
 const provisioningPayloadValidator = v.object({
   run_id: v.string(),
   environment_id: v.string(),
@@ -62,6 +73,15 @@ const provisioningPayloadValidator = v.object({
       data_bytes: v.number(),
     }),
   ),
+  runpod_pod_id: v.optional(v.string()),
+});
+const runProvisionSpecValidator = v.object({
+  run_id: v.string(),
+  effective_gpu_type: v.string(),
+  effective_gpu_count: v.number(),
+  effective_volume_gb: v.number(),
+  framework: v.string(),
+  version: v.string(),
 });
 
 const provisionPool = new Workpool(components.workpool, {
@@ -303,6 +323,158 @@ async function fetchAndVerifyManifestBlobs(
   };
 }
 
+function resolveImageName(framework: string, version: string) {
+  const frameworkImages = images[framework];
+  if (!frameworkImages) {
+    throw new Error(`unsupported framework for provisioning: ${framework}`);
+  }
+  const imageName = frameworkImages[version];
+  if (!imageName) {
+    throw new Error(`unsupported framework version for provisioning: ${framework}:${version}`);
+  }
+  return imageName;
+}
+
+async function createRunpodPod(args: {
+  runId: string;
+  imageName: string;
+  gpuType: string;
+  gpuCount: number;
+  volumeGb: number;
+  payload: {
+    run_id: string;
+    environment_id: string;
+    input_path: string;
+    output_path: string;
+    logs_path: string;
+    code_manifest_hash: string | null;
+    data_manifest_hash: string | null;
+    code_manifest_key: string | null;
+    data_manifest_key: string | null;
+    contract_version: string;
+  };
+}) {
+  const apiKey = process.env.RUNPOD_API_KEY?.trim();
+  if (!apiKey) {
+    throw new Error("RUNPOD_API_KEY is not set");
+  }
+  const cloudType = (process.env.RUNPOD_CLOUD_TYPE?.trim().toUpperCase() || "SECURE");
+  const allowedCloudType = cloudType === "COMMUNITY" ? "COMMUNITY" : "SECURE";
+  const gpuTypeId = await resolveRunpodGpuTypeId(apiKey, args.gpuType);
+
+  const response = await fetch("https://rest.runpod.io/v1/pods", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      name: `tahuna-${args.runId}`,
+      computeType: "GPU",
+      cloudType: allowedCloudType,
+      gpuCount: Math.max(1, args.gpuCount),
+      gpuTypeIds: [gpuTypeId],
+      gpuTypePriority: "custom",
+      imageName: args.imageName,
+      volumeInGb: Math.max(1, args.volumeGb),
+      volumeMountPath: "/workspace",
+      env: {
+        TAHUNA_RUN_ID: args.payload.run_id,
+        TAHUNA_ENVIRONMENT_ID: args.payload.environment_id,
+        TAHUNA_CONTRACT_VERSION: args.payload.contract_version,
+        TAHUNA_INPUT_PATH: args.payload.input_path,
+        TAHUNA_OUTPUT_PATH: args.payload.output_path,
+        TAHUNA_LOGS_PATH: args.payload.logs_path,
+        TAHUNA_CODE_MANIFEST_HASH: args.payload.code_manifest_hash || "",
+        TAHUNA_DATA_MANIFEST_HASH: args.payload.data_manifest_hash || "",
+        TAHUNA_CODE_MANIFEST_KEY: args.payload.code_manifest_key || "",
+        TAHUNA_DATA_MANIFEST_KEY: args.payload.data_manifest_key || "",
+      },
+      ports: ["22/tcp", "8888/http"],
+    }),
+  });
+  const rawText = await response.text();
+  let body: unknown = null;
+  try {
+    body = rawText ? JSON.parse(rawText) : null;
+  } catch {
+    body = null;
+  }
+  if (!response.ok) {
+    const detail =
+      body && typeof body === "object" && "message" in body && typeof (body as Record<string, unknown>).message === "string"
+        ? String((body as Record<string, unknown>).message)
+        : (rawText.trim() || `http ${response.status}`);
+    throw new Error(`Runpod pod creation failed: ${detail}`);
+  }
+  const row = (body || {}) as Record<string, unknown>;
+  const podId = typeof row.id === "string" ? row.id : (typeof row.podId === "string" ? row.podId : "");
+  if (!podId) {
+    throw new Error("Runpod pod creation failed: missing pod id in response");
+  }
+  return {
+    podId,
+    rawResponse: row,
+  };
+}
+
+function normalizeGpuLabel(value: string) {
+  return value.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+async function resolveRunpodGpuTypeId(apiKey: string, requestedGpu: string) {
+  const trimmed = requestedGpu.trim();
+  if (!trimmed) {
+    throw new Error("GPU type is empty");
+  }
+  const res = await fetch("https://api.runpod.io/graphql", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      query: "query { gpuTypes { id displayName } }",
+    }),
+  });
+  if (!res.ok) {
+    throw new Error(`failed to fetch Runpod GPU catalog: http ${res.status}`);
+  }
+  let json: unknown;
+  try {
+    json = await res.json();
+  } catch {
+    throw new Error("failed to parse Runpod GPU catalog response");
+  }
+  const typesRaw =
+    json && typeof json === "object" && "data" in json
+      ? (json as { data?: { gpuTypes?: Array<{ id?: string; displayName?: string }> } }).data?.gpuTypes
+      : undefined;
+  const gpuTypes = Array.isArray(typesRaw) ? typesRaw : [];
+  if (gpuTypes.length === 0) {
+    throw new Error("Runpod GPU catalog is empty");
+  }
+
+  const requestedNorm = normalizeGpuLabel(trimmed);
+  const directMatch = gpuTypes.find((gpu) => typeof gpu.id === "string" && gpu.id === trimmed);
+  if (directMatch?.id) {
+    return directMatch.id;
+  }
+  const displayMatch = gpuTypes.find(
+    (gpu) => typeof gpu.displayName === "string" && normalizeGpuLabel(gpu.displayName) === requestedNorm,
+  );
+  if (displayMatch?.id) {
+    return displayMatch.id;
+  }
+
+  const sample = gpuTypes
+    .slice(0, 10)
+    .map((gpu) => gpu.displayName || gpu.id || "")
+    .filter(Boolean)
+    .join(", ");
+  throw new Error(`Runpod GPU type not found: "${trimmed}". Available examples: ${sample}`);
+}
+
 async function listByUserId(ctx: QueryCtx, userId: string) {
   const rows = await ctx.db
     .query("runs")
@@ -460,6 +632,29 @@ export const internalGetLogs = internalQuery({
   },
 });
 
+export const internalGetEvents = internalQuery({
+  args: { userId: v.string(), runId: v.id("runs") },
+  returns: runEventsResponseValidator,
+  handler: async (ctx, args) => {
+    const row = await getOwnedRun(ctx, args.userId, args.runId);
+    const events = await ctx.db
+      .query("runEvents")
+      .withIndex("by_run", (q) => q.eq("runId", args.runId))
+      .collect();
+    return {
+      run_id: String(row._id),
+      events: events
+        .sort((a, b) => a._creationTime - b._creationTime)
+        .map((event) => ({
+          status: event.status,
+          message: event.message,
+          created_at: event._creationTime,
+          metadata: event.metadata,
+        })),
+    };
+  },
+});
+
 export const create = mutation({
   args: {
     environmentId: v.id("environments"),
@@ -550,11 +745,37 @@ export const internalGetProvisioningPayload = internalQuery({
   },
 });
 
+export const internalGetRunProvisionSpec = internalQuery({
+  args: { runId: v.id("runs") },
+  returns: runProvisionSpecValidator,
+  handler: async (ctx, args) => {
+    const row = await ctx.db.get("runs", args.runId);
+    if (!row) {
+      throw new ConvexError("run not found");
+    }
+    const env = await ctx.db.get("environments", row.environmentId);
+    if (!env) {
+      throw new ConvexError("environment not found");
+    }
+    return {
+      run_id: String(row._id),
+      effective_gpu_type: row.effectiveGpuType || env.gpuType,
+      effective_gpu_count: row.effectiveGpuCount || env.gpuCount,
+      effective_volume_gb: row.effectiveVolumeGb || env.volumeGb,
+      framework: env.framework,
+      version: env.version,
+    };
+  },
+});
+
 export const provisionRun = internalAction({
   args: { runId: v.id("runs") },
   returns: v.null(),
   handler: async (ctx, args) => {
     const provisioningPayload = await ctx.runQuery(internal.runs.internalGetProvisioningPayload, {
+      runId: args.runId,
+    });
+    const runSpec = await ctx.runQuery(internal.runs.internalGetRunProvisionSpec, {
       runId: args.runId,
     });
     await ctx.runMutation(internal.runs.markProvisioning, {
@@ -574,6 +795,20 @@ export const provisionRun = internalAction({
       const dataManifest = await fetchManifest(ctx, "data", dataManifestKey, dataManifestHash);
       const codeStats = await fetchAndVerifyManifestBlobs(ctx, provisioningPayload, "code", codeManifest);
       const dataStats = await fetchAndVerifyManifestBlobs(ctx, provisioningPayload, "data", dataManifest);
+      const imageName = resolveImageName(runSpec.framework, runSpec.version);
+      const provisionResult = await createRunpodPod({
+        runId: String(args.runId),
+        imageName,
+        gpuType: runSpec.effective_gpu_type,
+        gpuCount: runSpec.effective_gpu_count,
+        volumeGb: runSpec.effective_volume_gb,
+        payload: provisioningPayload,
+      });
+      await ctx.runMutation(internal.runs.markPodProvisioned, {
+        runId: args.runId,
+        podId: provisionResult.podId,
+        runpodResponse: provisionResult.rawResponse,
+      });
 
       await ctx.runMutation(internal.runs.markRunning, {
         runId: args.runId,
@@ -585,9 +820,9 @@ export const provisionRun = internalAction({
             data_files: dataStats.fileCount,
             data_bytes: dataStats.totalBytes,
           },
+          runpod_pod_id: provisionResult.podId,
         },
       });
-      await ctx.scheduler.runAfter(30_000, internal.runs.completeRun, { runId: args.runId });
     } catch (error) {
       const detail = error instanceof Error ? error.message : "pod bootstrap failed";
       await ctx.runMutation(internal.runs.markFailed, {
@@ -596,6 +831,34 @@ export const provisionRun = internalAction({
         provisioningPayload,
       });
     }
+    return null;
+  },
+});
+
+export const markPodProvisioned = internalMutation({
+  args: {
+    runId: v.id("runs"),
+    podId: v.string(),
+    runpodResponse: v.optional(v.any()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const row = await ctx.db.get("runs", args.runId);
+    if (!row || row.cancellationRequested || TERMINAL_STATUSES.has(row.status)) {
+      return null;
+    }
+    await ctx.db.patch("runs", args.runId, {
+      podId: args.podId,
+    });
+    await ctx.db.insert("runEvents", {
+      runId: args.runId,
+      status: "provisioning",
+      message: "gpu pod provisioned",
+      metadata: {
+        pod_id: args.podId,
+        runpod_response: args.runpodResponse,
+      },
+    });
     return null;
   },
 });

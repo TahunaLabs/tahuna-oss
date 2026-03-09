@@ -95,7 +95,7 @@ Usage:
   tahuna sync [code|data]
   tahuna train [-d] [--gpu-type <gpu>] [--gpu-count <n>] [--volume-gb <n>]
   tahuna env list|show|delete ...
-  tahuna run create|list|show|watch|logs|delete ...
+  tahuna run create|list|show|watch|events|logs|delete ...
   tahuna up
   tahuna version
 
@@ -104,6 +104,11 @@ Run list:
   tahuna run list -n <N>         Show last N runs
   tahuna run list -a             Show all runs
   tahuna run list --verbose      Show full JSON payload
+  tahuna run show <run_id>
+  tahuna run watch <run_id> [--interval 5]
+  tahuna run events <run_id>
+  tahuna run logs <run_id>
+  tahuna run delete <run_id>
 
 Environment:
   TAHUNA_API_URL      API base URL (default: http://localhost:3000)
@@ -530,6 +535,8 @@ func handleRun(args []string) {
 		runShow(args[1:])
 	case "watch", "monitor":
 		runWatch(args[1:])
+	case "events":
+		runEvents(args[1:])
 	case "logs":
 		runLogs(args[1:])
 	case "delete":
@@ -538,6 +545,17 @@ func handleRun(args []string) {
 		fmt.Printf("unknown run subcommand: %s\n", args[0])
 		os.Exit(1)
 	}
+}
+
+func resolveRunID(idFlag string, positional []string) string {
+	id := strings.TrimSpace(idFlag)
+	if id != "" {
+		return id
+	}
+	if len(positional) > 0 {
+		return strings.TrimSpace(positional[0])
+	}
+	return ""
 }
 
 type syncScope struct {
@@ -1260,8 +1278,9 @@ func runShow(args []string) {
 		printRunListSummary(orderedRuns)
 		return
 	}
-	require(*id != "", "--id is required when --list is not set")
-	resp, err := doJSON(http.MethodGet, "/runs/"+*id, nil)
+	runID := resolveRunID(*id, fs.Args())
+	require(runID != "", "run_id is required (usage: tahuna run show <run_id>)")
+	resp, err := doJSON(http.MethodGet, "/runs/"+runID, nil)
 	must(err)
 	printJSON(resp)
 }
@@ -1358,19 +1377,33 @@ func runWatch(args []string) {
 	id := fs.String("id", "", "Run ID")
 	interval := fs.Int("interval", 5, "Polling interval seconds")
 	fs.Parse(args)
-	require(*id != "", "--id is required")
+	runID := resolveRunID(*id, fs.Args())
+	require(runID != "", "run_id is required (usage: tahuna run watch <run_id>)")
 	require(*interval > 0, "--interval must be >= 1")
 
-	must(monitorRun(*id, *interval))
+	must(monitorRun(runID, *interval))
 }
 
 func runLogs(args []string) {
 	fs := flag.NewFlagSet("run logs", flag.ExitOnError)
 	id := fs.String("id", "", "Run ID")
 	fs.Parse(args)
-	require(*id != "", "--id is required")
+	runID := resolveRunID(*id, fs.Args())
+	require(runID != "", "run_id is required (usage: tahuna run logs <run_id>)")
 
-	resp, err := doJSON(http.MethodGet, "/runs/"+*id+"/logs", nil)
+	resp, err := doJSON(http.MethodGet, "/runs/"+runID+"/logs", nil)
+	must(err)
+	printJSON(resp)
+}
+
+func runEvents(args []string) {
+	fs := flag.NewFlagSet("run events", flag.ExitOnError)
+	id := fs.String("id", "", "Run ID")
+	fs.Parse(args)
+	runID := resolveRunID(*id, fs.Args())
+	require(runID != "", "run_id is required (usage: tahuna run events <run_id>)")
+
+	resp, err := doJSON(http.MethodGet, "/runs/"+runID+"/events", nil)
 	must(err)
 	printJSON(resp)
 }
@@ -1379,9 +1412,10 @@ func runDelete(args []string) {
 	fs := flag.NewFlagSet("run delete", flag.ExitOnError)
 	id := fs.String("id", "", "Run ID")
 	fs.Parse(args)
-	require(*id != "", "--id is required")
+	runID := resolveRunID(*id, fs.Args())
+	require(runID != "", "run_id is required (usage: tahuna run delete <run_id>)")
 
-	resp, err := doJSON(http.MethodDelete, "/runs/"+*id, nil)
+	resp, err := doJSON(http.MethodDelete, "/runs/"+runID, nil)
 	must(err)
 	printJSON(resp)
 }
