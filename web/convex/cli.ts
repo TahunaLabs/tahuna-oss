@@ -163,12 +163,33 @@ async function readJsonBody(request: Request) {
   }
 }
 
-async function objectExists(ctx: ActionCtx, key: string) {
-  try {
-    return await ctx.runQuery(internal.cli.internalObjectExists, { key });
-  } catch {
-    return false;
+function sleep(ms: number) {
+  return new Promise<void>((resolve) => setTimeout(resolve, ms));
+}
+
+async function objectExistsInStorage(ctx: ActionCtx, key: string) {
+  const metadata = await r2.getMetadata(ctx, key);
+  return metadata !== null;
+}
+
+async function waitForSyncedMetadata(ctx: ActionCtx, key: string) {
+  let delayMs = 200;
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    try {
+      await r2.syncMetadata(ctx, key);
+    } catch {
+      // Object store may not be immediately consistent after upload.
+    }
+    const metadata = await r2.getMetadata(ctx, key);
+    if (metadata) {
+      return metadata;
+    }
+    await sleep(delayMs);
+    if (delayMs < 2000) {
+      delayMs *= 2;
+    }
   }
+  return null;
 }
 
 async function requireOwnedEnvironment(
@@ -223,15 +244,6 @@ async function createAndProvisionRunStrict(ctx: ActionCtx, args: CreateRunStrict
   }
   throw new Error(detail);
 }
-
-export const internalObjectExists = internalQuery({
-  args: { key: v.string() },
-  returns: v.boolean(),
-  handler: async (ctx, args) => {
-    const metadata = await r2.getMetadata(ctx, args.key);
-    return metadata !== null;
-  },
-});
 
 export const internalGetObjectDownloadUrl = internalQuery({
   args: { key: v.string() },
@@ -599,14 +611,23 @@ export const listMissingBlobHashes = httpAction(async (ctx, request) => {
     }
   }
 
-  const checks = await Promise.all(
-    hashes.map(async (hash) => {
-      const key = buildBlobObjectKey(userId, environmentId, ownedEnvironment.dataId, kind, hash);
-      const exists = await objectExists(ctx, key);
-      return { hash, exists };
-    }),
-  );
-  const missing = checks.filter((item) => !item.exists).map((item) => item.hash);
+  const missing: string[] = [];
+  const chunkSize = 8;
+  for (let start = 0; start < hashes.length; start += chunkSize) {
+    const batch = hashes.slice(start, start + chunkSize);
+    const checks = await Promise.all(
+      batch.map(async (hash) => {
+        const key = buildBlobObjectKey(userId, environmentId, ownedEnvironment.dataId, kind, hash);
+        const metadata = await r2.getMetadata(ctx, key);
+        return { hash, exists: metadata !== null };
+      }),
+    );
+    for (const item of checks) {
+      if (!item.exists) {
+        missing.push(item.hash);
+      }
+    }
+  }
 
   return new Response(JSON.stringify({ missing }), {
     status: 200,
@@ -861,7 +882,7 @@ export const commitSync = httpAction(async (ctx, request) => {
       "code",
       codeManifestHash,
     );
-    const exists = await objectExists(ctx, codeManifestKey);
+    const exists = await objectExistsInStorage(ctx, codeManifestKey);
     if (!exists) {
       return new Response(JSON.stringify({ detail: "code manifest not found in object storage" }), {
         status: 400,
@@ -877,7 +898,7 @@ export const commitSync = httpAction(async (ctx, request) => {
       "data",
       dataManifestHash,
     );
-    const exists = await objectExists(ctx, dataManifestKey);
+    const exists = await objectExistsInStorage(ctx, dataManifestKey);
     if (!exists) {
       return new Response(JSON.stringify({ detail: "data manifest not found in object storage" }), {
         status: 400,
@@ -942,14 +963,25 @@ export const syncObjectMetadata = httpAction(async (ctx, request) => {
   }
 
   const target = uploadCategoryForKey(key, userId);
+  let metadata = null;
+  try {
+    metadata = await waitForSyncedMetadata(ctx, key);
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : "failed to sync metadata";
+    return new Response(JSON.stringify({ detail }), {
+      status: 400,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+
+  if (!metadata) {
+    return new Response(JSON.stringify({ detail: "object not found" }), {
+      status: 404,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+
   if (target) {
-    const metadata = await r2.getMetadata(ctx, key);
-    if (!metadata) {
-      return new Response(JSON.stringify({ detail: "object not found" }), {
-        status: 404,
-        headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
-      });
-    }
     const objectSize = typeof metadata.size === "number" && Number.isFinite(metadata.size) ? metadata.size : 0;
     const maxSizeBytes = target.category === "manifest" ? manifestLimitByKind(target.kind) : blobLimitByKind(target.kind);
     if (objectSize > maxSizeBytes) {
@@ -968,19 +1000,10 @@ export const syncObjectMetadata = httpAction(async (ctx, request) => {
     }
   }
 
-  try {
-    await r2.syncMetadata(ctx, key);
-    return new Response(JSON.stringify({ synced: true, key }), {
-      status: 200,
-      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
-    });
-  } catch (err) {
-    const detail = err instanceof Error ? err.message : "failed to sync metadata";
-    return new Response(JSON.stringify({ detail }), {
-      status: 400,
-      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
-    });
-  }
+  return new Response(JSON.stringify({ synced: true, key }), {
+    status: 200,
+    headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+  });
 });
 
 // Environments

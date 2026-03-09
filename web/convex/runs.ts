@@ -624,16 +624,101 @@ def materialize(kind, manifest, root_dir):
         total += len(blob)
     return count, total
 
+def unquote(value):
+    text = str(value).strip()
+    if len(text) >= 2 and ((text[0] == '"' and text[-1] == '"') or (text[0] == "'" and text[-1] == "'")):
+        return text[1:-1]
+    return text
+
+def load_command_from_config():
+    config_candidates = [
+        os.path.join(WORKSPACE_ROOT, "config.yaml"),
+        os.path.join(WORKSPACE_ROOT, "config.yml"),
+    ]
+    for config_path in config_candidates:
+        if not os.path.isfile(config_path):
+            continue
+        command = []
+        in_command = False
+        with open(config_path, "r", encoding="utf-8") as fh:
+            for line in fh:
+                stripped = line.strip()
+                if not stripped or stripped.startswith("#"):
+                    continue
+                if not in_command:
+                    if stripped == "command:":
+                        in_command = True
+                    continue
+                if not line.startswith((" ", "\t")):
+                    break
+                if stripped.startswith("- "):
+                    value = unquote(stripped[2:])
+                    if value:
+                        command.append(value)
+        if command:
+            return command, config_path
+    return [], ""
+
+def normalize_command(command):
+    if not command:
+        return ["python3", "-u", "train.py"]
+    resolved = list(command)
+    first = (resolved[0] or "").strip().lower()
+    if first in ("python", "python3"):
+        resolved[0] = "python3"
+        if len(resolved) < 2 or resolved[1] != "-u":
+            resolved.insert(1, "-u")
+    return resolved
+
+def install_requirements():
+    requirements_path = os.path.join(WORKSPACE_ROOT, "requirements.txt")
+    if not os.path.isfile(requirements_path):
+        emit_logs(["bootstrap: no requirements.txt found (skipping install)"], source="bootstrap")
+        return
+
+    emit_logs(["bootstrap: installing dependencies from requirements.txt"], source="bootstrap")
+    proc = subprocess.Popen(
+        ["python3", "-m", "pip", "install", "-r", requirements_path],
+        cwd=WORKSPACE_ROOT,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        bufsize=1,
+    )
+    for line in proc.stdout:
+        text = line.rstrip("\n")
+        if text:
+            emit_logs([text], source="bootstrap")
+
+    code = proc.wait()
+    if code != 0:
+        raise RuntimeError("requirements install failed with status " + str(code))
+    emit_logs(["bootstrap: dependency install complete"], source="bootstrap")
+
 def run_training():
-    entrypoint_path = os.path.join(WORKSPACE_ROOT, "train.py")
-    if not os.path.isfile(entrypoint_path):
+    command, source_config = load_command_from_config()
+    normalized_command = normalize_command(command)
+    if source_config:
+        emit_logs(["using command from " + source_config + ": " + " ".join(normalized_command)], source="train")
+    else:
+        emit_logs(["no config command found; using default: " + " ".join(normalized_command)], source="train")
+
+    entrypoint = ""
+    for token in normalized_command[1:]:
+        if str(token).strip().endswith(".py"):
+            entrypoint = str(token).strip()
+            break
+    if not entrypoint:
+        entrypoint = "train.py"
+    entrypoint_path = os.path.join(WORKSPACE_ROOT, entrypoint)
+    if entrypoint and entrypoint.endswith(".py") and not os.path.isfile(entrypoint_path):
         emit_logs(["no entrypoint found at " + entrypoint_path + " (bootstrap only)"], source="train")
         emit_status("completed", "workspace materialized (no entrypoint)")
         return 0
 
-    emit_logs(["starting entrypoint: " + entrypoint_path], source="train")
+    emit_logs(["starting entrypoint"], source="train")
     proc = subprocess.Popen(
-        ["python3", "-u", entrypoint_path],
+        normalized_command,
         cwd=WORKSPACE_ROOT,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
@@ -682,6 +767,7 @@ try:
             {"name": "bootstrap_data_bytes", "value": float(data_bytes), "source": "bootstrap"},
         ]
     )
+    install_requirements()
     emit_status("running", "workspace materialized")
     raise SystemExit(run_training())
 except Exception as err:

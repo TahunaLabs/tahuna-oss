@@ -1,2 +1,2 @@
-# Add Python dependencies here
 torch
+torchvision

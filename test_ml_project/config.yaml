@@ -5,6 +5,10 @@ command:
   - train.py
   - --epochs
   - "3"
+  - --data-dir
+  - data/mnist
+  - --output-dir
+  - outputs
 data:
   path: data
 resources:

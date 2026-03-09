@@ -2199,11 +2199,17 @@ func uploadFileToSignedURL(path, rawURL string) error {
 		return err
 	}
 	defer file.Close()
+	info, err := file.Stat()
+	if err != nil {
+		return err
+	}
 
 	req, err := http.NewRequest(http.MethodPut, rawURL, file)
 	if err != nil {
 		return err
 	}
+	req.ContentLength = info.Size()
+	req.Header.Set("Content-Length", strconv.FormatInt(info.Size(), 10))
 	if contentType := mime.TypeByExtension(filepath.Ext(path)); contentType != "" {
 		req.Header.Set("Content-Type", contentType)
 	}
@@ -2242,6 +2248,8 @@ func uploadBytesToSignedURL(raw []byte, rawURL, contentType string) error {
 	if err != nil {
 		return err
 	}
+	req.ContentLength = int64(len(raw))
+	req.Header.Set("Content-Length", strconv.Itoa(len(raw)))
 	if strings.TrimSpace(contentType) != "" {
 		req.Header.Set("Content-Type", contentType)
 	}
