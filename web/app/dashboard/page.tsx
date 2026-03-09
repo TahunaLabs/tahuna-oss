@@ -299,7 +299,7 @@ export default function DashboardPage() {
 
     try {
       for (const file of selectedDataFiles) {
-        const upload = await generateDataUploadUrlMutation({ filename: file.name })
+        const upload = await generateDataUploadUrlMutation({ filename: file.name, size_bytes: file.size })
         const response = await fetch(upload.url, {
           method: "PUT",
           headers: file.type ? { "Content-Type": file.type } : undefined,

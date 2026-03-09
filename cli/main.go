@@ -1308,6 +1308,7 @@ func syncMissingBlobs(environmentID string, item preparedManifest) error {
 	if len(hashes) == 0 {
 		return nil
 	}
+	sizeByHash := manifestSizesByHash(item.manifest.Entries)
 
 	resp, err := syncDoJSON(http.MethodPost, "/sync/blobs/missing", map[string]any{
 		"environment_id": environmentID,
@@ -1332,10 +1333,15 @@ func syncMissingBlobs(environmentID string, item preparedManifest) error {
 		if !exists {
 			return fmt.Errorf("missing local blob for hash %s", hash)
 		}
+		sizeBytes, hasSize := sizeByHash[hash]
+		if !hasSize || sizeBytes <= 0 {
+			return fmt.Errorf("missing local size for hash %s", hash)
+		}
 		uploadResp, uploadErr := syncDoJSON(http.MethodPost, "/sync/blobs/upload-url", map[string]any{
 			"environment_id": environmentID,
 			"kind":           item.kind,
 			"sha256":         hash,
+			"size_bytes":     sizeBytes,
 		})
 		if uploadErr != nil {
 			return uploadErr
@@ -1363,6 +1369,7 @@ func uploadManifest(environmentID string, item preparedManifest) error {
 		"environment_id": environmentID,
 		"kind":           item.kind,
 		"manifest_hash":  item.hash,
+		"size_bytes":     len(item.raw),
 	})
 	if err != nil {
 		return err
@@ -1398,6 +1405,20 @@ func uniqueSortedHashes(entries []syncManifestEntry) []string {
 		out = append(out, entry.SHA256)
 	}
 	sort.Strings(out)
+	return out
+}
+
+func manifestSizesByHash(entries []syncManifestEntry) map[string]int64 {
+	out := make(map[string]int64, len(entries))
+	for _, entry := range entries {
+		if entry.SHA256 == "" || entry.Size <= 0 {
+			continue
+		}
+		if _, exists := out[entry.SHA256]; exists {
+			continue
+		}
+		out[entry.SHA256] = entry.Size
+	}
 	return out
 }
 

@@ -5,6 +5,7 @@ import type { DataModel } from "@convex/_generated/dataModel";
 import { mutation, query, type MutationCtx, type QueryCtx } from "@convex/_generated/server";
 import { requireUser } from "@convex/auth";
 import { shortId } from "@convex/ids";
+import { UPLOAD_LIMITS_BYTES } from "../config";
 
 const r2 = new R2(components.r2);
 
@@ -50,12 +51,23 @@ export const { syncMetadata } = r2.clientApi<DataModel>({
     if (!key.startsWith(buildDataPrefix(String(user._id)))) {
       throw new ConvexError("invalid upload key");
     }
+    const metadata = await r2.getMetadata(ctx, key);
+    const objectSize = typeof metadata?.size === "number" && Number.isFinite(metadata.size) ? metadata.size : 0;
+    if (objectSize > UPLOAD_LIMITS_BYTES.dataBlob) {
+      try {
+        await r2.deleteObject(ctx, key);
+      } catch {
+        // Ignore cleanup errors and return the original size violation.
+      }
+      throw new ConvexError(`data file exceeds limit of ${UPLOAD_LIMITS_BYTES.dataBlob} bytes`);
+    }
   },
 });
 
 export const generateUploadUrl = mutation({
   args: {
     filename: v.string(),
+    size_bytes: v.number(),
   },
   returns: v.object({
     blob_id: v.string(),
@@ -65,6 +77,12 @@ export const generateUploadUrl = mutation({
   }),
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
+    if (!Number.isInteger(args.size_bytes) || args.size_bytes <= 0) {
+      throw new ConvexError("size_bytes must be a positive integer");
+    }
+    if (args.size_bytes > UPLOAD_LIMITS_BYTES.dataBlob) {
+      throw new ConvexError(`data file exceeds limit of ${UPLOAD_LIMITS_BYTES.dataBlob} bytes`);
+    }
     const blobId = shortId("blob");
     const key = buildDataPath(String(user._id), blobId, args.filename);
     const upload = await r2.generateUploadUrl(key);

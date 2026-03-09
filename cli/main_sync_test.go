@@ -76,6 +76,10 @@ func (m *syncBackendMock) doJSON(method, path string, payload map[string]any) (m
 		if environmentID == "" {
 			return nil, fmt.Errorf("missing environment_id")
 		}
+		sizeBytes := asInt64(payload["size_bytes"])
+		if sizeBytes <= 0 {
+			return nil, fmt.Errorf("missing size_bytes")
+		}
 		kind := asString(payload["kind"])
 		sha := asString(payload["sha256"])
 		key := fmt.Sprintf("user/environment/%s/blobs/%s/%s", environmentID, kind, sha)
@@ -90,6 +94,10 @@ func (m *syncBackendMock) doJSON(method, path string, payload map[string]any) (m
 		environmentID := asString(payload["environment_id"])
 		if environmentID == "" {
 			return nil, fmt.Errorf("missing environment_id")
+		}
+		sizeBytes := asInt64(payload["size_bytes"])
+		if sizeBytes <= 0 {
+			return nil, fmt.Errorf("missing size_bytes")
 		}
 		kind := asString(payload["kind"])
 		hash := asString(payload["manifest_hash"])

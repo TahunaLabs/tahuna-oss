@@ -18,6 +18,7 @@ import type * as http from "../http.js";
 import type * as ids from "../ids.js";
 import type * as resend from "../resend.js";
 import type * as runs from "../runs.js";
+import type * as uploadLimits from "../uploadLimits.js";
 
 import type {
   ApiFromModules,
@@ -36,6 +37,7 @@ declare const fullApi: ApiFromModules<{
   ids: typeof ids;
   resend: typeof resend;
   runs: typeof runs;
+  uploadLimits: typeof uploadLimits;
 }>;
 
 /**

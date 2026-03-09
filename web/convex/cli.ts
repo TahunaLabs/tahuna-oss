@@ -5,6 +5,7 @@ import { R2 } from "@convex-dev/r2";
 import { components } from "@convex/_generated/api";
 import { shortId } from "@convex/ids";
 import { v } from "convex/values";
+import { UPLOAD_LIMITS_BYTES, blobLimitByKind, manifestLimitByKind } from "../config";
 
 function extractBearerToken(request: Request): string {
   const bearer = request.headers.get("authorization")?.trim() || "";
@@ -130,6 +131,28 @@ function normalizeSha256(value: unknown): string | null {
   const hash = value.trim().toLowerCase();
   if (!SHA256_HEX_RE.test(hash)) return null;
   return hash;
+}
+
+function parseSizeBytes(value: unknown): number | null {
+  if (typeof value !== "number") return null;
+  if (!Number.isFinite(value) || !Number.isInteger(value) || value <= 0) return null;
+  return value;
+}
+
+function uploadCategoryForKey(key: string, userId: string): { kind: SyncKind; category: "blob" | "manifest" } | null {
+  if (key.startsWith(dataRootPrefix(userId))) {
+    return {
+      kind: "data",
+      category: key.includes("/manifests/") ? "manifest" : "blob",
+    };
+  }
+  if (key.startsWith(environmentPrefix(userId))) {
+    return {
+      kind: "code",
+      category: key.includes("/manifests/") ? "manifest" : "blob",
+    };
+  }
+  return null;
 }
 
 async function readJsonBody(request: Request) {
@@ -260,12 +283,16 @@ function parseManifest(value: unknown, kind: SyncKind): SyncManifestPayload | nu
   }
   const parsedEntries: ManifestEntry[] = [];
   let previousPath = "";
+  const maxEntrySizeBytes = blobLimitByKind(kind);
   for (const entry of entries) {
     const parsed = parseManifestEntry(entry);
     if (!parsed) {
       return null;
     }
     if (previousPath !== "" && parsed.path < previousPath) {
+      return null;
+    }
+    if (parsed.size > maxEntrySizeBytes) {
       return null;
     }
     previousPath = parsed.path;
@@ -407,6 +434,19 @@ export const createCodeUploadUrl = httpAction(async (ctx, request) => {
       headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
     });
   }
+  const sizeBytes = parseSizeBytes(body?.size_bytes);
+  if (sizeBytes === null) {
+    return new Response(JSON.stringify({ detail: "size_bytes must be a positive integer" }), {
+      status: 400,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+  if (sizeBytes > UPLOAD_LIMITS_BYTES.codeBlob) {
+    return new Response(JSON.stringify({ detail: `code file exceeds limit of ${UPLOAD_LIMITS_BYTES.codeBlob} bytes` }), {
+      status: 413,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
 
   try {
     const filename = normalizeFilename(body?.filename);
@@ -458,6 +498,19 @@ export const createDataUploadUrl = httpAction(async (ctx, request) => {
   if (!ownedEnvironment) {
     return new Response(JSON.stringify({ detail: "environment not found" }), {
       status: 404,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+  const sizeBytes = parseSizeBytes(body?.size_bytes);
+  if (sizeBytes === null) {
+    return new Response(JSON.stringify({ detail: "size_bytes must be a positive integer" }), {
+      status: 400,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+  if (sizeBytes > UPLOAD_LIMITS_BYTES.dataBlob) {
+    return new Response(JSON.stringify({ detail: `data file exceeds limit of ${UPLOAD_LIMITS_BYTES.dataBlob} bytes` }), {
+      status: 413,
       headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
     });
   }
@@ -602,6 +655,20 @@ export const createBlobUploadUrl = httpAction(async (ctx, request) => {
       headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
     });
   }
+  const sizeBytes = parseSizeBytes(body?.size_bytes);
+  if (sizeBytes === null) {
+    return new Response(JSON.stringify({ detail: "size_bytes must be a positive integer" }), {
+      status: 400,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+  const maxSizeBytes = blobLimitByKind(kind);
+  if (sizeBytes > maxSizeBytes) {
+    return new Response(JSON.stringify({ detail: `${kind} blob exceeds limit of ${maxSizeBytes} bytes` }), {
+      status: 413,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
 
   try {
     const key = buildBlobObjectKey(userId, environmentId, ownedEnvironment.dataId, kind, sha256);
@@ -662,6 +729,20 @@ export const createManifestUploadUrl = httpAction(async (ctx, request) => {
   if (!manifestHash) {
     return new Response(JSON.stringify({ detail: "manifest_hash must be a valid sha256 hex value" }), {
       status: 400,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+  const sizeBytes = parseSizeBytes(body?.size_bytes);
+  if (sizeBytes === null) {
+    return new Response(JSON.stringify({ detail: "size_bytes must be a positive integer" }), {
+      status: 400,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+  const maxSizeBytes = manifestLimitByKind(kind);
+  if (sizeBytes > maxSizeBytes) {
+    return new Response(JSON.stringify({ detail: `${kind} manifest exceeds limit of ${maxSizeBytes} bytes` }), {
+      status: 413,
       headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
     });
   }
@@ -858,6 +939,33 @@ export const syncObjectMetadata = httpAction(async (ctx, request) => {
       status: 403,
       headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
     });
+  }
+
+  const target = uploadCategoryForKey(key, userId);
+  if (target) {
+    const metadata = await r2.getMetadata(ctx, key);
+    if (!metadata) {
+      return new Response(JSON.stringify({ detail: "object not found" }), {
+        status: 404,
+        headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+      });
+    }
+    const objectSize = typeof metadata.size === "number" && Number.isFinite(metadata.size) ? metadata.size : 0;
+    const maxSizeBytes = target.category === "manifest" ? manifestLimitByKind(target.kind) : blobLimitByKind(target.kind);
+    if (objectSize > maxSizeBytes) {
+      try {
+        await r2.deleteObject(ctx, key);
+      } catch {
+        // Ignore cleanup failures so we can return the original size violation.
+      }
+      return new Response(
+        JSON.stringify({ detail: `${target.kind} ${target.category} exceeds limit of ${maxSizeBytes} bytes` }),
+        {
+          status: 413,
+          headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+        },
+      );
+    }
   }
 
   try {
