@@ -45,6 +45,7 @@ export default defineSchema({
     effectiveVolumeGb: v.optional(v.number()),
     codeManifestHash: v.optional(v.string()),
     dataManifestHash: v.optional(v.string()),
+    runtimeTokenHash: v.optional(v.string()),
     cancellationRequested: v.boolean(),
   })
     .index("by_user", ["userId"])
@@ -57,4 +58,26 @@ export default defineSchema({
     message: v.string(),
     metadata: v.optional(v.any()),
   }).index("by_run", ["runId"]),
+
+  runRuntimeLogs: defineTable({
+    runId: v.id("runs"),
+    timestamp: v.number(),
+    level: v.string(),
+    source: v.string(),
+    message: v.string(),
+  })
+    .index("by_run", ["runId"])
+    .index("by_run_and_timestamp", ["runId", "timestamp"]),
+
+  runRuntimeMetrics: defineTable({
+    runId: v.id("runs"),
+    timestamp: v.number(),
+    name: v.string(),
+    value: v.number(),
+    step: v.optional(v.number()),
+    unit: v.optional(v.string()),
+    source: v.string(),
+  })
+    .index("by_run", ["runId"])
+    .index("by_run_and_timestamp", ["runId", "timestamp"]),
 });

@@ -42,6 +42,24 @@ const runLogsResponseValidator = v.object({
   logs_path: v.string(),
   log_file: v.string(),
   note: v.string(),
+  recent_logs: v.array(
+    v.object({
+      timestamp: v.number(),
+      level: v.string(),
+      source: v.string(),
+      message: v.string(),
+    }),
+  ),
+  recent_metrics: v.array(
+    v.object({
+      timestamp: v.number(),
+      name: v.string(),
+      value: v.number(),
+      step: v.union(v.number(), v.null()),
+      unit: v.union(v.string(), v.null()),
+      source: v.string(),
+    }),
+  ),
 });
 const provisioningPayloadValidator = v.object({
   run_id: v.string(),
@@ -73,12 +91,55 @@ const runProvisionSpecValidator = v.object({
   framework: v.string(),
   version: v.string(),
 });
+const runtimeLogLineValidator = v.object({
+  message: v.string(),
+  level: v.optional(v.string()),
+  source: v.optional(v.string()),
+  timestamp: v.optional(v.number()),
+});
+const runtimeMetricSampleValidator = v.object({
+  name: v.string(),
+  value: v.number(),
+  step: v.optional(v.number()),
+  unit: v.optional(v.string()),
+  source: v.optional(v.string()),
+  timestamp: v.optional(v.number()),
+});
+const runtimeStatusValidator = v.union(
+  v.literal("provisioning"),
+  v.literal("running"),
+  v.literal("completed"),
+  v.literal("failed"),
+  v.literal("cancelled"),
+);
+const runtimeBootstrapEntryValidator = v.object({
+  path: v.string(),
+  sha256: v.string(),
+  size: v.number(),
+  mode: v.number(),
+  download_url: v.string(),
+});
+const runtimeBootstrapPlanValidator = v.object({
+  run_id: v.string(),
+  contract_version: v.string(),
+  workspace_root: v.string(),
+  code: v.object({
+    manifest_hash: v.string(),
+    entries: v.array(runtimeBootstrapEntryValidator),
+  }),
+  data: v.object({
+    manifest_hash: v.string(),
+    entries: v.array(runtimeBootstrapEntryValidator),
+  }),
+});
 
 const provisionPool = new Workpool(components.workpool, {
   maxParallelism: 3,
   retryActionsByDefault: true,
 });
 const SHA256_HEX_RE = /^[a-f0-9]{64}$/i;
+const RUNTIME_LOG_TAIL_LIMIT = 200;
+const RUNTIME_METRIC_TAIL_LIMIT = 200;
 
 type SyncKind = "code" | "data";
 type ManifestEntry = {
@@ -92,6 +153,40 @@ type SyncManifestPayload = {
   type: SyncKind;
   created_at: number;
   entries: ManifestEntry[];
+};
+type RuntimeBootstrapEntry = ManifestEntry & { download_url: string };
+type ProvisioningPayload = {
+  run_id: string;
+  environment_id: string;
+  user_id: string;
+  input_path: string;
+  output_path: string;
+  logs_path: string;
+  code_manifest_hash: string | null;
+  data_manifest_hash: string | null;
+  code_manifest_key: string | null;
+  data_manifest_key: string | null;
+  contract_version: string;
+  bootstrap_summary?: {
+    code_files: number;
+    code_bytes: number;
+    data_files: number;
+    data_bytes: number;
+  };
+  runpod_pod_id?: string;
+};
+type RuntimeBootstrapPlan = {
+  run_id: string;
+  contract_version: string;
+  workspace_root: string;
+  code: {
+    manifest_hash: string;
+    entries: RuntimeBootstrapEntry[];
+  };
+  data: {
+    manifest_hash: string;
+    entries: RuntimeBootstrapEntry[];
+  };
 };
 
 function toRunResponse(row: Doc<"runs">) {
@@ -114,6 +209,34 @@ function toRunResponse(row: Doc<"runs">) {
   };
 }
 
+function normalizeRuntimeLevel(level: string | undefined) {
+  const trimmed = (level || "").trim().toLowerCase();
+  if (trimmed === "debug" || trimmed === "warn" || trimmed === "warning" || trimmed === "error") {
+    return trimmed === "warning" ? "warn" : trimmed;
+  }
+  return "info";
+}
+
+function normalizeRuntimeSource(source: string | undefined) {
+  const trimmed = (source || "").trim();
+  return trimmed || "pod";
+}
+
+function normalizeRuntimeTimestamp(timestamp: number | undefined) {
+  if (typeof timestamp === "number" && Number.isFinite(timestamp) && timestamp > 0) {
+    return Math.floor(timestamp);
+  }
+  return Date.now();
+}
+
+function sanitizeRuntimeMessage(message: string) {
+  const trimmed = message.trim();
+  if (!trimmed) {
+    return "";
+  }
+  return trimmed.slice(0, 4000);
+}
+
 function manifestKey(
   userId: string,
   environmentId: Id<"environments">,
@@ -131,7 +254,7 @@ function manifestKey(
   return `${userId}/environment/${environmentId}/manifests/${kind}/${manifestHash}.json`;
 }
 
-function toProvisioningPayload(row: Doc<"runs">) {
+function toProvisioningPayload(row: Doc<"runs">): ProvisioningPayload {
   return {
     run_id: String(row._id),
     environment_id: String(row.environmentId),
@@ -284,7 +407,14 @@ function blobKey(
   return `${dataKey.slice(0, markerIndex)}/blobs/${sha256}`;
 }
 
-async function fetchAndVerifyManifestBlobs(
+function summarizeManifest(manifest: SyncManifestPayload) {
+  return {
+    fileCount: manifest.entries.length,
+    totalBytes: manifest.entries.reduce((sum, entry) => sum + entry.size, 0),
+  };
+}
+
+async function resolveManifestDownloadEntries(
   ctx: ActionCtx,
   payload: {
     user_id: string;
@@ -293,24 +423,20 @@ async function fetchAndVerifyManifestBlobs(
   },
   kind: SyncKind,
   manifest: SyncManifestPayload,
-) {
-  let totalBytes = 0;
+): Promise<RuntimeBootstrapEntry[]> {
+  const entries: RuntimeBootstrapEntry[] = [];
   for (const entry of manifest.entries) {
     const key = blobKey(payload, kind, entry.sha256);
-    const bytes = await fetchObjectBytes(ctx, key);
-    if (bytes.byteLength !== entry.size) {
-      throw new Error(`${kind} blob size mismatch for ${entry.path}`);
+    const downloadUrl = await ctx.runQuery(internal.cli.internalGetObjectDownloadUrl, { key });
+    if (!downloadUrl) {
+      throw new Error(`${kind} blob is missing from object storage: ${entry.sha256}`);
     }
-    const actualHash = await sha256Hex(bytes);
-    if (actualHash !== entry.sha256) {
-      throw new Error(`${kind} blob hash mismatch for ${entry.path}`);
-    }
-    totalBytes += bytes.byteLength;
+    entries.push({
+      ...entry,
+      download_url: downloadUrl,
+    });
   }
-  return {
-    fileCount: manifest.entries.length,
-    totalBytes,
-  };
+  return entries;
 }
 
 function resolveImageName(framework: string, version: string) {
@@ -325,24 +451,241 @@ function resolveImageName(framework: string, version: string) {
   return imageName;
 }
 
+function resolveRuntimeApiBase() {
+  const candidates = [
+    process.env.SITE_URL,
+    process.env.NEXT_PUBLIC_SITE_URL,
+    process.env.CONVEX_SITE_URL,
+    process.env.NEXT_PUBLIC_CONVEX_SITE_URL,
+  ];
+  for (const candidate of candidates) {
+    const trimmed = (candidate || "").trim();
+    if (trimmed) {
+      return trimmed.replace(/\/+$/, "");
+    }
+  }
+  throw new Error("SITE_URL (or NEXT_PUBLIC_SITE_URL / NEXT_PUBLIC_CONVEX_SITE_URL) is required for pod runtime callbacks");
+}
+
+function generateRuntimeToken() {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes)
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+function buildPodBootstrapStartCommand() {
+  return String.raw`set -euo pipefail
+cat <<'PY' >/tmp/tahuna_bootstrap.py
+import hashlib
+import json
+import os
+import re
+import subprocess
+import urllib.error
+import urllib.request
+
+RUN_ID = (os.environ.get("TAHUNA_RUN_ID") or "").strip()
+API_BASE = (os.environ.get("TAHUNA_API_BASE") or "").strip().rstrip("/")
+RUNTIME_TOKEN = (os.environ.get("TAHUNA_RUNTIME_TOKEN") or "").strip()
+WORKSPACE_ROOT = (os.environ.get("TAHUNA_WORKSPACE_ROOT") or "/workspace").strip() or "/workspace"
+DATA_ROOT = os.path.join(WORKSPACE_ROOT, "data")
+ENTRYPOINT = (os.environ.get("TAHUNA_ENTRYPOINT") or "train.py").strip() or "train.py"
+
+if not RUN_ID or not API_BASE or not RUNTIME_TOKEN:
+    raise RuntimeError("missing runtime env vars: TAHUNA_RUN_ID / TAHUNA_API_BASE / TAHUNA_RUNTIME_TOKEN")
+
+def api_request(method, path, payload=None):
+    url = API_BASE + path
+    headers = {"Authorization": "Bearer " + RUNTIME_TOKEN}
+    data = None
+    if payload is not None:
+        headers["Content-Type"] = "application/json"
+        data = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(url, data=data, method=method, headers=headers)
+    try:
+        with urllib.request.urlopen(req, timeout=120) as response:
+            raw = response.read().decode("utf-8")
+            return json.loads(raw) if raw else {}
+    except urllib.error.HTTPError as err:
+        body = err.read().decode("utf-8", errors="replace")
+        raise RuntimeError("runtime API " + method + " " + path + " failed: " + str(err.code) + " " + body)
+
+def emit_logs(lines, level="info", source="pod"):
+    payload_lines = []
+    for line in lines:
+        text = str(line).strip()
+        if not text:
+            continue
+        payload_lines.append({
+            "message": text,
+            "level": level,
+            "source": source,
+        })
+    if not payload_lines:
+        return
+    try:
+        api_request("POST", "/api/runs/" + RUN_ID + "/runtime/logs", {"lines": payload_lines})
+    except Exception:
+        pass
+
+def emit_metrics(metrics):
+    clean = []
+    for metric in metrics:
+        name = str(metric.get("name", "")).strip()
+        if not name:
+            continue
+        try:
+            value = float(metric.get("value"))
+        except Exception:
+            continue
+        row = {"name": name, "value": value, "source": str(metric.get("source", "pod"))}
+        if "step" in metric and metric["step"] is not None:
+            try:
+                row["step"] = int(metric["step"])
+            except Exception:
+                pass
+        if "unit" in metric and metric["unit"]:
+            row["unit"] = str(metric["unit"])
+        clean.append(row)
+    if not clean:
+        return
+    try:
+        api_request("POST", "/api/runs/" + RUN_ID + "/runtime/metrics", {"metrics": clean})
+    except Exception:
+        pass
+
+def emit_status(status, message, error=None):
+    payload = {"status": status, "message": message}
+    if error:
+        payload["error"] = error
+    try:
+        api_request("POST", "/api/runs/" + RUN_ID + "/runtime/status", payload)
+    except Exception:
+        pass
+
+def safe_rel_path(path):
+    cleaned = os.path.normpath(str(path).replace("\\\\", "/")).lstrip("/")
+    if cleaned in ("", ".", "..") or cleaned.startswith("../"):
+        raise RuntimeError("invalid manifest path: " + str(path))
+    return cleaned
+
+def download_bytes(url):
+    req = urllib.request.Request(url, method="GET")
+    with urllib.request.urlopen(req, timeout=300) as response:
+        return response.read()
+
+def materialize(kind, manifest, root_dir):
+    os.makedirs(root_dir, exist_ok=True)
+    count = 0
+    total = 0
+    for entry in manifest.get("entries", []):
+        rel = safe_rel_path(entry.get("path", ""))
+        target = os.path.join(root_dir, rel)
+        parent = os.path.dirname(target)
+        if parent:
+            os.makedirs(parent, exist_ok=True)
+
+        blob = download_bytes(entry["download_url"])
+        expected_size = int(entry["size"])
+        if len(blob) != expected_size:
+            raise RuntimeError(kind + " blob size mismatch for " + rel)
+        actual_hash = hashlib.sha256(blob).hexdigest()
+        expected_hash = str(entry["sha256"])
+        if actual_hash != expected_hash:
+            raise RuntimeError(kind + " blob hash mismatch for " + rel)
+
+        with open(target, "wb") as fh:
+            fh.write(blob)
+        try:
+            os.chmod(target, int(entry.get("mode", 420)))
+        except Exception:
+            pass
+
+        count += 1
+        total += len(blob)
+    return count, total
+
+def run_training():
+    entrypoint_path = ENTRYPOINT
+    if not os.path.isabs(entrypoint_path):
+        entrypoint_path = os.path.join(WORKSPACE_ROOT, entrypoint_path)
+    if not os.path.isfile(entrypoint_path):
+        emit_logs(["no entrypoint found at " + entrypoint_path + " (bootstrap only)"], source="train")
+        emit_status("completed", "workspace materialized (no entrypoint)")
+        return 0
+
+    emit_logs(["starting entrypoint: " + entrypoint_path], source="train")
+    proc = subprocess.Popen(
+        ["python3", "-u", entrypoint_path],
+        cwd=WORKSPACE_ROOT,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        bufsize=1,
+    )
+    metric_pattern = re.compile(r"([A-Za-z_][A-Za-z0-9_]*)=([-+]?(?:\\d+\\.\\d+|\\d+))")
+    step = 0
+    for line in proc.stdout:
+        text = line.rstrip("\n")
+        if text:
+            emit_logs([text], source="train")
+            samples = []
+            for match in metric_pattern.finditer(text):
+                samples.append(
+                    {
+                        "name": match.group(1),
+                        "value": float(match.group(2)),
+                        "step": step,
+                        "source": "train",
+                    }
+                )
+            if samples:
+                emit_metrics(samples)
+        step += 1
+
+    code = proc.wait()
+    if code == 0:
+        emit_status("completed", "entrypoint completed")
+    else:
+        emit_status("failed", "entrypoint failed", "entrypoint exited with status " + str(code))
+    return code
+
+try:
+    emit_status("provisioning", "in-pod bootstrap started")
+    emit_logs(["bootstrap: requesting materialization plan"])
+    plan = api_request("GET", "/api/runs/" + RUN_ID + "/runtime/bootstrap")
+    code_count, code_bytes = materialize("code", plan["code"], WORKSPACE_ROOT)
+    data_count, data_bytes = materialize("data", plan["data"], DATA_ROOT)
+    emit_logs(["bootstrap: materialized code files=" + str(code_count) + " data files=" + str(data_count)])
+    emit_metrics(
+        [
+            {"name": "bootstrap_code_files", "value": float(code_count), "source": "bootstrap"},
+            {"name": "bootstrap_code_bytes", "value": float(code_bytes), "source": "bootstrap"},
+            {"name": "bootstrap_data_files", "value": float(data_count), "source": "bootstrap"},
+            {"name": "bootstrap_data_bytes", "value": float(data_bytes), "source": "bootstrap"},
+        ]
+    )
+    emit_status("running", "workspace materialized")
+    raise SystemExit(run_training())
+except Exception as err:
+    message = str(err).strip() or "bootstrap failed"
+    emit_logs(["bootstrap failed: " + message], level="error")
+    emit_status("failed", "bootstrap failed", message)
+    raise
+PY
+python3 /tmp/tahuna_bootstrap.py`;
+}
+
 async function createRunpodPod(args: {
   runId: string;
   imageName: string;
   gpuType: string;
   gpuCount: number;
   volumeGb: number;
-  payload: {
-    run_id: string;
-    environment_id: string;
-    input_path: string;
-    output_path: string;
-    logs_path: string;
-    code_manifest_hash: string | null;
-    data_manifest_hash: string | null;
-    code_manifest_key: string | null;
-    data_manifest_key: string | null;
-    contract_version: string;
-  };
+  runtimeToken: string;
+  payload: ProvisioningPayload;
 }) {
   const apiKey = process.env.RUNPOD_API_KEY?.trim();
   if (!apiKey) {
@@ -351,6 +694,8 @@ async function createRunpodPod(args: {
   const cloudType = (process.env.RUNPOD_CLOUD_TYPE?.trim().toUpperCase() || "SECURE");
   const allowedCloudType = cloudType === "COMMUNITY" ? "COMMUNITY" : "SECURE";
   const gpuTypeId = await resolveRunpodGpuTypeId(apiKey, args.gpuType);
+  const runtimeApiBase = resolveRuntimeApiBase();
+  const bootstrapCommand = buildPodBootstrapStartCommand();
 
   const response = await fetch("https://rest.runpod.io/v1/pods", {
     method: "POST",
@@ -379,7 +724,12 @@ async function createRunpodPod(args: {
         TAHUNA_DATA_MANIFEST_HASH: args.payload.data_manifest_hash || "",
         TAHUNA_CODE_MANIFEST_KEY: args.payload.code_manifest_key || "",
         TAHUNA_DATA_MANIFEST_KEY: args.payload.data_manifest_key || "",
+        TAHUNA_API_BASE: runtimeApiBase,
+        TAHUNA_RUNTIME_TOKEN: args.runtimeToken,
+        TAHUNA_WORKSPACE_ROOT: "/workspace",
       },
+      dockerEntrypoint: ["/bin/bash", "-lc"],
+      dockerStartCmd: [bootstrapCommand],
       ports: ["22/tcp", "8888/http"],
     }),
   });
@@ -496,6 +846,57 @@ async function getOwnedEnvironment(
   return env;
 }
 
+async function listRecentRuntimeLogs(ctx: QueryCtx, runId: Id<"runs">) {
+  const rows = await ctx.db
+    .query("runRuntimeLogs")
+    .withIndex("by_run", (q) => q.eq("runId", runId))
+    .order("desc")
+    .take(RUNTIME_LOG_TAIL_LIMIT);
+  return rows
+    .slice()
+    .reverse()
+    .map((row) => ({
+      timestamp: row.timestamp,
+      level: row.level,
+      source: row.source,
+      message: row.message,
+    }));
+}
+
+async function listRecentRuntimeMetrics(ctx: QueryCtx, runId: Id<"runs">) {
+  const rows = await ctx.db
+    .query("runRuntimeMetrics")
+    .withIndex("by_run", (q) => q.eq("runId", runId))
+    .order("desc")
+    .take(RUNTIME_METRIC_TAIL_LIMIT);
+  return rows
+    .slice()
+    .reverse()
+    .map((row) => ({
+      timestamp: row.timestamp,
+      name: row.name,
+      value: row.value,
+      step: row.step ?? null,
+      unit: row.unit ?? null,
+      source: row.source,
+    }));
+}
+
+async function toRunLogsResponse(ctx: QueryCtx, row: Doc<"runs">) {
+  const [recentLogs, recentMetrics] = await Promise.all([
+    listRecentRuntimeLogs(ctx, row._id),
+    listRecentRuntimeMetrics(ctx, row._id),
+  ]);
+  return {
+    run_id: String(row._id),
+    logs_path: row.logs,
+    log_file: `${row.logs}/run.log`,
+    note: "Runtime logs/metrics are streamed by the pod and persisted in Convex.",
+    recent_logs: recentLogs,
+    recent_metrics: recentMetrics,
+  };
+}
+
 async function createRunForUserId(
   ctx: MutationCtx,
   args: {
@@ -571,6 +972,25 @@ async function removeRunForUserId(ctx: MutationCtx, userId: string, runId: Id<"r
     return { cancel_requested: true, run_id: String(runId) };
   }
 
+  const [events, runtimeLogs, runtimeMetrics] = await Promise.all([
+    ctx.db
+      .query("runEvents")
+      .withIndex("by_run", (q) => q.eq("runId", runId))
+      .collect(),
+    ctx.db
+      .query("runRuntimeLogs")
+      .withIndex("by_run", (q) => q.eq("runId", runId))
+      .collect(),
+    ctx.db
+      .query("runRuntimeMetrics")
+      .withIndex("by_run", (q) => q.eq("runId", runId))
+      .collect(),
+  ]);
+  await Promise.all([
+    ...events.map((event) => ctx.db.delete(event._id)),
+    ...runtimeLogs.map((entry) => ctx.db.delete(entry._id)),
+    ...runtimeMetrics.map((entry) => ctx.db.delete(entry._id)),
+  ]);
   await ctx.db.delete("runs", runId);
   return { deleted: true, run_id: String(runId) };
 }
@@ -602,12 +1022,7 @@ export const getLogs = query({
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
     const row = await getOwnedRun(ctx, String(user._id), args.runId);
-    return {
-      run_id: String(row._id),
-      logs_path: row.logs,
-      log_file: `${row.logs}/run.log`,
-      note: "Logs are uploaded by the training pod into object storage.",
-    };
+    return toRunLogsResponse(ctx, row);
   },
 });
 
@@ -616,12 +1031,7 @@ export const internalGetLogs = internalQuery({
   returns: runLogsResponseValidator,
   handler: async (ctx, args) => {
     const row = await getOwnedRun(ctx, args.userId, args.runId);
-    return {
-      run_id: String(row._id),
-      logs_path: row.logs,
-      log_file: `${row.logs}/run.log`,
-      note: "Logs are uploaded by the training pod into object storage.",
-    };
+    return toRunLogsResponse(ctx, row);
   },
 });
 
@@ -739,6 +1149,70 @@ export const internalGetRunProvisionSpec = internalQuery({
   },
 });
 
+export const internalValidateRuntimeToken = internalQuery({
+  args: { runId: v.id("runs"), tokenHash: v.string() },
+  returns: v.boolean(),
+  handler: async (ctx, args) => {
+    const row = await ctx.db.get("runs", args.runId);
+    if (!row || !row.runtimeTokenHash) {
+      return false;
+    }
+    return row.runtimeTokenHash === args.tokenHash;
+  },
+});
+
+export const internalGetRuntimeBootstrapPlan = internalAction({
+  args: { runId: v.id("runs") },
+  returns: runtimeBootstrapPlanValidator,
+  handler: async (ctx, args): Promise<RuntimeBootstrapPlan> => {
+    const provisioningPayload: ProvisioningPayload = await ctx.runQuery(
+      internal.runs.internalGetProvisioningPayload,
+      {
+        runId: args.runId,
+      },
+    );
+    const codeManifestHash = provisioningPayload.code_manifest_hash;
+    const dataManifestHash = provisioningPayload.data_manifest_hash;
+    const codeManifestKey = provisioningPayload.code_manifest_key;
+    const dataManifestKey = provisioningPayload.data_manifest_key;
+    if (!codeManifestHash || !dataManifestHash || !codeManifestKey || !dataManifestKey) {
+      throw new Error("missing pinned manifest hash/key in provisioning payload");
+    }
+
+    const codeManifest = await fetchManifest(ctx, "code", codeManifestKey, codeManifestHash);
+    const dataManifest = await fetchManifest(ctx, "data", dataManifestKey, dataManifestHash);
+    const codeEntries = await resolveManifestDownloadEntries(ctx, provisioningPayload, "code", codeManifest);
+    const dataEntries = await resolveManifestDownloadEntries(ctx, provisioningPayload, "data", dataManifest);
+
+    return {
+      run_id: provisioningPayload.run_id,
+      contract_version: provisioningPayload.contract_version,
+      workspace_root: "/workspace",
+      code: {
+        manifest_hash: codeManifestHash,
+        entries: codeEntries,
+      },
+      data: {
+        manifest_hash: dataManifestHash,
+        entries: dataEntries,
+      },
+    };
+  },
+});
+
+export const setRuntimeTokenHash = internalMutation({
+  args: { runId: v.id("runs"), runtimeTokenHash: v.string() },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const row = await ctx.db.get("runs", args.runId);
+    if (!row || row.cancellationRequested || TERMINAL_STATUSES.has(row.status)) {
+      return null;
+    }
+    await ctx.db.patch("runs", args.runId, { runtimeTokenHash: args.runtimeTokenHash });
+    return null;
+  },
+});
+
 export const provisionRun = internalAction({
   args: { runId: v.id("runs") },
   returns: v.null(),
@@ -764,8 +1238,14 @@ export const provisionRun = internalAction({
 
       const codeManifest = await fetchManifest(ctx, "code", codeManifestKey, codeManifestHash);
       const dataManifest = await fetchManifest(ctx, "data", dataManifestKey, dataManifestHash);
-      const codeStats = await fetchAndVerifyManifestBlobs(ctx, provisioningPayload, "code", codeManifest);
-      const dataStats = await fetchAndVerifyManifestBlobs(ctx, provisioningPayload, "data", dataManifest);
+      const codeStats = summarizeManifest(codeManifest);
+      const dataStats = summarizeManifest(dataManifest);
+      const runtimeToken = generateRuntimeToken();
+      const runtimeTokenHash = await sha256Hex(runtimeToken);
+      await ctx.runMutation(internal.runs.setRuntimeTokenHash, {
+        runId: args.runId,
+        runtimeTokenHash,
+      });
       const imageName = resolveImageName(runSpec.framework, runSpec.version);
       const provisionResult = await createRunpodPod({
         runId: String(args.runId),
@@ -773,6 +1253,7 @@ export const provisionRun = internalAction({
         gpuType: runSpec.effective_gpu_type,
         gpuCount: runSpec.effective_gpu_count,
         volumeGb: runSpec.effective_volume_gb,
+        runtimeToken,
         payload: provisioningPayload,
       });
       await ctx.runMutation(internal.runs.markPodProvisioned, {
@@ -853,7 +1334,7 @@ export const markProvisioning = internalMutation({
       metadata: args.provisioningPayload
         ? {
             provisioning_payload: args.provisioningPayload,
-            fetch_strategy: "download pinned code/data manifests from R2 and verify referenced blobs",
+            fetch_strategy: "pod bootstrap downloads pinned code/data manifests and blobs into /workspace",
           }
         : undefined,
     });
@@ -883,7 +1364,7 @@ export const markRunning = internalMutation({
       metadata: args.provisioningPayload
         ? {
             provisioning_payload: args.provisioningPayload,
-            fetch_strategy: "pod fetched code/data manifests from R2 by pinned manifest hash",
+            fetch_strategy: "pod runtime is active and reporting logs/metrics via runtime endpoints",
           }
         : undefined,
     });
@@ -907,6 +1388,7 @@ export const markFailed = internalMutation({
     await ctx.db.patch("runs", args.runId, {
       status: "failed",
       error: errorText,
+      runtimeTokenHash: "revoked",
     });
     await ctx.db.insert("runEvents", {
       runId: args.runId,
@@ -922,6 +1404,133 @@ export const markFailed = internalMutation({
   },
 });
 
+export const ingestRuntimeLogs = internalMutation({
+  args: {
+    runId: v.id("runs"),
+    lines: v.array(runtimeLogLineValidator),
+  },
+  returns: v.object({ accepted: v.number() }),
+  handler: async (ctx, args) => {
+    const row = await ctx.db.get("runs", args.runId);
+    if (!row) {
+      return { accepted: 0 };
+    }
+    let accepted = 0;
+    for (const line of args.lines.slice(0, 500)) {
+      const message = sanitizeRuntimeMessage(line.message);
+      if (!message) {
+        continue;
+      }
+      await ctx.db.insert("runRuntimeLogs", {
+        runId: args.runId,
+        timestamp: normalizeRuntimeTimestamp(line.timestamp),
+        level: normalizeRuntimeLevel(line.level),
+        source: normalizeRuntimeSource(line.source),
+        message,
+      });
+      accepted += 1;
+    }
+    return { accepted };
+  },
+});
+
+export const ingestRuntimeMetrics = internalMutation({
+  args: {
+    runId: v.id("runs"),
+    metrics: v.array(runtimeMetricSampleValidator),
+  },
+  returns: v.object({ accepted: v.number() }),
+  handler: async (ctx, args) => {
+    const row = await ctx.db.get("runs", args.runId);
+    if (!row) {
+      return { accepted: 0 };
+    }
+    let accepted = 0;
+    for (const metric of args.metrics.slice(0, 500)) {
+      const name = metric.name.trim().slice(0, 120);
+      if (!name || !Number.isFinite(metric.value)) {
+        continue;
+      }
+      await ctx.db.insert("runRuntimeMetrics", {
+        runId: args.runId,
+        timestamp: normalizeRuntimeTimestamp(metric.timestamp),
+        name,
+        value: metric.value,
+        step:
+          typeof metric.step === "number" && Number.isFinite(metric.step)
+            ? Math.floor(metric.step)
+            : undefined,
+        unit: metric.unit?.trim() ? metric.unit.trim().slice(0, 32) : undefined,
+        source: normalizeRuntimeSource(metric.source),
+      });
+      accepted += 1;
+    }
+    return { accepted };
+  },
+});
+
+export const ingestRuntimeStatus = internalMutation({
+  args: {
+    runId: v.id("runs"),
+    status: runtimeStatusValidator,
+    message: v.optional(v.string()),
+    error: v.optional(v.string()),
+  },
+  returns: v.object({ status: v.string() }),
+  handler: async (ctx, args) => {
+    const row = await ctx.db.get("runs", args.runId);
+    if (!row) {
+      return { status: "missing" };
+    }
+    if (TERMINAL_STATUSES.has(row.status)) {
+      return { status: row.status };
+    }
+
+    let status = args.status;
+    if (row.cancellationRequested && (status === "provisioning" || status === "running")) {
+      status = "cancelled";
+    }
+    if (row.status === "running" && status === "provisioning") {
+      status = "running";
+    }
+
+    if (status === "failed") {
+      const errorText = sanitizeRuntimeMessage(args.error || args.message || "runtime failed") || "runtime failed";
+      await ctx.db.patch("runs", args.runId, {
+        status: "failed",
+        error: errorText,
+        runtimeTokenHash: "revoked",
+      });
+      await ctx.db.insert("runEvents", {
+        runId: args.runId,
+        status: "failed",
+        message: errorText,
+        metadata: {
+          source: "pod-runtime",
+        },
+      });
+      return { status: "failed" };
+    }
+
+    const patch: { status: string; runtimeTokenHash?: string } = { status };
+    if (status === "completed" || status === "cancelled") {
+      patch.runtimeTokenHash = "revoked";
+    }
+    await ctx.db.patch("runs", args.runId, patch);
+    await ctx.db.insert("runEvents", {
+      runId: args.runId,
+      status,
+      message:
+        sanitizeRuntimeMessage(args.message || `runtime status: ${status}`) ||
+        `runtime status: ${status}`,
+      metadata: {
+        source: "pod-runtime",
+      },
+    });
+    return { status };
+  },
+});
+
 export const completeRun = internalMutation({
   args: { runId: v.id("runs") },
   returns: v.null(),
@@ -934,6 +1543,7 @@ export const completeRun = internalMutation({
     const terminal = row.cancellationRequested ? "cancelled" : "completed";
     await ctx.db.patch("runs", args.runId, {
       status: terminal,
+      runtimeTokenHash: "revoked",
     });
     await ctx.db.insert("runEvents", {
       runId: args.runId,

@@ -18,6 +18,7 @@ import {
     listEnvironments,
     listRuns,
     optionsHandler,
+    postRunRuntime,
     removeEnvironment,
     removeRun,
     syncObjectMetadata,
@@ -53,6 +54,8 @@ http.route({ pathPrefix: "/api/environments/", method: "DELETE", handler: remove
 // Runs (REST)
 http.route({ path: "/api/runs", method: "GET", handler: listRuns });
 http.route({ path: "/api/runs", method: "POST", handler: createRun });
+// Route prefix for pod runtime callbacks: /api/runs/{run_id}/runtime/{action}
+http.route({ pathPrefix: "/api/runs/", method: "POST", handler: postRunRuntime });
 // Route prefix for getting runs by ID /api/runs/{run_id} or /logs
 http.route({ pathPrefix: "/api/runs/", method: "GET", handler: getRunOrLogs });
 // Route prefix for deleting runs by ID /api/runs/{run_id}

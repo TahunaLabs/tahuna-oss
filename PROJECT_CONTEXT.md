@@ -81,8 +81,10 @@ Run:
 - `[x]` CLI incremental sync regression tests added (commit retry + metadata sync, no-change sync, data-only scope)
 - `[ ]` env var sync (Convex-style) not implemented in CLI
 - `[x]` `train` / `train -d` command model implemented with optional runtime overrides (`--gpu-type`, `--gpu-count`, `--volume-gb`)
+- `[x]` CLI environment specs update command implemented (`tahuna env update` / `tahuna env specs`) with backend `PATCH` support
+- `[x]` `train` / `run create` now prompt for alternative GPU selection on no-capacity responses (interactive terminals)
 - `[x]` run listing/show/watch/logs/delete exist
-- `[ ]` live loss/metrics stream not implemented
+- `[~]` pod runtime now emits real logs/metrics to backend ingestion endpoints; CLI/dashboard live visualization remains basic
 - `[~]` terminal UI includes branded panels and status, but not full split static+interactive dashboard behavior
 
 ### Workflow 2 status
@@ -109,6 +111,7 @@ Contract fixes applied on 2026-03-06:
 2. Environment endpoint compatibility fixed.
    - Added `GET /api/environments/{env_id}`.
    - Added `POST /api/environments/{env_id}/runs`.
+   - Added `PATCH /api/environments/{env_id}` for runtime spec updates (`gpu_type`, `gpu_count`, `volume_gb`).
 
 3. Catalog payload compatibility fixed.
    - `/api/catalog` now returns both `images` and `gpus`.
@@ -128,9 +131,10 @@ Current operational note:
   - browser-based login (`tahuna login`) with local callback and automatic browser URL persistence (`TAHUNA_BROWSER_URL`)
   - guided setup (`init`) with local project file prompts/scaffolding
   - interactive shell mode (`shell`)
-  - environment commands: `list/show/delete` (`create` intentionally removed; creation via `init`)
+  - environment commands: `list/show/update(specs)/delete` (`create` intentionally removed; creation via `init`)
   - train commands: `train`, `train -d` with optional overrides
   - run commands: `create/list/show/watch/logs/delete` (`run create` uses linked `.tahuna/environment_id`, no `--environment-id`)
+  - no-capacity interactive fallback in `train`/`run create`: prompt user to pick another GPU from catalog and retry
   - HTTP client (`doJSON`) with standalone config resolution (`~/.config/tahuna/config.env` + env vars)
 
 - [`cli/main_sync_test.go`](/Users/pazuzzu/Desktop/gigi/boob-ai/cli/main_sync_test.go)
@@ -156,7 +160,7 @@ Current operational note:
 ### Convex Backend (`/web/convex`)
 
 - [`web/convex/schema.ts`](/Users/pazuzzu/Desktop/gigi/boob-ai/web/convex/schema.ts)
-  - tables: `apiKeys`, `environments`, `runs`, `runEvents`
+  - tables: `apiKeys`, `environments`, `runs`, `runEvents`, `runRuntimeLogs`, `runRuntimeMetrics`
 
 - [`web/convex/http.ts`](/Users/pazuzzu/Desktop/gigi/boob-ai/web/convex/http.ts)
   - HTTP route registration for CLI-style API
@@ -164,13 +168,17 @@ Current operational note:
 - [`web/convex/cli.ts`](/Users/pazuzzu/Desktop/gigi/boob-ai/web/convex/cli.ts)
   - HTTP handlers for health/catalog/environments/runs
   - API key authentication
+  - strict run creation path (`create + provision`) with rollback on no-capacity
+  - pod runtime callback endpoints (`/api/runs/{run_id}/runtime/*`) for bootstrap plan + logs/metrics/status
 
 - [`web/convex/environments.ts`](/Users/pazuzzu/Desktop/gigi/boob-ai/web/convex/environments.ts)
   - environment CRUD and validation
+  - environment runtime spec updates (`gpu_type`, `gpu_count`, `volume_gb`)
 
 - [`web/convex/runs.ts`](/Users/pazuzzu/Desktop/gigi/boob-ai/web/convex/runs.ts)
   - run CRUD + lifecycle events
-  - simulated provisioning flow (`queued -> running -> completed/cancelled`)
+  - real provisioning flow with Runpod pod creation + in-pod bootstrap materialization contract
+  - runtime token validation + ingestion for pod logs/metrics/status
 
 - [`web/convex/data.ts`](/Users/pazuzzu/Desktop/gigi/boob-ai/web/convex/data.ts)
   - R2 data upload URLs, metadata sync, listing, deletion
@@ -188,7 +196,8 @@ Most realistic current path:
 3. Browser opens auth flow and redirects back to local CLI callback.
 4. CLI stores auth token (and auto-detected browser URL base when missing) in `~/.config/tahuna/config.env`.
 5. Use `tahuna init .` (or `tahuna init <project-name>`) then `tahuna train` / `tahuna train -d`.
-6. Use CLI + dashboard to inspect runs/data.
+6. If no GPU capacity is available, CLI returns a strict create error; in interactive mode it prompts for alternate GPU selection and retries.
+7. Use CLI + dashboard to inspect runs/data.
 
 ## 7) Product Decisions (locked 2026-03-09)
 
@@ -213,6 +222,11 @@ The following sync architecture choices are now agreed and should be treated as 
    - Environments are account-scoped and remain separate across users.
    - Collaboration/sharing should happen via explicit immutable snapshot transfer (manifest hashes), not by implicitly sharing mutable environment records.
 
+5. Run creation gating (clarified 2026-03-09):
+   - User-facing run creation should not succeed when no GPU capacity is available.
+   - CLI run creation path is strict: if provisioning fails due to capacity, backend rolls back created run and returns a no-capacity error.
+   - Queue state should reflect actual post-attempt capacity handling, not pre-attempt acceptance.
+
 ## 8) Next Milestone (Incremental Sync (0.1.0))
 
 Milestone objective: deliver incremental, reproducible sync with R2-backed manifests and blob deduplication.
@@ -229,9 +243,13 @@ Progress (2026-03-09):
 - `[x]` Backend commit validates manifest hash format and manifest payload schema (`version/type/created_at/entries`, sorted paths, sha/mode/size checks).
 - `[x]` Run creation pins environment manifest hashes and now fails clearly when environment was not synced.
 - `[x]` Automated CLI regression tests added for the critical sync flows exercised manually.
-- `[x]` Pod bootstrap now performs real R2 manifest/blob fetch + integrity verification before provisioning.
+- `[x]` Pod bootstrap now materializes pinned code/data manifests and blobs inside the pod filesystem (`/workspace`) with integrity verification.
 - `[x]` Run provisioning now creates a real Runpod GPU pod and persists `podId` on the run record.
-- `[~]` Pod workspace materialization (`code/data` reconstructed inside the pod filesystem) is not yet automatic; manifest pointers are injected to pod env for bootstrap consumption.
+- `[x]` Strict run creation gating for CLI endpoints: create attempts provisioning immediately; no-capacity errors return `409` and roll back run creation.
+- `[x]` CLI `tahuna env update` / `tahuna env specs` implemented to update environment runtime specs.
+- `[x]` CLI `train` / `run create` interactive no-capacity fallback prompt implemented (choose alternative GPU from catalog and retry).
+- `[x]` Pod workspace materialization (`code/data` reconstructed inside the pod filesystem) is now automatic via in-pod bootstrap callbacks.
+- `[~]` Runtime logs/metrics are now ingested in backend tables via pod callbacks; end-user live monitoring UX still needs richer streaming surfaces.
 - `[ ]` Cross-account environment sharing is not implemented yet; current design direction is snapshot export/import based on pinned code/data manifest hashes.
 
 Pod startup contract detail (Incremental Sync (0.1.0)):

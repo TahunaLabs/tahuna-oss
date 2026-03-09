@@ -6,18 +6,20 @@ import { components } from "@convex/_generated/api";
 import { shortId } from "@convex/ids";
 import { v } from "convex/values";
 
-// Helper to authenticate CLI requests via the API keys
-async function authenticateApiRequest(ctx: ActionCtx, request: Request): Promise<string | null> {
+function extractBearerToken(request: Request): string {
   const bearer = request.headers.get("authorization")?.trim() || "";
   if (!bearer.toLowerCase().startsWith("bearer ")) {
-    return null;
+    return "";
   }
+  return bearer.slice("bearer ".length).trim();
+}
 
-  const apiKey = bearer.slice("bearer ".length).trim();
+// Helper to authenticate CLI requests via the API keys
+async function authenticateApiRequest(ctx: ActionCtx, request: Request): Promise<string | null> {
+  const apiKey = extractBearerToken(request);
   if (!apiKey) {
     return null;
   }
-
   const auth = await ctx.runMutation(api.auth.authByApiKey, { apiKey });
   if (!auth) {
     return null;
@@ -280,6 +282,41 @@ async function sha256Hex(value: string): Promise<string> {
   return Array.from(new Uint8Array(digest))
     .map((byte) => byte.toString(16).padStart(2, "0"))
     .join("");
+}
+
+type RuntimeRoute = {
+  runId: string;
+  action: string;
+};
+
+function parseRuntimeRoute(pathname: string): RuntimeRoute | null {
+  const parts = pathname.split("/").filter(Boolean);
+  // /api/runs/{runId}/runtime/{action}
+  if (parts.length !== 5 || parts[0] !== "api" || parts[1] !== "runs" || parts[3] !== "runtime") {
+    return null;
+  }
+  const runId = parts[2];
+  const action = parts[4];
+  if (!runId || !action) {
+    return null;
+  }
+  return { runId, action };
+}
+
+async function authenticateRuntimeRequest(
+  ctx: ActionCtx,
+  request: Request,
+  runId: Id<"runs">,
+): Promise<boolean> {
+  const token = extractBearerToken(request);
+  if (!token) {
+    return false;
+  }
+  const tokenHash = await sha256Hex(token);
+  return await ctx.runQuery(internal.runs.internalValidateRuntimeToken, {
+    runId,
+    tokenHash,
+  });
 }
 
 // Ensure proper CORS for external clients (CLI/web)
@@ -1086,6 +1123,158 @@ export const createRunFromEnvironment = httpAction(async (ctx, request) => {
   }
 });
 
+async function handleRuntimeGet(ctx: ActionCtx, request: Request, route: RuntimeRoute) {
+  const runId = route.runId as Id<"runs">;
+  const authenticated = await authenticateRuntimeRequest(ctx, request, runId);
+  if (!authenticated) {
+    return new Response(JSON.stringify({ detail: "runtime authentication required" }), {
+      status: 401,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+
+  if (route.action === "bootstrap") {
+    try {
+      const plan = await ctx.runAction(internal.runs.internalGetRuntimeBootstrapPlan, { runId });
+      return new Response(JSON.stringify(plan), {
+        status: 200,
+        headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+      });
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : "failed to build bootstrap plan";
+      return new Response(JSON.stringify({ detail }), {
+        status: 400,
+        headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+      });
+    }
+  }
+
+  return new Response(JSON.stringify({ detail: "runtime endpoint not found" }), {
+    status: 404,
+    headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+  });
+}
+
+async function handleRuntimePost(ctx: ActionCtx, request: Request, route: RuntimeRoute) {
+  const runId = route.runId as Id<"runs">;
+  const authenticated = await authenticateRuntimeRequest(ctx, request, runId);
+  if (!authenticated) {
+    return new Response(JSON.stringify({ detail: "runtime authentication required" }), {
+      status: 401,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+
+  const body = await readJsonBody(request);
+
+  if (route.action === "logs") {
+    const fallbackLine: Array<Record<string, unknown>> =
+      typeof body?.line === "string"
+        ? [{ message: body.line, level: body?.level, source: body?.source, timestamp: body?.timestamp }]
+        : [];
+    const candidateLines: unknown[] = Array.isArray(body?.lines) ? (body.lines as unknown[]) : fallbackLine;
+    const lines = candidateLines
+      .filter((item): item is Record<string, unknown> => !!item && typeof item === "object")
+      .map((item) => ({
+        message: typeof item.message === "string" ? item.message : "",
+        level: typeof item.level === "string" ? item.level : undefined,
+        source: typeof item.source === "string" ? item.source : undefined,
+        timestamp: typeof item.timestamp === "number" ? item.timestamp : undefined,
+      }));
+    const result = await ctx.runMutation(internal.runs.ingestRuntimeLogs, {
+      runId,
+      lines,
+    });
+    return new Response(JSON.stringify({ ok: true, accepted: result.accepted }), {
+      status: 200,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+
+  if (route.action === "metrics") {
+    const candidateMetrics: unknown[] = Array.isArray(body?.metrics) ? (body.metrics as unknown[]) : [];
+    const metrics: Array<{
+      name: string;
+      value: number;
+      step?: number;
+      unit?: string;
+      source?: string;
+      timestamp?: number;
+    }> = [];
+    for (const raw of candidateMetrics) {
+      if (!raw || typeof raw !== "object") {
+        continue;
+      }
+      const item = raw as Record<string, unknown>;
+      const value = typeof item.value === "number" && Number.isFinite(item.value) ? item.value : null;
+      if (value === null) {
+        continue;
+      }
+      metrics.push({
+        name: typeof item.name === "string" ? item.name : "",
+        value,
+        step: typeof item.step === "number" ? item.step : undefined,
+        unit: typeof item.unit === "string" ? item.unit : undefined,
+        source: typeof item.source === "string" ? item.source : undefined,
+        timestamp: typeof item.timestamp === "number" ? item.timestamp : undefined,
+      });
+    }
+    const result = await ctx.runMutation(internal.runs.ingestRuntimeMetrics, {
+      runId,
+      metrics,
+    });
+    return new Response(JSON.stringify({ ok: true, accepted: result.accepted }), {
+      status: 200,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+
+  if (route.action === "status") {
+    const status = typeof body?.status === "string" ? body.status : "";
+    const message = typeof body?.message === "string" ? body.message : undefined;
+    const error = typeof body?.error === "string" ? body.error : undefined;
+    if (!status) {
+      return new Response(JSON.stringify({ detail: "status is required" }), {
+        status: 400,
+        headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+      });
+    }
+    const allowedStatuses = new Set(["provisioning", "running", "completed", "failed", "cancelled"]);
+    if (!allowedStatuses.has(status)) {
+      return new Response(JSON.stringify({ detail: "invalid status" }), {
+        status: 400,
+        headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+      });
+    }
+    const result = await ctx.runMutation(internal.runs.ingestRuntimeStatus, {
+      runId,
+      status: status as "provisioning" | "running" | "completed" | "failed" | "cancelled",
+      message,
+      error,
+    });
+    return new Response(JSON.stringify({ ok: true, status: result.status }), {
+      status: 200,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+
+  return new Response(JSON.stringify({ detail: "runtime endpoint not found" }), {
+    status: 404,
+    headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+  });
+}
+
+export const postRunRuntime = httpAction(async (ctx, request) => {
+  const route = parseRuntimeRoute(new URL(request.url).pathname);
+  if (!route) {
+    return new Response(JSON.stringify({ detail: "path must be /api/runs/{run_id}/runtime/{action}" }), {
+      status: 400,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+  return handleRuntimePost(ctx, request, route);
+});
+
 // Runs
 
 export const listRuns = httpAction(async (ctx, request) => {
@@ -1143,6 +1332,12 @@ export const createRun = httpAction(async (ctx, request) => {
 });
 
 export const getRunOrLogs = httpAction(async (ctx, request) => {
+  const url = new URL(request.url);
+  const runtimeRoute = parseRuntimeRoute(url.pathname);
+  if (runtimeRoute) {
+    return handleRuntimeGet(ctx, request, runtimeRoute);
+  }
+
   const userId = await authenticateApiRequest(ctx, request);
   if (!userId) {
     return new Response(JSON.stringify({ detail: "authentication required" }), {
@@ -1151,10 +1346,9 @@ export const getRunOrLogs = httpAction(async (ctx, request) => {
     });
   }
 
-  const url = new URL(request.url);
   // Pattern: /api/runs/{run_id} or /api/runs/{run_id}/logs
   const parts = url.pathname.split("/").filter(Boolean); // remove empty strings
-  
+
   const isLogs = parts[parts.length - 1] === "logs";
   const runId = isLogs ? parts[parts.length - 2] : parts[parts.length - 1];
 
