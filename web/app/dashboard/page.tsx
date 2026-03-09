@@ -26,16 +26,13 @@ import { useAction, useConvexAuth, useMutation, useQuery } from "convex/react"
 import {
   Database,
   Download,
-  Key,
   LogOut,
   Moon,
   Play,
   Server,
-  Settings,
   Sun,
   Trash2,
 } from "lucide-react"
-import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useEffect, useMemo, useState, type ComponentType, type FormEvent, type ReactNode } from "react"
 
@@ -83,8 +80,7 @@ type SidebarItem = {
   id: string
   label: string
   icon: ComponentType<{ className?: string }>
-  section?: MainSection
-  href?: string
+  section: MainSection
 }
 
 const PAGE_TITLES: Record<MainSection, string> = {
@@ -97,10 +93,6 @@ const FEATURE_ITEMS: SidebarItem[] = [
   { id: "data", label: "Storage", icon: Database, section: "data" },
   { id: "environments", label: "Environments", icon: Server, section: "environments" },
   { id: "runs", label: "Runs", icon: Play, section: "runs" },
-]
-
-const ACCOUNT_ITEMS: SidebarItem[] = [
-  { id: "api-keys", label: "API keys", icon: Key, href: "/api-key" },
 ]
 
 const CANCELLABLE_STATUSES = new Set(["queued", "provisioning", "running", "cancelling"])
@@ -139,17 +131,6 @@ function SidebarSection({
         {items.map((item) => {
           const Icon = item.icon
 
-          if (item.href) {
-            return (
-              <Button key={item.id} asChild variant="dashboard-nav" size="none">
-                <Link href={item.href}>
-                  <Icon className="h-[15px] w-[15px]" />
-                  {item.label}
-                </Link>
-              </Button>
-            )
-          }
-
           const isActive = item.section === activeSection
           return (
             <Button
@@ -157,7 +138,7 @@ function SidebarSection({
               type="button"
               size="none"
               variant={isActive ? "dashboard-nav-active" : "dashboard-nav"}
-              onClick={() => onSelect(item.section!)}
+              onClick={() => onSelect(item.section)}
             >
               <Icon className="h-[15px] w-[15px]" />
               {item.label}
@@ -420,14 +401,6 @@ export default function DashboardPage() {
               API Docs
             </a>
           </Button>
-          <Button
-            type="button"
-            onClick={() => router.push("/api-key")}
-            variant="dashboard-icon"
-            size="none"
-          >
-            <Settings className="h-4 w-4" />
-          </Button>
           <div className="flex h-7 w-7 items-center justify-center rounded-full bg-secondary text-xs font-semibold text-secondary-foreground">
             {userInitial}
           </div>
@@ -439,13 +412,6 @@ export default function DashboardPage() {
           <SidebarSection
             label="Features"
             items={FEATURE_ITEMS}
-            activeSection={activeSection}
-            onSelect={setActiveSection}
-          />
-          <div className="my-1 h-px bg-border" />
-          <SidebarSection
-            label="Account"
-            items={ACCOUNT_ITEMS}
             activeSection={activeSection}
             onSelect={setActiveSection}
           />
