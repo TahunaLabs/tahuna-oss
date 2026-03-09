@@ -1,67 +1,61 @@
 # Control Plane
 
+Last updated: 2026-03-09
+
 ## Purpose
-The control plane is the system of record for authentication, run lifecycle, queueing, metadata, and artifact indexing. In this repo, it maps to the current web + Convex backend.
+The control plane is the source of truth for auth, run lifecycle, sync pointers, runtime telemetry, and artifact metadata.
 
-## Scope
-- User auth and API keys.
-- Run creation, cancellation, and status transitions.
-- Queue + lease management for executors.
-- Metadata for environments, dataset snapshots, runs, attempts, and checkpoints.
-- Artifact index (where outputs/checkpoints/logs live in object storage).
+## Implemented Responsibilities
+- API key auth for CLI/web requests.
+- Runtime token auth for pod runtime callbacks.
+- Environment + run CRUD.
+- Strict run creation with immediate provisioning attempt.
+- Sync pointer commit (`latestCodeManifestHash`, `latestDataManifestHash`).
+- Runtime log/metric/status ingestion.
 
-## Responsibilities
-- Validate and persist an immutable `RunSpec` at run creation time.
-- Expose API endpoints for CLI/dashboard + executor callbacks.
-- Coordinate retries through run attempts.
-- Track checkpoint lineage (`latest`, `best`, `committed`).
-- Emit run events for observability (queued, running, failed, completed, cancelled).
-
-## Recommended Data Model
+## Current Data Model
+- `environments`
+  - `dataId`
+  - `latestCodeManifestHash`
+  - `latestDataManifestHash`
+  - `latestSyncAt`
 - `runs`
-  - `run_id`, `user_id`, `project_id`, `environment_id`
-  - `status` (`queued`, `provisioning`, `running`, `succeeded`, `failed`, `cancelled`)
-  - `active_attempt`, `max_attempts`
-  - `run_spec` (immutable JSON)
-  - `created_at`, `updated_at`
-- `run_attempts`
-  - `attempt_id`, `run_id`, `provider`, `provider_job_id`
-  - `status`, `node_count`, `gpus_per_node`
-  - `started_at`, `ended_at`, `failure_reason`
-- `checkpoints`
-  - `run_id`, `attempt_id`, `step`, `epoch`
-  - `uri`, `state` (`pending`, `committed`)
-  - `metric_primary`, `created_at`
-- `artifacts`
-  - `run_id`, `kind` (`logs`, `model`, `metrics`, `profile`)
-  - `uri`, `content_type`, `size_bytes`, `created_at`
-- `run_events`
-  - `run_id`, `attempt_id`, `type`, `message`, `payload`, `ts`
+  - `effectiveGpuType`, `effectiveGpuCount`, `effectiveVolumeGb`
+  - `codeManifestHash`, `dataManifestHash`
+  - `runtimeTokenHash`
+  - `podId`, `status`, `error`
+- `runEvents`
+  - status/event timeline
+- `runRuntimeLogs`
+  - runtime log lines
+- `runRuntimeMetrics`
+  - runtime metric samples
 
-## API Contract (Minimal)
-- `POST /runs`
-  - Create run, persist immutable `RunSpec`, status `queued`.
-- `POST /runs/{run_id}/cancel`
-  - Request cancellation.
-- `POST /runs/{run_id}/lease`
-  - Executor lease for queued runs.
-- `POST /runs/{run_id}/attempts/{attempt_id}/heartbeat`
-  - Worker/executor heartbeat.
-- `POST /runs/{run_id}/attempts/{attempt_id}/status`
-  - Provider status callback.
-- `POST /runs/{run_id}/attempts/{attempt_id}/checkpoints`
-  - Register checkpoint pending/committed.
-- `POST /runs/{run_id}/attempts/{attempt_id}/logs`
-  - Register log chunk/object metadata.
+## Current HTTP Surface
+- `GET /api/health`
+- `GET /api/catalog`
+- `POST /api/sync/blobs/missing`
+- `POST /api/sync/blobs/upload-url`
+- `POST /api/sync/manifests/upload-url`
+- `POST /api/sync/commit`
+- `POST /api/sync/metadata`
+- `GET|POST /api/environments`
+- `GET|PATCH|DELETE /api/environments/{env_id}`
+- `POST /api/environments/{env_id}/runs`
+- `GET|POST /api/runs`
+- `GET|DELETE /api/runs/{run_id}`
+- `GET /api/runs/{run_id}/logs`
+- `GET /api/runs/{run_id}/runtime/bootstrap`
+- `POST /api/runs/{run_id}/runtime/logs`
+- `POST /api/runs/{run_id}/runtime/metrics`
+- `POST /api/runs/{run_id}/runtime/status`
 
-## Run State Machine
-- `queued -> provisioning -> running -> succeeded`
-- `queued -> provisioning -> failed`
-- `running -> failed` (with retry if attempts remain)
-- `running -> cancelled`
-- `provisioning -> cancelled`
+## Current Run State Semantics
+- `queued -> provisioning -> running -> completed`
+- `queued|provisioning|running -> failed`
+- `queued|provisioning|running -> cancelling -> cancelled`
 
-## Non-Goals
-- No training framework logic in control plane.
-- No provider-specific scheduling logic in control plane.
-- No dependency on persistent node volumes.
+## Known Gaps
+- No generic run-attempt model yet.
+- No provider-neutral scheduler/executor interface yet.
+- No checkpoint lineage tables yet.

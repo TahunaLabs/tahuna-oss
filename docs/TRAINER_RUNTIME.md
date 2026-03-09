@@ -1,62 +1,38 @@
 # Trainer Runtime
 
-## Purpose
-The trainer runtime owns all ML execution logic that must stay provider-independent:
-- FSDP distributed training.
-- Data sharding and loading.
-- Checkpointing and resume.
-- Metrics and progress emission.
+Last updated: 2026-03-09
 
-## Bootstrap Sequence
-1. Read `RunSpec` env.
-2. Initialize distributed process group (`torchrun` + NCCL).
-3. Build model and wrap with FSDP.
-4. Load dataset manifest and initialize rank-specific shard iterator.
-5. Attempt resume from latest committed checkpoint.
-6. Enter train loop with periodic checkpoint + metrics emit.
+## Current Runtime (Implemented)
+Current runtime is an in-pod bootstrap runner, not yet FSDP.
 
-## Distributed Training Contract
-- Launch: `torchrun` with fixed world size from `RunSpec`.
-- Required env:
-  - `RANK`, `LOCAL_RANK`, `WORLD_SIZE`
-  - `MASTER_ADDR`, `MASTER_PORT`
-- FSDP baseline:
-  - mixed precision enabled
-  - gradient accumulation optional
-  - activation checkpointing optional
+Flow:
+1. Pod receives env (`TAHUNA_RUN_ID`, `TAHUNA_API_BASE`, `TAHUNA_RUNTIME_TOKEN`, manifest hashes/keys).
+2. Pod calls `GET /api/runs/{run_id}/runtime/bootstrap`.
+3. Pod downloads code/data files using signed download URLs from the bootstrap plan.
+4. Pod verifies each blob hash and size before writing to disk.
+5. Pod runs `python3 -u /workspace/train.py`.
+6. Pod sends:
+   - `runtime/logs`
+   - `runtime/metrics`
+   - `runtime/status`
 
-## Data Sharding
-- Input is an immutable dataset manifest (list of shards + checksums + sample counts).
-- Per-epoch rank assignment:
-  - Shuffle shard order with deterministic seed (`base_seed + epoch`).
-  - Assign by modulo: `shard_index % world_size == rank`.
-- Keep many shards relative to world size to avoid imbalance.
+If no `train.py` exists, runtime reports completion after workspace materialization.
 
-## Checkpoint/Resume
-- Use sharded checkpointing (`torch.distributed.checkpoint`).
-- Save states:
-  - model
-  - optimizer
-  - scheduler
-  - scaler
-  - RNG states
-  - `global_step` and `epoch`
-- Resume only from a `committed` checkpoint.
+## Current Metric Extraction
+- Parses `name=value` pairs from training stdout and emits them as runtime metrics.
 
-## Metrics and Events
-- Emit heartbeat every 10-30 seconds.
-- Emit step-level metrics at configured interval.
-- Emit checkpoint events:
-  - `pending` on write start
-  - `committed` after upload completion
+## Runtime Auth
+- Runtime endpoints use a per-run bearer token.
+- Backend stores only `runtimeTokenHash` and validates hashed bearer tokens.
 
-## Failure Semantics
-- Any worker fatal error fails the current attempt.
-- Retry policy is controlled by control plane.
-- On termination signal:
-  - finalize in-flight checkpoint if possible
-  - flush final status/log event
+## Not Implemented Yet
+- FSDP wrapping and `torchrun` process groups.
+- Distributed data sharding by global rank.
+- Checkpoint commit/resume with `torch.distributed.checkpoint`.
 
-## Non-Goals
-- No provider API calls in trainer runtime.
-- No control-plane queue semantics in trainer runtime.
+## Next Runtime Milestone
+- Replace bootstrap `train.py` execution with a trainer package that supports:
+  - multi-GPU launch
+  - FSDP
+  - shard-aware dataloaders
+  - durable checkpoint/resume

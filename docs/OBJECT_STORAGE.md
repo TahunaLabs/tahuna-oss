@@ -1,52 +1,37 @@
 # Object Storage (S3/R2)
 
-## Purpose
-Object storage is the durable source of truth for:
-- Dataset snapshots and manifests.
-- Checkpoints.
-- Logs and metrics artifacts.
-- Model outputs.
+Last updated: 2026-03-09
 
-## Principles
-- Immutable dataset snapshots.
-- Versioned checkpoint directories.
-- Control plane stores metadata index, not large blobs.
-- Node-local disk is a disposable cache, never authoritative.
+## Role
+Object storage is the durable source of truth for synced code/data blobs and manifests.
 
-## Suggested Layout
-```text
-{bucket}/datasets/{dataset_id}/snapshots/{snapshot_id}/manifest.json
-{bucket}/datasets/{dataset_id}/snapshots/{snapshot_id}/shards/{shard_id}.tar
+## Current Key Conventions
+Code domain:
+- Blobs: `{userId}/environment/{environmentId}/blobs/code/{sha256}`
+- Manifests: `{userId}/environment/{environmentId}/manifests/code/{manifestHash}.json`
 
-{bucket}/runs/{run_id}/attempts/{attempt_id}/checkpoints/step_{global_step}/...
-{bucket}/runs/{run_id}/attempts/{attempt_id}/logs/{timestamp}.jsonl
-{bucket}/runs/{run_id}/artifacts/{kind}/{name}
-{bucket}/runs/{run_id}/metrics/metrics.jsonl
-```
+Data domain:
+- Blobs: `{userId}/data/{dataId}/blobs/{sha256}`
+- Manifests: `{userId}/data/{dataId}/manifests/{manifestHash}.json`
 
-## Dataset Contract
-- `manifest.json` includes:
-  - shard URI
-  - byte size
-  - checksum
-  - sample count
-  - optional class/statistics metadata
-- Training always references a specific snapshot ID.
+Legacy/direct upload helpers still exist for:
+- code archive artifacts
+- data file uploads
 
-## Checkpoint Commit Protocol
-1. Write checkpoint locally on ephemeral disk.
-2. Upload all checkpoint objects to S3/R2.
-3. Upload checkpoint manifest last.
-4. Mark checkpoint `committed` in control plane.
+## Current Sync Contract
+1. CLI computes deterministic manifests for `code` and `data`.
+2. CLI asks server which blob hashes are missing.
+3. CLI uploads only missing blobs.
+4. CLI uploads manifest objects.
+5. CLI calls `/api/sync/commit`.
+6. Control plane stores latest manifest pointers on environment.
 
-Only committed checkpoints are valid resume points.
+## Current Integrity Guarantees
+- Blob addresses are content hashes.
+- Manifest payload hash must match `manifest_hash` on commit.
+- Provisioning/runtime consume pinned manifest hashes from run record.
+- Runtime re-validates blob hash/size before writing locally.
 
-## Credentials Model
-- Prefer short-lived scoped credentials per run/attempt.
-- Alternative: presigned URLs for upload/download actions.
-- Avoid long-lived static credentials in training images.
-
-## Lifecycle Policy
-- Keep dataset snapshots immutable.
-- Keep latest N checkpoints per run plus explicit best checkpoint.
-- Apply retention policy for logs and intermediate artifacts.
+## Not Implemented Yet
+- Formal checkpoint object layout and commit protocol.
+- Lifecycle/retention policies for checkpoints and runtime artifacts.

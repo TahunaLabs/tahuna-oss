@@ -1,51 +1,48 @@
-# Training Stack (Lambda + Runpod)
+# Training Stack (Current + Next)
 
-## Goal
-Build a provider-agnostic distributed training stack where:
-- Trainer runtime owns FSDP, data sharding, and checkpoint/resume.
-- Provider adapters own job submission and lifecycle integration.
-- Object storage is the durable source of truth.
-- Ephemeral node disk is a performance cache only.
+Last updated: 2026-03-09
 
-## Architecture Summary
-1. Control plane stores immutable run specs, run state, queue, metadata, and artifact index.
-2. Executor leases queued runs and dispatches through provider adapters.
-3. Adapter submits provider-native job (Lambda/K8s or Runpod/Slurm).
-4. Trainer runtime performs distributed training with FSDP and shard-aware loading.
-5. Checkpoints/logs/artifacts are persisted to S3/R2.
+## What Changed Recently
+- Run lifecycle moved from mocked timing to real provisioning + runtime callbacks.
+- CLI sync moved to incremental blob upload with pinned manifests.
+- Run creation now provisions immediately and surfaces real capacity failures.
 
-## Components
+## Current Implementation (Today)
+1. CLI `train` / `run create` performs pre-run sync.
+2. CLI builds code/data manifests (`sha256`, `path`, `size`, `mode`), uploads only missing blobs, uploads manifests, then calls `/api/sync/commit`.
+3. Control plane creates run and provisions a Runpod pod.
+4. Pod bootstrap fetches `/api/runs/{run_id}/runtime/bootstrap`, materializes pinned code/data into `/workspace`, verifies hashes, then starts `train.py`.
+5. Pod sends logs/metrics/status to runtime endpoints.
+6. Control plane persists runtime logs/metrics and updates terminal run status.
+
+## Current Flow
+```mermaid
+flowchart LR
+A["CLI: tahuna train"] --> B["Incremental sync: blobs + manifests + commit"]
+B --> C["POST /api/environments/{env_id}/runs"]
+C --> D["Convex: createAndProvisionRunStrict"]
+D --> E["Runpod pod created"]
+E --> F["Pod GET /runtime/bootstrap"]
+F --> G["Materialize /workspace + verify hashes"]
+G --> H["Run python3 -u train.py"]
+H --> I["POST runtime/logs, runtime/metrics, runtime/status"]
+I --> J["Run status in Convex"]
+```
+
+## Component Docs
 - Control plane: [CONTROL_PLANE.md](./CONTROL_PLANE.md)
 - Provider adapters: [PROVIDER_ADAPTERS.md](./PROVIDER_ADAPTERS.md)
 - Trainer runtime: [TRAINER_RUNTIME.md](./TRAINER_RUNTIME.md)
 - Object storage: [OBJECT_STORAGE.md](./OBJECT_STORAGE.md)
 - Ephemeral node disk: [EPHEMERAL_NODE_DISK.md](./EPHEMERAL_NODE_DISK.md)
 
-## Golden Flow
-```mermaid
-flowchart LR
-A["CLI or Dashboard: create run"] --> B["Control plane: queued + immutable RunSpec"]
-B --> C["Executor leases run"]
-C --> D["Provider adapter submits job"]
-D --> E["Trainer bootstrap + torchrun"]
-E --> F["FSDP + shard-aware loading"]
-F --> G["Checkpoint staged on ephemeral disk"]
-G --> H["Checkpoint committed to S3/R2"]
-F --> I["Metrics/logs/events to control plane"]
-H --> J["Run succeeds or retries"]
-```
+## Current Limitations
+- No FSDP / `torchrun` orchestration yet.
+- No Lambda adapter yet.
+- No checkpoint commit/resume pipeline yet.
+- Runtime is currently single-process `train.py` bootstrap in pod.
 
-## Right-Sized MVP
-- One canonical `RunSpec`.
-- Two adapters:
-  - `lambda-k8s`
-  - `runpod-slurm`
-- One trainer runtime package for all providers.
-- One object-storage layout for datasets/checkpoints/artifacts.
-- One ephemeral cache policy and checkpoint staging path.
-
-## Explicit Non-Goals for MVP
-- No provider-specific training code forks.
-- No persistent volume dependency for training correctness.
-- No custom distributed filesystem.
-- No elastic world-size changes during a run.
+## Next Phase
+- Add provider abstraction layer (`runpod` + `lambda`).
+- Replace bootstrap single-process runner with trainer runtime supporting FSDP and sharded data loading.
+- Add checkpoint metadata + durable resume contract.
