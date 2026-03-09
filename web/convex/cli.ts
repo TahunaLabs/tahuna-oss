@@ -165,6 +165,15 @@ export const internalObjectExists = internalQuery({
   },
 });
 
+export const internalGetObjectDownloadUrl = internalQuery({
+  args: { key: v.string() },
+  returns: v.union(v.string(), v.null()),
+  handler: async (ctx, args) => {
+    const metadata = await r2.getMetadata(ctx, args.key);
+    return metadata?.url ?? null;
+  },
+});
+
 function parseManifestEntry(value: unknown): ManifestEntry | null {
   if (!value || typeof value !== "object") {
     return null;

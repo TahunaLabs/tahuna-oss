@@ -99,6 +99,12 @@ Usage:
   tahuna up
   tahuna version
 
+Run list:
+  tahuna run list                Show last 5 runs (tail order; newest at bottom)
+  tahuna run list -n <N>         Show last N runs
+  tahuna run list -a             Show all runs
+  tahuna run list --verbose      Show full JSON payload
+
 Environment:
   TAHUNA_API_URL      API base URL (default: http://localhost:3000)
   TAHUNA_BROWSER_URL  Browser auth URL base for "tahuna login" (optional)
@@ -519,7 +525,7 @@ func handleRun(args []string) {
 	case "create":
 		runCreate(args[1:])
 	case "list":
-		runShow([]string{"--list"})
+		runShow(append(args[1:], "--list"))
 	case "show":
 		runShow(args[1:])
 	case "watch", "monitor":
@@ -1228,18 +1234,123 @@ func runShow(args []string) {
 	fs := flag.NewFlagSet("run show", flag.ExitOnError)
 	id := fs.String("id", "", "Run ID")
 	list := fs.Bool("list", false, "List all runs")
+	limit := fs.Int("n", 5, "Show only the last N runs (tail order)")
+	all := fs.Bool("all", false, "Show all runs")
+	fs.BoolVar(all, "a", false, "Show all runs")
+	verbose := fs.Bool("verbose", false, "Show full run payload")
+	fs.BoolVar(verbose, "v", false, "Show full run payload")
 	fs.Parse(args)
 
 	if *list {
 		resp, err := doJSON(http.MethodGet, "/runs", nil)
 		must(err)
-		printJSON(resp)
+		runsAny, ok := resp["runs"].([]any)
+		if !ok {
+			printJSON(resp)
+			return
+		}
+		orderedRuns := reverseRunsForTailOrder(runsAny)
+		if !*all && *limit > 0 && len(orderedRuns) > *limit {
+			orderedRuns = orderedRuns[len(orderedRuns)-*limit:]
+		}
+		if *verbose {
+			printJSON(map[string]any{"runs": orderedRuns})
+			return
+		}
+		printRunListSummary(orderedRuns)
 		return
 	}
 	require(*id != "", "--id is required when --list is not set")
 	resp, err := doJSON(http.MethodGet, "/runs/"+*id, nil)
 	must(err)
 	printJSON(resp)
+}
+
+func reverseRunsForTailOrder(runs []any) []any {
+	ordered := make([]any, len(runs))
+	for i := range runs {
+		ordered[i] = runs[len(runs)-1-i]
+	}
+	return ordered
+}
+
+func printRunListSummary(runsAny []any) {
+	if len(runsAny) == 0 {
+		fmt.Println("No runs found.")
+		return
+	}
+
+	envNameByID := map[string]string{}
+	envResp, err := doJSON(http.MethodGet, "/environments", nil)
+	if err == nil {
+		if environmentsAny, ok := envResp["environments"].([]any); ok {
+			for _, raw := range environmentsAny {
+				row, ok := raw.(map[string]any)
+				if !ok {
+					continue
+				}
+				envID := asString(row["environment_id"])
+				envName := asString(row["name"])
+				if envID != "" && envName != "" {
+					envNameByID[envID] = envName
+				}
+			}
+		}
+	}
+
+	fmt.Printf("%-22s %-32s %-12s %s\n", "ENVIRONMENT", "RUN ID", "STATUS", "CREATED")
+	for _, raw := range runsAny {
+		run, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		envID := asString(run["env_id"])
+		envLabel := envNameByID[envID]
+		if envLabel == "" {
+			envLabel = "unknown"
+		}
+		runID := asString(run["run_id"])
+		status := asString(run["status"])
+		created := formatUnixMillis(asInt64(run["created_at"]))
+		fmt.Printf("%-22s %-32s %-12s %s\n", truncateRunListColumn(envLabel, 22), truncateRunListColumn(runID, 32), truncateRunListColumn(status, 12), created)
+	}
+}
+
+func truncateRunListColumn(value string, max int) string {
+	if max <= 3 || len(value) <= max {
+		return value
+	}
+	return value[:max-3] + "..."
+}
+
+func formatUnixMillis(value int64) string {
+	if value <= 0 {
+		return "-"
+	}
+	return time.UnixMilli(value).Local().Format("2006-01-02 15:04:05")
+}
+
+func asInt64(v any) int64 {
+	switch t := v.(type) {
+	case int:
+		return int64(t)
+	case int64:
+		return t
+	case float64:
+		return int64(t)
+	case json.Number:
+		n, err := t.Int64()
+		if err == nil {
+			return n
+		}
+		f, ferr := t.Float64()
+		if ferr != nil {
+			return 0
+		}
+		return int64(f)
+	default:
+		return 0
+	}
 }
 
 func runWatch(args []string) {

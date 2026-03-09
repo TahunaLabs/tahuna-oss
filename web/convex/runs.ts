@@ -2,13 +2,23 @@ import { Workpool } from "@convex-dev/workpool";
 import { ConvexError, v } from "convex/values";
 import { components, internal } from "@convex/_generated/api";
 import type { Doc, Id } from "@convex/_generated/dataModel";
-import { internalAction, internalMutation, internalQuery, mutation, query, type MutationCtx, type QueryCtx } from "@convex/_generated/server";
+import {
+  internalAction,
+  internalMutation,
+  internalQuery,
+  mutation,
+  query,
+  type ActionCtx,
+  type MutationCtx,
+  type QueryCtx,
+} from "@convex/_generated/server";
 import { requireUser } from "@convex/auth";
 
 const ACTIVE_STATUSES = new Set(["queued", "provisioning", "running", "cancelling"]);
 const TERMINAL_STATUSES = new Set(["completed", "failed", "cancelled"]);
 const runResponseValidator = v.object({
   run_id: v.string(),
+  created_at: v.number(),
   env_id: v.string(),
   input: v.string(),
   output: v.string(),
@@ -44,16 +54,40 @@ const provisioningPayloadValidator = v.object({
   code_manifest_key: v.union(v.string(), v.null()),
   data_manifest_key: v.union(v.string(), v.null()),
   contract_version: v.string(),
+  bootstrap_summary: v.optional(
+    v.object({
+      code_files: v.number(),
+      code_bytes: v.number(),
+      data_files: v.number(),
+      data_bytes: v.number(),
+    }),
+  ),
 });
 
 const provisionPool = new Workpool(components.workpool, {
   maxParallelism: 3,
   retryActionsByDefault: true,
 });
+const SHA256_HEX_RE = /^[a-f0-9]{64}$/i;
+
+type SyncKind = "code" | "data";
+type ManifestEntry = {
+  path: string;
+  sha256: string;
+  size: number;
+  mode: number;
+};
+type SyncManifestPayload = {
+  version: number;
+  type: SyncKind;
+  created_at: number;
+  entries: ManifestEntry[];
+};
 
 function toRunResponse(row: Doc<"runs">) {
   return {
     run_id: String(row._id),
+    created_at: row._creationTime,
     env_id: String(row.environmentId),
     input: row.input,
     output: row.output,
@@ -100,6 +134,172 @@ function toProvisioningPayload(row: Doc<"runs">) {
     code_manifest_key: manifestKey(row.userId, row.environmentId, row.dataId, "code", row.codeManifestHash),
     data_manifest_key: manifestKey(row.userId, row.environmentId, row.dataId, "data", row.dataManifestHash),
     contract_version: "sync-incremental-0.1.0",
+  };
+}
+
+function normalizeSha256(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const hash = value.trim().toLowerCase();
+  if (!SHA256_HEX_RE.test(hash)) return null;
+  return hash;
+}
+
+function parseManifestEntry(value: unknown): ManifestEntry | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+  const row = value as Record<string, unknown>;
+  const path = typeof row.path === "string" ? row.path.trim() : "";
+  const sha256 = normalizeSha256(row.sha256);
+  const size = typeof row.size === "number" ? row.size : NaN;
+  const mode = typeof row.mode === "number" ? row.mode : NaN;
+  if (!path || path.startsWith("/") || path.includes("\\") || path.includes("\0")) {
+    return null;
+  }
+  if (path === "." || path === ".." || path.includes("/../") || path.startsWith("../")) {
+    return null;
+  }
+  if (!sha256 || !Number.isFinite(size) || size < 0 || !Number.isInteger(size)) {
+    return null;
+  }
+  if (!Number.isFinite(mode) || mode < 0 || mode > 0o777 || !Number.isInteger(mode)) {
+    return null;
+  }
+  return { path, sha256, size, mode };
+}
+
+function parseManifest(value: unknown, kind: SyncKind): SyncManifestPayload | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+  const row = value as Record<string, unknown>;
+  const version = row.version;
+  const type = row.type;
+  const createdAt = row.created_at;
+  const entries = row.entries;
+  if (version !== 1 || type !== kind || typeof createdAt !== "number" || !Number.isFinite(createdAt)) {
+    return null;
+  }
+  if (!Array.isArray(entries)) {
+    return null;
+  }
+  const parsedEntries: ManifestEntry[] = [];
+  let previousPath = "";
+  for (const entry of entries) {
+    const parsed = parseManifestEntry(entry);
+    if (!parsed) {
+      return null;
+    }
+    if (previousPath !== "" && parsed.path < previousPath) {
+      return null;
+    }
+    previousPath = parsed.path;
+    parsedEntries.push(parsed);
+  }
+  return {
+    version: 1,
+    type: kind,
+    created_at: createdAt,
+    entries: parsedEntries,
+  };
+}
+
+async function sha256Hex(value: string | ArrayBuffer): Promise<string> {
+  const bytes =
+    typeof value === "string" ? new TextEncoder().encode(value) : new Uint8Array(value);
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest))
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+async function fetchObjectBytes(ctx: ActionCtx, key: string): Promise<ArrayBuffer> {
+  const downloadUrl = await ctx.runQuery(internal.cli.internalGetObjectDownloadUrl, { key });
+  if (!downloadUrl) {
+    throw new Error(`object not found: ${key}`);
+  }
+  const response = await fetch(downloadUrl);
+  if (!response.ok) {
+    throw new Error(`failed to fetch object ${key}: http ${response.status}`);
+  }
+  return await response.arrayBuffer();
+}
+
+async function fetchManifest(
+  ctx: ActionCtx,
+  kind: SyncKind,
+  key: string,
+  expectedHash: string,
+) {
+  const rawBytes = await fetchObjectBytes(ctx, key);
+  const rawText = new TextDecoder().decode(rawBytes);
+  const actualHash = await sha256Hex(rawText);
+  if (actualHash !== expectedHash) {
+    throw new Error(`${kind} manifest hash mismatch`);
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(rawText);
+  } catch {
+    throw new Error(`${kind} manifest is not valid JSON`);
+  }
+  const manifest = parseManifest(parsed, kind);
+  if (!manifest) {
+    throw new Error(`${kind} manifest payload is invalid`);
+  }
+  return manifest;
+}
+
+function blobKey(
+  payload: {
+    user_id: string;
+    environment_id: string;
+    data_manifest_key: string | null;
+  },
+  kind: SyncKind,
+  sha256: string,
+) {
+  if (kind === "code") {
+    return `${payload.user_id}/environment/${payload.environment_id}/blobs/code/${sha256}`;
+  }
+  const dataKey = payload.data_manifest_key;
+  if (!dataKey) {
+    throw new Error("data manifest key is missing");
+  }
+  const marker = "/manifests/";
+  const markerIndex = dataKey.indexOf(marker);
+  if (markerIndex <= 0) {
+    throw new Error("invalid data manifest key");
+  }
+  return `${dataKey.slice(0, markerIndex)}/blobs/${sha256}`;
+}
+
+async function fetchAndVerifyManifestBlobs(
+  ctx: ActionCtx,
+  payload: {
+    user_id: string;
+    environment_id: string;
+    data_manifest_key: string | null;
+  },
+  kind: SyncKind,
+  manifest: SyncManifestPayload,
+) {
+  let totalBytes = 0;
+  for (const entry of manifest.entries) {
+    const key = blobKey(payload, kind, entry.sha256);
+    const bytes = await fetchObjectBytes(ctx, key);
+    if (bytes.byteLength !== entry.size) {
+      throw new Error(`${kind} blob size mismatch for ${entry.path}`);
+    }
+    const actualHash = await sha256Hex(bytes);
+    if (actualHash !== entry.sha256) {
+      throw new Error(`${kind} blob hash mismatch for ${entry.path}`);
+    }
+    totalBytes += bytes.byteLength;
+  }
+  return {
+    fileCount: manifest.entries.length,
+    totalBytes,
   };
 }
 
@@ -357,11 +557,72 @@ export const provisionRun = internalAction({
     const provisioningPayload = await ctx.runQuery(internal.runs.internalGetProvisioningPayload, {
       runId: args.runId,
     });
-    await ctx.runMutation(internal.runs.markRunning, {
+    await ctx.runMutation(internal.runs.markProvisioning, {
       runId: args.runId,
       provisioningPayload,
     });
-    await ctx.scheduler.runAfter(30_000, internal.runs.completeRun, { runId: args.runId });
+    try {
+      const codeManifestHash = provisioningPayload.code_manifest_hash;
+      const dataManifestHash = provisioningPayload.data_manifest_hash;
+      const codeManifestKey = provisioningPayload.code_manifest_key;
+      const dataManifestKey = provisioningPayload.data_manifest_key;
+      if (!codeManifestHash || !dataManifestHash || !codeManifestKey || !dataManifestKey) {
+        throw new Error("missing pinned manifest hash/key in provisioning payload");
+      }
+
+      const codeManifest = await fetchManifest(ctx, "code", codeManifestKey, codeManifestHash);
+      const dataManifest = await fetchManifest(ctx, "data", dataManifestKey, dataManifestHash);
+      const codeStats = await fetchAndVerifyManifestBlobs(ctx, provisioningPayload, "code", codeManifest);
+      const dataStats = await fetchAndVerifyManifestBlobs(ctx, provisioningPayload, "data", dataManifest);
+
+      await ctx.runMutation(internal.runs.markRunning, {
+        runId: args.runId,
+        provisioningPayload: {
+          ...provisioningPayload,
+          bootstrap_summary: {
+            code_files: codeStats.fileCount,
+            code_bytes: codeStats.totalBytes,
+            data_files: dataStats.fileCount,
+            data_bytes: dataStats.totalBytes,
+          },
+        },
+      });
+      await ctx.scheduler.runAfter(30_000, internal.runs.completeRun, { runId: args.runId });
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : "pod bootstrap failed";
+      await ctx.runMutation(internal.runs.markFailed, {
+        runId: args.runId,
+        error: `pod bootstrap failed: ${detail}`,
+        provisioningPayload,
+      });
+    }
+    return null;
+  },
+});
+
+export const markProvisioning = internalMutation({
+  args: { runId: v.id("runs"), provisioningPayload: v.optional(provisioningPayloadValidator) },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const row = await ctx.db.get("runs", args.runId);
+    if (!row || row.cancellationRequested || TERMINAL_STATUSES.has(row.status)) {
+      if (row?.cancellationRequested) {
+        await ctx.db.patch("runs", args.runId, { status: "cancelled" });
+      }
+      return null;
+    }
+    await ctx.db.patch("runs", args.runId, { status: "provisioning" });
+    await ctx.db.insert("runEvents", {
+      runId: args.runId,
+      status: "provisioning",
+      message: "pod bootstrap started",
+      metadata: args.provisioningPayload
+        ? {
+            provisioning_payload: args.provisioningPayload,
+            fetch_strategy: "download pinned code/data manifests from R2 and verify referenced blobs",
+          }
+        : undefined,
+    });
     return null;
   },
 });
@@ -384,11 +645,42 @@ export const markRunning = internalMutation({
     await ctx.db.insert("runEvents", {
       runId: args.runId,
       status: "running",
-      message: "pod running (simulated)",
+      message: "pod running",
       metadata: args.provisioningPayload
         ? {
             provisioning_payload: args.provisioningPayload,
-            fetch_strategy: "pod fetches code/data manifests from R2 by pinned manifest hash",
+            fetch_strategy: "pod fetched code/data manifests from R2 by pinned manifest hash",
+          }
+        : undefined,
+    });
+    return null;
+  },
+});
+
+export const markFailed = internalMutation({
+  args: {
+    runId: v.id("runs"),
+    error: v.string(),
+    provisioningPayload: v.optional(provisioningPayloadValidator),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const row = await ctx.db.get("runs", args.runId);
+    if (!row || TERMINAL_STATUSES.has(row.status)) {
+      return null;
+    }
+    const errorText = args.error.trim() || "pod bootstrap failed";
+    await ctx.db.patch("runs", args.runId, {
+      status: "failed",
+      error: errorText,
+    });
+    await ctx.db.insert("runEvents", {
+      runId: args.runId,
+      status: "failed",
+      message: errorText,
+      metadata: args.provisioningPayload
+        ? {
+            provisioning_payload: args.provisioningPayload,
           }
         : undefined,
     });

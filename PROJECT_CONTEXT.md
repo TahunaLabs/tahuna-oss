@@ -229,7 +229,7 @@ Progress (2026-03-09):
 - `[x]` Backend commit validates manifest hash format and manifest payload schema (`version/type/created_at/entries`, sorted paths, sha/mode/size checks).
 - `[x]` Run creation pins environment manifest hashes and now fails clearly when environment was not synced.
 - `[x]` Automated CLI regression tests added for the critical sync flows exercised manually.
-- `[~]` Pod runtime remains simulated; provisioning payload contract is pinned and explicit, but real pod fetch/extract implementation is still pending.
+- `[x]` Pod bootstrap now performs real R2 manifest/blob fetch + integrity verification before transitioning runs to `running`; bootstrap failures mark runs `failed` with actionable error details.
 - `[ ]` Cross-account environment sharing is not implemented yet; current design direction is snapshot export/import based on pinned code/data manifest hashes.
 
 Pod startup contract detail (Incremental Sync (0.1.0)):
