@@ -224,7 +224,7 @@ func TestSyncIncremental_CodeCommitRetryUploadsManifestAndMetadata(t *testing.T)
 	installSyncStubs(t, mock)
 	setupTestProject(t, false)
 
-	if err := syncIncremental("env-test", syncScope{code: true}); err != nil {
+	if err := syncIncremental("env-test", syncScope{code: true}, syncOptions{}); err != nil {
 		t.Fatalf("syncIncremental failed: %v", err)
 	}
 
@@ -261,7 +261,7 @@ func TestSyncIncremental_CodeNoChangeSkipsBlobAndManifestUploads(t *testing.T) {
 	installSyncStubs(t, mock)
 	setupTestProject(t, false)
 
-	if err := syncIncremental("env-test", syncScope{code: true}); err != nil {
+	if err := syncIncremental("env-test", syncScope{code: true}, syncOptions{}); err != nil {
 		t.Fatalf("first syncIncremental failed: %v", err)
 	}
 
@@ -271,7 +271,7 @@ func TestSyncIncremental_CodeNoChangeSkipsBlobAndManifestUploads(t *testing.T) {
 	commitCountBefore := mock.commitCount
 	mock.mu.Unlock()
 
-	if err := syncIncremental("env-test", syncScope{code: true}); err != nil {
+	if err := syncIncremental("env-test", syncScope{code: true}, syncOptions{}); err != nil {
 		t.Fatalf("second syncIncremental failed: %v", err)
 	}
 
@@ -294,7 +294,7 @@ func TestSyncIncremental_DataScopeOnlyCommitsDataManifest(t *testing.T) {
 	installSyncStubs(t, mock)
 	setupTestProject(t, true)
 
-	if err := syncIncremental("env-test", syncScope{data: true}); err != nil {
+	if err := syncIncremental("env-test", syncScope{data: true}, syncOptions{}); err != nil {
 		t.Fatalf("syncIncremental(data only) failed: %v", err)
 	}
 

@@ -562,6 +562,10 @@ type preparedManifest struct {
 	filesByID map[string]string
 }
 
+type syncOptions struct {
+	logProgress bool
+}
+
 var (
 	syncDoJSON                      = doJSON
 	syncUploadFileToSignedURLRetry  = uploadFileToSignedURLWithRetry
@@ -586,8 +590,7 @@ func handleSync(args []string) {
 
 	environmentID, err := resolveEnvironmentID()
 	must(err)
-	must(syncIncremental(environmentID, scope))
-	fmt.Println("sync complete")
+	must(runSyncWithStatus(environmentID, scope))
 }
 
 func environmentCreate(args []string) {
@@ -690,7 +693,7 @@ func runCreate(args []string) {
 
 	resp, err := doJSON(http.MethodPost, "/environments/"+environmentID+"/runs", payload)
 	must(err)
-	fmt.Println("run created")
+	printSuccessLine("run created")
 	printJSON(resp)
 	if *watch || *monitor {
 		must(monitorRun(asString(resp["run_id"]), 5))
@@ -724,7 +727,7 @@ func train(args []string) {
 	resp, err := doJSON(http.MethodPost, "/environments/"+resolvedEnvironmentID+"/runs", payload)
 	must(err)
 
-	fmt.Println("run created")
+	printSuccessLine("run created")
 	printTrainRunSummary(resp)
 	if *detached {
 		return
@@ -733,14 +736,54 @@ func train(args []string) {
 }
 
 func preRunSync(environmentID string) error {
-	return syncIncremental(environmentID, syncScope{code: true, data: true})
+	return runSyncWithStatus(environmentID, syncScope{code: true, data: true})
 }
 
-func syncIncremental(environmentID string, scope syncScope) error {
+func runSyncWithStatus(environmentID string, scope syncScope) error {
+	start := time.Now()
+	if !supportsDynamicStatus() {
+		if err := syncIncremental(environmentID, scope, syncOptions{logProgress: false}); err != nil {
+			return err
+		}
+		printSuccessLine(fmt.Sprintf("sync complete (%s)", formatDuration(time.Since(start))))
+		return nil
+	}
+
+	status := syncStatusText(scope)
+	frames := []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
+	printStatusLine(frames[0], status)
+
+	done := make(chan error, 1)
+	go func() {
+		done <- syncIncremental(environmentID, scope, syncOptions{logProgress: false})
+	}()
+
+	ticker := time.NewTicker(90 * time.Millisecond)
+	defer ticker.Stop()
+	frameIndex := 1
+	for {
+		select {
+		case err := <-done:
+			if err != nil {
+				clearStatusLine()
+				return err
+			}
+			fmt.Printf("\r\033[2K%s✓%s %s\n", cAmpGreen, cReset, fmt.Sprintf("sync complete (%s)", formatDuration(time.Since(start))))
+			return nil
+		case <-ticker.C:
+			printStatusLine(frames[frameIndex%len(frames)], status)
+			frameIndex++
+		}
+	}
+}
+
+func syncIncremental(environmentID string, scope syncScope, options syncOptions) error {
 	prepared := []preparedManifest{}
 
 	if scope.code {
-		fmt.Println("syncing code...")
+		if options.logProgress {
+			fmt.Println("syncing code...")
+		}
 		codeManifest, err := prepareCodeManifest()
 		if err != nil {
 			return fmt.Errorf("code sync failed: %w", err)
@@ -749,7 +792,9 @@ func syncIncremental(environmentID string, scope syncScope) error {
 	}
 
 	if scope.data {
-		fmt.Println("syncing data...")
+		if options.logProgress {
+			fmt.Println("syncing data...")
+		}
 		dataManifest, err := prepareDataManifest()
 		if err != nil {
 			return fmt.Errorf("data sync failed: %w", err)
@@ -791,6 +836,43 @@ func syncIncremental(environmentID string, scope syncScope) error {
 		}
 	}
 	return nil
+}
+
+func formatDuration(d time.Duration) string {
+	if d < time.Second {
+		return fmt.Sprintf("%dms", d.Milliseconds())
+	}
+	return fmt.Sprintf("%.2fs", d.Seconds())
+}
+
+func syncStatusText(scope syncScope) string {
+	switch {
+	case scope.code && scope.data:
+		return "syncing code and data..."
+	case scope.code:
+		return "syncing code..."
+	default:
+		return "syncing data..."
+	}
+}
+
+func supportsDynamicStatus() bool {
+	if strings.EqualFold(strings.TrimSpace(os.Getenv("TERM")), "dumb") {
+		return false
+	}
+	info, err := os.Stdout.Stat()
+	if err != nil {
+		return false
+	}
+	return (info.Mode() & os.ModeCharDevice) != 0
+}
+
+func printStatusLine(prefix, message string) {
+	fmt.Printf("\r\033[2K%s%s%s %s", cAmpGreen, prefix, cReset, message)
+}
+
+func clearStatusLine() {
+	fmt.Print("\r\033[2K")
 }
 
 func isMissingManifestCommitError(err error) bool {
@@ -1527,9 +1609,13 @@ func printTrainRunSummary(resp map[string]any) {
 		status = "queued"
 	}
 
-	fmt.Printf("Run created: %s\n", runID)
+	fmt.Printf("%s✓%s Run created: %s\n", cAmpGreen, cReset, runID)
 	fmt.Printf("Environment: %s\n", envID)
 	fmt.Printf("Status: %s\n", status)
+}
+
+func printSuccessLine(message string) {
+	fmt.Printf("%s✓%s %s\n", cAmpGreen, cReset, message)
 }
 
 func monitorRun(runID string, interval int) error {
