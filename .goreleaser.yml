@@ -38,6 +38,8 @@ release:
     owner: Pazuzzu
     name: tahuna-cli
   target_commitish: main
+  replace_existing_artifacts: true
+  mode: replace
   draft: false
   prerelease: auto
 
