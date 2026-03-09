@@ -1,0 +1,307 @@
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/url"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync"
+	"testing"
+)
+
+type syncBackendMock struct {
+	mu sync.Mutex
+
+	metadata map[string]bool
+	uploaded map[string]bool
+
+	blobUploadCount     int
+	manifestUploadCount int
+	commitCount         int
+
+	blobKinds    []string
+	missingKinds []string
+	commitBodies []map[string]any
+}
+
+func newSyncBackendMock() *syncBackendMock {
+	return &syncBackendMock{
+		metadata: map[string]bool{},
+		uploaded: map[string]bool{},
+	}
+}
+
+func (m *syncBackendMock) doJSON(method, path string, payload map[string]any) (map[string]any, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	switch {
+	case method == http.MethodPost && path == "/sync/blobs/missing":
+		kind := asString(payload["kind"])
+		hashesAny, _ := payload["hashes"].([]string)
+		if len(hashesAny) == 0 {
+			if raw, ok := payload["hashes"].([]any); ok {
+				hashesAny = make([]string, 0, len(raw))
+				for _, r := range raw {
+					hashesAny = append(hashesAny, asString(r))
+				}
+			}
+		}
+		m.missingKinds = append(m.missingKinds, kind)
+		missing := make([]string, 0, len(hashesAny))
+		for _, hash := range hashesAny {
+			key := fmt.Sprintf("user/blobs/%s/%s", kind, hash)
+			if !m.metadata[key] {
+				missing = append(missing, hash)
+			}
+		}
+		missingAny := make([]any, 0, len(missing))
+		for _, hash := range missing {
+			missingAny = append(missingAny, hash)
+		}
+		return map[string]any{"missing": missingAny}, nil
+
+	case method == http.MethodPost && path == "/sync/blobs/upload-url":
+		kind := asString(payload["kind"])
+		sha := asString(payload["sha256"])
+		key := fmt.Sprintf("user/blobs/%s/%s", kind, sha)
+		m.blobUploadCount++
+		m.blobKinds = append(m.blobKinds, kind)
+		return map[string]any{"key": key, "url": "mock://upload?key=" + url.QueryEscape(key)}, nil
+
+	case method == http.MethodPost && path == "/sync/manifests/upload-url":
+		kind := asString(payload["kind"])
+		hash := asString(payload["manifest_hash"])
+		key := fmt.Sprintf("user/manifests/%s/%s.json", kind, hash)
+		m.manifestUploadCount++
+		return map[string]any{"key": key, "url": "mock://upload?key=" + url.QueryEscape(key)}, nil
+
+	case method == http.MethodPost && path == "/sync/metadata":
+		key := asString(payload["key"])
+		m.metadata[key] = true
+		return map[string]any{"synced": true, "key": key}, nil
+
+	case method == http.MethodPost && path == "/sync/commit":
+		m.commitCount++
+		clone := map[string]any{}
+		for k, v := range payload {
+			clone[k] = v
+		}
+		m.commitBodies = append(m.commitBodies, clone)
+
+		codeHash := asString(payload["code_manifest_hash"])
+		dataHash := asString(payload["data_manifest_hash"])
+		if codeHash != "" {
+			if !m.metadata[fmt.Sprintf("user/manifests/code/%s.json", codeHash)] {
+				return nil, fmt.Errorf("api error (400): code manifest not found in object storage")
+			}
+		}
+		if dataHash != "" {
+			if !m.metadata[fmt.Sprintf("user/manifests/data/%s.json", dataHash)] {
+				return nil, fmt.Errorf("api error (400): data manifest not found in object storage")
+			}
+		}
+
+		return map[string]any{
+			"ok":                 true,
+			"environment_id":     asString(payload["environment_id"]),
+			"code_manifest_hash": codeHash,
+			"data_manifest_hash": dataHash,
+		}, nil
+	}
+
+	return nil, fmt.Errorf("unexpected call: %s %s", method, path)
+}
+
+func (m *syncBackendMock) uploadFile(path, rawURL string, attempts int) error {
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return err
+	}
+	if parsed.Scheme != "mock" {
+		return fmt.Errorf("unexpected upload url: %s", rawURL)
+	}
+	key := parsed.Query().Get("key")
+	if key == "" {
+		return fmt.Errorf("missing key in upload url: %s", rawURL)
+	}
+	m.mu.Lock()
+	m.uploaded[key] = true
+	m.mu.Unlock()
+	return nil
+}
+
+func (m *syncBackendMock) uploadBytes(raw []byte, rawURL, contentType string, attempts int) error {
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return err
+	}
+	if parsed.Scheme != "mock" {
+		return fmt.Errorf("unexpected upload url: %s", rawURL)
+	}
+	key := parsed.Query().Get("key")
+	if key == "" {
+		return fmt.Errorf("missing key in upload url: %s", rawURL)
+	}
+	m.mu.Lock()
+	m.uploaded[key] = true
+	m.mu.Unlock()
+	return nil
+}
+
+func setupTestProject(t *testing.T, withData bool) string {
+	t.Helper()
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "train.py"), []byte("print('hello')\n"), 0o644); err != nil {
+		t.Fatalf("failed to write train.py: %v", err)
+	}
+	if withData {
+		if err := os.MkdirAll(filepath.Join(dir, "data"), 0o755); err != nil {
+			t.Fatalf("failed to create data dir: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "data", "sample.txt"), []byte("sample\n"), 0o644); err != nil {
+			t.Fatalf("failed to write data file: %v", err)
+		}
+	}
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get cwd: %v", err)
+	}
+	if err := os.Chdir(dir); err != nil {
+		t.Fatalf("failed to chdir: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = os.Chdir(cwd)
+	})
+	return dir
+}
+
+func installSyncStubs(t *testing.T, mock *syncBackendMock) {
+	t.Helper()
+	prevDoJSON := syncDoJSON
+	prevUploadFile := syncUploadFileToSignedURLRetry
+	prevUploadBytes := syncUploadBytesToSignedURLRetry
+	syncDoJSON = mock.doJSON
+	syncUploadFileToSignedURLRetry = mock.uploadFile
+	syncUploadBytesToSignedURLRetry = mock.uploadBytes
+	t.Cleanup(func() {
+		syncDoJSON = prevDoJSON
+		syncUploadFileToSignedURLRetry = prevUploadFile
+		syncUploadBytesToSignedURLRetry = prevUploadBytes
+	})
+}
+
+func TestSyncIncremental_CodeCommitRetryUploadsManifestAndMetadata(t *testing.T) {
+	mock := newSyncBackendMock()
+	installSyncStubs(t, mock)
+	setupTestProject(t, false)
+
+	if err := syncIncremental("env-test", syncScope{code: true}); err != nil {
+		t.Fatalf("syncIncremental failed: %v", err)
+	}
+
+	mock.mu.Lock()
+	defer mock.mu.Unlock()
+
+	if mock.commitCount != 2 {
+		t.Fatalf("expected 2 commit calls (retry flow), got %d", mock.commitCount)
+	}
+	if mock.manifestUploadCount != 1 {
+		t.Fatalf("expected 1 manifest upload, got %d", mock.manifestUploadCount)
+	}
+	if mock.blobUploadCount == 0 {
+		t.Fatalf("expected at least one blob upload")
+	}
+	if _, err := os.Stat(filepath.Join(projectStateDir, "sync_code_manifest.json")); err != nil {
+		t.Fatalf("expected sync_code_manifest.json to exist: %v", err)
+	}
+
+	hasManifestMetadata := false
+	for key := range mock.metadata {
+		if strings.HasPrefix(key, "user/manifests/code/") {
+			hasManifestMetadata = true
+			break
+		}
+	}
+	if !hasManifestMetadata {
+		t.Fatalf("expected code manifest metadata sync")
+	}
+}
+
+func TestSyncIncremental_CodeNoChangeSkipsBlobAndManifestUploads(t *testing.T) {
+	mock := newSyncBackendMock()
+	installSyncStubs(t, mock)
+	setupTestProject(t, false)
+
+	if err := syncIncremental("env-test", syncScope{code: true}); err != nil {
+		t.Fatalf("first syncIncremental failed: %v", err)
+	}
+
+	mock.mu.Lock()
+	blobUploadsBefore := mock.blobUploadCount
+	manifestUploadsBefore := mock.manifestUploadCount
+	commitCountBefore := mock.commitCount
+	mock.mu.Unlock()
+
+	if err := syncIncremental("env-test", syncScope{code: true}); err != nil {
+		t.Fatalf("second syncIncremental failed: %v", err)
+	}
+
+	mock.mu.Lock()
+	defer mock.mu.Unlock()
+
+	if mock.blobUploadCount != blobUploadsBefore {
+		t.Fatalf("expected no new blob uploads on no-change sync, before=%d after=%d", blobUploadsBefore, mock.blobUploadCount)
+	}
+	if mock.manifestUploadCount != manifestUploadsBefore {
+		t.Fatalf("expected no new manifest uploads on no-change sync, before=%d after=%d", manifestUploadsBefore, mock.manifestUploadCount)
+	}
+	if mock.commitCount != commitCountBefore+1 {
+		t.Fatalf("expected one additional commit call, before=%d after=%d", commitCountBefore, mock.commitCount)
+	}
+}
+
+func TestSyncIncremental_DataScopeOnlyCommitsDataManifest(t *testing.T) {
+	mock := newSyncBackendMock()
+	installSyncStubs(t, mock)
+	setupTestProject(t, true)
+
+	if err := syncIncremental("env-test", syncScope{data: true}); err != nil {
+		t.Fatalf("syncIncremental(data only) failed: %v", err)
+	}
+
+	mock.mu.Lock()
+	defer mock.mu.Unlock()
+
+	if len(mock.commitBodies) == 0 {
+		t.Fatalf("expected at least one commit payload")
+	}
+	lastCommit := mock.commitBodies[len(mock.commitBodies)-1]
+	if _, ok := lastCommit["code_manifest_hash"]; ok {
+		t.Fatalf("did not expect code_manifest_hash in data-only commit payload")
+	}
+	if asString(lastCommit["data_manifest_hash"]) == "" {
+		t.Fatalf("expected data_manifest_hash in data-only commit payload")
+	}
+
+	if len(mock.blobKinds) == 0 {
+		t.Fatalf("expected at least one blob upload")
+	}
+	for _, kind := range mock.blobKinds {
+		if kind != "data" {
+			t.Fatalf("expected only data blob uploads, found kind=%s", kind)
+		}
+	}
+
+	manifestAny := lastCommit["data_manifest"]
+	manifestRaw, err := json.Marshal(manifestAny)
+	if err != nil {
+		t.Fatalf("failed to marshal manifest from commit payload: %v", err)
+	}
+	if len(manifestRaw) == 0 {
+		t.Fatalf("expected non-empty data_manifest payload")
+	}
+}

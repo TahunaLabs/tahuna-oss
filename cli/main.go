@@ -557,6 +557,12 @@ type preparedManifest struct {
 	filesByID map[string]string
 }
 
+var (
+	syncDoJSON                      = doJSON
+	syncUploadFileToSignedURLRetry  = uploadFileToSignedURLWithRetry
+	syncUploadBytesToSignedURLRetry = uploadBytesToSignedURLWithRetry
+)
+
 func handleSync(args []string) {
 	if len(args) > 1 {
 		must(errors.New("usage: tahuna sync [code|data]"))
@@ -760,7 +766,7 @@ func syncIncremental(environmentID string, scope syncScope) error {
 		commitPayload[item.kind+"_manifest"] = item.manifest
 	}
 
-	if _, err := doJSON(http.MethodPost, "/sync/commit", commitPayload); err != nil {
+	if _, err := syncDoJSON(http.MethodPost, "/sync/commit", commitPayload); err != nil {
 		if !isMissingManifestCommitError(err) {
 			return err
 		}
@@ -769,7 +775,7 @@ func syncIncremental(environmentID string, scope syncScope) error {
 				return fmt.Errorf("%s sync failed: %w", item.kind, errUpload)
 			}
 		}
-		if _, retryErr := doJSON(http.MethodPost, "/sync/commit", commitPayload); retryErr != nil {
+		if _, retryErr := syncDoJSON(http.MethodPost, "/sync/commit", commitPayload); retryErr != nil {
 			return retryErr
 		}
 	}
@@ -1019,7 +1025,7 @@ func syncMissingBlobs(item preparedManifest) error {
 		return nil
 	}
 
-	resp, err := doJSON(http.MethodPost, "/sync/blobs/missing", map[string]any{
+	resp, err := syncDoJSON(http.MethodPost, "/sync/blobs/missing", map[string]any{
 		"kind":   item.kind,
 		"hashes": hashes,
 	})
@@ -1041,7 +1047,7 @@ func syncMissingBlobs(item preparedManifest) error {
 		if !exists {
 			return fmt.Errorf("missing local blob for hash %s", hash)
 		}
-		uploadResp, uploadErr := doJSON(http.MethodPost, "/sync/blobs/upload-url", map[string]any{
+		uploadResp, uploadErr := syncDoJSON(http.MethodPost, "/sync/blobs/upload-url", map[string]any{
 			"kind":   item.kind,
 			"sha256": hash,
 		})
@@ -1056,10 +1062,10 @@ func syncMissingBlobs(item preparedManifest) error {
 		if key == "" {
 			return errors.New("invalid blob upload URL response")
 		}
-		if err := uploadFileToSignedURLWithRetry(path, uploadURL, 3); err != nil {
+		if err := syncUploadFileToSignedURLRetry(path, uploadURL, 3); err != nil {
 			return err
 		}
-		if _, err := doJSON(http.MethodPost, "/sync/metadata", map[string]any{"key": key}); err != nil {
+		if _, err := syncDoJSON(http.MethodPost, "/sync/metadata", map[string]any{"key": key}); err != nil {
 			return err
 		}
 	}
@@ -1067,7 +1073,7 @@ func syncMissingBlobs(item preparedManifest) error {
 }
 
 func uploadManifest(item preparedManifest) error {
-	uploadResp, err := doJSON(http.MethodPost, "/sync/manifests/upload-url", map[string]any{
+	uploadResp, err := syncDoJSON(http.MethodPost, "/sync/manifests/upload-url", map[string]any{
 		"kind":          item.kind,
 		"manifest_hash": item.hash,
 	})
@@ -1082,10 +1088,10 @@ func uploadManifest(item preparedManifest) error {
 	if key == "" {
 		return errors.New("invalid manifest upload URL response")
 	}
-	if err := uploadBytesToSignedURLWithRetry(item.raw, uploadURL, "application/json", 3); err != nil {
+	if err := syncUploadBytesToSignedURLRetry(item.raw, uploadURL, "application/json", 3); err != nil {
 		return err
 	}
-	if _, err := doJSON(http.MethodPost, "/sync/metadata", map[string]any{"key": key}); err != nil {
+	if _, err := syncDoJSON(http.MethodPost, "/sync/metadata", map[string]any{"key": key}); err != nil {
 		return err
 	}
 	return nil

@@ -78,6 +78,7 @@ Run:
 - `[~]` data upload exists in dashboard (`web/app/dashboard/page.tsx`, `web/convex/data.ts`)
 - `[x]` codebase sync from CLI to R2 implemented as incremental manifest/blob sync + automatic pre-run sync (`train`, `run create`)
 - `[x]` manual sync command implemented (`tahuna sync`, `tahuna sync code`, `tahuna sync data`)
+- `[x]` CLI incremental sync regression tests added (commit retry + metadata sync, no-change sync, data-only scope)
 - `[ ]` env var sync (Convex-style) not implemented in CLI
 - `[x]` `train` / `train -d` command model implemented with optional runtime overrides (`--gpu-type`, `--gpu-count`, `--volume-gb`)
 - `[x]` run listing/show/watch/logs/delete exist
@@ -131,6 +132,12 @@ Current operational note:
   - train commands: `train`, `train -d` with optional overrides
   - run commands: `create/list/show/watch/logs/delete` (`run create` uses linked `.tahuna/environment_id`, no `--environment-id`)
   - HTTP client (`doJSON`) with standalone config resolution (`~/.config/tahuna/config.env` + env vars)
+
+- [`cli/main_sync_test.go`](/Users/pazuzzu/Desktop/gigi/boob-ai/cli/main_sync_test.go)
+  - regression coverage for incremental sync pipeline:
+  - commit retry path requiring manifest upload + metadata sync
+  - no-change sync avoids redundant blob/manifest uploads
+  - `sync data` scope commits only data manifest payload/hash
 
 ### Web App (`/web`)
 
@@ -202,6 +209,10 @@ The following sync architecture choices are now agreed and should be treated as 
    - Pods pull by version/manifest pointer at run startup.
    - Direct client-to-pod upload is not the primary path.
 
+4. Multi-user model (clarified 2026-03-09):
+   - Environments are account-scoped and remain separate across users.
+   - Collaboration/sharing should happen via explicit immutable snapshot transfer (manifest hashes), not by implicitly sharing mutable environment records.
+
 ## 8) Next Milestone (Incremental Sync (0.1.0))
 
 Milestone objective: deliver incremental, reproducible sync with R2-backed manifests and blob deduplication.
@@ -217,7 +228,9 @@ Progress (2026-03-09):
 - `[x]` Backend sync endpoints for missing blobs/upload URL/manifest upload URL/commit.
 - `[x]` Backend commit validates manifest hash format and manifest payload schema (`version/type/created_at/entries`, sorted paths, sha/mode/size checks).
 - `[x]` Run creation pins environment manifest hashes and now fails clearly when environment was not synced.
+- `[x]` Automated CLI regression tests added for the critical sync flows exercised manually.
 - `[~]` Pod runtime remains simulated; provisioning payload contract is pinned and explicit, but real pod fetch/extract implementation is still pending.
+- `[ ]` Cross-account environment sharing is not implemented yet; current design direction is snapshot export/import based on pinned code/data manifest hashes.
 
 Pod startup contract detail (Incremental Sync (0.1.0)):
 - Run creation pins `codeManifestHash` / `dataManifestHash` from environment latest pointers when available.
