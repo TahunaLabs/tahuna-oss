@@ -83,11 +83,12 @@ go run .
 
 Tagging a release (`vX.Y.Z`) triggers `.github/workflows/release-cli.yml` with GoReleaser (`.goreleaser.yml`) to:
 - build `tahuna` tarballs for `darwin/arm64`, `darwin/amd64`, and `linux/amd64`
-- publish artifacts + `checksums.txt` to GitHub Releases
+- publish artifacts + `checksums.txt` to `Pazuzzu/tahuna-cli` GitHub Releases
 - update the Homebrew tap formula in `Pazuzzu/homebrew-tahuna`
 
 Required repository secret:
 - `HOMEBREW_TAP_GITHUB_TOKEN`: GitHub token with push access to `Pazuzzu/homebrew-tahuna`
+- `RELEASES_GITHUB_TOKEN`: GitHub token with push access to `Pazuzzu/tahuna-cli`
 
 Default API URL is `http://localhost:3000`.
 

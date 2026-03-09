@@ -32,6 +32,9 @@ checksum:
   name_template: "checksums.txt"
 
 release:
+  github:
+    owner: Pazuzzu
+    name: tahuna-cli
   draft: false
   prerelease: auto
 
@@ -46,6 +49,7 @@ brews:
     directory: Formula
     homepage: "https://github.com/Pazuzzu/tahuna"
     description: "Tahuna CLI for ML training orchestration"
+    url_template: "https://github.com/Pazuzzu/tahuna-cli/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
     commit_author:
       name: github-actions[bot]
       email: 41898282+github-actions[bot]@users.noreply.github.com
