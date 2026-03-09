@@ -1,22 +1,19 @@
 class Tahuna < Formula
   desc "Tahuna CLI for ML training orchestration"
   homepage "https://github.com/pazuzzu/tahuna"
-  version "0.1.0"
+  version "0.1.1"
 
   on_macos do
     if Hardware::CPU.arm?
-      url "https://github.com/pazuzzu/tahuna/releases/download/v#{version}/tahuna_darwin_arm64.tar.gz"
-      sha256 "REPLACE_WITH_DARWIN_ARM64_SHA256"
+      c98f8e73d7d6a19b0cd3b65059dea5912320bfa1436be4dbf3994570c78d279"
     else
-      url "https://github.com/pazuzzu/tahuna/releases/download/v#{version}/tahuna_darwin_amd64.tar.gz"
-      sha256 "REPLACE_WITH_DARWIN_AMD64_SHA256"
+      d380664cd83dabe1222d926b8328180483f75c00d45669a36d031dc6af8dd89"
     end
   end
 
   on_linux do
     if Hardware::CPU.intel?
-      url "https://github.com/pazuzzu/tahuna/releases/download/v#{version}/tahuna_linux_amd64.tar.gz"
-      sha256 "REPLACE_WITH_LINUX_AMD64_SHA256"
+      c9a722b1a69598ebcb2a716ebb3e95f99646e9804842cbd036da726983"
     end
   end
 
