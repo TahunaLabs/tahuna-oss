@@ -30,6 +30,8 @@ async function authenticateApiRequest(ctx: ActionCtx, request: Request): Promise
 
 const r2 = new R2(components.r2);
 const SHA256_HEX_RE = /^[a-f0-9]{64}$/i;
+const RUNTIME_STATUS_VALUES = ["provisioning", "running", "completed", "failed", "cancelled"] as const;
+const RUNTIME_STATUS_SET = new Set<string>(RUNTIME_STATUS_VALUES);
 type SyncKind = "code" | "data";
 type ManifestEntry = {
   path: string;
@@ -53,6 +55,7 @@ type CreateRunStrictArgs = {
   gpu_count?: number;
   volume_gb?: number;
 };
+type RuntimeStatus = (typeof RUNTIME_STATUS_VALUES)[number];
 
 function normalizeFilename(filename: unknown) {
   if (typeof filename !== "string") return "file";
@@ -1239,8 +1242,7 @@ async function handleRuntimePost(ctx: ActionCtx, request: Request, route: Runtim
         headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
       });
     }
-    const allowedStatuses = new Set(["provisioning", "running", "completed", "failed", "cancelled"]);
-    if (!allowedStatuses.has(status)) {
+    if (!RUNTIME_STATUS_SET.has(status)) {
       return new Response(JSON.stringify({ detail: "invalid status" }), {
         status: 400,
         headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
@@ -1248,7 +1250,7 @@ async function handleRuntimePost(ctx: ActionCtx, request: Request, route: Runtim
     }
     const result = await ctx.runMutation(internal.runs.ingestRuntimeStatus, {
       runId,
-      status: status as "provisioning" | "running" | "completed" | "failed" | "cancelled",
+      status: status as RuntimeStatus,
       message,
       error,
     });

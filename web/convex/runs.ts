@@ -15,8 +15,26 @@ import {
 import { requireUser } from "@convex/auth";
 import { images } from "./catalog";
 
-const ACTIVE_STATUSES = new Set(["queued", "provisioning", "running", "cancelling"]);
-const TERMINAL_STATUSES = new Set(["completed", "failed", "cancelled"]);
+const RUN_STATUS = {
+  QUEUED: "queued",
+  PROVISIONING: "provisioning",
+  RUNNING: "running",
+  CANCELLING: "cancelling",
+  COMPLETED: "completed",
+  FAILED: "failed",
+  CANCELLED: "cancelled",
+} as const;
+const ACTIVE_STATUSES: Set<string> = new Set([
+  RUN_STATUS.QUEUED,
+  RUN_STATUS.PROVISIONING,
+  RUN_STATUS.RUNNING,
+  RUN_STATUS.CANCELLING,
+]);
+const TERMINAL_STATUSES: Set<string> = new Set([
+  RUN_STATUS.COMPLETED,
+  RUN_STATUS.FAILED,
+  RUN_STATUS.CANCELLED,
+]);
 const runResponseValidator = v.object({
   run_id: v.string(),
   created_at: v.number(),
@@ -106,11 +124,11 @@ const runtimeMetricSampleValidator = v.object({
   timestamp: v.optional(v.number()),
 });
 const runtimeStatusValidator = v.union(
-  v.literal("provisioning"),
-  v.literal("running"),
-  v.literal("completed"),
-  v.literal("failed"),
-  v.literal("cancelled"),
+  v.literal(RUN_STATUS.PROVISIONING),
+  v.literal(RUN_STATUS.RUNNING),
+  v.literal(RUN_STATUS.COMPLETED),
+  v.literal(RUN_STATUS.FAILED),
+  v.literal(RUN_STATUS.CANCELLED),
 );
 const runtimeBootstrapEntryValidator = v.object({
   path: v.string(),
@@ -491,7 +509,6 @@ API_BASE = (os.environ.get("TAHUNA_API_BASE") or "").strip().rstrip("/")
 RUNTIME_TOKEN = (os.environ.get("TAHUNA_RUNTIME_TOKEN") or "").strip()
 WORKSPACE_ROOT = (os.environ.get("TAHUNA_WORKSPACE_ROOT") or "/workspace").strip() or "/workspace"
 DATA_ROOT = os.path.join(WORKSPACE_ROOT, "data")
-ENTRYPOINT = (os.environ.get("TAHUNA_ENTRYPOINT") or "train.py").strip() or "train.py"
 
 if not RUN_ID or not API_BASE or not RUNTIME_TOKEN:
     raise RuntimeError("missing runtime env vars: TAHUNA_RUN_ID / TAHUNA_API_BASE / TAHUNA_RUNTIME_TOKEN")
@@ -608,9 +625,7 @@ def materialize(kind, manifest, root_dir):
     return count, total
 
 def run_training():
-    entrypoint_path = ENTRYPOINT
-    if not os.path.isabs(entrypoint_path):
-        entrypoint_path = os.path.join(WORKSPACE_ROOT, entrypoint_path)
+    entrypoint_path = os.path.join(WORKSPACE_ROOT, "train.py")
     if not os.path.isfile(entrypoint_path):
         emit_logs(["no entrypoint found at " + entrypoint_path + " (bootstrap only)"], source="train")
         emit_status("completed", "workspace materialized (no entrypoint)")
@@ -924,7 +939,7 @@ async function createRunForUserId(
     input: `runs/${args.environmentId}/${now}/input`,
     output: `runs/${args.environmentId}/${now}/output`,
     logs: `runs/${args.environmentId}/${now}/logs`,
-    status: "provisioning",
+    status: RUN_STATUS.PROVISIONING,
     cancellationRequested: false,
     effectiveGpuType: args.gpu_type ?? env.gpuType,
     effectiveGpuCount: args.gpu_count ?? env.gpuCount,
@@ -935,7 +950,7 @@ async function createRunForUserId(
 
   await ctx.db.insert("runEvents", {
     runId,
-    status: "provisioning",
+    status: RUN_STATUS.PROVISIONING,
     message: "run submitted for provisioning",
     metadata: {
       gpu_type: args.gpu_type || env.gpuType,
@@ -961,12 +976,12 @@ async function removeRunForUserId(ctx: MutationCtx, userId: string, runId: Id<"r
 
   if (ACTIVE_STATUSES.has(row.status)) {
     await ctx.db.patch("runs", runId, {
-      status: "cancelling",
+      status: RUN_STATUS.CANCELLING,
       cancellationRequested: true,
     });
     await ctx.db.insert("runEvents", {
       runId,
-      status: "cancelling",
+      status: RUN_STATUS.CANCELLING,
       message: "cancellation requested",
     });
     return { cancel_requested: true, run_id: String(runId) };
@@ -1304,7 +1319,7 @@ export const markPodProvisioned = internalMutation({
     });
     await ctx.db.insert("runEvents", {
       runId: args.runId,
-      status: "provisioning",
+      status: RUN_STATUS.PROVISIONING,
       message: "gpu pod provisioned",
       metadata: {
         pod_id: args.podId,
@@ -1322,14 +1337,14 @@ export const markProvisioning = internalMutation({
     const row = await ctx.db.get("runs", args.runId);
     if (!row || row.cancellationRequested || TERMINAL_STATUSES.has(row.status)) {
       if (row?.cancellationRequested) {
-        await ctx.db.patch("runs", args.runId, { status: "cancelled" });
+        await ctx.db.patch("runs", args.runId, { status: RUN_STATUS.CANCELLED });
       }
       return null;
     }
-    await ctx.db.patch("runs", args.runId, { status: "provisioning" });
+    await ctx.db.patch("runs", args.runId, { status: RUN_STATUS.PROVISIONING });
     await ctx.db.insert("runEvents", {
       runId: args.runId,
-      status: "provisioning",
+      status: RUN_STATUS.PROVISIONING,
       message: "pod bootstrap started",
       metadata: args.provisioningPayload
         ? {
@@ -1349,17 +1364,17 @@ export const markRunning = internalMutation({
     const row = await ctx.db.get("runs", args.runId);
     if (!row || row.cancellationRequested || TERMINAL_STATUSES.has(row.status)) {
       if (row?.cancellationRequested) {
-        await ctx.db.patch("runs", args.runId, { status: "cancelled" });
+        await ctx.db.patch("runs", args.runId, { status: RUN_STATUS.CANCELLED });
       }
       return null;
     }
 
     await ctx.db.patch("runs", args.runId, {
-      status: "running",
+      status: RUN_STATUS.RUNNING,
     });
     await ctx.db.insert("runEvents", {
       runId: args.runId,
-      status: "running",
+      status: RUN_STATUS.RUNNING,
       message: "pod running",
       metadata: args.provisioningPayload
         ? {
@@ -1386,13 +1401,13 @@ export const markFailed = internalMutation({
     }
     const errorText = args.error.trim() || "pod bootstrap failed";
     await ctx.db.patch("runs", args.runId, {
-      status: "failed",
+      status: RUN_STATUS.FAILED,
       error: errorText,
       runtimeTokenHash: "revoked",
     });
     await ctx.db.insert("runEvents", {
       runId: args.runId,
-      status: "failed",
+      status: RUN_STATUS.FAILED,
       message: errorText,
       metadata: args.provisioningPayload
         ? {
@@ -1487,33 +1502,33 @@ export const ingestRuntimeStatus = internalMutation({
     }
 
     let status = args.status;
-    if (row.cancellationRequested && (status === "provisioning" || status === "running")) {
-      status = "cancelled";
+    if (row.cancellationRequested && (status === RUN_STATUS.PROVISIONING || status === RUN_STATUS.RUNNING)) {
+      status = RUN_STATUS.CANCELLED;
     }
-    if (row.status === "running" && status === "provisioning") {
-      status = "running";
+    if (row.status === RUN_STATUS.RUNNING && status === RUN_STATUS.PROVISIONING) {
+      status = RUN_STATUS.RUNNING;
     }
 
-    if (status === "failed") {
+    if (status === RUN_STATUS.FAILED) {
       const errorText = sanitizeRuntimeMessage(args.error || args.message || "runtime failed") || "runtime failed";
       await ctx.db.patch("runs", args.runId, {
-        status: "failed",
+        status: RUN_STATUS.FAILED,
         error: errorText,
         runtimeTokenHash: "revoked",
       });
       await ctx.db.insert("runEvents", {
         runId: args.runId,
-        status: "failed",
+        status: RUN_STATUS.FAILED,
         message: errorText,
         metadata: {
           source: "pod-runtime",
         },
       });
-      return { status: "failed" };
+      return { status: RUN_STATUS.FAILED };
     }
 
     const patch: { status: string; runtimeTokenHash?: string } = { status };
-    if (status === "completed" || status === "cancelled") {
+    if (status === RUN_STATUS.COMPLETED || status === RUN_STATUS.CANCELLED) {
       patch.runtimeTokenHash = "revoked";
     }
     await ctx.db.patch("runs", args.runId, patch);
@@ -1540,7 +1555,7 @@ export const completeRun = internalMutation({
       return null;
     }
 
-    const terminal = row.cancellationRequested ? "cancelled" : "completed";
+    const terminal = row.cancellationRequested ? RUN_STATUS.CANCELLED : RUN_STATUS.COMPLETED;
     await ctx.db.patch("runs", args.runId, {
       status: terminal,
       runtimeTokenHash: "revoked",
@@ -1548,7 +1563,7 @@ export const completeRun = internalMutation({
     await ctx.db.insert("runEvents", {
       runId: args.runId,
       status: terminal,
-      message: terminal === "completed" ? "run completed" : "run cancelled",
+      message: terminal === RUN_STATUS.COMPLETED ? "run completed" : "run cancelled",
     });
     return null;
   },
