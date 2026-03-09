@@ -40,6 +40,10 @@ func (m *syncBackendMock) doJSON(method, path string, payload map[string]any) (m
 
 	switch {
 	case method == http.MethodPost && path == "/sync/blobs/missing":
+		environmentID := asString(payload["environment_id"])
+		if environmentID == "" {
+			return nil, fmt.Errorf("missing environment_id")
+		}
 		kind := asString(payload["kind"])
 		hashesAny, _ := payload["hashes"].([]string)
 		if len(hashesAny) == 0 {
@@ -53,7 +57,10 @@ func (m *syncBackendMock) doJSON(method, path string, payload map[string]any) (m
 		m.missingKinds = append(m.missingKinds, kind)
 		missing := make([]string, 0, len(hashesAny))
 		for _, hash := range hashesAny {
-			key := fmt.Sprintf("user/blobs/%s/%s", kind, hash)
+			key := fmt.Sprintf("user/environment/%s/blobs/%s/%s", environmentID, kind, hash)
+			if kind == "data" {
+				key = fmt.Sprintf("user/data/data-%s/blobs/%s", environmentID, hash)
+			}
 			if !m.metadata[key] {
 				missing = append(missing, hash)
 			}
@@ -65,17 +72,31 @@ func (m *syncBackendMock) doJSON(method, path string, payload map[string]any) (m
 		return map[string]any{"missing": missingAny}, nil
 
 	case method == http.MethodPost && path == "/sync/blobs/upload-url":
+		environmentID := asString(payload["environment_id"])
+		if environmentID == "" {
+			return nil, fmt.Errorf("missing environment_id")
+		}
 		kind := asString(payload["kind"])
 		sha := asString(payload["sha256"])
-		key := fmt.Sprintf("user/blobs/%s/%s", kind, sha)
+		key := fmt.Sprintf("user/environment/%s/blobs/%s/%s", environmentID, kind, sha)
+		if kind == "data" {
+			key = fmt.Sprintf("user/data/data-%s/blobs/%s", environmentID, sha)
+		}
 		m.blobUploadCount++
 		m.blobKinds = append(m.blobKinds, kind)
 		return map[string]any{"key": key, "url": "mock://upload?key=" + url.QueryEscape(key)}, nil
 
 	case method == http.MethodPost && path == "/sync/manifests/upload-url":
+		environmentID := asString(payload["environment_id"])
+		if environmentID == "" {
+			return nil, fmt.Errorf("missing environment_id")
+		}
 		kind := asString(payload["kind"])
 		hash := asString(payload["manifest_hash"])
-		key := fmt.Sprintf("user/manifests/%s/%s.json", kind, hash)
+		key := fmt.Sprintf("user/environment/%s/manifests/%s/%s.json", environmentID, kind, hash)
+		if kind == "data" {
+			key = fmt.Sprintf("user/data/data-%s/manifests/%s.json", environmentID, hash)
+		}
 		m.manifestUploadCount++
 		return map[string]any{"key": key, "url": "mock://upload?key=" + url.QueryEscape(key)}, nil
 
@@ -94,13 +115,17 @@ func (m *syncBackendMock) doJSON(method, path string, payload map[string]any) (m
 
 		codeHash := asString(payload["code_manifest_hash"])
 		dataHash := asString(payload["data_manifest_hash"])
+		environmentID := asString(payload["environment_id"])
+		if environmentID == "" {
+			return nil, fmt.Errorf("missing environment_id")
+		}
 		if codeHash != "" {
-			if !m.metadata[fmt.Sprintf("user/manifests/code/%s.json", codeHash)] {
+			if !m.metadata[fmt.Sprintf("user/environment/%s/manifests/code/%s.json", environmentID, codeHash)] {
 				return nil, fmt.Errorf("api error (400): code manifest not found in object storage")
 			}
 		}
 		if dataHash != "" {
-			if !m.metadata[fmt.Sprintf("user/manifests/data/%s.json", dataHash)] {
+			if !m.metadata[fmt.Sprintf("user/data/data-%s/manifests/%s.json", environmentID, dataHash)] {
 				return nil, fmt.Errorf("api error (400): data manifest not found in object storage")
 			}
 		}
@@ -221,7 +246,7 @@ func TestSyncIncremental_CodeCommitRetryUploadsManifestAndMetadata(t *testing.T)
 
 	hasManifestMetadata := false
 	for key := range mock.metadata {
-		if strings.HasPrefix(key, "user/manifests/code/") {
+		if strings.HasPrefix(key, "user/environment/env-test/manifests/code/") {
 			hasManifestMetadata = true
 			break
 		}

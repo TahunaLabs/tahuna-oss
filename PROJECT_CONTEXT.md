@@ -235,8 +235,8 @@ Progress (2026-03-09):
 Pod startup contract detail (Incremental Sync (0.1.0)):
 - Run creation pins `codeManifestHash` / `dataManifestHash` from environment latest pointers when available.
 - Provisioning payload includes pinned hashes plus resolved manifest keys:
-  - `<userId>/manifests/code/<codeManifestHash>.json`
-  - `<userId>/manifests/data/<dataManifestHash>.json`
+  - `<userId>/environment/<environmentId>/manifests/code/<codeManifestHash>.json`
+  - `<userId>/data/<dataId>/manifests/<dataManifestHash>.json`
 - Pod must reconstruct workspace/data exclusively from these pinned manifests to guarantee reproducibility across later syncs.
 
 Update (completed 2026-03-06):

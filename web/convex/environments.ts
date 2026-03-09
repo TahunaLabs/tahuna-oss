@@ -3,9 +3,11 @@ import type { Doc, Id } from "@convex/_generated/dataModel";
 import { internalMutation, internalQuery, mutation, query, type MutationCtx, type QueryCtx } from "@convex/_generated/server";
 import { requireUser } from "@convex/auth";
 import { images } from "@convex/catalog";
+import { shortId } from "@convex/ids";
 
 const environmentResponseValidator = v.object({
   environment_id: v.string(),
+  data_id: v.string(),
   name: v.string(),
   artifacts: v.string(),
   gpu_type: v.string(),
@@ -49,8 +51,10 @@ function validateEnvironmentPayload(args: {
 }
 
 function toEnvironmentResponse(row: Doc<"environments">) {
+  const dataId = row.dataId || String(row._id);
   return {
     environment_id: String(row._id),
+    data_id: dataId,
     name: row.name,
     artifacts: environmentPath(row.userId, String(row._id)),
     gpu_type: row.gpuType,
@@ -102,6 +106,7 @@ async function createEnvironmentForUserId(
     userId: args.userId,
     name: args.name,
     artifacts: "",
+    dataId: shortId("data"),
     gpuType: args.gpu_type,
     gpuCount: args.gpu_count,
     volumeGb: args.volume_gb,

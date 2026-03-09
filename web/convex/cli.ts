@@ -41,6 +41,9 @@ type SyncManifestPayload = {
   created_at: number;
   entries: ManifestEntry[];
 };
+type OwnedEnvironmentRef = {
+  dataId: string;
+};
 
 function normalizeFilename(filename: unknown) {
   if (typeof filename !== "string") return "file";
@@ -52,18 +55,22 @@ function encodePathSegment(value: string) {
   return encodeURIComponent(value.trim() || "file");
 }
 
-function dataPrefix(userId: string) {
-  return `${userId}/data/`;
-}
-
 function environmentPrefix(userId: string) {
   return `${userId}/environment/`;
 }
 
-function buildDataKey(userId: string, relativePath: string, filename: string) {
+function dataRootPrefix(userId: string) {
+  return `${userId}/data/`;
+}
+
+function dataPrefix(userId: string, dataId: string) {
+  return `${dataRootPrefix(userId)}${dataId}/`;
+}
+
+function buildDataKey(userId: string, dataId: string, relativePath: string, filename: string) {
   const blobId = shortId("blob");
   const pathLabel = relativePath.trim() || filename;
-  return `${dataPrefix(userId)}${blobId}__${encodePathSegment(pathLabel)}`;
+  return `${dataPrefix(userId, dataId)}files/${blobId}__${encodePathSegment(pathLabel)}`;
 }
 
 function buildCodeKey(userId: string, environmentId: string, filename: string) {
@@ -71,20 +78,32 @@ function buildCodeKey(userId: string, environmentId: string, filename: string) {
   return `${environmentPrefix(userId)}${environmentId}/artifacts/${artifactId}__${encodePathSegment(filename)}`;
 }
 
-function blobPrefix(userId: string, kind: SyncKind) {
-  return `${userId}/blobs/${kind}/`;
+function blobPrefix(userId: string, environmentId: string, dataId: string, kind: SyncKind) {
+  if (kind === "data") {
+    return `${dataPrefix(userId, dataId)}blobs/`;
+  }
+  return `${userId}/environment/${environmentId}/blobs/${kind}/`;
 }
 
-function manifestPrefix(userId: string, kind: SyncKind) {
-  return `${userId}/manifests/${kind}/`;
+function manifestPrefix(userId: string, environmentId: string, dataId: string, kind: SyncKind) {
+  if (kind === "data") {
+    return `${dataPrefix(userId, dataId)}manifests/`;
+  }
+  return `${userId}/environment/${environmentId}/manifests/${kind}/`;
 }
 
-function buildBlobObjectKey(userId: string, kind: SyncKind, sha256: string) {
-  return `${blobPrefix(userId, kind)}${sha256}`;
+function buildBlobObjectKey(userId: string, environmentId: string, dataId: string, kind: SyncKind, sha256: string) {
+  return `${blobPrefix(userId, environmentId, dataId, kind)}${sha256}`;
 }
 
-function buildManifestObjectKey(userId: string, kind: SyncKind, manifestHash: string) {
-  return `${manifestPrefix(userId, kind)}${manifestHash}.json`;
+function buildManifestObjectKey(
+  userId: string,
+  environmentId: string,
+  dataId: string,
+  kind: SyncKind,
+  manifestHash: string,
+) {
+  return `${manifestPrefix(userId, environmentId, dataId, kind)}${manifestHash}.json`;
 }
 
 function parseSyncKind(value: unknown): SyncKind | null {
@@ -114,6 +133,26 @@ async function objectExists(ctx: ActionCtx, key: string) {
     return await ctx.runQuery(internal.cli.internalObjectExists, { key });
   } catch {
     return false;
+  }
+}
+
+async function requireOwnedEnvironment(
+  ctx: ActionCtx,
+  userId: string,
+  environmentId: string,
+): Promise<OwnedEnvironmentRef | null> {
+  const typedEnvironmentId = environmentId as Id<"environments">;
+  try {
+    const env = await ctx.runQuery(internal.environments.internalGet, {
+      userId,
+      environmentId: typedEnvironmentId,
+    });
+    const dataId = typeof env?.data_id === "string" && env.data_id.trim() ? env.data_id.trim() : environmentId;
+    return {
+      dataId,
+    };
+  } catch {
+    return null;
   }
 }
 
@@ -273,13 +312,7 @@ export const createCodeUploadUrl = httpAction(async (ctx, request) => {
     });
   }
 
-  const typedEnvironmentId = environmentId as Id<"environments">;
-  try {
-    await ctx.runQuery(internal.environments.internalGet, {
-      userId,
-      environmentId: typedEnvironmentId,
-    });
-  } catch {
+  if (!(await requireOwnedEnvironment(ctx, userId, environmentId))) {
     return new Response(JSON.stringify({ detail: "environment not found" }), {
       status: 404,
       headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
@@ -324,18 +357,36 @@ export const createDataUploadUrl = httpAction(async (ctx, request) => {
     body = null;
   }
 
+  const environmentId = typeof body?.environment_id === "string" ? body.environment_id.trim() : "";
+  if (!environmentId) {
+    return new Response(JSON.stringify({ detail: "environment_id is required" }), {
+      status: 400,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+
+  const ownedEnvironment = await requireOwnedEnvironment(ctx, userId, environmentId);
+  if (!ownedEnvironment) {
+    return new Response(JSON.stringify({ detail: "environment not found" }), {
+      status: 404,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+
   try {
     const filename = normalizeFilename(body?.filename);
     const relativePath =
       typeof body?.relative_path === "string" && body.relative_path.trim() !== ""
         ? body.relative_path
         : filename;
-    const key = buildDataKey(userId, relativePath, filename);
+    const key = buildDataKey(userId, ownedEnvironment.dataId, relativePath, filename);
     const upload = await r2.generateUploadUrl(key);
     return new Response(JSON.stringify({
       key: upload.key,
       url: upload.url,
       filename,
+      environment_id: environmentId,
+      data_id: ownedEnvironment.dataId,
     }), {
       status: 200,
       headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
@@ -359,6 +410,22 @@ export const listMissingBlobHashes = httpAction(async (ctx, request) => {
   }
 
   const body = await readJsonBody(request);
+  const environmentId = typeof body?.environment_id === "string" ? body.environment_id.trim() : "";
+  if (!environmentId) {
+    return new Response(JSON.stringify({ detail: "environment_id is required" }), {
+      status: 400,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+
+  const ownedEnvironment = await requireOwnedEnvironment(ctx, userId, environmentId);
+  if (!ownedEnvironment) {
+    return new Response(JSON.stringify({ detail: "environment not found" }), {
+      status: 404,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+
   const kind = parseSyncKind(body?.kind);
   if (!kind) {
     return new Response(JSON.stringify({ detail: "kind must be one of: code, data" }), {
@@ -392,7 +459,7 @@ export const listMissingBlobHashes = httpAction(async (ctx, request) => {
 
   const checks = await Promise.all(
     hashes.map(async (hash) => {
-      const key = buildBlobObjectKey(userId, kind, hash);
+      const key = buildBlobObjectKey(userId, environmentId, ownedEnvironment.dataId, kind, hash);
       const exists = await objectExists(ctx, key);
       return { hash, exists };
     }),
@@ -415,6 +482,22 @@ export const createBlobUploadUrl = httpAction(async (ctx, request) => {
   }
 
   const body = await readJsonBody(request);
+  const environmentId = typeof body?.environment_id === "string" ? body.environment_id.trim() : "";
+  if (!environmentId) {
+    return new Response(JSON.stringify({ detail: "environment_id is required" }), {
+      status: 400,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+
+  const ownedEnvironment = await requireOwnedEnvironment(ctx, userId, environmentId);
+  if (!ownedEnvironment) {
+    return new Response(JSON.stringify({ detail: "environment not found" }), {
+      status: 404,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+
   const kind = parseSyncKind(body?.kind);
   if (!kind) {
     return new Response(JSON.stringify({ detail: "kind must be one of: code, data" }), {
@@ -432,9 +515,14 @@ export const createBlobUploadUrl = httpAction(async (ctx, request) => {
   }
 
   try {
-    const key = buildBlobObjectKey(userId, kind, sha256);
+    const key = buildBlobObjectKey(userId, environmentId, ownedEnvironment.dataId, kind, sha256);
     const upload = await r2.generateUploadUrl(key);
-    return new Response(JSON.stringify({ key: upload.key, url: upload.url }), {
+    return new Response(JSON.stringify({
+      key: upload.key,
+      url: upload.url,
+      environment_id: environmentId,
+      data_id: ownedEnvironment.dataId,
+    }), {
       status: 200,
       headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
     });
@@ -457,6 +545,22 @@ export const createManifestUploadUrl = httpAction(async (ctx, request) => {
   }
 
   const body = await readJsonBody(request);
+  const environmentId = typeof body?.environment_id === "string" ? body.environment_id.trim() : "";
+  if (!environmentId) {
+    return new Response(JSON.stringify({ detail: "environment_id is required" }), {
+      status: 400,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+
+  const ownedEnvironment = await requireOwnedEnvironment(ctx, userId, environmentId);
+  if (!ownedEnvironment) {
+    return new Response(JSON.stringify({ detail: "environment not found" }), {
+      status: 404,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+
   const kind = parseSyncKind(body?.kind);
   if (!kind) {
     return new Response(JSON.stringify({ detail: "kind must be one of: code, data" }), {
@@ -474,9 +578,14 @@ export const createManifestUploadUrl = httpAction(async (ctx, request) => {
   }
 
   try {
-    const key = buildManifestObjectKey(userId, kind, manifestHash);
+    const key = buildManifestObjectKey(userId, environmentId, ownedEnvironment.dataId, kind, manifestHash);
     const upload = await r2.generateUploadUrl(key);
-    return new Response(JSON.stringify({ key: upload.key, url: upload.url }), {
+    return new Response(JSON.stringify({
+      key: upload.key,
+      url: upload.url,
+      environment_id: environmentId,
+      data_id: ownedEnvironment.dataId,
+    }), {
       status: 200,
       headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
     });
@@ -535,6 +644,13 @@ export const commitSync = httpAction(async (ctx, request) => {
     });
   }
   const typedEnvironmentId = environmentId as Id<"environments">;
+  const ownedEnvironment = await requireOwnedEnvironment(ctx, userId, environmentId);
+  if (!ownedEnvironment) {
+    return new Response(JSON.stringify({ detail: "environment not found" }), {
+      status: 404,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
 
   const codeManifest =
     typeof codeManifestHash === "undefined" ? undefined : parseManifest(codeManifestRaw, "code");
@@ -567,20 +683,14 @@ export const commitSync = httpAction(async (ctx, request) => {
     }
   }
 
-  try {
-    await ctx.runQuery(internal.environments.internalGet, {
-      userId,
-      environmentId: typedEnvironmentId,
-    });
-  } catch {
-    return new Response(JSON.stringify({ detail: "environment not found" }), {
-      status: 404,
-      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
-    });
-  }
-
   if (codeManifestHash) {
-    const codeManifestKey = buildManifestObjectKey(userId, "code", codeManifestHash);
+    const codeManifestKey = buildManifestObjectKey(
+      userId,
+      environmentId,
+      ownedEnvironment.dataId,
+      "code",
+      codeManifestHash,
+    );
     const exists = await objectExists(ctx, codeManifestKey);
     if (!exists) {
       return new Response(JSON.stringify({ detail: "code manifest not found in object storage" }), {
@@ -590,7 +700,13 @@ export const commitSync = httpAction(async (ctx, request) => {
     }
   }
   if (dataManifestHash) {
-    const dataManifestKey = buildManifestObjectKey(userId, "data", dataManifestHash);
+    const dataManifestKey = buildManifestObjectKey(
+      userId,
+      environmentId,
+      ownedEnvironment.dataId,
+      "data",
+      dataManifestHash,
+    );
     const exists = await objectExists(ctx, dataManifestKey);
     if (!exists) {
       return new Response(JSON.stringify({ detail: "data manifest not found in object storage" }), {
@@ -645,12 +761,8 @@ export const syncObjectMetadata = httpAction(async (ctx, request) => {
   }
 
   const allowedPrefixes = [
-    dataPrefix(userId),
     environmentPrefix(userId),
-    blobPrefix(userId, "code"),
-    blobPrefix(userId, "data"),
-    manifestPrefix(userId, "code"),
-    manifestPrefix(userId, "data"),
+    dataRootPrefix(userId),
   ];
   if (!allowedPrefixes.some((prefix) => key.startsWith(prefix))) {
     return new Response(JSON.stringify({ detail: "invalid key prefix" }), {

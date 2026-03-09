@@ -70,11 +70,21 @@ function toRunResponse(row: Doc<"runs">) {
   };
 }
 
-function manifestKey(userId: string, kind: "code" | "data", manifestHash?: string) {
+function manifestKey(
+  userId: string,
+  environmentId: Id<"environments">,
+  dataId: string | undefined,
+  kind: "code" | "data",
+  manifestHash?: string,
+) {
   if (!manifestHash) {
     return null;
   }
-  return `${userId}/manifests/${kind}/${manifestHash}.json`;
+  if (kind === "data") {
+    const resolvedDataId = dataId || String(environmentId);
+    return `${userId}/data/${resolvedDataId}/manifests/${manifestHash}.json`;
+  }
+  return `${userId}/environment/${environmentId}/manifests/${kind}/${manifestHash}.json`;
 }
 
 function toProvisioningPayload(row: Doc<"runs">) {
@@ -87,8 +97,8 @@ function toProvisioningPayload(row: Doc<"runs">) {
     logs_path: row.logs,
     code_manifest_hash: row.codeManifestHash ?? null,
     data_manifest_hash: row.dataManifestHash ?? null,
-    code_manifest_key: manifestKey(row.userId, "code", row.codeManifestHash),
-    data_manifest_key: manifestKey(row.userId, "data", row.dataManifestHash),
+    code_manifest_key: manifestKey(row.userId, row.environmentId, row.dataId, "code", row.codeManifestHash),
+    data_manifest_key: manifestKey(row.userId, row.environmentId, row.dataId, "data", row.dataManifestHash),
     contract_version: "sync-incremental-0.1.0",
   };
 }
@@ -137,6 +147,7 @@ async function createRunForUserId(
   const env = await getOwnedEnvironment(ctx, args.userId, args.environmentId);
   const codeManifestHash = env.latestCodeManifestHash;
   const dataManifestHash = env.latestDataManifestHash;
+  const dataId = env.dataId || String(env._id);
   if (!codeManifestHash || !dataManifestHash) {
     throw new ConvexError("environment is not synced; run `tahuna sync` before creating a run");
   }
@@ -145,6 +156,7 @@ async function createRunForUserId(
   const runId = await ctx.db.insert("runs", {
     userId: args.userId,
     environmentId: args.environmentId,
+    dataId,
     input: `runs/${args.environmentId}/${now}/input`,
     output: `runs/${args.environmentId}/${now}/output`,
     logs: `runs/${args.environmentId}/${now}/logs`,

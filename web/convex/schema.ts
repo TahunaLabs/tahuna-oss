@@ -19,6 +19,7 @@ export default defineSchema({
     userId: v.string(),
     name: v.string(),
     artifacts: v.string(),
+    dataId: v.optional(v.string()),
     gpuType: v.string(),
     gpuCount: v.number(),
     volumeGb: v.number(),
@@ -32,6 +33,7 @@ export default defineSchema({
   runs: defineTable({
     userId: v.string(),
     environmentId: v.id("environments"),
+    dataId: v.optional(v.string()),
     input: v.string(),
     output: v.string(),
     logs: v.string(),

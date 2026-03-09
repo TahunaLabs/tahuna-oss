@@ -29,11 +29,13 @@ Out of scope for this milestone:
 Add fields in Convex schema:
 
 ### environments
+- `dataId?: string`
 - `latestCodeManifestHash?: string`
 - `latestDataManifestHash?: string`
 - `latestSyncAt?: number`
 
 ### runs
+- `dataId?: string`
 - `codeManifestHash?: string`
 - `dataManifestHash?: string`
 
@@ -44,10 +46,10 @@ Reason:
 ## 4) R2 Object Layout
 
 Use deterministic keys:
-- Code blobs: `<userId>/blobs/code/<sha256>`
-- Data blobs: `<userId>/blobs/data/<sha256>`
-- Code manifests: `<userId>/manifests/code/<manifestHash>.json`
-- Data manifests: `<userId>/manifests/data/<manifestHash>.json`
+- Code blobs: `<userId>/environment/<environmentId>/blobs/code/<sha256>`
+- Data blobs: `<userId>/data/<dataId>/blobs/<sha256>`
+- Code manifests: `<userId>/environment/<environmentId>/manifests/code/<manifestHash>.json`
+- Data manifests: `<userId>/data/<dataId>/manifests/<manifestHash>.json`
 
 Optional (future): keep refs/aliases per environment (`latest`).
 
@@ -84,6 +86,7 @@ Keep existing auth model (Bearer API key).
 Request:
 ```json
 {
+  "environment_id": "envId",
   "kind": "code",
   "hashes": ["sha256a", "sha256b"]
 }
@@ -102,6 +105,7 @@ Response:
 Request:
 ```json
 {
+  "environment_id": "envId",
   "kind": "code",
   "sha256": "sha256b"
 }
@@ -121,6 +125,7 @@ Response:
 Request:
 ```json
 {
+  "environment_id": "envId",
   "kind": "code",
   "manifest_hash": "mh123"
 }
@@ -208,8 +213,8 @@ Example provisioning payload (simulated today, shape is contract for real pod la
   "logs_path": "runs/env_123/1730000000000/logs",
   "code_manifest_hash": "mh-code",
   "data_manifest_hash": "mh-data",
-  "code_manifest_key": "user_123/manifests/code/mh-code.json",
-  "data_manifest_key": "user_123/manifests/data/mh-data.json",
+  "code_manifest_key": "user_123/environment/env_123/manifests/code/mh-code.json",
+  "data_manifest_key": "user_123/data/data_abc/manifests/mh-data.json",
   "contract_version": "sync-incremental-0.1.0"
 }
 ```
@@ -230,7 +235,7 @@ CLI:
 
 Backend:
 - Reject malformed hashes/manifests.
-- Enforce key prefix ownership by `userId`.
+- Enforce key prefix ownership by `userId` and verify `environment_id` ownership.
 
 ## 10) Acceptance Criteria
 

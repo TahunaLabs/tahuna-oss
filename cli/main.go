@@ -758,7 +758,7 @@ func syncIncremental(environmentID string, scope syncScope) error {
 	}
 
 	for _, item := range prepared {
-		if err := syncMissingBlobs(item); err != nil {
+		if err := syncMissingBlobs(environmentID, item); err != nil {
 			return fmt.Errorf("%s sync failed: %w", item.kind, err)
 		}
 	}
@@ -776,7 +776,7 @@ func syncIncremental(environmentID string, scope syncScope) error {
 			return err
 		}
 		for _, item := range prepared {
-			if errUpload := uploadManifest(item); errUpload != nil {
+			if errUpload := uploadManifest(environmentID, item); errUpload != nil {
 				return fmt.Errorf("%s sync failed: %w", item.kind, errUpload)
 			}
 		}
@@ -1024,15 +1024,16 @@ func manifestEntriesEqual(a, b []syncManifestEntry) bool {
 	return true
 }
 
-func syncMissingBlobs(item preparedManifest) error {
+func syncMissingBlobs(environmentID string, item preparedManifest) error {
 	hashes := uniqueSortedHashes(item.manifest.Entries)
 	if len(hashes) == 0 {
 		return nil
 	}
 
 	resp, err := syncDoJSON(http.MethodPost, "/sync/blobs/missing", map[string]any{
-		"kind":   item.kind,
-		"hashes": hashes,
+		"environment_id": environmentID,
+		"kind":           item.kind,
+		"hashes":         hashes,
 	})
 	if err != nil {
 		return err
@@ -1053,8 +1054,9 @@ func syncMissingBlobs(item preparedManifest) error {
 			return fmt.Errorf("missing local blob for hash %s", hash)
 		}
 		uploadResp, uploadErr := syncDoJSON(http.MethodPost, "/sync/blobs/upload-url", map[string]any{
-			"kind":   item.kind,
-			"sha256": hash,
+			"environment_id": environmentID,
+			"kind":           item.kind,
+			"sha256":         hash,
 		})
 		if uploadErr != nil {
 			return uploadErr
@@ -1077,10 +1079,11 @@ func syncMissingBlobs(item preparedManifest) error {
 	return nil
 }
 
-func uploadManifest(item preparedManifest) error {
+func uploadManifest(environmentID string, item preparedManifest) error {
 	uploadResp, err := syncDoJSON(http.MethodPost, "/sync/manifests/upload-url", map[string]any{
-		"kind":          item.kind,
-		"manifest_hash": item.hash,
+		"environment_id": environmentID,
+		"kind":           item.kind,
+		"manifest_hash":  item.hash,
 	})
 	if err != nil {
 		return err
