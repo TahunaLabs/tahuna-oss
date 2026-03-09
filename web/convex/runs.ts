@@ -43,16 +43,6 @@ const runLogsResponseValidator = v.object({
   log_file: v.string(),
   note: v.string(),
 });
-const runEventResponseValidator = v.object({
-  status: v.string(),
-  message: v.string(),
-  created_at: v.number(),
-  metadata: v.optional(v.any()),
-});
-const runEventsResponseValidator = v.object({
-  run_id: v.string(),
-  events: v.array(runEventResponseValidator),
-});
 const provisioningPayloadValidator = v.object({
   run_id: v.string(),
   environment_id: v.string(),
@@ -514,6 +504,7 @@ async function createRunForUserId(
     gpu_type?: string;
     gpu_count?: number;
     volume_gb?: number;
+    enqueue_provisioning?: boolean;
   },
 ) {
   const env = await getOwnedEnvironment(ctx, args.userId, args.environmentId);
@@ -532,7 +523,7 @@ async function createRunForUserId(
     input: `runs/${args.environmentId}/${now}/input`,
     output: `runs/${args.environmentId}/${now}/output`,
     logs: `runs/${args.environmentId}/${now}/logs`,
-    status: "queued",
+    status: "provisioning",
     cancellationRequested: false,
     effectiveGpuType: args.gpu_type ?? env.gpuType,
     effectiveGpuCount: args.gpu_count ?? env.gpuCount,
@@ -543,8 +534,8 @@ async function createRunForUserId(
 
   await ctx.db.insert("runEvents", {
     runId,
-    status: "queued",
-    message: "run queued for execution",
+    status: "provisioning",
+    message: "run submitted for provisioning",
     metadata: {
       gpu_type: args.gpu_type || env.gpuType,
       gpu_count: args.gpu_count ?? env.gpuCount,
@@ -554,7 +545,9 @@ async function createRunForUserId(
     },
   });
 
-  await provisionPool.enqueueAction(ctx, internal.runs.provisionRun, { runId });
+  if (args.enqueue_provisioning ?? true) {
+    await provisionPool.enqueueAction(ctx, internal.runs.provisionRun, { runId });
+  }
   const row = await ctx.db.get("runs", runId);
   if (!row) {
     throw new ConvexError("failed to create run");
@@ -632,29 +625,6 @@ export const internalGetLogs = internalQuery({
   },
 });
 
-export const internalGetEvents = internalQuery({
-  args: { userId: v.string(), runId: v.id("runs") },
-  returns: runEventsResponseValidator,
-  handler: async (ctx, args) => {
-    const row = await getOwnedRun(ctx, args.userId, args.runId);
-    const events = await ctx.db
-      .query("runEvents")
-      .withIndex("by_run", (q) => q.eq("runId", args.runId))
-      .collect();
-    return {
-      run_id: String(row._id),
-      events: events
-        .sort((a, b) => a._creationTime - b._creationTime)
-        .map((event) => ({
-          status: event.status,
-          message: event.message,
-          created_at: event._creationTime,
-          metadata: event.metadata,
-        })),
-    };
-  },
-});
-
 export const create = mutation({
   args: {
     environmentId: v.id("environments"),
@@ -713,6 +683,7 @@ export const internalCreate = internalMutation({
     gpu_type: v.optional(v.string()),
     gpu_count: v.optional(v.number()),
     volume_gb: v.optional(v.number()),
+    enqueue_provisioning: v.optional(v.boolean()),
   },
   returns: runResponseValidator,
   handler: async (ctx, args) => {

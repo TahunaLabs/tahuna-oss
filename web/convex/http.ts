@@ -11,6 +11,7 @@ import {
     createRun,
     getCatalog,
     getEnvironment,
+    updateEnvironmentSpecs,
     getRunOrLogs,
     health,
     listMissingBlobHashes,
@@ -44,6 +45,7 @@ http.route({ path: "/api/sync/commit", method: "POST", handler: commitSync });
 http.route({ path: "/api/environments", method: "GET", handler: listEnvironments });
 http.route({ path: "/api/environments", method: "POST", handler: createEnvironment });
 http.route({ pathPrefix: "/api/environments/", method: "GET", handler: getEnvironment });
+http.route({ pathPrefix: "/api/environments/", method: "PATCH", handler: updateEnvironmentSpecs });
 http.route({ pathPrefix: "/api/environments/", method: "POST", handler: createRunFromEnvironment });
 // Route prefix for environments deletion e.g. /api/environments/{env_id}
 http.route({ pathPrefix: "/api/environments/", method: "DELETE", handler: removeEnvironment });

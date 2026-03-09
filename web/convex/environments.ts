@@ -126,6 +126,38 @@ async function createEnvironmentForUserId(
   return toEnvironmentResponse(env);
 }
 
+async function updateEnvironmentSpecsForUserId(
+  ctx: MutationCtx,
+  args: {
+    userId: string;
+    environmentId: Id<"environments">;
+    gpu_type?: string;
+    gpu_count?: number;
+    volume_gb?: number;
+  },
+) {
+  const env = await getOwnedEnvironment(ctx, args.userId, args.environmentId);
+  const nextGpuType = typeof args.gpu_type === "string" && args.gpu_type.trim() !== "" ? args.gpu_type.trim() : env.gpuType;
+  const nextGpuCount = typeof args.gpu_count === "number" ? args.gpu_count : env.gpuCount;
+  const nextVolumeGb = typeof args.volume_gb === "number" ? args.volume_gb : env.volumeGb;
+
+  if (nextGpuCount < 1 || nextVolumeGb < 1) {
+    throw new ConvexError("invalid environment payload");
+  }
+
+  await ctx.db.patch("environments", args.environmentId, {
+    gpuType: nextGpuType,
+    gpuCount: nextGpuCount,
+    volumeGb: nextVolumeGb,
+  });
+
+  const updated = await ctx.db.get("environments", args.environmentId);
+  if (!updated) {
+    throw new ConvexError("failed to update environment");
+  }
+  return toEnvironmentResponse(updated);
+}
+
 async function removeEnvironmentForUserId(ctx: MutationCtx, userId: string, environmentId: Id<"environments">) {
   await getOwnedEnvironment(ctx, userId, environmentId);
 
@@ -236,6 +268,23 @@ export const internalRemove = internalMutation({
   returns: v.object({ deleted: v.boolean(), environment_id: v.string() }),
   handler: async (ctx, args) => {
     return removeEnvironmentForUserId(ctx, args.userId, args.environmentId);
+  },
+});
+
+export const internalUpdateSpecs = internalMutation({
+  args: {
+    userId: v.string(),
+    environmentId: v.id("environments"),
+    gpu_type: v.optional(v.string()),
+    gpu_count: v.optional(v.number()),
+    volume_gb: v.optional(v.number()),
+  },
+  returns: environmentResponseValidator,
+  handler: async (ctx, args) => {
+    if (typeof args.gpu_type === "undefined" && typeof args.gpu_count === "undefined" && typeof args.volume_gb === "undefined") {
+      throw new ConvexError("at least one of gpu_type, gpu_count, or volume_gb is required");
+    }
+    return updateEnvironmentSpecsForUserId(ctx, args);
   },
 });
 

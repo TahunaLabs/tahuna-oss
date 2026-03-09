@@ -94,8 +94,8 @@ Usage:
   tahuna init [.]|[project-name]
   tahuna sync [code|data]
   tahuna train [-d] [--gpu-type <gpu>] [--gpu-count <n>] [--volume-gb <n>]
-  tahuna env list|show|delete ...
-  tahuna run create|list|show|watch|events|logs|delete ...
+  tahuna env list|show|update|delete ...
+  tahuna run create|list|show|watch|logs|delete ...
   tahuna up
   tahuna version
 
@@ -106,9 +106,12 @@ Run list:
   tahuna run list --verbose      Show full JSON payload
   tahuna run show <run_id>
   tahuna run watch <run_id> [--interval 5]
-  tahuna run events <run_id>
   tahuna run logs <run_id>
   tahuna run delete <run_id>
+
+Environment specs:
+  tahuna env update [<env_id>] [--gpu-type <gpu>] [--gpu-count <n>] [--volume-gb <n>]
+  tahuna env specs [<env_id>] [--gpu-type <gpu>] [--gpu-count <n>] [--volume-gb <n>]   Alias
 
 Environment:
   TAHUNA_API_URL      API base URL (default: http://localhost:3000)
@@ -511,6 +514,8 @@ func handleEnvironment(args []string) {
 		environmentList(args[1:])
 	case "show":
 		environmentShow(args[1:])
+	case "update", "specs":
+		environmentUpdate(args[1:])
 	case "delete":
 		environmentDelete(args[1:])
 	case "create":
@@ -535,8 +540,6 @@ func handleRun(args []string) {
 		runShow(args[1:])
 	case "watch", "monitor":
 		runWatch(args[1:])
-	case "events":
-		runEvents(args[1:])
 	case "logs":
 		runLogs(args[1:])
 	case "delete":
@@ -692,6 +695,76 @@ func environmentDelete(args []string) {
 	printJSON(resp)
 }
 
+func environmentUpdate(args []string) {
+	fs := flag.NewFlagSet("environment update", flag.ExitOnError)
+	id := fs.String("id", "", "Environment ID (defaults to linked project environment)")
+	gpuType := fs.String("gpu-type", "", "GPU type")
+	gpuCount := fs.Int("gpu-count", 0, "GPU count")
+	volumeGB := fs.Int("volume-gb", 0, "Volume in GB")
+	fs.Parse(args)
+
+	environmentID := strings.TrimSpace(*id)
+	if environmentID == "" && len(fs.Args()) > 0 {
+		environmentID = strings.TrimSpace(fs.Args()[0])
+	}
+	if environmentID == "" {
+		linkedID, err := resolveEnvironmentID()
+		must(err)
+		environmentID = linkedID
+	}
+
+	if *gpuCount < 0 || *volumeGB < 0 {
+		must(errors.New("--gpu-count and --volume-gb must be positive"))
+	}
+
+	payload := map[string]any{}
+	if strings.TrimSpace(*gpuType) != "" {
+		payload["gpu_type"] = strings.TrimSpace(*gpuType)
+	}
+	if *gpuCount > 0 {
+		payload["gpu_count"] = *gpuCount
+	}
+	if *volumeGB > 0 {
+		payload["volume_gb"] = *volumeGB
+	}
+
+	interactive := len(payload) == 0
+	if interactive {
+		current, err := doJSON(http.MethodGet, "/environments/"+environmentID, nil)
+		must(err)
+
+		currentGPU := strings.TrimSpace(asString(current["gpu_type"]))
+		currentGPUCount := int(asInt64(current["gpu_count"]))
+		if currentGPUCount < 1 {
+			currentGPUCount = 1
+		}
+		currentVolume := int(asInt64(current["volume_gb"]))
+		if currentVolume < 1 {
+			currentVolume = 1
+		}
+
+		gpus, _, err := fetchCatalog()
+		must(err)
+		defaultGPUIndex := 0
+		if currentGPU != "" {
+			for i, item := range gpus {
+				if strings.EqualFold(strings.TrimSpace(item), currentGPU) {
+					defaultGPUIndex = i
+					break
+				}
+			}
+		}
+
+		payload["gpu_type"] = promptChoice("GPU type", gpus, defaultGPUIndex)
+		payload["gpu_count"] = promptInt("GPU count", currentGPUCount)
+		payload["volume_gb"] = promptInt("Volume (GB)", currentVolume)
+	}
+
+	resp, err := doJSON(http.MethodPatch, "/environments/"+environmentID, payload)
+	must(err)
+	printJSON(resp)
+}
+
 func runCreate(args []string) {
 	fs := flag.NewFlagSet("run create", flag.ExitOnError)
 	gpuType := fs.String("gpu-type", "", "Override GPU type")
@@ -717,7 +790,7 @@ func runCreate(args []string) {
 		payload["volume_gb"] = *volumeGB
 	}
 
-	resp, err := doJSON(http.MethodPost, "/environments/"+environmentID+"/runs", payload)
+	resp, err := createRunWithCapacityPrompt("/environments/"+environmentID+"/runs", payload)
 	must(err)
 	runID := asString(resp["run_id"])
 	fmt.Printf("%s✓%s run created: %s - %s\n", cAmpGreen, cReset, runID, runDashboardURL(runID))
@@ -753,7 +826,7 @@ func train(args []string) {
 		payload["volume_gb"] = *volumeGB
 	}
 
-	resp, err := doJSON(http.MethodPost, "/environments/"+resolvedEnvironmentID+"/runs", payload)
+	resp, err := createRunWithCapacityPrompt("/environments/"+resolvedEnvironmentID+"/runs", payload)
 	must(err)
 
 	runID := asString(resp["run_id"])
@@ -762,6 +835,101 @@ func train(args []string) {
 		return
 	}
 	must(monitorRun(runID, 5))
+}
+
+func createRunWithCapacityPrompt(path string, payload map[string]any) (map[string]any, error) {
+	resp, err := doJSON(http.MethodPost, path, payload)
+	if err == nil || !isNoGPUCapacityCreateError(err) || !supportsInteractivePrompts() {
+		return resp, err
+	}
+
+	gpus, _, catalogErr := fetchCatalog()
+	if catalogErr != nil || len(gpus) == 0 {
+		return nil, err
+	}
+
+	defaultGPU := strings.TrimSpace(asString(payload["gpu_type"]))
+	if defaultGPU == "" {
+		if inferred, inferErr := inferEnvironmentGPU(path); inferErr == nil {
+			defaultGPU = inferred
+		}
+	}
+	defaultIndex := 0
+	if defaultGPU != "" {
+		for i, gpu := range gpus {
+			if strings.EqualFold(strings.TrimSpace(gpu), defaultGPU) {
+				defaultIndex = i
+				break
+			}
+		}
+	}
+
+	lastErr := err
+	for {
+		fmt.Printf("%sNo GPU capacity for current selection.%s\n", cAmpGold, cReset)
+		nextGPU := promptChoice("Choose available GPU", gpus, defaultIndex)
+		payload["gpu_type"] = nextGPU
+
+		resp, err = doJSON(http.MethodPost, path, payload)
+		if err == nil {
+			return resp, nil
+		}
+		lastErr = err
+		if !isNoGPUCapacityCreateError(err) {
+			return nil, err
+		}
+
+		choice := promptChoice("Still unavailable", []string{"Try another GPU", "Cancel"}, 0)
+		if choice == "Cancel" {
+			return nil, lastErr
+		}
+		for i, gpu := range gpus {
+			if strings.EqualFold(strings.TrimSpace(gpu), nextGPU) {
+				defaultIndex = (i + 1) % len(gpus)
+				break
+			}
+		}
+	}
+}
+
+func isNoGPUCapacityCreateError(err error) bool {
+	if err == nil {
+		return false
+	}
+	text := strings.ToLower(err.Error())
+	return strings.Contains(text, "no gpu capacity currently available") ||
+		strings.Contains(text, "no instances currently available") ||
+		strings.Contains(text, "insufficient capacity")
+}
+
+func supportsInteractivePrompts() bool {
+	in, inErr := os.Stdin.Stat()
+	out, outErr := os.Stdout.Stat()
+	if inErr != nil || outErr != nil {
+		return false
+	}
+	return (in.Mode()&os.ModeCharDevice) != 0 && (out.Mode()&os.ModeCharDevice) != 0
+}
+
+func inferEnvironmentGPU(path string) (string, error) {
+	parts := strings.Split(strings.Trim(path, "/"), "/")
+	// Expected: environments/{env_id}/runs
+	if len(parts) < 3 || parts[0] != "environments" {
+		return "", errors.New("environment id not found in path")
+	}
+	environmentID := strings.TrimSpace(parts[1])
+	if environmentID == "" {
+		return "", errors.New("environment id is empty")
+	}
+	env, err := doJSON(http.MethodGet, "/environments/"+environmentID, nil)
+	if err != nil {
+		return "", err
+	}
+	gpu := strings.TrimSpace(asString(env["gpu_type"]))
+	if gpu == "" {
+		return "", errors.New("environment gpu_type is empty")
+	}
+	return gpu, nil
 }
 
 func preRunSync(environmentID string) error {
@@ -1392,18 +1560,6 @@ func runLogs(args []string) {
 	require(runID != "", "run_id is required (usage: tahuna run logs <run_id>)")
 
 	resp, err := doJSON(http.MethodGet, "/runs/"+runID+"/logs", nil)
-	must(err)
-	printJSON(resp)
-}
-
-func runEvents(args []string) {
-	fs := flag.NewFlagSet("run events", flag.ExitOnError)
-	id := fs.String("id", "", "Run ID")
-	fs.Parse(args)
-	runID := resolveRunID(*id, fs.Args())
-	require(runID != "", "run_id is required (usage: tahuna run events <run_id>)")
-
-	resp, err := doJSON(http.MethodGet, "/runs/"+runID+"/events", nil)
 	must(err)
 	printJSON(resp)
 }

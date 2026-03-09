@@ -44,6 +44,13 @@ type SyncManifestPayload = {
 type OwnedEnvironmentRef = {
   dataId: string;
 };
+type CreateRunStrictArgs = {
+  userId: string;
+  environmentId: Id<"environments">;
+  gpu_type?: string;
+  gpu_count?: number;
+  volume_gb?: number;
+};
 
 function normalizeFilename(filename: unknown) {
   if (typeof filename !== "string") return "file";
@@ -156,6 +163,39 @@ async function requireOwnedEnvironment(
   }
 }
 
+function isNoGpuCapacityError(detail: string) {
+  const text = detail.toLowerCase();
+  return text.includes("no instances currently available") || text.includes("insufficient capacity");
+}
+
+async function createAndProvisionRunStrict(ctx: ActionCtx, args: CreateRunStrictArgs) {
+  const created = await ctx.runMutation(internal.runs.internalCreate, {
+    ...args,
+    enqueue_provisioning: false,
+  });
+  const runId = created.run_id as Id<"runs">;
+
+  await ctx.runAction(internal.runs.provisionRun, { runId });
+
+  const resolved = await ctx.runQuery(internal.runs.internalGet, {
+    userId: args.userId,
+    runId,
+  });
+  if (resolved.status !== "failed") {
+    return resolved;
+  }
+
+  const detail = resolved.error || "run provisioning failed";
+  if (isNoGpuCapacityError(detail)) {
+    await ctx.runMutation(internal.runs.internalRemove, {
+      userId: args.userId,
+      runId,
+    });
+    throw new Error("no GPU capacity currently available; run was not created");
+  }
+  throw new Error(detail);
+}
+
 export const internalObjectExists = internalQuery({
   args: { key: v.string() },
   returns: v.boolean(),
@@ -246,7 +286,7 @@ async function sha256Hex(value: string): Promise<string> {
 function corsHeaders() {
   return {
     "Access-Control-Allow-Origin": process.env.CLIENT_ORIGIN || "*",
-    "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
+    "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, OPTIONS",
     "Access-Control-Allow-Headers": "Authorization, Content-Type",
     "Access-Control-Max-Age": "86400",
   };
@@ -885,7 +925,7 @@ export const removeEnvironment = httpAction(async (ctx, request) => {
   try {
     const data = await ctx.runMutation(internal.environments.internalRemove, {
       userId,
-      environmentId: environmentId as any,
+      environmentId: environmentId as Id<"environments">,
     });
     return new Response(JSON.stringify(data), {
       status: 200,
@@ -923,7 +963,7 @@ export const getEnvironment = httpAction(async (ctx, request) => {
   try {
     const data = await ctx.runQuery(internal.environments.internalGet, {
       userId,
-      environmentId: environmentId as any,
+      environmentId: environmentId as Id<"environments">,
     });
     return new Response(JSON.stringify(data), {
       status: 200,
@@ -933,6 +973,63 @@ export const getEnvironment = httpAction(async (ctx, request) => {
     const detail = err instanceof Error ? err.message : "failed to load environment";
     return new Response(JSON.stringify({ detail }), {
       status: 404,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+});
+
+export const updateEnvironmentSpecs = httpAction(async (ctx, request) => {
+  const userId = await authenticateApiRequest(ctx, request);
+  if (!userId) {
+    return new Response(JSON.stringify({ detail: "authentication required" }), {
+      status: 401,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+
+  const url = new URL(request.url);
+  const parts = url.pathname.split("/").filter(Boolean);
+  const environmentId = parts[parts.length - 1];
+  if (!environmentId || environmentId === "environments") {
+    return new Response(JSON.stringify({ detail: "env_id is required" }), {
+      status: 400,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    body = null;
+  }
+
+  const gpuType = typeof body?.gpu_type === "string" ? body.gpu_type.trim() : undefined;
+  const gpuCount = typeof body?.gpu_count === "number" ? body.gpu_count : undefined;
+  const volumeGb = typeof body?.volume_gb === "number" ? body.volume_gb : undefined;
+  if (typeof gpuType === "undefined" && typeof gpuCount === "undefined" && typeof volumeGb === "undefined") {
+    return new Response(JSON.stringify({ detail: "at least one of gpu_type, gpu_count, or volume_gb is required" }), {
+      status: 400,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+
+  try {
+    const data = await ctx.runMutation(internal.environments.internalUpdateSpecs, {
+      userId,
+      environmentId: environmentId as Id<"environments">,
+      gpu_type: gpuType,
+      gpu_count: gpuCount,
+      volume_gb: volumeGb,
+    });
+    return new Response(JSON.stringify(data), {
+      status: 200,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : "failed to update environment specs";
+    return new Response(JSON.stringify({ detail }), {
+      status: 400,
       headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
     });
   }
@@ -968,9 +1065,9 @@ export const createRunFromEnvironment = httpAction(async (ctx, request) => {
   }
 
   try {
-    const data = await ctx.runMutation(internal.runs.internalCreate, {
+    const data = await createAndProvisionRunStrict(ctx, {
       userId,
-      environmentId: environmentId as any,
+      environmentId: environmentId as Id<"environments">,
       gpu_type: body?.gpu_type,
       gpu_count: body?.gpu_count,
       volume_gb: body?.volume_gb,
@@ -981,8 +1078,9 @@ export const createRunFromEnvironment = httpAction(async (ctx, request) => {
     });
   } catch (err) {
     const detail = err instanceof Error ? err.message : "failed to create run";
+    const status = detail.toLowerCase().includes("no gpu capacity currently available") ? 409 : 400;
     return new Response(JSON.stringify({ detail }), {
-      status: 400,
+      status,
       headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
     });
   }
@@ -1023,9 +1121,9 @@ export const createRun = httpAction(async (ctx, request) => {
   }
 
   try {
-    const data = await ctx.runMutation(internal.runs.internalCreate, {
+    const data = await createAndProvisionRunStrict(ctx, {
       userId,
-      environmentId: body?.environment_id as any,
+      environmentId: body?.environment_id as Id<"environments">,
       gpu_type: body?.gpu_type,
       gpu_count: body?.gpu_count,
       volume_gb: body?.volume_gb,
@@ -1036,8 +1134,9 @@ export const createRun = httpAction(async (ctx, request) => {
     });
   } catch (err) {
     const detail = err instanceof Error ? err.message : "failed to create run";
+    const status = detail.toLowerCase().includes("no gpu capacity currently available") ? 409 : 400;
     return new Response(JSON.stringify({ detail }), {
-      status: 400,
+      status,
       headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
     });
   }
@@ -1053,12 +1152,11 @@ export const getRunOrLogs = httpAction(async (ctx, request) => {
   }
 
   const url = new URL(request.url);
-  // Pattern: /api/runs/{run_id} or /api/runs/{run_id}/logs or /api/runs/{run_id}/events
+  // Pattern: /api/runs/{run_id} or /api/runs/{run_id}/logs
   const parts = url.pathname.split("/").filter(Boolean); // remove empty strings
   
   const isLogs = parts[parts.length - 1] === "logs";
-  const isEvents = parts[parts.length - 1] === "events";
-  const runId = isLogs || isEvents ? parts[parts.length - 2] : parts[parts.length - 1];
+  const runId = isLogs ? parts[parts.length - 2] : parts[parts.length - 1];
 
   if (!runId || runId === "runs") {
     return new Response(JSON.stringify({ detail: "run_id is required" }), {
@@ -1071,7 +1169,7 @@ export const getRunOrLogs = httpAction(async (ctx, request) => {
     try {
       const data = await ctx.runQuery(internal.runs.internalGetLogs, {
         userId,
-        runId: runId as any,
+        runId: runId as Id<"runs">,
       });
       return new Response(JSON.stringify(data), {
         status: 200,
@@ -1086,29 +1184,10 @@ export const getRunOrLogs = httpAction(async (ctx, request) => {
     }
   }
 
-  if (isEvents) {
-    try {
-      const data = await ctx.runQuery(internal.runs.internalGetEvents, {
-        userId,
-        runId: runId as any,
-      });
-      return new Response(JSON.stringify(data), {
-        status: 200,
-        headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
-      });
-    } catch (err) {
-      const detail = err instanceof Error ? err.message : "failed to load run events";
-      return new Response(JSON.stringify({ detail }), {
-        status: 404,
-        headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
-      });
-    }
-  }
-
   try {
     const data = await ctx.runQuery(internal.runs.internalGet, {
       userId,
-      runId: runId as any,
+      runId: runId as Id<"runs">,
     });
     return new Response(JSON.stringify(data), {
       status: 200,
@@ -1146,7 +1225,7 @@ export const removeRun = httpAction(async (ctx, request) => {
   try {
     const data = await ctx.runMutation(internal.runs.internalRemove, {
       userId,
-      runId: runId as any,
+      runId: runId as Id<"runs">,
     });
     return new Response(JSON.stringify(data), {
       status: 200,
