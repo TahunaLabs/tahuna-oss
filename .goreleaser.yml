@@ -1,0 +1,55 @@
+version: 2
+
+project_name: tahuna
+
+builds:
+  - id: tahuna
+    dir: cli
+    main: .
+    binary: tahuna
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: linux
+        goarch: arm64
+
+archives:
+  - id: tahuna
+    ids:
+      - tahuna
+    formats: [tar.gz]
+    name_template: "tahuna_{{ .Os }}_{{ .Arch }}"
+    files:
+      - none*
+
+checksum:
+  name_template: "checksums.txt"
+
+release:
+  draft: false
+  prerelease: auto
+
+brews:
+  - name: tahuna
+    ids:
+      - tahuna
+    repository:
+      owner: Pazuzzu
+      name: homebrew-tahuna
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    directory: Formula
+    homepage: "https://github.com/Pazuzzu/tahuna"
+    description: "Tahuna CLI for ML training orchestration"
+    commit_author:
+      name: github-actions[bot]
+      email: 41898282+github-actions[bot]@users.noreply.github.com
+    install: |
+      bin.install "tahuna"
+    test: |
+      system "#{bin}/tahuna", "version"

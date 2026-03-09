@@ -4,12 +4,6 @@ on:
   push:
     tags:
       - "v*"
-  workflow_dispatch:
-    inputs:
-      tag:
-        description: "Release tag (vX.Y.Z)"
-        required: true
-        type: string
 
 permissions:
   contents: write
@@ -23,86 +17,18 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Resolve tag
-        id: meta
-        run: |
-          set -euo pipefail
-          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
-            TAG="${{ inputs.tag }}"
-          else
-            TAG="${GITHUB_REF_NAME}"
-          fi
-          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "Invalid tag format: $TAG" >&2
-            exit 1
-          fi
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
           go-version-file: cli/go.mod
           cache-dependency-path: cli/go.sum
 
-      - name: Build release artifacts
-        run: |
-          set -euo pipefail
-          mkdir -p dist
-
-          build_target() {
-            local goos="$1"
-            local goarch="$2"
-            local name="tahuna_${goos}_${goarch}"
-            local out_dir="dist/${name}"
-            local binary="tahuna"
-
-            mkdir -p "$out_dir"
-            (
-              cd cli
-              CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" go build -trimpath -o "../${out_dir}/${binary}" .
-            )
-            tar -C "$out_dir" -czf "dist/${name}.tar.gz" "$binary"
-            rm -rf "$out_dir"
-          }
-
-          build_target darwin arm64
-          build_target darwin amd64
-          build_target linux amd64
-
-          (cd dist && shasum -a 256 tahuna_*.tar.gz > checksums.txt)
-
-      - name: Create GitHub release
-        uses: softprops/action-gh-release@v2
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v6
         with:
-          tag_name: ${{ steps.meta.outputs.tag }}
-          files: |
-            dist/tahuna_darwin_arm64.tar.gz
-            dist/tahuna_darwin_amd64.tar.gz
-            dist/tahuna_linux_amd64.tar.gz
-            dist/checksums.txt
-          fail_on_unmatched_files: true
-
-      - name: Update Homebrew formula
-        run: |
-          set -euo pipefail
-          ./scripts/update_homebrew_formula.sh "${{ steps.meta.outputs.tag }}" "dist/checksums.txt"
-
-      - name: Commit and push formula update
-        run: |
-          set -euo pipefail
-          if git diff --quiet -- Formula/tahuna.rb; then
-            echo "No formula changes to commit."
-            exit 0
-          fi
-
-          DEFAULT_BRANCH="${{ github.event.repository.default_branch }}"
-          git fetch origin "$DEFAULT_BRANCH"
-          git checkout "$DEFAULT_BRANCH"
-
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-          ./scripts/update_homebrew_formula.sh "${{ steps.meta.outputs.tag }}" "dist/checksums.txt"
-          git add Formula/tahuna.rb
-          git commit -m "chore(formula): update tahuna to ${{ steps.meta.outputs.tag }}"
-          git push origin "HEAD:${DEFAULT_BRANCH}"
+          distribution: goreleaser
+          version: "~> v2"
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
