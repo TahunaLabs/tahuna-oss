@@ -675,6 +675,8 @@ func runCreate(args []string) {
 	volumeGB := fs.Int("volume-gb", 0, "Override volume size")
 	watch := fs.Bool("watch", false, "Watch run status after creation")
 	monitor := fs.Bool("monitor", false, "Alias for --watch")
+	verbose := fs.Bool("verbose", false, "Show full run payload")
+	fs.BoolVar(verbose, "v", false, "Show full run payload")
 	fs.Parse(args)
 	environmentID, err := resolveEnvironmentID()
 	must(err)
@@ -693,10 +695,13 @@ func runCreate(args []string) {
 
 	resp, err := doJSON(http.MethodPost, "/environments/"+environmentID+"/runs", payload)
 	must(err)
-	printSuccessLine("run created")
-	printJSON(resp)
+	runID := asString(resp["run_id"])
+	fmt.Printf("%s✓%s run created: %s - %s\n", cAmpGreen, cReset, runID, runDashboardURL(runID))
+	if *verbose {
+		printJSON(resp)
+	}
 	if *watch || *monitor {
-		must(monitorRun(asString(resp["run_id"]), 5))
+		must(monitorRun(runID, 5))
 	}
 }
 
@@ -727,12 +732,12 @@ func train(args []string) {
 	resp, err := doJSON(http.MethodPost, "/environments/"+resolvedEnvironmentID+"/runs", payload)
 	must(err)
 
-	printSuccessLine("run created")
-	printTrainRunSummary(resp)
+	runID := asString(resp["run_id"])
+	fmt.Printf("%s✓%s run created: %s - %s\n", cAmpGreen, cReset, runID, runDashboardURL(runID))
 	if *detached {
 		return
 	}
-	must(monitorRun(asString(resp["run_id"]), 5))
+	must(monitorRun(runID, 5))
 }
 
 func preRunSync(environmentID string) error {
@@ -1619,6 +1624,9 @@ func printSuccessLine(message string) {
 }
 
 func monitorRun(runID string, interval int) error {
+	dynamic := supportsDynamicStatus()
+	anchored := false
+
 	for {
 		resp, err := doJSON(http.MethodGet, "/runs/"+runID, nil)
 		if err != nil {
@@ -1626,6 +1634,18 @@ func monitorRun(runID string, interval int) error {
 		}
 		status := asString(resp["status"])
 		errMsg := asString(resp["error"])
+
+		if dynamic {
+			if anchored {
+				// Restore cursor to the first run panel render and clear below it.
+				fmt.Print("\033[u\033[J")
+			} else {
+				// Save cursor so subsequent updates can redraw in place.
+				fmt.Print("\033[s")
+				anchored = true
+			}
+		}
+
 		printRunPanel(runID, status, errMsg)
 		if status == "completed" || status == "failed" || status == "cancelled" {
 			break
@@ -1651,7 +1671,7 @@ func printRunPanel(runID, status, errMsg string) {
 	if errMsg != "" {
 		lines = append(lines, fmt.Sprintf("  %s>%s Error %s", cAmpGold, cReset, errMsg))
 	}
-	printPanel("Tahuna", lines, status, "run "+runID)
+	printPanel("Tahuna", lines, "", "")
 }
 
 func printPanel(title string, lines []string, leftFooter, rightFooter string) {
@@ -2095,6 +2115,14 @@ func browserBaseURL() string {
 		return defaultAPIURL
 	}
 	return base
+}
+
+func runDashboardURL(runID string) string {
+	base := strings.TrimRight(browserBaseURL(), "/")
+	if strings.TrimSpace(runID) == "" {
+		return base + "/runs"
+	}
+	return fmt.Sprintf("%s/runs/%s", base, neturl.QueryEscape(runID))
 }
 
 func resolveLoginBrowserBaseURL() string {
