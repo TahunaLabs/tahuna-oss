@@ -18,6 +18,12 @@ const environmentResponseValidator = v.object({
 const listEnvironmentsResponseValidator = v.object({
   environments: v.array(environmentResponseValidator),
 });
+const commitSyncPointersResponseValidator = v.object({
+  ok: v.boolean(),
+  environment_id: v.string(),
+  code_manifest_hash: v.optional(v.string()),
+  data_manifest_hash: v.optional(v.string()),
+});
 
 function environmentPath(userId: string, environmentId: string) {
   return `${userId}/environment/${environmentId}`;
@@ -225,5 +231,39 @@ export const internalRemove = internalMutation({
   returns: v.object({ deleted: v.boolean(), environment_id: v.string() }),
   handler: async (ctx, args) => {
     return removeEnvironmentForUserId(ctx, args.userId, args.environmentId);
+  },
+});
+
+export const internalCommitSyncPointers = internalMutation({
+  args: {
+    userId: v.string(),
+    environmentId: v.id("environments"),
+    code_manifest_hash: v.optional(v.string()),
+    data_manifest_hash: v.optional(v.string()),
+  },
+  returns: commitSyncPointersResponseValidator,
+  handler: async (ctx, args) => {
+    const env = await getOwnedEnvironment(ctx, args.userId, args.environmentId);
+    const patch: {
+      latestSyncAt: number;
+      latestCodeManifestHash?: string;
+      latestDataManifestHash?: string;
+    } = { latestSyncAt: Date.now() };
+
+    if (args.code_manifest_hash) {
+      patch.latestCodeManifestHash = args.code_manifest_hash;
+    }
+    if (args.data_manifest_hash) {
+      patch.latestDataManifestHash = args.data_manifest_hash;
+    }
+
+    await ctx.db.patch("environments", args.environmentId, patch);
+
+    return {
+      ok: true,
+      environment_id: String(args.environmentId),
+      code_manifest_hash: args.code_manifest_hash ?? env.latestCodeManifestHash,
+      data_manifest_hash: args.data_manifest_hash ?? env.latestDataManifestHash,
+    };
   },
 });

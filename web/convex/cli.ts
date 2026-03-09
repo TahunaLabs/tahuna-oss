@@ -1,8 +1,10 @@
 import { api, internal } from "@convex/_generated/api";
-import { ActionCtx, httpAction } from "@convex/_generated/server";
+import type { Id } from "@convex/_generated/dataModel";
+import { ActionCtx, httpAction, internalQuery } from "@convex/_generated/server";
 import { R2 } from "@convex-dev/r2";
 import { components } from "@convex/_generated/api";
 import { shortId } from "@convex/ids";
+import { v } from "convex/values";
 
 // Helper to authenticate CLI requests via the API keys
 async function authenticateApiRequest(ctx: ActionCtx, request: Request): Promise<string | null> {
@@ -25,6 +27,20 @@ async function authenticateApiRequest(ctx: ActionCtx, request: Request): Promise
 }
 
 const r2 = new R2(components.r2);
+const SHA256_HEX_RE = /^[a-f0-9]{64}$/i;
+type SyncKind = "code" | "data";
+type ManifestEntry = {
+  path: string;
+  sha256: string;
+  size: number;
+  mode: number;
+};
+type SyncManifestPayload = {
+  version: number;
+  type: SyncKind;
+  created_at: number;
+  entries: ManifestEntry[];
+};
 
 function normalizeFilename(filename: unknown) {
   if (typeof filename !== "string") return "file";
@@ -53,6 +69,129 @@ function buildDataKey(userId: string, relativePath: string, filename: string) {
 function buildCodeKey(userId: string, environmentId: string, filename: string) {
   const artifactId = shortId("code");
   return `${environmentPrefix(userId)}${environmentId}/artifacts/${artifactId}__${encodePathSegment(filename)}`;
+}
+
+function blobPrefix(userId: string, kind: SyncKind) {
+  return `${userId}/blobs/${kind}/`;
+}
+
+function manifestPrefix(userId: string, kind: SyncKind) {
+  return `${userId}/manifests/${kind}/`;
+}
+
+function buildBlobObjectKey(userId: string, kind: SyncKind, sha256: string) {
+  return `${blobPrefix(userId, kind)}${sha256}`;
+}
+
+function buildManifestObjectKey(userId: string, kind: SyncKind, manifestHash: string) {
+  return `${manifestPrefix(userId, kind)}${manifestHash}.json`;
+}
+
+function parseSyncKind(value: unknown): SyncKind | null {
+  if (value === "code" || value === "data") {
+    return value;
+  }
+  return null;
+}
+
+function normalizeSha256(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const hash = value.trim().toLowerCase();
+  if (!SHA256_HEX_RE.test(hash)) return null;
+  return hash;
+}
+
+async function readJsonBody(request: Request) {
+  try {
+    return await request.json();
+  } catch {
+    return null;
+  }
+}
+
+async function objectExists(ctx: ActionCtx, key: string) {
+  try {
+    return await ctx.runQuery(internal.cli.internalObjectExists, { key });
+  } catch {
+    return false;
+  }
+}
+
+export const internalObjectExists = internalQuery({
+  args: { key: v.string() },
+  returns: v.boolean(),
+  handler: async (ctx, args) => {
+    const metadata = await r2.getMetadata(ctx, args.key);
+    return metadata !== null;
+  },
+});
+
+function parseManifestEntry(value: unknown): ManifestEntry | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+  const row = value as Record<string, unknown>;
+  const path = typeof row.path === "string" ? row.path.trim() : "";
+  const sha256 = normalizeSha256(row.sha256);
+  const size = typeof row.size === "number" ? row.size : NaN;
+  const mode = typeof row.mode === "number" ? row.mode : NaN;
+  if (!path || path.startsWith("/") || path.includes("\\") || path.includes("\0")) {
+    return null;
+  }
+  if (path === "." || path === ".." || path.includes("/../") || path.startsWith("../")) {
+    return null;
+  }
+  if (!sha256 || !Number.isFinite(size) || size < 0 || !Number.isInteger(size)) {
+    return null;
+  }
+  if (!Number.isFinite(mode) || mode < 0 || mode > 0o777 || !Number.isInteger(mode)) {
+    return null;
+  }
+  return { path, sha256, size, mode };
+}
+
+function parseManifest(value: unknown, kind: SyncKind): SyncManifestPayload | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+  const row = value as Record<string, unknown>;
+  const version = row.version;
+  const type = row.type;
+  const createdAt = row.created_at;
+  const entries = row.entries;
+  if (version !== 1 || type !== kind || typeof createdAt !== "number" || !Number.isFinite(createdAt)) {
+    return null;
+  }
+  if (!Array.isArray(entries)) {
+    return null;
+  }
+  const parsedEntries: ManifestEntry[] = [];
+  let previousPath = "";
+  for (const entry of entries) {
+    const parsed = parseManifestEntry(entry);
+    if (!parsed) {
+      return null;
+    }
+    if (previousPath !== "" && parsed.path < previousPath) {
+      return null;
+    }
+    previousPath = parsed.path;
+    parsedEntries.push(parsed);
+  }
+  return {
+    version: 1,
+    type: kind,
+    created_at: createdAt,
+    entries: parsedEntries,
+  };
+}
+
+async function sha256Hex(value: string): Promise<string> {
+  const bytes = new TextEncoder().encode(value);
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest))
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
 }
 
 // Ensure proper CORS for external clients (CLI/web)
@@ -134,10 +273,11 @@ export const createCodeUploadUrl = httpAction(async (ctx, request) => {
     });
   }
 
+  const typedEnvironmentId = environmentId as Id<"environments">;
   try {
     await ctx.runQuery(internal.environments.internalGet, {
       userId,
-      environmentId: environmentId as any,
+      environmentId: typedEnvironmentId,
     });
   } catch {
     return new Response(JSON.stringify({ detail: "environment not found" }), {
@@ -209,6 +349,277 @@ export const createDataUploadUrl = httpAction(async (ctx, request) => {
   }
 });
 
+export const listMissingBlobHashes = httpAction(async (ctx, request) => {
+  const userId = await authenticateApiRequest(ctx, request);
+  if (!userId) {
+    return new Response(JSON.stringify({ detail: "authentication required" }), {
+      status: 401,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+
+  const body = await readJsonBody(request);
+  const kind = parseSyncKind(body?.kind);
+  if (!kind) {
+    return new Response(JSON.stringify({ detail: "kind must be one of: code, data" }), {
+      status: 400,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+
+  if (!Array.isArray(body?.hashes)) {
+    return new Response(JSON.stringify({ detail: "hashes must be an array" }), {
+      status: 400,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+
+  const seen = new Set<string>();
+  const hashes: string[] = [];
+  for (const rawHash of body.hashes) {
+    const hash = normalizeSha256(rawHash);
+    if (!hash) {
+      return new Response(JSON.stringify({ detail: "hashes must contain valid sha256 hex values" }), {
+        status: 400,
+        headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+      });
+    }
+    if (!seen.has(hash)) {
+      seen.add(hash);
+      hashes.push(hash);
+    }
+  }
+
+  const checks = await Promise.all(
+    hashes.map(async (hash) => {
+      const key = buildBlobObjectKey(userId, kind, hash);
+      const exists = await objectExists(ctx, key);
+      return { hash, exists };
+    }),
+  );
+  const missing = checks.filter((item) => !item.exists).map((item) => item.hash);
+
+  return new Response(JSON.stringify({ missing }), {
+    status: 200,
+    headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+  });
+});
+
+export const createBlobUploadUrl = httpAction(async (ctx, request) => {
+  const userId = await authenticateApiRequest(ctx, request);
+  if (!userId) {
+    return new Response(JSON.stringify({ detail: "authentication required" }), {
+      status: 401,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+
+  const body = await readJsonBody(request);
+  const kind = parseSyncKind(body?.kind);
+  if (!kind) {
+    return new Response(JSON.stringify({ detail: "kind must be one of: code, data" }), {
+      status: 400,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+
+  const sha256 = normalizeSha256(body?.sha256);
+  if (!sha256) {
+    return new Response(JSON.stringify({ detail: "sha256 must be a valid sha256 hex value" }), {
+      status: 400,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+
+  try {
+    const key = buildBlobObjectKey(userId, kind, sha256);
+    const upload = await r2.generateUploadUrl(key);
+    return new Response(JSON.stringify({ key: upload.key, url: upload.url }), {
+      status: 200,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : "failed to generate blob upload URL";
+    return new Response(JSON.stringify({ detail }), {
+      status: 400,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+});
+
+export const createManifestUploadUrl = httpAction(async (ctx, request) => {
+  const userId = await authenticateApiRequest(ctx, request);
+  if (!userId) {
+    return new Response(JSON.stringify({ detail: "authentication required" }), {
+      status: 401,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+
+  const body = await readJsonBody(request);
+  const kind = parseSyncKind(body?.kind);
+  if (!kind) {
+    return new Response(JSON.stringify({ detail: "kind must be one of: code, data" }), {
+      status: 400,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+
+  const manifestHash = normalizeSha256(body?.manifest_hash);
+  if (!manifestHash) {
+    return new Response(JSON.stringify({ detail: "manifest_hash must be a valid sha256 hex value" }), {
+      status: 400,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+
+  try {
+    const key = buildManifestObjectKey(userId, kind, manifestHash);
+    const upload = await r2.generateUploadUrl(key);
+    return new Response(JSON.stringify({ key: upload.key, url: upload.url }), {
+      status: 200,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : "failed to generate manifest upload URL";
+    return new Response(JSON.stringify({ detail }), {
+      status: 400,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+});
+
+export const commitSync = httpAction(async (ctx, request) => {
+  const userId = await authenticateApiRequest(ctx, request);
+  if (!userId) {
+    return new Response(JSON.stringify({ detail: "authentication required" }), {
+      status: 401,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+
+  const body = await readJsonBody(request);
+  const environmentId = typeof body?.environment_id === "string" ? body.environment_id.trim() : "";
+  if (!environmentId) {
+    return new Response(JSON.stringify({ detail: "environment_id is required" }), {
+      status: 400,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+
+  const codeManifestHashRaw =
+    typeof body?.code_manifest_hash === "string" ? body.code_manifest_hash : undefined;
+  const dataManifestHashRaw =
+    typeof body?.data_manifest_hash === "string" ? body.data_manifest_hash : undefined;
+  const codeManifestRaw = body?.code_manifest;
+  const dataManifestRaw = body?.data_manifest;
+  const codeManifestHash =
+    typeof codeManifestHashRaw === "undefined" ? undefined : (normalizeSha256(codeManifestHashRaw) ?? undefined);
+  const dataManifestHash =
+    typeof dataManifestHashRaw === "undefined" ? undefined : (normalizeSha256(dataManifestHashRaw) ?? undefined);
+
+  if (
+    (typeof codeManifestHashRaw !== "undefined" && !codeManifestHash) ||
+    (typeof dataManifestHashRaw !== "undefined" && !dataManifestHash)
+  ) {
+    return new Response(JSON.stringify({ detail: "manifest hashes must be valid sha256 hex values" }), {
+      status: 400,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+
+  if (!codeManifestHash && !dataManifestHash) {
+    return new Response(JSON.stringify({ detail: "at least one of code_manifest_hash or data_manifest_hash is required" }), {
+      status: 400,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+  const typedEnvironmentId = environmentId as Id<"environments">;
+
+  const codeManifest =
+    typeof codeManifestHash === "undefined" ? undefined : parseManifest(codeManifestRaw, "code");
+  const dataManifest =
+    typeof dataManifestHash === "undefined" ? undefined : parseManifest(dataManifestRaw, "data");
+
+  if ((typeof codeManifestHash !== "undefined" && !codeManifest) || (typeof dataManifestHash !== "undefined" && !dataManifest)) {
+    return new Response(JSON.stringify({ detail: "manifest payload is invalid or missing for provided hash" }), {
+      status: 400,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+
+  if (codeManifestHash && codeManifest) {
+    const computedHash = await sha256Hex(JSON.stringify(codeManifest));
+    if (computedHash !== codeManifestHash) {
+      return new Response(JSON.stringify({ detail: "code manifest hash does not match manifest payload" }), {
+        status: 400,
+        headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+      });
+    }
+  }
+  if (dataManifestHash && dataManifest) {
+    const computedHash = await sha256Hex(JSON.stringify(dataManifest));
+    if (computedHash !== dataManifestHash) {
+      return new Response(JSON.stringify({ detail: "data manifest hash does not match manifest payload" }), {
+        status: 400,
+        headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+      });
+    }
+  }
+
+  try {
+    await ctx.runQuery(internal.environments.internalGet, {
+      userId,
+      environmentId: typedEnvironmentId,
+    });
+  } catch {
+    return new Response(JSON.stringify({ detail: "environment not found" }), {
+      status: 404,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+
+  if (codeManifestHash) {
+    const codeManifestKey = buildManifestObjectKey(userId, "code", codeManifestHash);
+    const exists = await objectExists(ctx, codeManifestKey);
+    if (!exists) {
+      return new Response(JSON.stringify({ detail: "code manifest not found in object storage" }), {
+        status: 400,
+        headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+      });
+    }
+  }
+  if (dataManifestHash) {
+    const dataManifestKey = buildManifestObjectKey(userId, "data", dataManifestHash);
+    const exists = await objectExists(ctx, dataManifestKey);
+    if (!exists) {
+      return new Response(JSON.stringify({ detail: "data manifest not found in object storage" }), {
+        status: 400,
+        headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+      });
+    }
+  }
+
+  try {
+    const data = await ctx.runMutation(internal.environments.internalCommitSyncPointers, {
+      userId,
+      environmentId: typedEnvironmentId,
+      code_manifest_hash: codeManifestHash,
+      data_manifest_hash: dataManifestHash,
+    });
+    return new Response(JSON.stringify(data), {
+      status: 200,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : "failed to commit sync pointers";
+    return new Response(JSON.stringify({ detail }), {
+      status: 400,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+});
+
 export const syncObjectMetadata = httpAction(async (ctx, request) => {
   const userId = await authenticateApiRequest(ctx, request);
   if (!userId) {
@@ -233,7 +644,14 @@ export const syncObjectMetadata = httpAction(async (ctx, request) => {
     });
   }
 
-  const allowedPrefixes = [dataPrefix(userId), environmentPrefix(userId)];
+  const allowedPrefixes = [
+    dataPrefix(userId),
+    environmentPrefix(userId),
+    blobPrefix(userId, "code"),
+    blobPrefix(userId, "data"),
+    manifestPrefix(userId, "code"),
+    manifestPrefix(userId, "data"),
+  ];
   if (!allowedPrefixes.some((prefix) => key.startsWith(prefix))) {
     return new Response(JSON.stringify({ detail: "invalid key prefix" }), {
       status: 403,

@@ -1,11 +1,11 @@
 package main
 
 import (
-	"archive/tar"
 	"bufio"
 	"bytes"
-	"compress/gzip"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -63,6 +63,8 @@ func main() {
 		handleEnvironment(os.Args[2:])
 	case "run":
 		handleRun(os.Args[2:])
+	case "sync":
+		handleSync(os.Args[2:])
 	case "train":
 		train(os.Args[2:])
 	case "shell":
@@ -90,6 +92,7 @@ Usage:
   tahuna shell
   tahuna login
   tahuna init [.]|[project-name]
+  tahuna sync [code|data]
   tahuna train [-d] [--gpu-type <gpu>] [--gpu-count <n>] [--volume-gb <n>]
   tahuna env list|show|delete ...
   tahuna run create|list|show|watch|logs|delete ...
@@ -526,6 +529,56 @@ func handleRun(args []string) {
 	}
 }
 
+type syncScope struct {
+	code bool
+	data bool
+}
+
+type syncManifestEntry struct {
+	Path   string `json:"path"`
+	SHA256 string `json:"sha256"`
+	Size   int64  `json:"size"`
+	Mode   uint32 `json:"mode"`
+}
+
+type syncManifest struct {
+	Version   int                 `json:"version"`
+	Type      string              `json:"type"`
+	CreatedAt int64               `json:"created_at"`
+	Entries   []syncManifestEntry `json:"entries"`
+}
+
+type preparedManifest struct {
+	kind      string
+	manifest  syncManifest
+	hash      string
+	raw       []byte
+	cachePath string
+	filesByID map[string]string
+}
+
+func handleSync(args []string) {
+	if len(args) > 1 {
+		must(errors.New("usage: tahuna sync [code|data]"))
+	}
+	scope := syncScope{code: true, data: true}
+	if len(args) == 1 {
+		switch strings.ToLower(strings.TrimSpace(args[0])) {
+		case "code":
+			scope = syncScope{code: true}
+		case "data":
+			scope = syncScope{data: true}
+		default:
+			must(errors.New("usage: tahuna sync [code|data]"))
+		}
+	}
+
+	environmentID, err := resolveEnvironmentID()
+	must(err)
+	must(syncIncremental(environmentID, scope))
+	fmt.Println("sync complete")
+}
+
 func environmentCreate(args []string) {
 	fs := flag.NewFlagSet("environment create", flag.ExitOnError)
 	name := fs.String("name", "", "Environment name")
@@ -669,121 +722,405 @@ func train(args []string) {
 }
 
 func preRunSync(environmentID string) error {
-	fmt.Println("syncing code...")
-	if err := syncCodeArchive(environmentID); err != nil {
-		return err
-	}
-
-	fmt.Println("syncing data...")
-	if err := syncDataDirectory(); err != nil {
-		return err
-	}
-
-	return nil
+	return syncIncremental(environmentID, syncScope{code: true, data: true})
 }
 
-func syncCodeArchive(environmentID string) error {
-	dataDir := "data"
-	if cfg, err := loadProjectConfig(); err == nil && strings.TrimSpace(cfg.DataDir) != "" {
-		dataDir = cfg.DataDir
+func syncIncremental(environmentID string, scope syncScope) error {
+	prepared := []preparedManifest{}
+
+	if scope.code {
+		fmt.Println("syncing code...")
+		codeManifest, err := prepareCodeManifest()
+		if err != nil {
+			return fmt.Errorf("code sync failed: %w", err)
+		}
+		prepared = append(prepared, codeManifest)
 	}
 
-	archivePath, err := createCodeArchive(dataDir)
-	if err != nil {
-		return fmt.Errorf("code sync failed: %w", err)
+	if scope.data {
+		fmt.Println("syncing data...")
+		dataManifest, err := prepareDataManifest()
+		if err != nil {
+			return fmt.Errorf("data sync failed: %w", err)
+		}
+		prepared = append(prepared, dataManifest)
 	}
-	defer os.Remove(archivePath)
 
-	upload, err := doJSON(http.MethodPost, "/sync/code/upload-url", map[string]any{
+	for _, item := range prepared {
+		if err := syncMissingBlobs(item); err != nil {
+			return fmt.Errorf("%s sync failed: %w", item.kind, err)
+		}
+	}
+
+	commitPayload := map[string]any{
 		"environment_id": environmentID,
-		"filename":       "source.tar.gz",
-	})
-	if err != nil {
-		return fmt.Errorf("code sync failed: %w", err)
+	}
+	for _, item := range prepared {
+		commitPayload[item.kind+"_manifest_hash"] = item.hash
+		commitPayload[item.kind+"_manifest"] = item.manifest
 	}
 
-	uploadURL := asString(upload["url"])
-	key := asString(upload["key"])
-	if uploadURL == "" || key == "" {
-		return errors.New("code sync failed: invalid upload URL response")
+	if _, err := doJSON(http.MethodPost, "/sync/commit", commitPayload); err != nil {
+		if !isMissingManifestCommitError(err) {
+			return err
+		}
+		for _, item := range prepared {
+			if errUpload := uploadManifest(item); errUpload != nil {
+				return fmt.Errorf("%s sync failed: %w", item.kind, errUpload)
+			}
+		}
+		if _, retryErr := doJSON(http.MethodPost, "/sync/commit", commitPayload); retryErr != nil {
+			return retryErr
+		}
 	}
 
-	if err := uploadFileToSignedURL(archivePath, uploadURL); err != nil {
-		return fmt.Errorf("code sync failed: %w", err)
-	}
-	if _, err := doJSON(http.MethodPost, "/sync/metadata", map[string]any{"key": key}); err != nil {
-		return fmt.Errorf("code sync failed: %w", err)
+	for _, item := range prepared {
+		if err := saveManifestCache(item); err != nil {
+			return fmt.Errorf("%s sync failed: %w", item.kind, err)
+		}
 	}
 	return nil
 }
 
-func syncDataDirectory() error {
+func isMissingManifestCommitError(err error) bool {
+	if err == nil {
+		return false
+	}
+	message := strings.ToLower(err.Error())
+	return strings.Contains(message, "manifest not found in object storage")
+}
+
+func prepareCodeManifest() (preparedManifest, error) {
 	cfg, err := loadProjectConfig()
 	if err != nil {
-		return err
+		return preparedManifest{}, err
 	}
 	dataDir := strings.TrimSpace(cfg.DataDir)
 	if dataDir == "" {
 		dataDir = "data"
 	}
+	cachePath := filepath.Join(projectStateDir, "sync_code_manifest.json")
+	return buildManifest("code", cachePath, dataDir)
+}
 
-	info, err := os.Stat(dataDir)
+func prepareDataManifest() (preparedManifest, error) {
+	cachePath := filepath.Join(projectStateDir, "sync_data_manifest.json")
+	return buildManifest("data", cachePath, "")
+}
+
+func buildManifest(kind, cachePath, dataDir string) (preparedManifest, error) {
+	entries, filesByID, err := collectManifestEntries(kind, dataDir)
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return nil
-		}
-		return fmt.Errorf("data sync failed: %w", err)
+		return preparedManifest{}, err
 	}
-	if !info.IsDir() {
+
+	createdAt := time.Now().UnixMilli()
+	if cached, cachedHash, cachedOK := loadManifestCache(cachePath); cachedOK {
+		if cachedHash != "" && manifestEntriesEqual(cached.Entries, entries) {
+			createdAt = cached.CreatedAt
+		}
+	}
+
+	manifest := syncManifest{
+		Version:   1,
+		Type:      kind,
+		CreatedAt: createdAt,
+		Entries:   entries,
+	}
+	raw, hash, err := marshalAndHashManifest(manifest)
+	if err != nil {
+		return preparedManifest{}, err
+	}
+
+	return preparedManifest{
+		kind:      kind,
+		manifest:  manifest,
+		hash:      hash,
+		raw:       raw,
+		cachePath: cachePath,
+		filesByID: filesByID,
+	}, nil
+}
+
+func collectManifestEntries(kind, dataDir string) ([]syncManifestEntry, map[string]string, error) {
+	baseDir, err := os.Getwd()
+	if err != nil {
+		return nil, nil, err
+	}
+
+	entries := []syncManifestEntry{}
+	filesByID := map[string]string{}
+
+	addEntry := func(fullPath, relPath string, fileInfo fs.FileInfo) error {
+		hash, size, err := fileSHA256(fullPath)
+		if err != nil {
+			return err
+		}
+		normalized := filepath.ToSlash(relPath)
+		entries = append(entries, syncManifestEntry{
+			Path:   normalized,
+			SHA256: hash,
+			Size:   size,
+			Mode:   uint32(fileInfo.Mode().Perm()),
+		})
+		if _, exists := filesByID[hash]; !exists {
+			filesByID[hash] = fullPath
+		}
 		return nil
 	}
 
-	var files []string
-	err = filepath.WalkDir(dataDir, func(path string, d fs.DirEntry, walkErr error) error {
+	if kind == "data" {
+		cfg, cfgErr := loadProjectConfig()
+		if cfgErr != nil {
+			return nil, nil, cfgErr
+		}
+		resolvedDataDir := strings.TrimSpace(cfg.DataDir)
+		if resolvedDataDir == "" {
+			resolvedDataDir = "data"
+		}
+		info, statErr := os.Stat(resolvedDataDir)
+		if statErr != nil {
+			if errors.Is(statErr, os.ErrNotExist) {
+				return entries, filesByID, nil
+			}
+			return nil, nil, statErr
+		}
+		if !info.IsDir() {
+			return entries, filesByID, nil
+		}
+		walkErr := filepath.WalkDir(resolvedDataDir, func(path string, d fs.DirEntry, walkErr error) error {
+			if walkErr != nil {
+				return walkErr
+			}
+			if d.IsDir() {
+				return nil
+			}
+			if !d.Type().IsRegular() || (d.Type()&os.ModeSymlink) != 0 {
+				return nil
+			}
+			relPath, relErr := filepath.Rel(resolvedDataDir, path)
+			if relErr != nil {
+				return relErr
+			}
+			fileInfo, infoErr := d.Info()
+			if infoErr != nil {
+				return infoErr
+			}
+			return addEntry(path, relPath, fileInfo)
+		})
+		if walkErr != nil {
+			return nil, nil, walkErr
+		}
+		sort.Slice(entries, func(i, j int) bool { return entries[i].Path < entries[j].Path })
+		return entries, filesByID, nil
+	}
+
+	normalizedDataDir := filepath.Clean(dataDir)
+	if filepath.IsAbs(normalizedDataDir) {
+		if relDataDir, relErr := filepath.Rel(baseDir, normalizedDataDir); relErr == nil && relDataDir != "." && relDataDir != ".." && !strings.HasPrefix(relDataDir, ".."+string(filepath.Separator)) {
+			normalizedDataDir = filepath.Clean(relDataDir)
+		}
+	}
+	walkErr := filepath.WalkDir(baseDir, func(path string, d fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
+		}
+		if path == baseDir {
+			return nil
+		}
+
+		relPath, relErr := filepath.Rel(baseDir, path)
+		if relErr != nil {
+			return relErr
+		}
+		relPath = filepath.Clean(relPath)
+
+		shouldSkipDir := relPath == ".git" ||
+			strings.HasPrefix(relPath, ".git"+string(filepath.Separator)) ||
+			relPath == projectStateDir ||
+			strings.HasPrefix(relPath, projectStateDir+string(filepath.Separator)) ||
+			relPath == normalizedDataDir ||
+			strings.HasPrefix(relPath, normalizedDataDir+string(filepath.Separator))
+
+		if d.IsDir() && shouldSkipDir {
+			return filepath.SkipDir
 		}
 		if d.IsDir() {
 			return nil
 		}
-		if d.Type().IsRegular() {
-			files = append(files, path)
+		if !d.Type().IsRegular() || (d.Type()&os.ModeSymlink) != 0 {
+			return nil
 		}
+
+		fileInfo, infoErr := d.Info()
+		if infoErr != nil {
+			return infoErr
+		}
+		return addEntry(path, relPath, fileInfo)
+	})
+	if walkErr != nil {
+		return nil, nil, walkErr
+	}
+	if len(entries) == 0 {
+		return nil, nil, errors.New("no code files found to sync")
+	}
+
+	sort.Slice(entries, func(i, j int) bool { return entries[i].Path < entries[j].Path })
+	return entries, filesByID, nil
+}
+
+func marshalAndHashManifest(manifest syncManifest) ([]byte, string, error) {
+	raw, err := json.Marshal(manifest)
+	if err != nil {
+		return nil, "", err
+	}
+	sum := sha256.Sum256(raw)
+	return raw, hex.EncodeToString(sum[:]), nil
+}
+
+func loadManifestCache(path string) (syncManifest, string, bool) {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return syncManifest{}, "", false
+	}
+	var manifest syncManifest
+	if err := json.Unmarshal(raw, &manifest); err != nil {
+		return syncManifest{}, "", false
+	}
+	_, hash, err := marshalAndHashManifest(manifest)
+	if err != nil {
+		return syncManifest{}, "", false
+	}
+	return manifest, hash, true
+}
+
+func saveManifestCache(item preparedManifest) error {
+	if err := os.MkdirAll(projectStateDir, 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(item.cachePath, append(item.raw, '\n'), 0o600)
+}
+
+func manifestEntriesEqual(a, b []syncManifestEntry) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func syncMissingBlobs(item preparedManifest) error {
+	hashes := uniqueSortedHashes(item.manifest.Entries)
+	if len(hashes) == 0 {
 		return nil
+	}
+
+	resp, err := doJSON(http.MethodPost, "/sync/blobs/missing", map[string]any{
+		"kind":   item.kind,
+		"hashes": hashes,
 	})
 	if err != nil {
-		return fmt.Errorf("data sync failed: %w", err)
+		return err
 	}
 
-	for _, path := range files {
-		relativePath, relErr := filepath.Rel(dataDir, path)
-		if relErr != nil {
-			return fmt.Errorf("data sync failed: %w", relErr)
-		}
+	missingAny, ok := resp["missing"].([]any)
+	if !ok {
+		return errors.New("invalid missing blob response")
+	}
 
-		upload, upErr := doJSON(http.MethodPost, "/sync/data/upload-url", map[string]any{
-			"filename":      filepath.Base(path),
-			"relative_path": filepath.ToSlash(relativePath),
+	for _, rawHash := range missingAny {
+		hash := asString(rawHash)
+		if hash == "" {
+			continue
+		}
+		path, exists := item.filesByID[hash]
+		if !exists {
+			return fmt.Errorf("missing local blob for hash %s", hash)
+		}
+		uploadResp, uploadErr := doJSON(http.MethodPost, "/sync/blobs/upload-url", map[string]any{
+			"kind":   item.kind,
+			"sha256": hash,
 		})
-		if upErr != nil {
-			return fmt.Errorf("data sync failed: %w", upErr)
+		if uploadErr != nil {
+			return uploadErr
 		}
-
-		uploadURL := asString(upload["url"])
-		key := asString(upload["key"])
-		if uploadURL == "" || key == "" {
-			return errors.New("data sync failed: invalid upload URL response")
+		uploadURL := asString(uploadResp["url"])
+		key := asString(uploadResp["key"])
+		if uploadURL == "" {
+			return errors.New("invalid blob upload URL response")
 		}
-
-		if err := uploadFileToSignedURL(path, uploadURL); err != nil {
-			return fmt.Errorf("data sync failed: %w", err)
+		if key == "" {
+			return errors.New("invalid blob upload URL response")
+		}
+		if err := uploadFileToSignedURLWithRetry(path, uploadURL, 3); err != nil {
+			return err
 		}
 		if _, err := doJSON(http.MethodPost, "/sync/metadata", map[string]any{"key": key}); err != nil {
-			return fmt.Errorf("data sync failed: %w", err)
+			return err
 		}
 	}
-
 	return nil
+}
+
+func uploadManifest(item preparedManifest) error {
+	uploadResp, err := doJSON(http.MethodPost, "/sync/manifests/upload-url", map[string]any{
+		"kind":          item.kind,
+		"manifest_hash": item.hash,
+	})
+	if err != nil {
+		return err
+	}
+	uploadURL := asString(uploadResp["url"])
+	key := asString(uploadResp["key"])
+	if uploadURL == "" {
+		return errors.New("invalid manifest upload URL response")
+	}
+	if key == "" {
+		return errors.New("invalid manifest upload URL response")
+	}
+	if err := uploadBytesToSignedURLWithRetry(item.raw, uploadURL, "application/json", 3); err != nil {
+		return err
+	}
+	if _, err := doJSON(http.MethodPost, "/sync/metadata", map[string]any{"key": key}); err != nil {
+		return err
+	}
+	return nil
+}
+
+func uniqueSortedHashes(entries []syncManifestEntry) []string {
+	seen := map[string]struct{}{}
+	out := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		if entry.SHA256 == "" {
+			continue
+		}
+		if _, exists := seen[entry.SHA256]; exists {
+			continue
+		}
+		seen[entry.SHA256] = struct{}{}
+		out = append(out, entry.SHA256)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func fileSHA256(path string) (string, int64, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return "", 0, err
+	}
+	defer file.Close()
+
+	hasher := sha256.New()
+	size, err := io.Copy(hasher, file)
+	if err != nil {
+		return "", 0, err
+	}
+	return hex.EncodeToString(hasher.Sum(nil)), size, nil
 }
 
 func runShow(args []string) {
@@ -1414,111 +1751,6 @@ func sortedKeys(m map[string][]string) []string {
 	return keys
 }
 
-func createCodeArchive(dataDir string) (string, error) {
-	baseDir, err := os.Getwd()
-	if err != nil {
-		return "", err
-	}
-
-	tempFile, err := os.CreateTemp("", "tahuna-code-*.tar.gz")
-	if err != nil {
-		return "", err
-	}
-	archivePath := tempFile.Name()
-
-	gzipWriter := gzip.NewWriter(tempFile)
-	tarWriter := tar.NewWriter(gzipWriter)
-	wroteFiles := false
-
-	closeAll := func() error {
-		errTar := tarWriter.Close()
-		errGzip := gzipWriter.Close()
-		errFile := tempFile.Close()
-		if errTar != nil {
-			return errTar
-		}
-		if errGzip != nil {
-			return errGzip
-		}
-		return errFile
-	}
-
-	normalizedDataDir := filepath.Clean(dataDir)
-	walkErr := filepath.WalkDir(baseDir, func(path string, d fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if path == baseDir {
-			return nil
-		}
-
-		relPath, err := filepath.Rel(baseDir, path)
-		if err != nil {
-			return err
-		}
-
-		shouldSkipDir := relPath == ".git" ||
-			strings.HasPrefix(relPath, ".git"+string(filepath.Separator)) ||
-			relPath == projectStateDir ||
-			strings.HasPrefix(relPath, projectStateDir+string(filepath.Separator)) ||
-			relPath == normalizedDataDir ||
-			strings.HasPrefix(relPath, normalizedDataDir+string(filepath.Separator))
-
-		if d.IsDir() && shouldSkipDir {
-			return filepath.SkipDir
-		}
-		if d.IsDir() {
-			return nil
-		}
-		if !d.Type().IsRegular() || (d.Type()&os.ModeSymlink) != 0 {
-			return nil
-		}
-
-		fileInfo, err := d.Info()
-		if err != nil {
-			return err
-		}
-
-		header, err := tar.FileInfoHeader(fileInfo, "")
-		if err != nil {
-			return err
-		}
-		header.Name = filepath.ToSlash(relPath)
-		if err := tarWriter.WriteHeader(header); err != nil {
-			return err
-		}
-
-		file, err := os.Open(path)
-		if err != nil {
-			return err
-		}
-		if _, err := io.Copy(tarWriter, file); err != nil {
-			_ = file.Close()
-			return err
-		}
-		if err := file.Close(); err != nil {
-			return err
-		}
-		wroteFiles = true
-		return nil
-	})
-	if walkErr != nil {
-		_ = closeAll()
-		_ = os.Remove(archivePath)
-		return "", walkErr
-	}
-	if !wroteFiles {
-		_ = closeAll()
-		_ = os.Remove(archivePath)
-		return "", errors.New("no code files found to sync")
-	}
-	if err := closeAll(); err != nil {
-		_ = os.Remove(archivePath)
-		return "", err
-	}
-	return archivePath, nil
-}
-
 func uploadFileToSignedURL(path, rawURL string) error {
 	file, err := os.Open(path)
 	if err != nil {
@@ -1546,6 +1778,59 @@ func uploadFileToSignedURL(path, rawURL string) error {
 		return fmt.Errorf("upload failed (%d): %s", resp.StatusCode, strings.TrimSpace(string(raw)))
 	}
 	return nil
+}
+
+func uploadFileToSignedURLWithRetry(path, rawURL string, attempts int) error {
+	var lastErr error
+	for i := 1; i <= attempts; i++ {
+		if err := uploadFileToSignedURL(path, rawURL); err == nil {
+			return nil
+		} else {
+			lastErr = err
+		}
+		if i < attempts {
+			time.Sleep(time.Duration(1<<(i-1)) * time.Second)
+		}
+	}
+	return lastErr
+}
+
+func uploadBytesToSignedURL(raw []byte, rawURL, contentType string) error {
+	req, err := http.NewRequest(http.MethodPut, rawURL, bytes.NewReader(raw))
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(contentType) != "" {
+		req.Header.Set("Content-Type", contentType)
+	}
+
+	client := &http.Client{Timeout: 30 * time.Minute}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 400))
+		return fmt.Errorf("upload failed (%d): %s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+	return nil
+}
+
+func uploadBytesToSignedURLWithRetry(raw []byte, rawURL, contentType string, attempts int) error {
+	var lastErr error
+	for i := 1; i <= attempts; i++ {
+		if err := uploadBytesToSignedURL(raw, rawURL, contentType); err == nil {
+			return nil
+		} else {
+			lastErr = err
+		}
+		if i < attempts {
+			time.Sleep(time.Duration(1<<(i-1)) * time.Second)
+		}
+	}
+	return lastErr
 }
 
 func doJSON(method, path string, payload map[string]any) (map[string]any, error) {

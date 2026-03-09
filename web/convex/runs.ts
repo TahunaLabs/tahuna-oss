@@ -19,6 +19,8 @@ const runResponseValidator = v.object({
   effective_gpu_type: v.string(),
   effective_gpu_count: v.number(),
   effective_volume_gb: v.number(),
+  code_manifest_hash: v.string(),
+  data_manifest_hash: v.string(),
   cancellation_requested: v.boolean(),
 });
 const listRunsResponseValidator = v.object({
@@ -29,6 +31,19 @@ const runLogsResponseValidator = v.object({
   logs_path: v.string(),
   log_file: v.string(),
   note: v.string(),
+});
+const provisioningPayloadValidator = v.object({
+  run_id: v.string(),
+  environment_id: v.string(),
+  user_id: v.string(),
+  input_path: v.string(),
+  output_path: v.string(),
+  logs_path: v.string(),
+  code_manifest_hash: v.union(v.string(), v.null()),
+  data_manifest_hash: v.union(v.string(), v.null()),
+  code_manifest_key: v.union(v.string(), v.null()),
+  data_manifest_key: v.union(v.string(), v.null()),
+  contract_version: v.string(),
 });
 
 const provisionPool = new Workpool(components.workpool, {
@@ -49,7 +64,32 @@ function toRunResponse(row: Doc<"runs">) {
     effective_gpu_type: row.effectiveGpuType || "",
     effective_gpu_count: row.effectiveGpuCount || 0,
     effective_volume_gb: row.effectiveVolumeGb || 0,
+    code_manifest_hash: row.codeManifestHash || "",
+    data_manifest_hash: row.dataManifestHash || "",
     cancellation_requested: row.cancellationRequested,
+  };
+}
+
+function manifestKey(userId: string, kind: "code" | "data", manifestHash?: string) {
+  if (!manifestHash) {
+    return null;
+  }
+  return `${userId}/manifests/${kind}/${manifestHash}.json`;
+}
+
+function toProvisioningPayload(row: Doc<"runs">) {
+  return {
+    run_id: String(row._id),
+    environment_id: String(row.environmentId),
+    user_id: row.userId,
+    input_path: row.input,
+    output_path: row.output,
+    logs_path: row.logs,
+    code_manifest_hash: row.codeManifestHash ?? null,
+    data_manifest_hash: row.dataManifestHash ?? null,
+    code_manifest_key: manifestKey(row.userId, "code", row.codeManifestHash),
+    data_manifest_key: manifestKey(row.userId, "data", row.dataManifestHash),
+    contract_version: "sync-incremental-0.1.0",
   };
 }
 
@@ -95,6 +135,11 @@ async function createRunForUserId(
   },
 ) {
   const env = await getOwnedEnvironment(ctx, args.userId, args.environmentId);
+  const codeManifestHash = env.latestCodeManifestHash;
+  const dataManifestHash = env.latestDataManifestHash;
+  if (!codeManifestHash || !dataManifestHash) {
+    throw new ConvexError("environment is not synced; run `tahuna sync` before creating a run");
+  }
 
   const now = Date.now();
   const runId = await ctx.db.insert("runs", {
@@ -108,6 +153,8 @@ async function createRunForUserId(
     effectiveGpuType: args.gpu_type ?? env.gpuType,
     effectiveGpuCount: args.gpu_count ?? env.gpuCount,
     effectiveVolumeGb: args.volume_gb ?? env.volumeGb,
+    codeManifestHash: codeManifestHash,
+    dataManifestHash: dataManifestHash,
   });
 
   await ctx.db.insert("runEvents", {
@@ -118,6 +165,8 @@ async function createRunForUserId(
       gpu_type: args.gpu_type || env.gpuType,
       gpu_count: args.gpu_count ?? env.gpuCount,
       volume_gb: args.volume_gb ?? env.volumeGb,
+      code_manifest_hash: codeManifestHash || null,
+      data_manifest_hash: dataManifestHash || null,
     },
   });
 
@@ -277,18 +326,36 @@ export const internalRemove = internalMutation({
 
 // ---------- internal lifecycle ----------
 
+export const internalGetProvisioningPayload = internalQuery({
+  args: { runId: v.id("runs") },
+  returns: provisioningPayloadValidator,
+  handler: async (ctx, args) => {
+    const row = await ctx.db.get("runs", args.runId);
+    if (!row) {
+      throw new ConvexError("run not found");
+    }
+    return toProvisioningPayload(row);
+  },
+});
+
 export const provisionRun = internalAction({
   args: { runId: v.id("runs") },
   returns: v.null(),
   handler: async (ctx, args) => {
-    await ctx.runMutation(internal.runs.markRunning, { runId: args.runId });
+    const provisioningPayload = await ctx.runQuery(internal.runs.internalGetProvisioningPayload, {
+      runId: args.runId,
+    });
+    await ctx.runMutation(internal.runs.markRunning, {
+      runId: args.runId,
+      provisioningPayload,
+    });
     await ctx.scheduler.runAfter(30_000, internal.runs.completeRun, { runId: args.runId });
     return null;
   },
 });
 
 export const markRunning = internalMutation({
-  args: { runId: v.id("runs") },
+  args: { runId: v.id("runs"), provisioningPayload: v.optional(provisioningPayloadValidator) },
   returns: v.null(),
   handler: async (ctx, args) => {
     const row = await ctx.db.get("runs", args.runId);
@@ -305,7 +372,13 @@ export const markRunning = internalMutation({
     await ctx.db.insert("runEvents", {
       runId: args.runId,
       status: "running",
-      message: "pod running",
+      message: "pod running (simulated)",
+      metadata: args.provisioningPayload
+        ? {
+            provisioning_payload: args.provisioningPayload,
+            fetch_strategy: "pod fetches code/data manifests from R2 by pinned manifest hash",
+          }
+        : undefined,
     });
     return null;
   },

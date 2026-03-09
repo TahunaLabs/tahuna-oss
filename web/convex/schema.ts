@@ -24,6 +24,9 @@ export default defineSchema({
     volumeGb: v.number(),
     framework: v.string(),
     version: v.string(),
+    latestCodeManifestHash: v.optional(v.string()),
+    latestDataManifestHash: v.optional(v.string()),
+    latestSyncAt: v.optional(v.number()),
   }).index("by_user", ["userId"]),
 
   runs: defineTable({
@@ -38,6 +41,8 @@ export default defineSchema({
     effectiveGpuType: v.optional(v.string()),
     effectiveGpuCount: v.optional(v.number()),
     effectiveVolumeGb: v.optional(v.number()),
+    codeManifestHash: v.optional(v.string()),
+    dataManifestHash: v.optional(v.string()),
     cancellationRequested: v.boolean(),
   })
     .index("by_user", ["userId"])

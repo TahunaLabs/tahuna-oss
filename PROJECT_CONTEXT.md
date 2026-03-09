@@ -1,6 +1,6 @@
 # Tahuna Project Context
 
-Last updated: 2026-03-08
+Last updated: 2026-03-09
 
 ## 1) What This Project Is
 
@@ -74,9 +74,10 @@ Setup:
 
 Run:
 - `[~]` CLI supports interactive shell mode (`tahuna shell`) and run lifecycle commands
-- `[x]` local directory data sync from CLI to R2 implemented as automatic pre-run sync (`train`, `run create`)
+- `[x]` local directory data sync from CLI to R2 implemented as incremental manifest/blob sync + automatic pre-run sync (`train`, `run create`)
 - `[~]` data upload exists in dashboard (`web/app/dashboard/page.tsx`, `web/convex/data.ts`)
-- `[x]` codebase sync from CLI to environment artifacts R2 implemented as automatic pre-run sync (`train`, `run create`)
+- `[x]` codebase sync from CLI to R2 implemented as incremental manifest/blob sync + automatic pre-run sync (`train`, `run create`)
+- `[x]` manual sync command implemented (`tahuna sync`, `tahuna sync code`, `tahuna sync data`)
 - `[ ]` env var sync (Convex-style) not implemented in CLI
 - `[x]` `train` / `train -d` command model implemented with optional runtime overrides (`--gpu-type`, `--gpu-count`, `--volume-gb`)
 - `[x]` run listing/show/watch/logs/delete exist
@@ -182,14 +183,48 @@ Most realistic current path:
 5. Use `tahuna init .` (or `tahuna init <project-name>`) then `tahuna train` / `tahuna train -d`.
 6. Use CLI + dashboard to inspect runs/data.
 
-## 7) Suggested Next Milestone (to unblock CLI-first phase)
+## 7) Product Decisions (locked 2026-03-09)
 
-With pre-run sync now implemented, the next shortest path for CLI-first quality is:
+The following sync architecture choices are now agreed and should be treated as implementation constraints:
 
-1. Add explicit manual sync commands (`tahuna sync code`, `tahuna sync data`) reusing the same pipeline.
-2. Add file-change awareness (skip unchanged uploads via manifest/hash).
-3. Implement env var sync and injection for runs.
-4. Add richer run observability (streamed logs/metrics in CLI).
+1. Upload timing:
+   - `tahuna train` and `tahuna run create` must always run a preflight sync.
+   - Manual sync command(s) are required (`tahuna sync ...`) for explicit user-triggered sync.
+   - No upload-on-every-file-save behavior.
+
+2. Upload payload model:
+   - Move from "always upload fresh tarball" to a git-style incremental strategy.
+   - Use content hashes + manifest comparison so only changed blobs are uploaded.
+   - Avoid re-implementing full Git internals (packfiles, delta compression, object graph GC).
+
+3. Upload destination:
+   - R2 is the source of truth for synced code/data artifacts.
+   - Pods pull by version/manifest pointer at run startup.
+   - Direct client-to-pod upload is not the primary path.
+
+## 8) Next Milestone (Incremental Sync (0.1.0))
+
+Milestone objective: deliver incremental, reproducible sync with R2-backed manifests and blob deduplication.
+
+1. Add explicit manual sync commands (`tahuna sync`, `tahuna sync code`, `tahuna sync data`).
+2. Implement content-addressed blob uploads and manifest-based diffing.
+3. Store artifact/data manifest pointers and pin them on each run.
+4. Update run provisioning contract so pod startup fetches by manifest pointer from R2.
+5. Keep env var sync/injection and richer run observability as follow-on work after Incremental Sync (0.1.0) base is stable.
+
+Progress (2026-03-09):
+- `[x]` Single incremental sync engine in CLI core path (`sync`, `train`, `run create`) with no tarball fallback path.
+- `[x]` Backend sync endpoints for missing blobs/upload URL/manifest upload URL/commit.
+- `[x]` Backend commit validates manifest hash format and manifest payload schema (`version/type/created_at/entries`, sorted paths, sha/mode/size checks).
+- `[x]` Run creation pins environment manifest hashes and now fails clearly when environment was not synced.
+- `[~]` Pod runtime remains simulated; provisioning payload contract is pinned and explicit, but real pod fetch/extract implementation is still pending.
+
+Pod startup contract detail (Incremental Sync (0.1.0)):
+- Run creation pins `codeManifestHash` / `dataManifestHash` from environment latest pointers when available.
+- Provisioning payload includes pinned hashes plus resolved manifest keys:
+  - `<userId>/manifests/code/<codeManifestHash>.json`
+  - `<userId>/manifests/data/<dataManifestHash>.json`
+- Pod must reconstruct workspace/data exclusively from these pinned manifests to guarantee reproducibility across later syncs.
 
 Update (completed 2026-03-06):
 - `tahuna init .` initializes current project, and `tahuna init <project-name>` creates/selects a project directory, then links created environment to `.tahuna/environment_id`.
@@ -207,6 +242,10 @@ Update (completed 2026-03-06):
 Clarification (agreed direction):
 - Code/data sync must happen via R2 before run launch, not inside run creation payload fields.
 - This pre-run sync should run automatically on run creation paths.
+- Sync architecture direction (2026-03-09):
+  - Add manual sync command(s) in addition to mandatory run preflight sync.
+  - Use incremental manifest/hash uploads, not full archive upload on every sync.
+  - Keep R2 as canonical storage; pods fetch by pinned sync version/manifest.
 
 ---
 

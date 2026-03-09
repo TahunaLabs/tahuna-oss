@@ -1,15 +1,19 @@
 import { httpRouter } from "convex/server";
 import { authComponent, createAuth } from "@convex/auth";
 import {
+    commitSync,
+    createBlobUploadUrl,
     createCodeUploadUrl,
     createDataUploadUrl,
     createEnvironment,
+    createManifestUploadUrl,
     createRunFromEnvironment,
     createRun,
     getCatalog,
     getEnvironment,
     getRunOrLogs,
     health,
+    listMissingBlobHashes,
     listEnvironments,
     listRuns,
     optionsHandler,
@@ -31,6 +35,10 @@ http.route({ path: "/api/catalog", method: "GET", handler: getCatalog });
 http.route({ path: "/api/sync/code/upload-url", method: "POST", handler: createCodeUploadUrl });
 http.route({ path: "/api/sync/data/upload-url", method: "POST", handler: createDataUploadUrl });
 http.route({ path: "/api/sync/metadata", method: "POST", handler: syncObjectMetadata });
+http.route({ path: "/api/sync/blobs/missing", method: "POST", handler: listMissingBlobHashes });
+http.route({ path: "/api/sync/blobs/upload-url", method: "POST", handler: createBlobUploadUrl });
+http.route({ path: "/api/sync/manifests/upload-url", method: "POST", handler: createManifestUploadUrl });
+http.route({ path: "/api/sync/commit", method: "POST", handler: commitSync });
 
 // Environments (REST)
 http.route({ path: "/api/environments", method: "GET", handler: listEnvironments });
