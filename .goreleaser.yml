@@ -35,6 +35,7 @@ release:
   github:
     owner: Pazuzzu
     name: tahuna-cli
+  target_commitish: main
   draft: false
   prerelease: auto
 
