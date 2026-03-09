@@ -33,7 +33,6 @@ import (
 
 const (
 	defaultAPIURL    = "http://localhost:3000"
-	cliVersion       = "0.1.0"
 	apiPrefix        = "/api"
 	projectStateDir  = ".tahuna"
 	projectEnvIDFile = "environment_id"
@@ -49,6 +48,9 @@ const (
 	cAmpGold  = "\033[38;5;179m"
 	cAmpRed   = "\033[38;5;196m"
 )
+
+// cliVersion is overridden at release build time via -ldflags.
+var cliVersion = "dev"
 
 func main() {
 	if len(os.Args) < 2 {
