@@ -1000,21 +1000,9 @@ func syncIncremental(environmentID string, scope syncScope, options syncOptions)
 		if dataManifest.cleanup != nil {
 			defer dataManifest.cleanup()
 		}
-		dataDecision, err := decideDataSyncUpload(dataManifest)
-		if err != nil {
-			dataSpinner.StopError()
-			return fmt.Errorf("data sync failed: %w", err)
-		}
-		if !dataDecision.upload {
-			dataSpinner.StopError()
-			return errors.New("data changed; sync cancelled by user")
-		}
-		if options.logProgress && dataDecision.versionName != "" {
-			fmt.Printf("%sdata version:%s %s\n", cAmpMuted, cReset, dataDecision.versionName)
-		}
 		if err := syncMissingBlobs(environmentID, dataManifest, func(done, total int, phase string) {
 			dataSpinner.SetMessage(formatDataSyncProgress(done, total, phase))
-		}, true); err != nil {
+		}, false); err != nil {
 			dataSpinner.StopError()
 			return fmt.Errorf("%s sync failed: %w", dataManifest.kind, err)
 		}
@@ -1031,37 +1019,50 @@ func syncIncremental(environmentID string, scope syncScope, options syncOptions)
 		commitPayload[item.kind+"_manifest"] = item.manifest
 	}
 
-	if _, err := syncDoJSON(http.MethodPost, "/sync/commit", commitPayload); err != nil {
-		if !isMissingManifestCommitError(err) {
+	for _, item := range prepared {
+		if err := uploadManifest(environmentID, item); err != nil {
 			commitSpinner.StopError()
-			return err
+			return fmt.Errorf("%s sync failed: %w", item.kind, err)
 		}
-		for _, item := range prepared {
-			if errUpload := uploadManifest(environmentID, item); errUpload != nil {
-				commitSpinner.StopError()
-				return fmt.Errorf("%s sync failed: %w", item.kind, errUpload)
-			}
+	}
+
+	var commitErr error
+	backoff := 250 * time.Millisecond
+	for attempt := 0; attempt < 8; attempt++ {
+		if _, commitErr = syncDoJSON(http.MethodPost, "/sync/commit", commitPayload); commitErr == nil {
+			break
 		}
-		var retryErr error
-		backoff := 250 * time.Millisecond
-		for attempt := 0; attempt < 5; attempt++ {
-			if _, retryErr = syncDoJSON(http.MethodPost, "/sync/commit", commitPayload); retryErr == nil {
-				break
-			}
-			if !isMissingManifestCommitError(retryErr) {
-				commitSpinner.StopError()
-				return retryErr
-			}
-			if attempt < 4 {
-				time.Sleep(backoff)
-				if backoff < 2*time.Second {
-					backoff *= 2
+		if !isMissingManifestCommitError(commitErr) {
+			commitSpinner.StopError()
+			return commitErr
+		}
+		// Re-upload manifests midway in case storage propagation lagged.
+		if attempt == 3 {
+			for _, item := range prepared {
+				if err := uploadManifest(environmentID, item); err != nil {
+					commitSpinner.StopError()
+					return fmt.Errorf("%s sync failed: %w", item.kind, err)
 				}
 			}
 		}
-		if retryErr != nil {
+		if attempt < 7 {
+			time.Sleep(backoff)
+			if backoff < 2*time.Second {
+				backoff *= 2
+			}
+		}
+	}
+	if commitErr != nil {
+		// Last fallback: one more upload + one last commit try before giving up.
+		for _, item := range prepared {
+			if err := uploadManifest(environmentID, item); err != nil {
+				commitSpinner.StopError()
+				return fmt.Errorf("%s sync failed: %w", item.kind, err)
+			}
+		}
+		if _, err := syncDoJSON(http.MethodPost, "/sync/commit", commitPayload); err != nil {
 			commitSpinner.StopError()
-			return retryErr
+			return err
 		}
 	}
 	commitSpinner.StopSuccess("finalizing sync")

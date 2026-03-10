@@ -134,8 +134,13 @@ async function objectExistsWithMetadataSync(
   key: string,
   attempts: number,
 ): Promise<boolean> {
-  let delay = 120;
+  let delay = 150;
   for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      await r2.syncMetadata(ctx, key);
+    } catch {
+      // Ignore sync race errors and continue polling metadata.
+    }
     const metadata = await r2.getMetadata(ctx, key);
     if (metadata) {
       return true;
@@ -707,7 +712,7 @@ export const commitSync = httpAction(async (ctx, request) => {
       "code",
       codeManifestHash,
     );
-    const exists = await objectExistsWithMetadataSync(ctx, codeManifestKey, 4);
+    const exists = await objectExistsWithMetadataSync(ctx, codeManifestKey, 10);
     if (!exists) {
       return new Response(JSON.stringify({ detail: "code manifest not found in object storage" }), {
         status: 400,
@@ -723,7 +728,7 @@ export const commitSync = httpAction(async (ctx, request) => {
       "data",
       dataManifestHash,
     );
-    const exists = await objectExistsWithMetadataSync(ctx, dataManifestKey, 4);
+    const exists = await objectExistsWithMetadataSync(ctx, dataManifestKey, 10);
     if (!exists) {
       return new Response(JSON.stringify({ detail: "data manifest not found in object storage" }), {
         status: 400,

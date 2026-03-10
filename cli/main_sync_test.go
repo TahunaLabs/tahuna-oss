@@ -245,8 +245,8 @@ func TestSyncIncremental_CodeCommitRetryUploadsManifestAndMetadata(t *testing.T)
 	mock.mu.Lock()
 	defer mock.mu.Unlock()
 
-	if mock.commitCount != 2 {
-		t.Fatalf("expected 2 commit calls (retry flow), got %d", mock.commitCount)
+	if mock.commitCount != 1 {
+		t.Fatalf("expected 1 commit call, got %d", mock.commitCount)
 	}
 	if mock.manifestUploadCount != 1 {
 		t.Fatalf("expected 1 manifest upload, got %d", mock.manifestUploadCount)
@@ -295,8 +295,8 @@ func TestSyncIncremental_CodeNoChangeSkipsBlobAndManifestUploads(t *testing.T) {
 	if mock.blobUploadCount != blobUploadsBefore {
 		t.Fatalf("expected no new blob uploads on no-change sync, before=%d after=%d", blobUploadsBefore, mock.blobUploadCount)
 	}
-	if mock.manifestUploadCount != manifestUploadsBefore {
-		t.Fatalf("expected no new manifest uploads on no-change sync, before=%d after=%d", manifestUploadsBefore, mock.manifestUploadCount)
+	if mock.manifestUploadCount != manifestUploadsBefore+1 {
+		t.Fatalf("expected exactly one new manifest upload on no-change sync, before=%d after=%d", manifestUploadsBefore, mock.manifestUploadCount)
 	}
 	if mock.commitCount != commitCountBefore+1 {
 		t.Fatalf("expected one additional commit call, before=%d after=%d", commitCountBefore, mock.commitCount)
@@ -369,7 +369,7 @@ func TestPreRunSync_SyncsCodeAndData(t *testing.T) {
 	}
 }
 
-func TestSyncIncremental_DataChangedWithoutInteractiveFails(t *testing.T) {
+func TestSyncIncremental_DataChangedWithoutInteractiveStillSyncs(t *testing.T) {
 	mock := newSyncBackendMock()
 	installSyncStubs(t, mock)
 	projectDir := setupTestProject(t, true)
@@ -383,16 +383,12 @@ func TestSyncIncremental_DataChangedWithoutInteractiveFails(t *testing.T) {
 	}
 
 	syncSupportsInteractivePrompts = func() bool { return false }
-	err := syncIncremental("env-test", syncScope{data: true}, syncOptions{})
-	if err == nil {
-		t.Fatalf("expected error when data changed and interactive prompts are unavailable")
-	}
-	if !strings.Contains(err.Error(), "interactive confirmation required") {
-		t.Fatalf("unexpected error: %v", err)
+	if err := syncIncremental("env-test", syncScope{data: true}, syncOptions{}); err != nil {
+		t.Fatalf("expected changed data sync to proceed without interactive prompts, got: %v", err)
 	}
 }
 
-func TestSyncIncremental_DataChangedPromptOverwrite(t *testing.T) {
+func TestSyncIncremental_DataChangedUploadsNewArchive(t *testing.T) {
 	mock := newSyncBackendMock()
 	installSyncStubs(t, mock)
 	projectDir := setupTestProject(t, true)
@@ -407,11 +403,6 @@ func TestSyncIncremental_DataChangedPromptOverwrite(t *testing.T) {
 
 	if err := os.WriteFile(filepath.Join(projectDir, "data", "sample.txt"), []byte("changed-again\n"), 0o644); err != nil {
 		t.Fatalf("failed to mutate data file: %v", err)
-	}
-
-	syncSupportsInteractivePrompts = func() bool { return true }
-	syncPromptChoice = func(label string, options []string, defaultIndex int) string {
-		return options[0]
 	}
 
 	if err := syncIncremental("env-test", syncScope{data: true}, syncOptions{}); err != nil {
