@@ -99,7 +99,7 @@ Usage:
   tahuna sync [code|data]
   tahuna train [-d] [--gpu-type <gpu>] [--gpu-count <n>] [--volume-gb <n>]
   tahuna env list|show|update|delete ...
-  tahuna run create|list|show|watch|logs|delete ...
+  tahuna run create|list|show|watch|logs|cancel|delete ...
   tahuna up
   tahuna version
 
@@ -111,6 +111,7 @@ Run list:
   tahuna run show <run_id>
   tahuna run watch <run_id> [--interval 5]
   tahuna run logs <run_id> [--verbose]
+  tahuna run cancel <run_id> [-f]
   tahuna run delete <run_id>
 
 Environment:
@@ -436,6 +437,9 @@ func initProject(target string) error {
 	if err := os.MkdirAll(projectCfg.DataDir, 0o755); err != nil {
 		return fmt.Errorf("failed to create data directory: %w", err)
 	}
+	if err := os.MkdirAll(projectCfg.OutputDir, 0o755); err != nil {
+		return fmt.Errorf("failed to create output directory: %w", err)
+	}
 	if err := ensureFrameworkDependency(projectCfg.RequirementsPath, frameworkKey); err != nil {
 		return fmt.Errorf("failed to update requirements: %w", err)
 	}
@@ -548,6 +552,8 @@ func handleRun(args []string) {
 		runWatch(args[1:])
 	case "logs":
 		runLogs(args[1:])
+	case "cancel":
+		runCancel(args[1:])
 	case "delete":
 		runDelete(args[1:])
 	default:
@@ -1243,13 +1249,17 @@ func prepareCodeManifest() (preparedManifest, error) {
 	if dataDir == "" {
 		dataDir = "data"
 	}
+	outputDir := strings.TrimSpace(cfg.OutputDir)
+	if outputDir == "" {
+		outputDir = "outputs"
+	}
 	cachePath := filepath.Join(projectStateDir, "sync_code_manifest.json")
-	return buildManifest("code", cachePath, dataDir)
+	return buildManifest("code", cachePath, []string{dataDir, outputDir})
 }
 
 func prepareDataManifest() (preparedManifest, error) {
 	cachePath := filepath.Join(projectStateDir, "sync_data_manifest.json")
-	return buildManifest("data", cachePath, "")
+	return buildManifest("data", cachePath, nil)
 }
 
 func dataSyncVersionNamePath() string {
@@ -1339,8 +1349,8 @@ func decideDataSyncUpload(item preparedManifest) (dataSyncDecision, error) {
 	}
 }
 
-func buildManifest(kind, cachePath, dataDir string) (preparedManifest, error) {
-	entries, filesByID, cleanup, err := collectManifestEntries(kind, dataDir)
+func buildManifest(kind, cachePath string, excludeDirs []string) (preparedManifest, error) {
+	entries, filesByID, cleanup, err := collectManifestEntries(kind, excludeDirs)
 	if err != nil {
 		return preparedManifest{}, err
 	}
@@ -1374,7 +1384,7 @@ func buildManifest(kind, cachePath, dataDir string) (preparedManifest, error) {
 	}, nil
 }
 
-func collectManifestEntries(kind, dataDir string) ([]syncManifestEntry, map[string]string, func(), error) {
+func collectManifestEntries(kind string, excludeDirs []string) ([]syncManifestEntry, map[string]string, func(), error) {
 	baseDir, err := os.Getwd()
 	if err != nil {
 		return nil, nil, nil, err
@@ -1434,14 +1444,18 @@ func collectManifestEntries(kind, dataDir string) ([]syncManifestEntry, map[stri
 		}, nil
 	}
 
-	normalizedDataDir := filepath.Clean(dataDir)
-	if filepath.IsAbs(normalizedDataDir) {
-		if relDataDir, relErr := filepath.Rel(baseDir, normalizedDataDir); relErr == nil && relDataDir != "." && relDataDir != ".." && !strings.HasPrefix(relDataDir, ".."+string(filepath.Separator)) {
-			normalizedDataDir = filepath.Clean(relDataDir)
+	normalizedExcludeDirs := make([]string, 0, len(excludeDirs))
+	for _, dir := range excludeDirs {
+		nd := filepath.Clean(dir)
+		if filepath.IsAbs(nd) {
+			if relDir, relErr := filepath.Rel(baseDir, nd); relErr == nil && relDir != "." && relDir != ".." && !strings.HasPrefix(relDir, ".."+string(filepath.Separator)) {
+				nd = filepath.Clean(relDir)
+			}
 		}
+		normalizedExcludeDirs = append(normalizedExcludeDirs, nd)
 	}
 
-	gitEntries, gitFilesByID, gitErr := collectCodeEntriesWithGitIgnore(baseDir, normalizedDataDir)
+	gitEntries, gitFilesByID, gitErr := collectCodeEntriesWithGitIgnore(baseDir, normalizedExcludeDirs)
 	if gitErr == nil {
 		if len(gitEntries) == 0 {
 			return nil, nil, nil, errors.New("no code files found to sync")
@@ -1464,13 +1478,13 @@ func collectManifestEntries(kind, dataDir string) ([]syncManifestEntry, map[stri
 		}
 		relPath = filepath.Clean(relPath)
 
-		if d.IsDir() && shouldSkipCodePath(relPath, normalizedDataDir) {
+		if d.IsDir() && shouldSkipCodePath(relPath, excludeDirs) {
 			return filepath.SkipDir
 		}
 		if d.IsDir() {
 			return nil
 		}
-		if shouldSkipCodePath(relPath, normalizedDataDir) {
+		if shouldSkipCodePath(relPath, excludeDirs) {
 			return nil
 		}
 		if !d.Type().IsRegular() || (d.Type()&os.ModeSymlink) != 0 {
@@ -1614,7 +1628,7 @@ func writeDeterministicDataArchive(dst *os.File, dataDir string, files []string)
 	return gw.Close()
 }
 
-func shouldSkipCodePath(relPath, normalizedDataDir string) bool {
+func shouldSkipCodePath(relPath string, excludeDirs []string) bool {
 	if relPath == "." {
 		return false
 	}
@@ -1624,9 +1638,17 @@ func shouldSkipCodePath(relPath, normalizedDataDir string) bool {
 	if relPath == projectStateDir || strings.HasPrefix(relPath, projectStateDir+string(filepath.Separator)) {
 		return true
 	}
-	if normalizedDataDir != "." && normalizedDataDir != "" {
-		if relPath == normalizedDataDir || strings.HasPrefix(relPath, normalizedDataDir+string(filepath.Separator)) {
+	// Hardcoded exclusions
+	for _, dir := range []string{"node_modules", "__pycache__"} {
+		if relPath == dir || strings.HasPrefix(relPath, dir+string(filepath.Separator)) {
 			return true
+		}
+	}
+	for _, dir := range excludeDirs {
+		if dir != "." && dir != "" {
+			if relPath == dir || strings.HasPrefix(relPath, dir+string(filepath.Separator)) {
+				return true
+			}
 		}
 	}
 	return false
@@ -1634,7 +1656,7 @@ func shouldSkipCodePath(relPath, normalizedDataDir string) bool {
 
 func collectCodeEntriesWithGitIgnore(
 	baseDir string,
-	normalizedDataDir string,
+	excludeDirs []string,
 ) ([]syncManifestEntry, map[string]string, error) {
 	cmd := exec.Command("git", "rev-parse", "--is-inside-work-tree")
 	cmd.Dir = baseDir
@@ -1658,7 +1680,7 @@ func collectCodeEntriesWithGitIgnore(
 		if relPath == "" || relPath == "." || strings.HasPrefix(relPath, ".."+string(filepath.Separator)) {
 			continue
 		}
-		if shouldSkipCodePath(relPath, normalizedDataDir) {
+		if shouldSkipCodePath(relPath, excludeDirs) {
 			continue
 		}
 
@@ -2423,6 +2445,45 @@ func printRunLogsSummary(resp map[string]any) {
 	fmt.Println("Use --verbose (-v) for full JSON payload.")
 }
 
+func runCancel(args []string) {
+	fs := flag.NewFlagSet("run cancel", flag.ExitOnError)
+	id := fs.String("id", "", "Run ID")
+	force := fs.Bool("f", false, "Force cancel (immediate termination, no graceful shutdown)")
+	forceLong := fs.Bool("force", false, "Force cancel (immediate termination, no graceful shutdown)")
+	fs.Parse(args)
+	runID := resolveRunID(*id, fs.Args())
+	require(runID != "", "run_id is required (usage: tahuna run cancel <run_id> [-f])")
+
+	isForce := *force || *forceLong
+
+	if !isForce {
+		confirm := promptChoice(
+			fmt.Sprintf("Cancel run %s? This will attempt graceful shutdown.", runID),
+			[]string{"Yes, cancel", "No, keep running"},
+			1,
+		)
+		if confirm != "Yes, cancel" {
+			fmt.Println("Cancelled.")
+			return
+		}
+	}
+
+	resp, err := doJSON(http.MethodDelete, "/runs/"+runID, nil)
+	must(err)
+
+	if cancelled, ok := resp["cancel_requested"]; ok && cancelled == true {
+		if isForce {
+			fmt.Printf("%sForce cancellation requested for run %s.%s\n", cAmpGold, runID, cReset)
+		} else {
+			fmt.Printf("%sCancellation requested for run %s. Waiting for graceful shutdown...%s\n", cAmpGold, runID, cReset)
+		}
+	} else if deleted, ok := resp["deleted"]; ok && deleted == true {
+		fmt.Printf("%sRun %s deleted.%s\n", cAmpGreen, runID, cReset)
+	} else {
+		printJSON(resp)
+	}
+}
+
 func runDelete(args []string) {
 	fs := flag.NewFlagSet("run delete", flag.ExitOnError)
 	id := fs.String("id", "", "Run ID")
@@ -2465,6 +2526,7 @@ func projectEnvironmentFilePath() string {
 
 type projectConfig struct {
 	DataDir          string
+	OutputDir        string
 	ConfigYAMLPath   string
 	TrainEntrypoint  string
 	RequirementsPath string
@@ -2473,6 +2535,7 @@ type projectConfig struct {
 func collectProjectInitConfig() (projectConfig, string, error) {
 	cfg := projectConfig{
 		DataDir:          "data",
+		OutputDir:        "outputs",
 		ConfigYAMLPath:   "config.yaml",
 		TrainEntrypoint:  "train.py",
 		RequirementsPath: "requirements.txt",
@@ -2492,6 +2555,14 @@ func collectProjectInitConfig() (projectConfig, string, error) {
 	} else {
 		fmt.Printf("%s?%s No data/ directory\n", cAmpGold, cReset)
 		cfg.DataDir = choosePathWhenMissing("Data directory", "data")
+	}
+
+	if dirExists(cfg.OutputDir) {
+		fmt.Printf("✓ Found %s%s/%s\n", cAmpGold, cfg.OutputDir, cReset)
+		cfg.OutputDir = choosePathWhenFound("Output directory", cfg.OutputDir, "outputs")
+	} else {
+		fmt.Printf("%s?%s No outputs/ directory\n", cAmpGold, cReset)
+		cfg.OutputDir = choosePathWhenMissing("Output directory", "outputs")
 	}
 
 	if fileExists("config.yaml") {
@@ -2568,25 +2639,19 @@ func promptPath(label, defaultValue string) string {
 }
 
 func detectFramework(cfg projectConfig) string {
-	candidates := []string{}
-	if cfg.ConfigYAMLPath != "" {
-		candidates = append(candidates, cfg.ConfigYAMLPath)
+	if cfg.RequirementsPath == "" {
+		return ""
 	}
-	if cfg.RequirementsPath != "" {
-		candidates = append(candidates, cfg.RequirementsPath)
+	raw, err := os.ReadFile(cfg.RequirementsPath)
+	if err != nil {
+		return ""
 	}
-	for _, path := range candidates {
-		raw, err := os.ReadFile(path)
-		if err != nil {
-			continue
-		}
-		lower := strings.ToLower(string(raw))
-		if strings.Contains(lower, "tensorflow") || strings.Contains(lower, "keras") {
-			return "tf"
-		}
-		if strings.Contains(lower, "torch") || strings.Contains(lower, "pytorch") {
-			return "pt"
-		}
+	lower := strings.ToLower(string(raw))
+	if strings.Contains(lower, "tensorflow") || strings.Contains(lower, "keras") {
+		return "tf"
+	}
+	if strings.Contains(lower, "torch") || strings.Contains(lower, "pytorch") {
+		return "pt"
 	}
 	return ""
 }
@@ -2645,8 +2710,9 @@ func saveProjectConfig(cfg projectConfig) error {
 		return err
 	}
 	body := fmt.Sprintf(
-		"data_dir: %q\nconfig_yaml: %q\ntrain_entrypoint: %q\nrequirements: %q\n",
+		"data_dir: %q\noutput_dir: %q\nconfig_yaml: %q\ntrain_entrypoint: %q\nrequirements: %q\n",
 		cfg.DataDir,
+		cfg.OutputDir,
 		cfg.ConfigYAMLPath,
 		cfg.TrainEntrypoint,
 		cfg.RequirementsPath,
@@ -2657,6 +2723,7 @@ func saveProjectConfig(cfg projectConfig) error {
 func loadProjectConfig() (projectConfig, error) {
 	cfg := projectConfig{
 		DataDir:          "data",
+		OutputDir:        "outputs",
 		ConfigYAMLPath:   "config.yaml",
 		TrainEntrypoint:  "train.py",
 		RequirementsPath: "requirements.txt",
@@ -2687,6 +2754,10 @@ func loadProjectConfig() (projectConfig, error) {
 		case "data_dir":
 			if value != "" {
 				cfg.DataDir = filepath.Clean(value)
+			}
+		case "output_dir":
+			if value != "" {
+				cfg.OutputDir = filepath.Clean(value)
 			}
 		case "config_yaml":
 			if value != "" {

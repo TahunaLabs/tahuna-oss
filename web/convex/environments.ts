@@ -161,13 +161,34 @@ async function updateEnvironmentSpecsForUserId(
 async function removeEnvironmentForUserId(ctx: MutationCtx, userId: string, environmentId: Id<"environments">) {
   await getOwnedEnvironment(ctx, userId, environmentId);
 
-  const existingRun = await ctx.db
+  // Cascade: delete all runs belonging to this environment
+  const runs = await ctx.db
     .query("runs")
     .withIndex("by_user_and_environment", (q) => q.eq("userId", userId).eq("environmentId", environmentId))
-    .first();
+    .collect();
 
-  if (existingRun) {
-    throw new ConvexError("environment still has runs; delete them first");
+  for (const run of runs) {
+    // Delete run events, logs, and metrics
+    const [events, runtimeLogs, runtimeMetrics] = await Promise.all([
+      ctx.db
+        .query("runEvents")
+        .withIndex("by_run", (q) => q.eq("runId", run._id))
+        .collect(),
+      ctx.db
+        .query("runRuntimeLogs")
+        .withIndex("by_run", (q) => q.eq("runId", run._id))
+        .collect(),
+      ctx.db
+        .query("runRuntimeMetrics")
+        .withIndex("by_run", (q) => q.eq("runId", run._id))
+        .collect(),
+    ]);
+    await Promise.all([
+      ...events.map((event) => ctx.db.delete(event._id)),
+      ...runtimeLogs.map((entry) => ctx.db.delete(entry._id)),
+      ...runtimeMetrics.map((entry) => ctx.db.delete(entry._id)),
+    ]);
+    await ctx.db.delete("runs", run._id);
   }
 
   await ctx.db.delete("environments", environmentId);
