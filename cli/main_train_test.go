@@ -138,6 +138,7 @@ func TestTrainAttached_MonitorsUntilCompletion(t *testing.T) {
 	var mu sync.Mutex
 	runCreateCount := 0
 	runWatchCount := 0
+	runLogsCount := 0
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -160,6 +161,37 @@ func TestTrainAttached_MonitorsUntilCompletion(t *testing.T) {
 				status = "completed"
 			}
 			_ = json.NewEncoder(w).Encode(map[string]any{"run_id": "run-attached", "status": status})
+			return
+		case r.Method == http.MethodGet && r.URL.Path == "/api/runs/run-attached/logs":
+			mu.Lock()
+			runLogsCount++
+			call := runLogsCount
+			mu.Unlock()
+
+			logs := []map[string]any{
+				{
+					"timestamp": 1773159359016,
+					"level":     "info",
+					"source":    "train",
+					"message":   "starting entrypoint",
+				},
+			}
+			if call >= 2 {
+				logs = append(logs, map[string]any{
+					"timestamp": 1773159537484,
+					"level":     "info",
+					"source":    "train",
+					"message":   "epoch=1 train_loss=0.1688 val_loss=0.0546 val_acc=0.9811",
+				})
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"run_id":         "run-attached",
+				"logs_path":      "runs/env-test/1/logs",
+				"log_file":       "runs/env-test/1/logs/run.log",
+				"note":           "Runtime logs/metrics are streamed by the pod and persisted in Convex.",
+				"recent_logs":    logs,
+				"recent_metrics": []map[string]any{},
+			})
 			return
 		default:
 			w.WriteHeader(http.StatusNotFound)
@@ -185,12 +217,18 @@ func TestTrainAttached_MonitorsUntilCompletion(t *testing.T) {
 	if runWatchCount < 2 {
 		t.Fatalf("expected monitor loop to poll at least twice, got %d", runWatchCount)
 	}
+	if runLogsCount < 2 {
+		t.Fatalf("expected monitor loop to poll run logs at least twice, got %d", runLogsCount)
+	}
 
 	if !strings.Contains(output, "Monitoring run lifecycle...") {
 		t.Fatalf("expected monitoring UX copy in output, got: %s", output)
 	}
 	if !strings.Contains(output, "Status") || !strings.Contains(output, "completed") {
 		t.Fatalf("expected completed status in output, got: %s", output)
+	}
+	if !strings.Contains(output, "epoch=1 train_loss=0.1688") {
+		t.Fatalf("expected streamed training log output, got: %s", output)
 	}
 }
 

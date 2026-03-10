@@ -110,7 +110,7 @@ Run list:
   tahuna run list --verbose      Show full JSON payload
   tahuna run show <run_id>
   tahuna run watch <run_id> [--interval 5]
-  tahuna run logs <run_id> [--verbose]
+  tahuna run logs <run_id> [--verbose] [--follow]
   tahuna run cancel <run_id> [-f]
   tahuna run delete <run_id>
 
@@ -621,6 +621,7 @@ var (
 	syncPromptChoice                = promptChoice
 	syncPromptString                = promptString
 	syncSupportsInteractivePrompts  = supportsInteractivePrompts
+	runLogsFollowSleep              = time.Sleep
 )
 
 func handleSync(args []string) {
@@ -977,7 +978,7 @@ func train(args []string) {
 	if *detached {
 		return
 	}
-	must(monitorRun(runID, 5))
+	must(monitorRunWithLogs(runID, 5))
 }
 
 func createRunWithCapacityPrompt(path string, payload map[string]any) (map[string]any, error) {
@@ -2348,13 +2349,16 @@ func runLogs(args []string) {
 	fs := flag.NewFlagSet("run logs", flag.ExitOnError)
 	id := fs.String("id", "", "Run ID")
 	lines := fs.Int("n", 0, "Show only the last N log lines (0 = all)")
-	follow := fs.Bool("f", false, "Follow log output (stream until run finishes)")
-	fs.BoolVar(follow, "follow", false, "Follow log output")
+	follow := fs.Bool("follow", false, "Follow log output (stream until run finishes)")
+	fs.BoolVar(follow, "f", false, "Follow log output (stream until run finishes)")
 	verbose := fs.Bool("verbose", false, "Show full logs payload")
 	fs.BoolVar(verbose, "v", false, "Show full logs payload")
+	interval := fs.Int("interval", 2, "Polling interval seconds when following")
 	fs.Parse(args)
 	runID := resolveRunID(*id, fs.Args())
 	require(runID != "", "run_id is required (usage: tahuna run logs <run_id>)")
+	require(*interval > 0, "--interval must be >= 1")
+	require(!(*follow && *verbose), "--follow (-f) cannot be used with --verbose (-v)")
 
 	resp, err := doJSON(http.MethodGet, "/runs/"+runID+"/logs", nil)
 	must(err)
@@ -2367,59 +2371,99 @@ func runLogs(args []string) {
 	if !*follow {
 		return
 	}
-
-	// Follow mode: poll every 2s, print only new log lines, stop on terminal status.
-	lastTimestamp := highestLogTimestamp(resp)
-	for {
-		status := strings.TrimSpace(asString(resp["status"]))
-		if status == "completed" || status == "failed" || status == "cancelled" {
-			break
-		}
-		time.Sleep(2 * time.Second)
-
-		resp, err = doJSON(http.MethodGet, "/runs/"+runID+"/logs", nil)
-		must(err)
-
-		recentLogs, _ := resp["recent_logs"].([]any)
-		for _, raw := range recentLogs {
-			row, ok := raw.(map[string]any)
-			if !ok {
-				continue
-			}
-			ts := asInt64(row["timestamp"])
-			if ts <= lastTimestamp {
-				continue
-			}
-			message := strings.TrimSpace(asString(row["message"]))
-			if message == "" {
-				continue
-			}
-			timestamp := formatUnixMillis(ts)
-			level := strings.ToUpper(strings.TrimSpace(asString(row["level"])))
-			if level == "" {
-				level = "INFO"
-			}
-			source := strings.TrimSpace(asString(row["source"]))
-			if source == "" {
-				source = "runtime"
-			}
-			fmt.Printf("%s %-7s %-12s %s\n", timestamp, level, source, message)
-			lastTimestamp = ts
-		}
-	}
+	must(followRunLogs(runID, resp, *interval))
 }
 
-func highestLogTimestamp(resp map[string]any) int64 {
+type runtimeLogLine struct {
+	timestamp int64
+	level     string
+	source    string
+	message   string
+}
+
+func parseRecentRunLogs(resp map[string]any) []runtimeLogLine {
 	recentLogs, _ := resp["recent_logs"].([]any)
-	var highest int64
-	for _, raw := range recentLogs {
-		if row, ok := raw.(map[string]any); ok {
-			if ts := asInt64(row["timestamp"]); ts > highest {
-				highest = ts
-			}
-		}
+	if len(recentLogs) == 0 {
+		return nil
 	}
-	return highest
+
+	out := make([]runtimeLogLine, 0, len(recentLogs))
+	for _, raw := range recentLogs {
+		row, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		message := strings.TrimSpace(asString(row["message"]))
+		if message == "" {
+			continue
+		}
+		level := strings.ToUpper(strings.TrimSpace(asString(row["level"])))
+		if level == "" {
+			level = "INFO"
+		}
+		source := strings.TrimSpace(asString(row["source"]))
+		if source == "" {
+			source = "runtime"
+		}
+		out = append(out, runtimeLogLine{
+			timestamp: asInt64(row["timestamp"]),
+			level:     level,
+			source:    source,
+			message:   message,
+		})
+	}
+	return out
+}
+
+func formatRuntimeLogLine(line runtimeLogLine) string {
+	return fmt.Sprintf("%s %-7s %-12s %s", formatUnixMillis(line.timestamp), line.level, line.source, line.message)
+}
+
+func runtimeLogLineKey(line runtimeLogLine) string {
+	return fmt.Sprintf("%d|%s|%s|%s", line.timestamp, line.level, line.source, line.message)
+}
+
+func isTerminalRunStatus(status string) bool {
+	return status == "completed" || status == "failed" || status == "cancelled"
+}
+
+func followRunLogs(runID string, initialResp map[string]any, interval int) error {
+	fmt.Printf("%sFollowing logs for run %s (Ctrl+C to stop)%s\n", cAmpMuted, runID, cReset)
+
+	seen := map[string]struct{}{}
+	for _, line := range parseRecentRunLogs(initialResp) {
+		key := runtimeLogLineKey(line)
+		seen[key] = struct{}{}
+	}
+
+	for {
+		statusResp, err := doJSON(http.MethodGet, "/runs/"+runID, nil)
+		if err != nil {
+			return err
+		}
+		status := asString(statusResp["status"])
+		if status == "" {
+			status = "queued"
+		}
+
+		logResp, err := doJSON(http.MethodGet, "/runs/"+runID+"/logs", nil)
+		if err != nil {
+			return err
+		}
+		for _, line := range parseRecentRunLogs(logResp) {
+			key := runtimeLogLineKey(line)
+			if _, exists := seen[key]; exists {
+				continue
+			}
+			seen[key] = struct{}{}
+			fmt.Println(formatRuntimeLogLine(line))
+		}
+
+		if isTerminalRunStatus(status) {
+			return nil
+		}
+		runLogsFollowSleep(time.Duration(interval) * time.Second)
+	}
 }
 
 func printRunLogsSummary(resp map[string]any, maxLines int) {
@@ -2442,32 +2486,15 @@ func printRunLogsSummary(resp map[string]any, maxLines int) {
 
 	fmt.Println()
 	fmt.Println("Recent logs:")
-	recentLogs, _ := resp["recent_logs"].([]any)
+	recentLogs := parseRecentRunLogs(resp)
 	if maxLines > 0 && len(recentLogs) > maxLines {
 		recentLogs = recentLogs[len(recentLogs)-maxLines:]
 	}
 	if len(recentLogs) == 0 {
 		fmt.Println("(no log lines yet)")
 	} else {
-		for _, raw := range recentLogs {
-			row, ok := raw.(map[string]any)
-			if !ok {
-				continue
-			}
-			message := strings.TrimSpace(asString(row["message"]))
-			if message == "" {
-				continue
-			}
-			timestamp := formatUnixMillis(asInt64(row["timestamp"]))
-			level := strings.ToUpper(strings.TrimSpace(asString(row["level"])))
-			if level == "" {
-				level = "INFO"
-			}
-			source := strings.TrimSpace(asString(row["source"]))
-			if source == "" {
-				source = "runtime"
-			}
-			fmt.Printf("%s %-7s %-12s %s\n", timestamp, level, source, message)
+		for _, line := range recentLogs {
+			fmt.Println(formatRuntimeLogLine(line))
 		}
 	}
 
@@ -2920,8 +2947,23 @@ func printSuccessLine(message string) {
 }
 
 func monitorRun(runID string, interval int) error {
+	return monitorRunWithOptions(runID, interval, false)
+}
+
+func monitorRunWithLogs(runID string, interval int) error {
+	return monitorRunWithOptions(runID, interval, true)
+}
+
+func monitorRunWithOptions(runID string, interval int, streamLogs bool) error {
 	dynamic := supportsDynamicStatus()
+	if streamLogs {
+		dynamic = false
+	}
 	anchored := false
+	headerPrinted := false
+	lastStatus := ""
+	seenLogLines := map[string]struct{}{}
+	logFetchWarned := false
 
 	for {
 		resp, err := doJSON(http.MethodGet, "/runs/"+runID, nil)
@@ -2929,7 +2971,58 @@ func monitorRun(runID string, interval int) error {
 			return err
 		}
 		status := asString(resp["status"])
+		if status == "" {
+			status = "queued"
+		}
 		errMsg := asString(resp["error"])
+
+		if streamLogs {
+			if !headerPrinted {
+				printPanel(
+					"Tahuna",
+					[]string{
+						fmt.Sprintf("%s>%s Tahuna train", cAmpGold, cReset),
+						"",
+						fmt.Sprintf("  %sMonitoring run lifecycle...%s", cAmpMuted, cReset),
+						fmt.Sprintf("  %s>%s Run ID %s", cAmpGreen, cReset, runID),
+						fmt.Sprintf("  %s>%s Dashboard %s", cAmpGreen, cReset, runDashboardURL(runID)),
+					},
+					"",
+					"",
+				)
+				headerPrinted = true
+			}
+			if status != lastStatus {
+				fmt.Printf("Status: %s\n", status)
+				lastStatus = status
+			}
+
+			logResp, logErr := doJSON(http.MethodGet, "/runs/"+runID+"/logs", nil)
+			if logErr != nil {
+				if !logFetchWarned {
+					fmt.Printf("%swarning:%s unable to stream logs yet (%v)\n", cAmpGold, cReset, logErr)
+					logFetchWarned = true
+				}
+			} else {
+				for _, line := range parseRecentRunLogs(logResp) {
+					key := runtimeLogLineKey(line)
+					if _, exists := seenLogLines[key]; exists {
+						continue
+					}
+					seenLogLines[key] = struct{}{}
+					fmt.Println(formatRuntimeLogLine(line))
+				}
+			}
+
+			if isTerminalRunStatus(status) {
+				if errMsg != "" {
+					fmt.Printf("%sError:%s %s\n", cAmpRed, cReset, errMsg)
+				}
+				break
+			}
+			time.Sleep(time.Duration(interval) * time.Second)
+			continue
+		}
 
 		if dynamic {
 			if anchored {
@@ -2943,7 +3036,7 @@ func monitorRun(runID string, interval int) error {
 		}
 
 		printRunPanel(runID, status, errMsg)
-		if status == "completed" || status == "failed" || status == "cancelled" {
+		if isTerminalRunStatus(status) {
 			break
 		}
 		time.Sleep(time.Duration(interval) * time.Second)
