@@ -99,7 +99,7 @@ export const createApiKey = mutation({
   },
 });
 
-export const authByApiKey = mutation({
+export const authByApiKey = query({
   args: { apiKey: v.string() },
   returns: v.union(v.object({ userId: v.string() }), v.null()),
   handler: async (ctx, args) => {
@@ -117,8 +117,6 @@ export const authByApiKey = mutation({
     if (!key || key.revokedAt) {
       return null;
     }
-
-    await ctx.db.patch("apiKeys", key._id, { lastUsedAt: Date.now() });
     return {
       userId: key.userId,
     };

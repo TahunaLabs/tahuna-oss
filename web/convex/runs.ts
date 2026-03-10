@@ -501,6 +501,7 @@ import json
 import os
 import re
 import subprocess
+import tarfile
 import urllib.error
 import urllib.request
 
@@ -623,6 +624,51 @@ def materialize(kind, manifest, root_dir):
         count += 1
         total += len(blob)
     return count, total
+
+def extract_data_bundle(root_dir):
+    archive_rel = "__tahuna__/data_bundle.tar.gz"
+    archive_path = os.path.join(root_dir, archive_rel)
+    if not os.path.isfile(archive_path):
+        return 0, 0, 0
+
+    archive_size = os.path.getsize(archive_path)
+    extracted_count = 0
+    extracted_bytes = 0
+    with tarfile.open(archive_path, "r:gz") as archive:
+        for member in archive.getmembers():
+            if member.isdir():
+                continue
+            if not member.isfile():
+                raise RuntimeError("data archive contains unsupported entry type: " + str(member.name))
+            rel = safe_rel_path(member.name)
+            target = os.path.join(root_dir, rel)
+            parent = os.path.dirname(target)
+            if parent:
+                os.makedirs(parent, exist_ok=True)
+            source = archive.extractfile(member)
+            if source is None:
+                raise RuntimeError("data archive entry missing bytes: " + rel)
+            blob = source.read()
+            with open(target, "wb") as fh:
+                fh.write(blob)
+            try:
+                os.chmod(target, int(member.mode) & 0o777)
+            except Exception:
+                pass
+            extracted_count += 1
+            extracted_bytes += len(blob)
+
+    try:
+        os.remove(archive_path)
+    except Exception:
+        pass
+    try:
+        bundle_dir = os.path.dirname(archive_path)
+        if os.path.isdir(bundle_dir) and not os.listdir(bundle_dir):
+            os.rmdir(bundle_dir)
+    except Exception:
+        pass
+    return extracted_count, extracted_bytes, archive_size
 
 def unquote(value):
     text = str(value).strip()
@@ -758,6 +804,11 @@ try:
     plan = api_request("GET", "/api/runs/" + RUN_ID + "/runtime/bootstrap")
     code_count, code_bytes = materialize("code", plan["code"], WORKSPACE_ROOT)
     data_count, data_bytes = materialize("data", plan["data"], DATA_ROOT)
+    bundle_files, bundle_bytes, bundle_archive_size = extract_data_bundle(DATA_ROOT)
+    if bundle_files > 0:
+        data_count = max(0, data_count - 1) + bundle_files
+        data_bytes = max(0, data_bytes - bundle_archive_size) + bundle_bytes
+        emit_logs(["bootstrap: extracted data bundle files=" + str(bundle_files)], source="bootstrap")
     emit_logs(["bootstrap: materialized code files=" + str(code_count) + " data files=" + str(data_count)])
     emit_metrics(
         [

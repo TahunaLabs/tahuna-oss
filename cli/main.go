@@ -1,8 +1,10 @@
 package main
 
 import (
+	"archive/tar"
 	"bufio"
 	"bytes"
+	"compress/gzip"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -24,6 +26,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 	"unicode/utf8"
@@ -588,6 +591,7 @@ type preparedManifest struct {
 	raw       []byte
 	cachePath string
 	filesByID map[string]string
+	cleanup   func()
 }
 
 type syncOptions struct {
@@ -595,10 +599,18 @@ type syncOptions struct {
 	dynamicStatus bool
 }
 
+type dataSyncDecision struct {
+	upload      bool
+	versionName string
+}
+
 var (
 	syncDoJSON                      = doJSON
 	syncUploadFileToSignedURLRetry  = uploadFileToSignedURLWithRetry
 	syncUploadBytesToSignedURLRetry = uploadBytesToSignedURLWithRetry
+	syncPromptChoice                = promptChoice
+	syncPromptString                = promptString
+	syncSupportsInteractivePrompts  = supportsInteractivePrompts
 )
 
 func handleSync(args []string) {
@@ -967,7 +979,10 @@ func syncIncremental(environmentID string, scope syncScope, options syncOptions)
 			codeSpinner.StopError()
 			return fmt.Errorf("code sync failed: %w", err)
 		}
-		if err := syncMissingBlobs(environmentID, codeManifest, options, nil); err != nil {
+		if codeManifest.cleanup != nil {
+			defer codeManifest.cleanup()
+		}
+		if err := syncMissingBlobs(environmentID, codeManifest, nil, false); err != nil {
 			codeSpinner.StopError()
 			return fmt.Errorf("%s sync failed: %w", codeManifest.kind, err)
 		}
@@ -982,9 +997,24 @@ func syncIncremental(environmentID string, scope syncScope, options syncOptions)
 			dataSpinner.StopError()
 			return fmt.Errorf("data sync failed: %w", err)
 		}
-		if err := syncMissingBlobs(environmentID, dataManifest, options, func(done, total int, phase string) {
+		if dataManifest.cleanup != nil {
+			defer dataManifest.cleanup()
+		}
+		dataDecision, err := decideDataSyncUpload(dataManifest)
+		if err != nil {
+			dataSpinner.StopError()
+			return fmt.Errorf("data sync failed: %w", err)
+		}
+		if !dataDecision.upload {
+			dataSpinner.StopError()
+			return errors.New("data changed; sync cancelled by user")
+		}
+		if options.logProgress && dataDecision.versionName != "" {
+			fmt.Printf("%sdata version:%s %s\n", cAmpMuted, cReset, dataDecision.versionName)
+		}
+		if err := syncMissingBlobs(environmentID, dataManifest, func(done, total int, phase string) {
 			dataSpinner.SetMessage(formatDataSyncProgress(done, total, phase))
-		}); err != nil {
+		}, true); err != nil {
 			dataSpinner.StopError()
 			return fmt.Errorf("%s sync failed: %w", dataManifest.kind, err)
 		}
@@ -1012,7 +1042,24 @@ func syncIncremental(environmentID string, scope syncScope, options syncOptions)
 				return fmt.Errorf("%s sync failed: %w", item.kind, errUpload)
 			}
 		}
-		if _, retryErr := syncDoJSON(http.MethodPost, "/sync/commit", commitPayload); retryErr != nil {
+		var retryErr error
+		backoff := 250 * time.Millisecond
+		for attempt := 0; attempt < 5; attempt++ {
+			if _, retryErr = syncDoJSON(http.MethodPost, "/sync/commit", commitPayload); retryErr == nil {
+				break
+			}
+			if !isMissingManifestCommitError(retryErr) {
+				commitSpinner.StopError()
+				return retryErr
+			}
+			if attempt < 4 {
+				time.Sleep(backoff)
+				if backoff < 2*time.Second {
+					backoff *= 2
+				}
+			}
+		}
+		if retryErr != nil {
 			commitSpinner.StopError()
 			return retryErr
 		}
@@ -1032,17 +1079,6 @@ func formatDuration(d time.Duration) string {
 		return fmt.Sprintf("%dms", d.Milliseconds())
 	}
 	return fmt.Sprintf("%.2fs", d.Seconds())
-}
-
-func syncStatusText(scope syncScope) string {
-	switch {
-	case scope.code && scope.data:
-		return "syncing code and data..."
-	case scope.code:
-		return "syncing code..."
-	default:
-		return "syncing data..."
-	}
 }
 
 func supportsDynamicStatus() bool {
@@ -1068,8 +1104,12 @@ func isMissingManifestCommitError(err error) bool {
 	if err == nil {
 		return false
 	}
-	message := strings.ToLower(err.Error())
-	return strings.Contains(message, "manifest not found in object storage")
+	var apiErr *apiRequestError
+	if errors.As(err, &apiErr) {
+		return apiErr.status == http.StatusBadRequest &&
+			strings.Contains(strings.ToLower(apiErr.detail), "manifest not found in object storage")
+	}
+	return strings.Contains(strings.ToLower(err.Error()), "manifest not found in object storage")
 }
 
 func prepareCodeManifest() (preparedManifest, error) {
@@ -1090,8 +1130,95 @@ func prepareDataManifest() (preparedManifest, error) {
 	return buildManifest("data", cachePath, "")
 }
 
+func dataSyncVersionNamePath() string {
+	return filepath.Join(projectStateDir, "sync_data_version_name")
+}
+
+func loadDataSyncVersionName() string {
+	raw, err := os.ReadFile(dataSyncVersionNamePath())
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(raw))
+}
+
+func saveDataSyncVersionName(name string) error {
+	if strings.TrimSpace(name) == "" {
+		return nil
+	}
+	if err := os.MkdirAll(projectStateDir, 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(dataSyncVersionNamePath(), []byte(strings.TrimSpace(name)+"\n"), 0o600)
+}
+
+func defaultDataSyncVersionName() string {
+	cfg, err := loadProjectConfig()
+	if err != nil {
+		return "data"
+	}
+	resolved := strings.TrimSpace(cfg.DataDir)
+	if resolved == "" {
+		resolved = "data"
+	}
+	base := strings.TrimSpace(filepath.Base(filepath.Clean(resolved)))
+	if base == "" || base == "." || base == string(filepath.Separator) {
+		return "data"
+	}
+	return base
+}
+
+func decideDataSyncUpload(item preparedManifest) (dataSyncDecision, error) {
+	currentName := loadDataSyncVersionName()
+	if currentName == "" {
+		currentName = defaultDataSyncVersionName()
+	}
+
+	_, previousHash, previousOK := loadManifestCache(item.cachePath)
+	changed := !previousOK || previousHash != item.hash
+	if !changed {
+		return dataSyncDecision{upload: true, versionName: currentName}, nil
+	}
+	if !previousOK {
+		if err := saveDataSyncVersionName(currentName); err != nil {
+			return dataSyncDecision{}, err
+		}
+		return dataSyncDecision{upload: true, versionName: currentName}, nil
+	}
+
+	if !syncSupportsInteractivePrompts() {
+		return dataSyncDecision{}, errors.New("data changed; interactive confirmation required (run `tahuna sync data` in a terminal)")
+	}
+
+	fmt.Printf("%sData files changed.%s\n", cAmpGold, cReset)
+	choice := syncPromptChoice("Data sync action", []string{
+		fmt.Sprintf("Re-upload and overwrite \"%s\"", currentName),
+		"Re-upload as a new data name",
+		"Cancel",
+	}, 0)
+
+	switch choice {
+	case "Cancel":
+		return dataSyncDecision{upload: false, versionName: currentName}, nil
+	case "Re-upload as a new data name":
+		nextName := strings.TrimSpace(syncPromptString("New data name", currentName+"-v2"))
+		if nextName == "" {
+			return dataSyncDecision{}, errors.New("data name is required")
+		}
+		if err := saveDataSyncVersionName(nextName); err != nil {
+			return dataSyncDecision{}, err
+		}
+		return dataSyncDecision{upload: true, versionName: nextName}, nil
+	default:
+		if err := saveDataSyncVersionName(currentName); err != nil {
+			return dataSyncDecision{}, err
+		}
+		return dataSyncDecision{upload: true, versionName: currentName}, nil
+	}
+}
+
 func buildManifest(kind, cachePath, dataDir string) (preparedManifest, error) {
-	entries, filesByID, err := collectManifestEntries(kind, dataDir)
+	entries, filesByID, cleanup, err := collectManifestEntries(kind, dataDir)
 	if err != nil {
 		return preparedManifest{}, err
 	}
@@ -1121,13 +1248,14 @@ func buildManifest(kind, cachePath, dataDir string) (preparedManifest, error) {
 		raw:       raw,
 		cachePath: cachePath,
 		filesByID: filesByID,
+		cleanup:   cleanup,
 	}, nil
 }
 
-func collectManifestEntries(kind, dataDir string) ([]syncManifestEntry, map[string]string, error) {
+func collectManifestEntries(kind, dataDir string) ([]syncManifestEntry, map[string]string, func(), error) {
 	baseDir, err := os.Getwd()
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	entries := []syncManifestEntry{}
@@ -1154,7 +1282,7 @@ func collectManifestEntries(kind, dataDir string) ([]syncManifestEntry, map[stri
 	if kind == "data" {
 		cfg, cfgErr := loadProjectConfig()
 		if cfgErr != nil {
-			return nil, nil, cfgErr
+			return nil, nil, nil, cfgErr
 		}
 		resolvedDataDir := strings.TrimSpace(cfg.DataDir)
 		if resolvedDataDir == "" {
@@ -1163,38 +1291,25 @@ func collectManifestEntries(kind, dataDir string) ([]syncManifestEntry, map[stri
 		info, statErr := os.Stat(resolvedDataDir)
 		if statErr != nil {
 			if errors.Is(statErr, os.ErrNotExist) {
-				return entries, filesByID, nil
+				return entries, filesByID, nil, nil
 			}
-			return nil, nil, statErr
+			return nil, nil, nil, statErr
 		}
 		if !info.IsDir() {
-			return entries, filesByID, nil
+			return entries, filesByID, nil, nil
 		}
-		walkErr := filepath.WalkDir(resolvedDataDir, func(path string, d fs.DirEntry, walkErr error) error {
-			if walkErr != nil {
-				return walkErr
-			}
-			if d.IsDir() {
-				return nil
-			}
-			if !d.Type().IsRegular() || (d.Type()&os.ModeSymlink) != 0 {
-				return nil
-			}
-			relPath, relErr := filepath.Rel(resolvedDataDir, path)
-			if relErr != nil {
-				return relErr
-			}
-			fileInfo, infoErr := d.Info()
-			if infoErr != nil {
-				return infoErr
-			}
-			return addEntry(path, relPath, fileInfo)
-		})
+		archiveEntry, archivePath, walkErr := buildDataArchiveEntry(resolvedDataDir)
 		if walkErr != nil {
-			return nil, nil, walkErr
+			return nil, nil, nil, walkErr
 		}
-		sort.Slice(entries, func(i, j int) bool { return entries[i].Path < entries[j].Path })
-		return entries, filesByID, nil
+		if archiveEntry == nil {
+			return entries, filesByID, nil, nil
+		}
+		entries = append(entries, *archiveEntry)
+		filesByID[archiveEntry.SHA256] = archivePath
+		return entries, filesByID, func() {
+			_ = os.Remove(archivePath)
+		}, nil
 	}
 
 	normalizedDataDir := filepath.Clean(dataDir)
@@ -1207,10 +1322,10 @@ func collectManifestEntries(kind, dataDir string) ([]syncManifestEntry, map[stri
 	gitEntries, gitFilesByID, gitErr := collectCodeEntriesWithGitIgnore(baseDir, normalizedDataDir)
 	if gitErr == nil {
 		if len(gitEntries) == 0 {
-			return nil, nil, errors.New("no code files found to sync")
+			return nil, nil, nil, errors.New("no code files found to sync")
 		}
 		sort.Slice(gitEntries, func(i, j int) bool { return gitEntries[i].Path < gitEntries[j].Path })
-		return gitEntries, gitFilesByID, nil
+		return gitEntries, gitFilesByID, nil, nil
 	}
 
 	walkErr := filepath.WalkDir(baseDir, func(path string, d fs.DirEntry, walkErr error) error {
@@ -1247,14 +1362,134 @@ func collectManifestEntries(kind, dataDir string) ([]syncManifestEntry, map[stri
 		return addEntry(path, relPath, fileInfo)
 	})
 	if walkErr != nil {
-		return nil, nil, walkErr
+		return nil, nil, nil, walkErr
 	}
 	if len(entries) == 0 {
-		return nil, nil, errors.New("no code files found to sync")
+		return nil, nil, nil, errors.New("no code files found to sync")
 	}
 
 	sort.Slice(entries, func(i, j int) bool { return entries[i].Path < entries[j].Path })
-	return entries, filesByID, nil
+	return entries, filesByID, nil, nil
+}
+
+func buildDataArchiveEntry(dataDir string) (*syncManifestEntry, string, error) {
+	files, err := listDataFiles(dataDir)
+	if err != nil {
+		return nil, "", err
+	}
+	if len(files) == 0 {
+		return nil, "", nil
+	}
+	if err := os.MkdirAll(projectStateDir, 0o755); err != nil {
+		return nil, "", err
+	}
+
+	archiveFile, err := os.CreateTemp(projectStateDir, "data_bundle_*.tar.gz")
+	if err != nil {
+		return nil, "", err
+	}
+	archivePath := archiveFile.Name()
+	if err := writeDeterministicDataArchive(archiveFile, dataDir, files); err != nil {
+		_ = archiveFile.Close()
+		_ = os.Remove(archivePath)
+		return nil, "", err
+	}
+	if err := archiveFile.Close(); err != nil {
+		_ = os.Remove(archivePath)
+		return nil, "", err
+	}
+
+	hash, size, err := fileSHA256(archivePath)
+	if err != nil {
+		_ = os.Remove(archivePath)
+		return nil, "", err
+	}
+	entry := syncManifestEntry{
+		Path:   "__tahuna__/data_bundle.tar.gz",
+		SHA256: hash,
+		Size:   size,
+		Mode:   0o644,
+	}
+	return &entry, archivePath, nil
+}
+
+func listDataFiles(dataDir string) ([]string, error) {
+	files := []string{}
+	err := filepath.WalkDir(dataDir, func(path string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if d.IsDir() {
+			return nil
+		}
+		if !d.Type().IsRegular() || (d.Type()&os.ModeSymlink) != 0 {
+			return nil
+		}
+		relPath, relErr := filepath.Rel(dataDir, path)
+		if relErr != nil {
+			return relErr
+		}
+		files = append(files, filepath.ToSlash(relPath))
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	sort.Strings(files)
+	return files, nil
+}
+
+func writeDeterministicDataArchive(dst *os.File, dataDir string, files []string) error {
+	gw := gzip.NewWriter(dst)
+	gw.Header.ModTime = time.Unix(0, 0)
+	gw.Header.OS = 255
+	tw := tar.NewWriter(gw)
+
+	for _, rel := range files {
+		fullPath := filepath.Join(dataDir, filepath.FromSlash(rel))
+		info, err := os.Stat(fullPath)
+		if err != nil {
+			_ = tw.Close()
+			_ = gw.Close()
+			return err
+		}
+		header := &tar.Header{
+			Name:     rel,
+			Mode:     int64(info.Mode().Perm()),
+			Size:     info.Size(),
+			ModTime:  time.Unix(0, 0),
+			Typeflag: tar.TypeReg,
+			Format:   tar.FormatUSTAR,
+		}
+		if err := tw.WriteHeader(header); err != nil {
+			_ = tw.Close()
+			_ = gw.Close()
+			return err
+		}
+		file, err := os.Open(fullPath)
+		if err != nil {
+			_ = tw.Close()
+			_ = gw.Close()
+			return err
+		}
+		_, copyErr := io.Copy(tw, file)
+		closeErr := file.Close()
+		if copyErr != nil {
+			_ = tw.Close()
+			_ = gw.Close()
+			return copyErr
+		}
+		if closeErr != nil {
+			_ = tw.Close()
+			_ = gw.Close()
+			return closeErr
+		}
+	}
+	if err := tw.Close(); err != nil {
+		_ = gw.Close()
+		return err
+	}
+	return gw.Close()
 }
 
 func shouldSkipCodePath(relPath, normalizedDataDir string) bool {
@@ -1381,8 +1616,8 @@ func manifestEntriesEqual(a, b []syncManifestEntry) bool {
 func syncMissingBlobs(
 	environmentID string,
 	item preparedManifest,
-	options syncOptions,
 	onProgress func(done, total int, phase string),
+	forceUploadAll bool,
 ) error {
 	hashes := uniqueSortedHashes(item.manifest.Entries)
 	totalHashes := len(hashes)
@@ -1396,29 +1631,41 @@ func syncMissingBlobs(
 		return nil
 	}
 	sizeByHash := manifestSizesByHash(item.manifest.Entries)
-
-	resp, err := syncDoJSON(http.MethodPost, "/sync/blobs/missing", map[string]any{
-		"environment_id": environmentID,
-		"kind":           item.kind,
-		"hashes":         hashes,
-	})
-	if err != nil {
-		return err
+	missingHashes := make([]string, 0, len(hashes))
+	confirmedCount := 0
+	if forceUploadAll {
+		missingHashes = append(missingHashes, hashes...)
+	} else {
+		const missingCheckChunkSize = 500
+		for start := 0; start < len(hashes); start += missingCheckChunkSize {
+			end := start + missingCheckChunkSize
+			if end > len(hashes) {
+				end = len(hashes)
+			}
+			chunk := hashes[start:end]
+			missingChunk, err := fetchMissingBlobHashesWithRetry(environmentID, item.kind, chunk)
+			if err != nil {
+				return err
+			}
+			missingHashes = append(missingHashes, missingChunk...)
+			confirmedCount += len(chunk) - len(missingChunk)
+			if onProgress != nil {
+				onProgress(confirmedCount, totalHashes, "checking")
+			}
+		}
 	}
 
-	missingAny, ok := resp["missing"].([]any)
-	if !ok {
-		return errors.New("invalid missing blob response")
-	}
-	totalMissing := len(missingAny)
-	existing := totalHashes - totalMissing
-	doneMissing := 0
 	if onProgress != nil {
-		onProgress(existing, totalHashes, "uploading")
+		onProgress(confirmedCount, totalHashes, "uploading")
 	}
 
-	for _, rawHash := range missingAny {
-		hash := asString(rawHash)
+	type blobUploadTask struct {
+		hash string
+		path string
+		size int64
+	}
+	tasks := make([]blobUploadTask, 0, len(missingHashes))
+	for _, hash := range missingHashes {
 		if hash == "" {
 			continue
 		}
@@ -1430,35 +1677,193 @@ func syncMissingBlobs(
 		if !hasSize || sizeBytes <= 0 {
 			return fmt.Errorf("missing local size for hash %s", hash)
 		}
-		uploadResp, uploadErr := syncDoJSON(http.MethodPost, "/sync/blobs/upload-url", map[string]any{
-			"environment_id": environmentID,
-			"kind":           item.kind,
-			"sha256":         hash,
-			"size_bytes":     sizeBytes,
+		tasks = append(tasks, blobUploadTask{
+			hash: hash,
+			path: path,
+			size: sizeBytes,
 		})
-		if uploadErr != nil {
-			return uploadErr
+	}
+	if len(tasks) == 0 {
+		return nil
+	}
+
+	workerCount := syncUploadWorkerCount(len(tasks))
+	jobs := make(chan blobUploadTask)
+	errCh := make(chan error, 1)
+	var wg sync.WaitGroup
+	var completed atomic.Int64
+	completed.Store(int64(confirmedCount))
+
+	for i := 0; i < workerCount; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for task := range jobs {
+				_, err := uploadBlobTask(environmentID, item.kind, task.hash, task.path, task.size)
+				if err != nil {
+					select {
+					case errCh <- err:
+					default:
+					}
+					return
+				}
+				if onProgress != nil {
+					done := int(completed.Add(1))
+					onProgress(done, totalHashes, "uploading")
+				}
+			}
+		}()
+	}
+
+	var firstErr error
+sendLoop:
+	for _, task := range tasks {
+		select {
+		case err := <-errCh:
+			firstErr = err
+			break sendLoop
+		default:
 		}
-		uploadURL := asString(uploadResp["url"])
-		key := asString(uploadResp["key"])
-		if uploadURL == "" {
-			return errors.New("invalid blob upload URL response")
-		}
-		if key == "" {
-			return errors.New("invalid blob upload URL response")
-		}
-		if err := syncUploadFileToSignedURLRetry(path, uploadURL, 3); err != nil {
-			return err
-		}
-		if _, err := syncDoJSON(http.MethodPost, "/sync/metadata", map[string]any{"key": key}); err != nil {
-			return err
-		}
-		doneMissing++
-		if onProgress != nil {
-			onProgress(existing+doneMissing, totalHashes, "uploading")
+		jobs <- task
+	}
+	close(jobs)
+	wg.Wait()
+	if firstErr == nil {
+		select {
+		case err := <-errCh:
+			firstErr = err
+		default:
 		}
 	}
+	if firstErr != nil {
+		return firstErr
+	}
+
+	if onProgress != nil {
+		onProgress(int(completed.Load()), totalHashes, "finalizing")
+	}
 	return nil
+}
+
+func syncUploadWorkerCount(total int) int {
+	if total <= 1 {
+		return 1
+	}
+	workers := 8
+	if raw := strings.TrimSpace(os.Getenv("TAHUNA_SYNC_UPLOAD_WORKERS")); raw != "" {
+		if parsed, err := strconv.Atoi(raw); err == nil {
+			workers = parsed
+		}
+	}
+	if workers < 1 {
+		workers = 1
+	}
+	if workers > 16 {
+		workers = 16
+	}
+	if workers > total {
+		workers = total
+	}
+	return workers
+}
+
+func uploadBlobTask(environmentID, kind, hash, path string, sizeBytes int64) (string, error) {
+	uploadResp, uploadErr := syncDoJSON(http.MethodPost, "/sync/blobs/upload-url", map[string]any{
+		"environment_id": environmentID,
+		"kind":           kind,
+		"sha256":         hash,
+		"size_bytes":     sizeBytes,
+	})
+	if uploadErr != nil {
+		return "", uploadErr
+	}
+	uploadURL := asString(uploadResp["url"])
+	key := asString(uploadResp["key"])
+	if uploadURL == "" || key == "" {
+		return "", errors.New("invalid blob upload URL response")
+	}
+	if err := syncUploadFileToSignedURLRetry(path, uploadURL, 3); err != nil {
+		return "", err
+	}
+	return key, nil
+}
+
+func fetchMissingBlobHashesWithRetry(environmentID, kind string, hashes []string) ([]string, error) {
+	var lastErr error
+	backoff := 750 * time.Millisecond
+	for attempt := 0; attempt < 4; attempt++ {
+		missing, err := fetchMissingBlobHashes(environmentID, kind, hashes)
+		if err == nil {
+			return missing, nil
+		}
+		lastErr = err
+		if !isRetryableSyncError(err) {
+			return nil, err
+		}
+		if attempt < 3 {
+			time.Sleep(backoff)
+			if backoff < 4*time.Second {
+				backoff *= 2
+			}
+		}
+	}
+	return nil, lastErr
+}
+
+func fetchMissingBlobHashes(environmentID, kind string, hashes []string) ([]string, error) {
+	resp, err := syncDoJSON(http.MethodPost, "/sync/blobs/missing", map[string]any{
+		"environment_id": environmentID,
+		"kind":           kind,
+		"hashes":         hashes,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	missingAny, ok := resp["missing"].([]any)
+	if !ok {
+		return nil, errors.New("invalid missing blob response")
+	}
+	missing := make([]string, 0, len(missingAny))
+	for _, rawHash := range missingAny {
+		hash := asString(rawHash)
+		if hash == "" {
+			continue
+		}
+		missing = append(missing, hash)
+	}
+	return missing, nil
+}
+
+func isRetryableSyncError(err error) bool {
+	if err == nil {
+		return false
+	}
+	var apiErr *apiRequestError
+	if errors.As(err, &apiErr) {
+		switch apiErr.status {
+		case 408, 429, 502, 503, 504, 524:
+			return true
+		case 409:
+			return strings.Contains(strings.ToLower(apiErr.detail), "not ready")
+		default:
+			return false
+		}
+	}
+
+	var netErr net.Error
+	if errors.As(err, &netErr) && (netErr.Timeout() || netErr.Temporary()) {
+		return true
+	}
+	if errors.Is(err, io.EOF) {
+		return true
+	}
+	var opErr *net.OpError
+	if errors.As(err, &opErr) {
+		return true
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "connection reset")
 }
 
 func formatDataSyncProgress(done, total int, phase string) string {
@@ -1476,7 +1881,9 @@ func formatDataSyncProgress(done, total int, phase string) string {
 	case "checking":
 		return fmt.Sprintf("syncing data... [%s] %3d%% (%d/%d) checking remote", bar, percent, done, total)
 	case "uploading":
-		return fmt.Sprintf("syncing data... [%s] %3d%% (%d/%d) uploading", bar, percent, done, total)
+		return fmt.Sprintf("syncing data... [%s] %3d%% (%d/%d) uploading missing blobs", bar, percent, done, total)
+	case "finalizing":
+		return fmt.Sprintf("syncing data... [%s] %3d%% (%d/%d) finalizing", bar, percent, done, total)
 	default:
 		return fmt.Sprintf("syncing data... [%s] %3d%% (%d/%d)", bar, percent, done, total)
 	}
@@ -1579,9 +1986,6 @@ func uploadManifest(environmentID string, item preparedManifest) error {
 		return errors.New("invalid manifest upload URL response")
 	}
 	if err := syncUploadBytesToSignedURLRetry(item.raw, uploadURL, "application/json", 3); err != nil {
-		return err
-	}
-	if _, err := syncDoJSON(http.MethodPost, "/sync/metadata", map[string]any{"key": key}); err != nil {
 		return err
 	}
 	return nil
@@ -2419,7 +2823,10 @@ func uploadFileToSignedURL(path, rawURL string) error {
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 400))
-		return fmt.Errorf("upload failed (%d): %s", resp.StatusCode, strings.TrimSpace(string(raw)))
+		return &uploadRequestError{
+			status: resp.StatusCode,
+			detail: strings.TrimSpace(string(raw)),
+		}
 	}
 	return nil
 }
@@ -2431,6 +2838,9 @@ func uploadFileToSignedURLWithRetry(path, rawURL string, attempts int) error {
 			return nil
 		} else {
 			lastErr = err
+			if !isRetryableUploadError(err) {
+				return err
+			}
 		}
 		if i < attempts {
 			time.Sleep(time.Duration(1<<(i-1)) * time.Second)
@@ -2459,7 +2869,10 @@ func uploadBytesToSignedURL(raw []byte, rawURL, contentType string) error {
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 400))
-		return fmt.Errorf("upload failed (%d): %s", resp.StatusCode, strings.TrimSpace(string(body)))
+		return &uploadRequestError{
+			status: resp.StatusCode,
+			detail: strings.TrimSpace(string(body)),
+		}
 	}
 	return nil
 }
@@ -2471,12 +2884,57 @@ func uploadBytesToSignedURLWithRetry(raw []byte, rawURL, contentType string, att
 			return nil
 		} else {
 			lastErr = err
+			if !isRetryableUploadError(err) {
+				return err
+			}
 		}
 		if i < attempts {
 			time.Sleep(time.Duration(1<<(i-1)) * time.Second)
 		}
 	}
 	return lastErr
+}
+
+type uploadRequestError struct {
+	status int
+	detail string
+}
+
+func (e *uploadRequestError) Error() string {
+	return fmt.Sprintf("upload failed (%d): %s", e.status, e.detail)
+}
+
+func isRetryableUploadError(err error) bool {
+	if err == nil {
+		return false
+	}
+	var uploadErr *uploadRequestError
+	if errors.As(err, &uploadErr) {
+		switch uploadErr.status {
+		case 408, 429:
+			return true
+		default:
+			return uploadErr.status >= 500
+		}
+	}
+	var netErr net.Error
+	if errors.As(err, &netErr) && (netErr.Timeout() || netErr.Temporary()) {
+		return true
+	}
+	if errors.Is(err, io.EOF) {
+		return true
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "connection reset")
+}
+
+type apiRequestError struct {
+	status int
+	detail string
+}
+
+func (e *apiRequestError) Error() string {
+	return fmt.Sprintf("api error (%d): %s", e.status, e.detail)
 }
 
 func doJSON(method, path string, payload map[string]any) (map[string]any, error) {
@@ -2542,7 +3000,10 @@ func doJSON(method, path string, payload map[string]any) (map[string]any, error)
 		if msg == "" {
 			msg = string(raw)
 		}
-		return nil, fmt.Errorf("api error (%d): %s", resp.StatusCode, msg)
+		return nil, &apiRequestError{
+			status: resp.StatusCode,
+			detail: msg,
+		}
 	}
 
 	return out, nil

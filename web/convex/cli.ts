@@ -3,9 +3,8 @@ import type { Id } from "@convex/_generated/dataModel";
 import { ActionCtx, httpAction, internalQuery } from "@convex/_generated/server";
 import { R2 } from "@convex-dev/r2";
 import { components } from "@convex/_generated/api";
-import { shortId } from "@convex/ids";
 import { v } from "convex/values";
-import { UPLOAD_LIMITS_BYTES, blobLimitByKind, manifestLimitByKind } from "../config";
+import { blobLimitByKind, manifestLimitByKind } from "../config";
 
 function extractBearerToken(request: Request): string {
   const bearer = request.headers.get("authorization")?.trim() || "";
@@ -21,7 +20,7 @@ async function authenticateApiRequest(ctx: ActionCtx, request: Request): Promise
   if (!apiKey) {
     return null;
   }
-  const auth = await ctx.runMutation(api.auth.authByApiKey, { apiKey });
+  const auth = await ctx.runQuery(api.auth.authByApiKey, { apiKey });
   if (!auth) {
     return null;
   }
@@ -58,16 +57,6 @@ type CreateRunStrictArgs = {
 };
 type RuntimeStatus = (typeof RUNTIME_STATUS_VALUES)[number];
 
-function normalizeFilename(filename: unknown) {
-  if (typeof filename !== "string") return "file";
-  const trimmed = filename.trim();
-  return trimmed || "file";
-}
-
-function encodePathSegment(value: string) {
-  return encodeURIComponent(value.trim() || "file");
-}
-
 function environmentPrefix(userId: string) {
   return `${userId}/environment/`;
 }
@@ -78,17 +67,6 @@ function dataRootPrefix(userId: string) {
 
 function dataPrefix(userId: string, dataId: string) {
   return `${dataRootPrefix(userId)}${dataId}/`;
-}
-
-function buildDataKey(userId: string, dataId: string, relativePath: string, filename: string) {
-  const blobId = shortId("blob");
-  const pathLabel = relativePath.trim() || filename;
-  return `${dataPrefix(userId, dataId)}files/${blobId}__${encodePathSegment(pathLabel)}`;
-}
-
-function buildCodeKey(userId: string, environmentId: string, filename: string) {
-  const artifactId = shortId("code");
-  return `${environmentPrefix(userId)}${environmentId}/artifacts/${artifactId}__${encodePathSegment(filename)}`;
 }
 
 function blobPrefix(userId: string, environmentId: string, dataId: string, kind: SyncKind) {
@@ -139,22 +117,6 @@ function parseSizeBytes(value: unknown): number | null {
   return value;
 }
 
-function uploadCategoryForKey(key: string, userId: string): { kind: SyncKind; category: "blob" | "manifest" } | null {
-  if (key.startsWith(dataRootPrefix(userId))) {
-    return {
-      kind: "data",
-      category: key.includes("/manifests/") ? "manifest" : "blob",
-    };
-  }
-  if (key.startsWith(environmentPrefix(userId))) {
-    return {
-      kind: "code",
-      category: key.includes("/manifests/") ? "manifest" : "blob",
-    };
-  }
-  return null;
-}
-
 async function readJsonBody(request: Request) {
   try {
     return await request.json();
@@ -163,33 +125,29 @@ async function readJsonBody(request: Request) {
   }
 }
 
-function sleep(ms: number) {
-  return new Promise<void>((resolve) => setTimeout(resolve, ms));
+async function sleepMs(ms: number) {
+  await new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function objectExistsInStorage(ctx: ActionCtx, key: string) {
-  const metadata = await r2.getMetadata(ctx, key);
-  return metadata !== null;
-}
-
-async function waitForSyncedMetadata(ctx: ActionCtx, key: string) {
-  let delayMs = 200;
-  for (let attempt = 0; attempt < 10; attempt += 1) {
-    try {
-      await r2.syncMetadata(ctx, key);
-    } catch {
-      // Object store may not be immediately consistent after upload.
-    }
+async function objectExistsWithMetadataSync(
+  ctx: ActionCtx,
+  key: string,
+  attempts: number,
+): Promise<boolean> {
+  let delay = 120;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
     const metadata = await r2.getMetadata(ctx, key);
     if (metadata) {
-      return metadata;
+      return true;
     }
-    await sleep(delayMs);
-    if (delayMs < 2000) {
-      delayMs *= 2;
+    if (attempt < attempts - 1) {
+      await sleepMs(delay);
+      if (delay < 800) {
+        delay *= 2;
+      }
     }
   }
-  return null;
+  return false;
 }
 
 async function requireOwnedEnvironment(
@@ -416,144 +374,6 @@ export const getCatalog = httpAction(async (ctx) => {
 
 // Sync
 
-export const createCodeUploadUrl = httpAction(async (ctx, request) => {
-  const userId = await authenticateApiRequest(ctx, request);
-  if (!userId) {
-    return new Response(JSON.stringify({ detail: "authentication required" }), {
-      status: 401,
-      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
-    });
-  }
-
-  let body;
-  try {
-    body = await request.json();
-  } catch {
-    body = null;
-  }
-
-  const environmentId = typeof body?.environment_id === "string" ? body.environment_id.trim() : "";
-  if (!environmentId) {
-    return new Response(JSON.stringify({ detail: "environment_id is required" }), {
-      status: 400,
-      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
-    });
-  }
-
-  if (!(await requireOwnedEnvironment(ctx, userId, environmentId))) {
-    return new Response(JSON.stringify({ detail: "environment not found" }), {
-      status: 404,
-      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
-    });
-  }
-  const sizeBytes = parseSizeBytes(body?.size_bytes);
-  if (sizeBytes === null) {
-    return new Response(JSON.stringify({ detail: "size_bytes must be a positive integer" }), {
-      status: 400,
-      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
-    });
-  }
-  if (sizeBytes > UPLOAD_LIMITS_BYTES.codeBlob) {
-    return new Response(JSON.stringify({ detail: `code file exceeds limit of ${UPLOAD_LIMITS_BYTES.codeBlob} bytes` }), {
-      status: 413,
-      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
-    });
-  }
-
-  try {
-    const filename = normalizeFilename(body?.filename);
-    const key = buildCodeKey(userId, environmentId, filename);
-    const upload = await r2.generateUploadUrl(key);
-    return new Response(JSON.stringify({
-      key: upload.key,
-      url: upload.url,
-      filename,
-      environment_id: environmentId,
-    }), {
-      status: 200,
-      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
-    });
-  } catch (err) {
-    const detail = err instanceof Error ? err.message : "failed to generate code upload URL";
-    return new Response(JSON.stringify({ detail }), {
-      status: 400,
-      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
-    });
-  }
-});
-
-export const createDataUploadUrl = httpAction(async (ctx, request) => {
-  const userId = await authenticateApiRequest(ctx, request);
-  if (!userId) {
-    return new Response(JSON.stringify({ detail: "authentication required" }), {
-      status: 401,
-      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
-    });
-  }
-
-  let body;
-  try {
-    body = await request.json();
-  } catch {
-    body = null;
-  }
-
-  const environmentId = typeof body?.environment_id === "string" ? body.environment_id.trim() : "";
-  if (!environmentId) {
-    return new Response(JSON.stringify({ detail: "environment_id is required" }), {
-      status: 400,
-      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
-    });
-  }
-
-  const ownedEnvironment = await requireOwnedEnvironment(ctx, userId, environmentId);
-  if (!ownedEnvironment) {
-    return new Response(JSON.stringify({ detail: "environment not found" }), {
-      status: 404,
-      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
-    });
-  }
-  const sizeBytes = parseSizeBytes(body?.size_bytes);
-  if (sizeBytes === null) {
-    return new Response(JSON.stringify({ detail: "size_bytes must be a positive integer" }), {
-      status: 400,
-      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
-    });
-  }
-  if (sizeBytes > UPLOAD_LIMITS_BYTES.dataBlob) {
-    return new Response(JSON.stringify({ detail: `data file exceeds limit of ${UPLOAD_LIMITS_BYTES.dataBlob} bytes` }), {
-      status: 413,
-      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
-    });
-  }
-
-  try {
-    const filename = normalizeFilename(body?.filename);
-    const relativePath =
-      typeof body?.relative_path === "string" && body.relative_path.trim() !== ""
-        ? body.relative_path
-        : filename;
-    const key = buildDataKey(userId, ownedEnvironment.dataId, relativePath, filename);
-    const upload = await r2.generateUploadUrl(key);
-    return new Response(JSON.stringify({
-      key: upload.key,
-      url: upload.url,
-      filename,
-      environment_id: environmentId,
-      data_id: ownedEnvironment.dataId,
-    }), {
-      status: 200,
-      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
-    });
-  } catch (err) {
-    const detail = err instanceof Error ? err.message : "failed to generate data upload URL";
-    return new Response(JSON.stringify({ detail }), {
-      status: 400,
-      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
-    });
-  }
-});
-
 export const listMissingBlobHashes = httpAction(async (ctx, request) => {
   const userId = await authenticateApiRequest(ctx, request);
   if (!userId) {
@@ -611,23 +431,28 @@ export const listMissingBlobHashes = httpAction(async (ctx, request) => {
     }
   }
 
-  const missing: string[] = [];
-  const chunkSize = 8;
-  for (let start = 0; start < hashes.length; start += chunkSize) {
-    const batch = hashes.slice(start, start + chunkSize);
-    const checks = await Promise.all(
-      batch.map(async (hash) => {
+  const missingSet = new Set<string>();
+  const maxConcurrency = 24;
+  let cursor = 0;
+  const workers = Math.min(maxConcurrency, Math.max(1, hashes.length));
+  await Promise.all(
+    Array.from({ length: workers }, async () => {
+      while (true) {
+        const index = cursor;
+        cursor += 1;
+        if (index >= hashes.length) {
+          return;
+        }
+        const hash = hashes[index];
         const key = buildBlobObjectKey(userId, environmentId, ownedEnvironment.dataId, kind, hash);
-        const metadata = await r2.getMetadata(ctx, key);
-        return { hash, exists: metadata !== null };
-      }),
-    );
-    for (const item of checks) {
-      if (!item.exists) {
-        missing.push(item.hash);
+        const exists = await objectExistsWithMetadataSync(ctx, key, 2);
+        if (!exists) {
+          missingSet.add(hash);
+        }
       }
-    }
-  }
+    }),
+  );
+  const missing = hashes.filter((hash) => missingSet.has(hash));
 
   return new Response(JSON.stringify({ missing }), {
     status: 200,
@@ -882,7 +707,7 @@ export const commitSync = httpAction(async (ctx, request) => {
       "code",
       codeManifestHash,
     );
-    const exists = await objectExistsInStorage(ctx, codeManifestKey);
+    const exists = await objectExistsWithMetadataSync(ctx, codeManifestKey, 4);
     if (!exists) {
       return new Response(JSON.stringify({ detail: "code manifest not found in object storage" }), {
         status: 400,
@@ -898,7 +723,7 @@ export const commitSync = httpAction(async (ctx, request) => {
       "data",
       dataManifestHash,
     );
-    const exists = await objectExistsInStorage(ctx, dataManifestKey);
+    const exists = await objectExistsWithMetadataSync(ctx, dataManifestKey, 4);
     if (!exists) {
       return new Response(JSON.stringify({ detail: "data manifest not found in object storage" }), {
         status: 400,
@@ -925,85 +750,6 @@ export const commitSync = httpAction(async (ctx, request) => {
       headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
     });
   }
-});
-
-export const syncObjectMetadata = httpAction(async (ctx, request) => {
-  const userId = await authenticateApiRequest(ctx, request);
-  if (!userId) {
-    return new Response(JSON.stringify({ detail: "authentication required" }), {
-      status: 401,
-      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
-    });
-  }
-
-  let body;
-  try {
-    body = await request.json();
-  } catch {
-    body = null;
-  }
-
-  const key = typeof body?.key === "string" ? body.key.trim() : "";
-  if (!key) {
-    return new Response(JSON.stringify({ detail: "key is required" }), {
-      status: 400,
-      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
-    });
-  }
-
-  const allowedPrefixes = [
-    environmentPrefix(userId),
-    dataRootPrefix(userId),
-  ];
-  if (!allowedPrefixes.some((prefix) => key.startsWith(prefix))) {
-    return new Response(JSON.stringify({ detail: "invalid key prefix" }), {
-      status: 403,
-      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
-    });
-  }
-
-  const target = uploadCategoryForKey(key, userId);
-  let metadata = null;
-  try {
-    metadata = await waitForSyncedMetadata(ctx, key);
-  } catch (err) {
-    const detail = err instanceof Error ? err.message : "failed to sync metadata";
-    return new Response(JSON.stringify({ detail }), {
-      status: 400,
-      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
-    });
-  }
-
-  if (!metadata) {
-    return new Response(JSON.stringify({ detail: "object not found" }), {
-      status: 404,
-      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
-    });
-  }
-
-  if (target) {
-    const objectSize = typeof metadata.size === "number" && Number.isFinite(metadata.size) ? metadata.size : 0;
-    const maxSizeBytes = target.category === "manifest" ? manifestLimitByKind(target.kind) : blobLimitByKind(target.kind);
-    if (objectSize > maxSizeBytes) {
-      try {
-        await r2.deleteObject(ctx, key);
-      } catch {
-        // Ignore cleanup failures so we can return the original size violation.
-      }
-      return new Response(
-        JSON.stringify({ detail: `${target.kind} ${target.category} exceeds limit of ${maxSizeBytes} bytes` }),
-        {
-          status: 413,
-          headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
-        },
-      );
-    }
-  }
-
-  return new Response(JSON.stringify({ synced: true, key }), {
-    status: 200,
-    headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
-  });
 });
 
 // Environments

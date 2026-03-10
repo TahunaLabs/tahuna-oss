@@ -108,11 +108,6 @@ func (m *syncBackendMock) doJSON(method, path string, payload map[string]any) (m
 		m.manifestUploadCount++
 		return map[string]any{"key": key, "url": "mock://upload?key=" + url.QueryEscape(key)}, nil
 
-	case method == http.MethodPost && path == "/sync/metadata":
-		key := asString(payload["key"])
-		m.metadata[key] = true
-		return map[string]any{"synced": true, "key": key}, nil
-
 	case method == http.MethodPost && path == "/sync/commit":
 		m.commitCount++
 		clone := map[string]any{}
@@ -163,6 +158,7 @@ func (m *syncBackendMock) uploadFile(path, rawURL string, attempts int) error {
 	}
 	m.mu.Lock()
 	m.uploaded[key] = true
+	m.metadata[key] = true
 	m.mu.Unlock()
 	return nil
 }
@@ -181,6 +177,7 @@ func (m *syncBackendMock) uploadBytes(raw []byte, rawURL, contentType string, at
 	}
 	m.mu.Lock()
 	m.uploaded[key] = true
+	m.metadata[key] = true
 	m.mu.Unlock()
 	return nil
 }
@@ -217,13 +214,22 @@ func installSyncStubs(t *testing.T, mock *syncBackendMock) {
 	prevDoJSON := syncDoJSON
 	prevUploadFile := syncUploadFileToSignedURLRetry
 	prevUploadBytes := syncUploadBytesToSignedURLRetry
+	prevPromptChoice := syncPromptChoice
+	prevPromptString := syncPromptString
+	prevSupportsInteractive := syncSupportsInteractivePrompts
 	syncDoJSON = mock.doJSON
 	syncUploadFileToSignedURLRetry = mock.uploadFile
 	syncUploadBytesToSignedURLRetry = mock.uploadBytes
+	syncPromptChoice = promptChoice
+	syncPromptString = promptString
+	syncSupportsInteractivePrompts = supportsInteractivePrompts
 	t.Cleanup(func() {
 		syncDoJSON = prevDoJSON
 		syncUploadFileToSignedURLRetry = prevUploadFile
 		syncUploadBytesToSignedURLRetry = prevUploadBytes
+		syncPromptChoice = prevPromptChoice
+		syncPromptString = prevPromptString
+		syncSupportsInteractivePrompts = prevSupportsInteractive
 	})
 }
 
@@ -336,5 +342,85 @@ func TestSyncIncremental_DataScopeOnlyCommitsDataManifest(t *testing.T) {
 	}
 	if len(manifestRaw) == 0 {
 		t.Fatalf("expected non-empty data_manifest payload")
+	}
+}
+
+func TestPreRunSync_SyncsCodeAndData(t *testing.T) {
+	mock := newSyncBackendMock()
+	installSyncStubs(t, mock)
+	setupTestProject(t, true)
+
+	if err := preRunSync("env-test"); err != nil {
+		t.Fatalf("preRunSync failed: %v", err)
+	}
+
+	mock.mu.Lock()
+	defer mock.mu.Unlock()
+
+	if len(mock.commitBodies) == 0 {
+		t.Fatalf("expected at least one commit payload")
+	}
+	lastCommit := mock.commitBodies[len(mock.commitBodies)-1]
+	if asString(lastCommit["code_manifest_hash"]) == "" {
+		t.Fatalf("expected code_manifest_hash in preRunSync commit payload")
+	}
+	if asString(lastCommit["data_manifest_hash"]) == "" {
+		t.Fatalf("expected data_manifest_hash in preRunSync commit payload")
+	}
+}
+
+func TestSyncIncremental_DataChangedWithoutInteractiveFails(t *testing.T) {
+	mock := newSyncBackendMock()
+	installSyncStubs(t, mock)
+	projectDir := setupTestProject(t, true)
+
+	if err := syncIncremental("env-test", syncScope{data: true}, syncOptions{}); err != nil {
+		t.Fatalf("initial data sync failed: %v", err)
+	}
+
+	if err := os.WriteFile(filepath.Join(projectDir, "data", "sample.txt"), []byte("changed\n"), 0o644); err != nil {
+		t.Fatalf("failed to mutate data file: %v", err)
+	}
+
+	syncSupportsInteractivePrompts = func() bool { return false }
+	err := syncIncremental("env-test", syncScope{data: true}, syncOptions{})
+	if err == nil {
+		t.Fatalf("expected error when data changed and interactive prompts are unavailable")
+	}
+	if !strings.Contains(err.Error(), "interactive confirmation required") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestSyncIncremental_DataChangedPromptOverwrite(t *testing.T) {
+	mock := newSyncBackendMock()
+	installSyncStubs(t, mock)
+	projectDir := setupTestProject(t, true)
+
+	if err := syncIncremental("env-test", syncScope{data: true}, syncOptions{}); err != nil {
+		t.Fatalf("initial data sync failed: %v", err)
+	}
+
+	mock.mu.Lock()
+	initialUploads := mock.blobUploadCount
+	mock.mu.Unlock()
+
+	if err := os.WriteFile(filepath.Join(projectDir, "data", "sample.txt"), []byte("changed-again\n"), 0o644); err != nil {
+		t.Fatalf("failed to mutate data file: %v", err)
+	}
+
+	syncSupportsInteractivePrompts = func() bool { return true }
+	syncPromptChoice = func(label string, options []string, defaultIndex int) string {
+		return options[0]
+	}
+
+	if err := syncIncremental("env-test", syncScope{data: true}, syncOptions{}); err != nil {
+		t.Fatalf("changed data sync failed: %v", err)
+	}
+
+	mock.mu.Lock()
+	defer mock.mu.Unlock()
+	if mock.blobUploadCount <= initialUploads {
+		t.Fatalf("expected additional data uploads after changed data overwrite prompt")
 	}
 }

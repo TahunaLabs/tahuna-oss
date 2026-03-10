@@ -3,8 +3,6 @@ import { authComponent, createAuth } from "@convex/auth";
 import {
     commitSync,
     createBlobUploadUrl,
-    createCodeUploadUrl,
-    createDataUploadUrl,
     createEnvironment,
     createManifestUploadUrl,
     createRunFromEnvironment,
@@ -21,7 +19,6 @@ import {
     postRunRuntime,
     removeEnvironment,
     removeRun,
-    syncObjectMetadata,
 } from "@convex/cli";
 
 const http = httpRouter();
@@ -34,9 +31,6 @@ http.route({ path: "/api/health", method: "GET", handler: health });
 http.route({ path: "/api/catalog", method: "GET", handler: getCatalog });
 
 // Sync helpers for CLI
-http.route({ path: "/api/sync/code/upload-url", method: "POST", handler: createCodeUploadUrl });
-http.route({ path: "/api/sync/data/upload-url", method: "POST", handler: createDataUploadUrl });
-http.route({ path: "/api/sync/metadata", method: "POST", handler: syncObjectMetadata });
 http.route({ path: "/api/sync/blobs/missing", method: "POST", handler: listMissingBlobHashes });
 http.route({ path: "/api/sync/blobs/upload-url", method: "POST", handler: createBlobUploadUrl });
 http.route({ path: "/api/sync/manifests/upload-url", method: "POST", handler: createManifestUploadUrl });
