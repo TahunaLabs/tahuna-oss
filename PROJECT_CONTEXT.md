@@ -78,7 +78,7 @@ Run:
 - `[~]` data upload exists in dashboard (`web/app/dashboard/page.tsx`, `web/convex/data.ts`)
 - `[x]` codebase sync from CLI to R2 implemented as incremental manifest/blob sync + automatic pre-run sync (`train`, `run create`)
 - `[x]` manual sync command implemented (`tahuna sync`, `tahuna sync code`, `tahuna sync data`)
-- `[x]` CLI incremental sync regression tests added (commit retry + metadata sync, no-change sync, data-only scope)
+- `[x]` CLI incremental sync regression tests added (manifest upload/commit finalization, no-change sync, data-only scope)
 - `[ ]` env var sync (Convex-style) not implemented in CLI
 - `[x]` `train` / `train -d` command model implemented with optional runtime overrides (`--gpu-type`, `--gpu-count`, `--volume-gb`)
 - `[x]` CLI environment specs update command implemented (`tahuna env update` / `tahuna env specs`) with backend `PATCH` support
@@ -139,8 +139,8 @@ Current operational note:
 
 - [`cli/main_sync_test.go`](/Users/pazuzzu/Desktop/gigi/boob-ai/cli/main_sync_test.go)
   - regression coverage for incremental sync pipeline:
-  - commit retry path requiring manifest upload + metadata sync
-  - no-change sync avoids redundant blob/manifest uploads
+  - manifest upload + commit finalization retry path
+  - no-change sync avoids redundant blob uploads (manifest pointer commit still refreshes)
   - `sync data` scope commits only data manifest payload/hash
 
 ### Web App (`/web`)
@@ -251,6 +251,13 @@ Progress (2026-03-09):
 - `[x]` Pod workspace materialization (`code/data` reconstructed inside the pod filesystem) is now automatic via in-pod bootstrap callbacks.
 - `[~]` Runtime logs/metrics are now ingested in backend tables via pod callbacks; end-user live monitoring UX still needs richer streaming surfaces.
 - `[ ]` Cross-account environment sharing is not implemented yet; current design direction is snapshot export/import based on pinned code/data manifest hashes.
+
+Latest update (2026-03-10):
+- `[x]` Data sync now packages the configured data directory into a deterministic archive (`__tahuna__/data_bundle.tar.gz`) by default before upload; runtime bootstrap auto-extracts it into `/workspace/data`.
+- `[x]` Data sync no longer forces blob re-upload on unchanged data; it uses the same missing-hash incremental behavior as code.
+- `[x]` Removed legacy interactive "data version" prompt/noise from sync path; `tahuna sync data` and preflight sync run non-interactively.
+- `[x]` Commit finalization hardened: CLI uploads manifests before commit and retries boundedly on transient manifest-visibility errors.
+- `[x]` Backend `/api/sync/commit` manifest existence checks now perform metadata sync + longer bounded polling to reduce object-store propagation races.
 
 Pod startup contract detail (Incremental Sync (0.1.0)):
 - Run creation pins `codeManifestHash` / `dataManifestHash` from environment latest pointers when available.
