@@ -296,12 +296,12 @@ type RuntimeRoute = {
 
 function parseRuntimeRoute(pathname: string): RuntimeRoute | null {
   const parts = pathname.split("/").filter(Boolean);
-  // /api/runs/{runId}/runtime/{action}
-  if (parts.length !== 5 || parts[0] !== "api" || parts[1] !== "runs" || parts[3] !== "runtime") {
+  // /api/runs/{runId}/runtime/{action}[/{sub}]
+  if (parts.length < 5 || parts[0] !== "api" || parts[1] !== "runs" || parts[3] !== "runtime") {
     return null;
   }
   const runId = parts[2];
-  const action = parts[4];
+  const action = parts.slice(4).join("/");
   if (!runId || !action) {
     return null;
   }
@@ -1137,6 +1137,73 @@ async function handleRuntimePost(ctx: ActionCtx, request: Request, route: Runtim
       error,
     });
     return new Response(JSON.stringify({ ok: true, status: result.status }), {
+      status: 200,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+
+  if (route.action === "artifacts/upload-url") {
+    const artifacts: Array<{ name: string; size_bytes: number }> = [];
+    const candidateArtifacts: unknown[] = Array.isArray(body?.artifacts) ? (body.artifacts as unknown[]) : [];
+    for (const raw of candidateArtifacts) {
+      if (!raw || typeof raw !== "object") continue;
+      const item = raw as Record<string, unknown>;
+      const name = typeof item.name === "string" ? item.name.trim() : "";
+      const sizeBytes = typeof item.size_bytes === "number" && Number.isFinite(item.size_bytes) ? item.size_bytes : 0;
+      if (name && sizeBytes > 0) {
+        artifacts.push({ name, size_bytes: sizeBytes });
+      }
+    }
+    if (artifacts.length === 0) {
+      return new Response(JSON.stringify({ detail: "artifacts array with name and size_bytes is required" }), {
+        status: 400,
+        headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+      });
+    }
+
+    const outputPath = await ctx.runQuery(internal.runs.internalGetRunOutputPath, { runId });
+    if (!outputPath) {
+      return new Response(JSON.stringify({ detail: "run not found or has no output path" }), {
+        status: 404,
+        headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+      });
+    }
+
+    const uploads: Array<{ name: string; key: string; url: string }> = [];
+    for (const artifact of artifacts) {
+      const safeName = artifact.name.replace(/\\/g, "/").replace(/^\/+/, "").replace(/\.\./g, "_");
+      const key = `${outputPath}/${safeName}`;
+      try {
+        const upload = await r2.generateUploadUrl(key);
+        uploads.push({ name: artifact.name, key: upload.key, url: upload.url });
+      } catch (err) {
+        const detail = err instanceof Error ? err.message : "failed to generate upload URL";
+        return new Response(JSON.stringify({ detail: `artifact upload URL failed for ${artifact.name}: ${detail}` }), {
+          status: 500,
+          headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+        });
+      }
+    }
+
+    return new Response(JSON.stringify({ uploads }), {
+      status: 200,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+
+  if (route.action === "artifacts/commit") {
+    const candidateKeys: unknown[] = Array.isArray(body?.keys) ? (body.keys as unknown[]) : [];
+    const keys: string[] = candidateKeys
+      .filter((k): k is string => typeof k === "string" && k.trim().length > 0)
+      .map((k) => k.trim());
+    if (keys.length === 0) {
+      return new Response(JSON.stringify({ detail: "keys array is required" }), {
+        status: 400,
+        headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+      });
+    }
+    const result = await ctx.runMutation(internal.runs.ingestRuntimeArtifacts, { runId, keys });
+    return new Response(JSON.stringify({ ok: true, accepted: result.accepted }), {
       status: 200,
       headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
     });

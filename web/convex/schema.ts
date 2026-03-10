@@ -46,6 +46,7 @@ export default defineSchema({
     codeManifestHash: v.optional(v.string()),
     dataManifestHash: v.optional(v.string()),
     runtimeTokenHash: v.optional(v.string()),
+    artifactKeys: v.optional(v.array(v.string())),
     cancellationRequested: v.boolean(),
   })
     .index("by_user", ["userId"])

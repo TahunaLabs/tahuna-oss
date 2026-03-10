@@ -110,14 +110,16 @@ Run list:
   tahuna run list --verbose      Show full JSON payload
   tahuna run show <run_id>
   tahuna run watch <run_id> [--interval 5]
-  tahuna run logs <run_id>
+  tahuna run logs <run_id> [--verbose]
   tahuna run delete <run_id>
 
-Environment specs:
+Environment:
+  tahuna env list [--verbose]
+  tahuna env show --id <env_id> [--verbose]
   tahuna env update [<env_id>] [--gpu-type <gpu>] [--gpu-count <n>] [--volume-gb <n>]
   tahuna env specs [<env_id>] [--gpu-type <gpu>] [--gpu-count <n>] [--volume-gb <n>]   Alias
 
-Environment:
+Auth:
   TAHUNA_API_URL      API base URL (default: http://localhost:3000)
   TAHUNA_BROWSER_URL  Browser auth URL base for "tahuna login" (optional)
   TAHUNA_API_KEY      Auth token (set automatically by "tahuna login")
@@ -680,22 +682,141 @@ func environmentShow(args []string) {
 	fs := flag.NewFlagSet("environment show", flag.ExitOnError)
 	id := fs.String("id", "", "Environment ID")
 	list := fs.Bool("list", false, "List all environments")
+	verbose := fs.Bool("verbose", false, "Show full environment payload")
+	fs.BoolVar(verbose, "v", false, "Show full environment payload")
 	fs.Parse(args)
 
 	if *list {
 		resp, err := doJSON(http.MethodGet, "/environments", nil)
 		must(err)
-		printJSON(resp)
+		if *verbose {
+			printJSON(resp)
+			return
+		}
+		environmentsAny, ok := resp["environments"].([]any)
+		if !ok {
+			printJSON(resp)
+			return
+		}
+		printEnvironmentListSummary(environmentsAny)
 		return
 	}
 	require(*id != "", "--id is required when --list is not set")
 	resp, err := doJSON(http.MethodGet, "/environments/"+*id, nil)
 	must(err)
-	printJSON(resp)
+	if *verbose {
+		printJSON(resp)
+		return
+	}
+	printEnvironmentSummary(resp)
 }
 
 func environmentList(args []string) {
 	environmentShow(append(args, "--list"))
+}
+
+func printEnvironmentListSummary(environmentsAny []any) {
+	if len(environmentsAny) == 0 {
+		fmt.Println("No environments found.")
+		return
+	}
+
+	fmt.Printf("%-22s %-32s %-22s %-10s %-18s\n", "NAME", "ENV ID", "GPU", "VOLUME", "FRAMEWORK")
+	for _, raw := range environmentsAny {
+		row, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		name := strings.TrimSpace(asString(row["name"]))
+		if name == "" {
+			name = "unknown"
+		}
+		envID := strings.TrimSpace(asString(row["environment_id"]))
+		if envID == "" {
+			envID = "-"
+		}
+		gpuType := strings.TrimSpace(asString(row["gpu_type"]))
+		gpuCount := asInt64(row["gpu_count"])
+		gpuLabel := gpuType
+		if gpuLabel == "" {
+			gpuLabel = "unknown"
+		}
+		if gpuCount > 0 {
+			gpuLabel = fmt.Sprintf("%s x%d", gpuLabel, gpuCount)
+		}
+
+		volumeGb := asInt64(row["volume_gb"])
+		volumeLabel := "-"
+		if volumeGb > 0 {
+			volumeLabel = fmt.Sprintf("%dGB", volumeGb)
+		}
+
+		framework := strings.TrimSpace(asString(row["framework"]))
+		version := strings.TrimSpace(asString(row["version"]))
+		frameworkLabel := framework
+		if frameworkLabel == "" {
+			frameworkLabel = "unknown"
+		}
+		if version != "" {
+			frameworkLabel += " " + version
+		}
+
+		fmt.Printf(
+			"%-22s %-32s %-22s %-10s %-18s\n",
+			truncateRunListColumn(name, 22),
+			truncateRunListColumn(envID, 32),
+			truncateRunListColumn(gpuLabel, 22),
+			truncateRunListColumn(volumeLabel, 10),
+			truncateRunListColumn(frameworkLabel, 18),
+		)
+	}
+}
+
+func printEnvironmentSummary(resp map[string]any) {
+	name := strings.TrimSpace(asString(resp["name"]))
+	envID := strings.TrimSpace(asString(resp["environment_id"]))
+	gpuType := strings.TrimSpace(asString(resp["gpu_type"]))
+	gpuCount := asInt64(resp["gpu_count"])
+	volumeGb := asInt64(resp["volume_gb"])
+	framework := strings.TrimSpace(asString(resp["framework"]))
+	version := strings.TrimSpace(asString(resp["version"]))
+	artifacts := strings.TrimSpace(asString(resp["artifacts"]))
+
+	if name != "" {
+		fmt.Printf("Name: %s\n", name)
+	}
+	if envID != "" {
+		fmt.Printf("Environment ID: %s\n", envID)
+	}
+	if gpuType != "" || gpuCount > 0 {
+		if gpuCount > 0 {
+			fmt.Printf("GPU: %s x%d\n", defaultString(gpuType, "unknown"), gpuCount)
+		} else {
+			fmt.Printf("GPU: %s\n", defaultString(gpuType, "unknown"))
+		}
+	}
+	if volumeGb > 0 {
+		fmt.Printf("Volume: %dGB\n", volumeGb)
+	}
+	if framework != "" || version != "" {
+		stack := defaultString(framework, "unknown")
+		if version != "" {
+			stack += " " + version
+		}
+		fmt.Printf("Framework: %s\n", stack)
+	}
+	if artifacts != "" {
+		fmt.Printf("Artifacts: %s\n", artifacts)
+	}
+	fmt.Println()
+	fmt.Println("Use --verbose (-v) for full JSON payload.")
+}
+
+func defaultString(value, fallback string) string {
+	if strings.TrimSpace(value) == "" {
+		return fallback
+	}
+	return value
 }
 
 func environmentDelete(args []string) {
@@ -2162,6 +2283,31 @@ func asInt64(v any) int64 {
 	}
 }
 
+func asFloat64(v any) (float64, bool) {
+	switch t := v.(type) {
+	case float64:
+		return t, true
+	case float32:
+		return float64(t), true
+	case int:
+		return float64(t), true
+	case int64:
+		return float64(t), true
+	case json.Number:
+		out, err := t.Float64()
+		return out, err == nil
+	case string:
+		trimmed := strings.TrimSpace(t)
+		if trimmed == "" {
+			return 0, false
+		}
+		out, err := strconv.ParseFloat(trimmed, 64)
+		return out, err == nil
+	default:
+		return 0, false
+	}
+}
+
 func runWatch(args []string) {
 	fs := flag.NewFlagSet("run watch", flag.ExitOnError)
 	id := fs.String("id", "", "Run ID")
@@ -2177,13 +2323,104 @@ func runWatch(args []string) {
 func runLogs(args []string) {
 	fs := flag.NewFlagSet("run logs", flag.ExitOnError)
 	id := fs.String("id", "", "Run ID")
+	verbose := fs.Bool("verbose", false, "Show full logs payload")
+	fs.BoolVar(verbose, "v", false, "Show full logs payload")
 	fs.Parse(args)
 	runID := resolveRunID(*id, fs.Args())
 	require(runID != "", "run_id is required (usage: tahuna run logs <run_id>)")
 
 	resp, err := doJSON(http.MethodGet, "/runs/"+runID+"/logs", nil)
 	must(err)
-	printJSON(resp)
+	if *verbose {
+		printJSON(resp)
+		return
+	}
+	printRunLogsSummary(resp)
+}
+
+func printRunLogsSummary(resp map[string]any) {
+	runID := strings.TrimSpace(asString(resp["run_id"]))
+	if runID != "" {
+		fmt.Printf("Run: %s\n", runID)
+	}
+	logsPath := strings.TrimSpace(asString(resp["logs_path"]))
+	if logsPath != "" {
+		fmt.Printf("Logs path: %s\n", logsPath)
+	}
+	logFile := strings.TrimSpace(asString(resp["log_file"]))
+	if logFile != "" {
+		fmt.Printf("Log file: %s\n", logFile)
+	}
+	note := strings.TrimSpace(asString(resp["note"]))
+	if note != "" {
+		fmt.Printf("Note: %s\n", note)
+	}
+
+	fmt.Println()
+	fmt.Println("Recent logs:")
+	recentLogs, _ := resp["recent_logs"].([]any)
+	if len(recentLogs) == 0 {
+		fmt.Println("(no log lines yet)")
+	} else {
+		for _, raw := range recentLogs {
+			row, ok := raw.(map[string]any)
+			if !ok {
+				continue
+			}
+			message := strings.TrimSpace(asString(row["message"]))
+			if message == "" {
+				continue
+			}
+			timestamp := formatUnixMillis(asInt64(row["timestamp"]))
+			level := strings.ToUpper(strings.TrimSpace(asString(row["level"])))
+			if level == "" {
+				level = "INFO"
+			}
+			source := strings.TrimSpace(asString(row["source"]))
+			if source == "" {
+				source = "runtime"
+			}
+			fmt.Printf("%s %-7s %-12s %s\n", timestamp, level, source, message)
+		}
+	}
+
+	recentMetrics, _ := resp["recent_metrics"].([]any)
+	if len(recentMetrics) == 0 {
+		return
+	}
+	fmt.Println()
+	fmt.Println("Recent metrics:")
+	for _, raw := range recentMetrics {
+		row, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		name := strings.TrimSpace(asString(row["name"]))
+		if name == "" {
+			continue
+		}
+		value, ok := asFloat64(row["value"])
+		if !ok {
+			continue
+		}
+		timestamp := formatUnixMillis(asInt64(row["timestamp"]))
+		source := strings.TrimSpace(asString(row["source"]))
+		if source == "" {
+			source = "runtime"
+		}
+		stepText := "-"
+		if stepRaw, exists := row["step"]; exists && stepRaw != nil {
+			stepText = strconv.FormatInt(asInt64(stepRaw), 10)
+		}
+		unit := strings.TrimSpace(asString(row["unit"]))
+		valueText := strconv.FormatFloat(value, 'f', -1, 64)
+		if unit != "" {
+			valueText = valueText + " " + unit
+		}
+		fmt.Printf("%s %-12s %-20s value=%-12s step=%s\n", timestamp, source, name, valueText, stepText)
+	}
+	fmt.Println()
+	fmt.Println("Use --verbose (-v) for full JSON payload.")
 }
 
 func runDelete(args []string) {

@@ -258,6 +258,21 @@ Latest update (2026-03-10):
 - `[x]` Removed legacy interactive "data version" prompt/noise from sync path; `tahuna sync data` and preflight sync run non-interactively.
 - `[x]` Commit finalization hardened: CLI uploads manifests before commit and retries boundedly on transient manifest-visibility errors.
 - `[x]` Backend `/api/sync/commit` manifest existence checks now perform metadata sync + longer bounded polling to reduce object-store propagation races.
+- `[x]` **Artifact persistence implemented**: training output artifacts (`/workspace/outputs/*`) are now uploaded to R2 after successful training and committed to the run record.
+
+Artifact persistence detail (2026-03-10):
+- Schema: `runs` table has optional `artifactKeys: string[]` field storing R2 object keys.
+- API response: `artifact_keys` array exposed in run GET response.
+- Pod bootstrap: after entrypoint exits 0, `upload_artifacts()` walks `/workspace/outputs`, requests signed upload URLs via `POST /api/runs/{run_id}/runtime/artifacts/upload-url`, PUTs each file to R2, then commits keys via `POST /api/runs/{run_id}/runtime/artifacts/commit`.
+- Failure behavior: artifact upload failures emit warning logs but do **not** mark the run as failed; training success is preserved.
+- Artifact R2 key pattern: `runs/<environment_id>/<timestamp>/output/<filename>`.
+- CLI: `tahuna run show <run_id>` automatically includes `artifact_keys` in JSON output.
+
+Caveats and follow-ups:
+- `[ ]` Artifact download URLs are not yet exposed in the API (only R2 keys); add download endpoint or signed URL generation for CLI/dashboard.
+- `[ ]` Artifact size limits are not enforced; add per-file and total size validation.
+- `[ ]` No artifact browsing/listing UI in dashboard; run detail panel should show artifact links.
+- `[ ]` Full E2E validation with real Runpod pod pending; code-level changes verified via all existing Go tests (9 passing) and TypeScript type-check (clean).
 
 Pod startup contract detail (Incremental Sync (0.1.0)):
 - Run creation pins `codeManifestHash` / `dataManifestHash` from environment latest pointers when available.

@@ -51,6 +51,7 @@ const runResponseValidator = v.object({
   code_manifest_hash: v.string(),
   data_manifest_hash: v.string(),
   cancellation_requested: v.boolean(),
+  artifact_keys: v.array(v.string()),
 });
 const listRunsResponseValidator = v.object({
   runs: v.array(runResponseValidator),
@@ -224,6 +225,7 @@ function toRunResponse(row: Doc<"runs">) {
     code_manifest_hash: row.codeManifestHash || "",
     data_manifest_hash: row.dataManifestHash || "",
     cancellation_requested: row.cancellationRequested,
+    artifact_keys: row.artifactKeys || [],
   };
 }
 
@@ -470,12 +472,22 @@ function resolveImageName(framework: string, version: string) {
 }
 
 function resolveRuntimeApiBase() {
+  // Prefer publicly-accessible Convex site URLs for pod runtime callbacks.
+  // SITE_URL / NEXT_PUBLIC_SITE_URL are often http://localhost:3000 in dev
+  // and unreachable from remote pods.
   const candidates = [
+    process.env.NEXT_PUBLIC_CONVEX_SITE_URL,
+    process.env.CONVEX_SITE_URL,
     process.env.SITE_URL,
     process.env.NEXT_PUBLIC_SITE_URL,
-    process.env.CONVEX_SITE_URL,
-    process.env.NEXT_PUBLIC_CONVEX_SITE_URL,
   ];
+  for (const candidate of candidates) {
+    const trimmed = (candidate || "").trim();
+    if (trimmed && !trimmed.includes("localhost") && !trimmed.includes("127.0.0.1")) {
+      return trimmed.replace(/\/+$/, "");
+    }
+  }
+  // Fallback: allow localhost if nothing else is available (local dev testing)
   for (const candidate of candidates) {
     const trimmed = (candidate || "").trim();
     if (trimmed) {
@@ -759,7 +771,6 @@ def run_training():
     entrypoint_path = os.path.join(WORKSPACE_ROOT, entrypoint)
     if entrypoint and entrypoint.endswith(".py") and not os.path.isfile(entrypoint_path):
         emit_logs(["no entrypoint found at " + entrypoint_path + " (bootstrap only)"], source="train")
-        emit_status("completed", "workspace materialized (no entrypoint)")
         return 0
 
     emit_logs(["starting entrypoint"], source="train")
@@ -791,12 +802,72 @@ def run_training():
                 emit_metrics(samples)
         step += 1
 
-    code = proc.wait()
-    if code == 0:
-        emit_status("completed", "entrypoint completed")
-    else:
-        emit_status("failed", "entrypoint failed", "entrypoint exited with status " + str(code))
-    return code
+    return proc.wait()
+
+def upload_artifacts():
+    output_dir = os.path.join(WORKSPACE_ROOT, "outputs")
+    if not os.path.isdir(output_dir):
+        emit_logs(["artifacts: no outputs directory found at " + output_dir + " (skipping upload)"], source="bootstrap")
+        return []
+
+    file_list = []
+    for dirpath, _dirnames, filenames in os.walk(output_dir):
+        for fname in filenames:
+            full_path = os.path.join(dirpath, fname)
+            rel = os.path.relpath(full_path, output_dir)
+            size = os.path.getsize(full_path)
+            if size > 0:
+                file_list.append({"path": full_path, "name": rel, "size": size})
+
+    if not file_list:
+        emit_logs(["artifacts: outputs directory is empty (skipping upload)"], source="bootstrap")
+        return []
+
+    emit_logs(["artifacts: found " + str(len(file_list)) + " output file(s) to upload"], source="bootstrap")
+
+    artifacts_payload = [{"name": f["name"], "size_bytes": f["size"]} for f in file_list]
+    try:
+        url_resp = api_request("POST", "/api/runs/" + RUN_ID + "/runtime/artifacts/upload-url", {"artifacts": artifacts_payload})
+    except Exception as err:
+        emit_logs(["artifacts: failed to get upload URLs: " + str(err)], level="warn", source="bootstrap")
+        return []
+
+    uploads = url_resp.get("uploads", [])
+    if not uploads:
+        emit_logs(["artifacts: no upload URLs returned"], level="warn", source="bootstrap")
+        return []
+
+    upload_map = {}
+    for u in uploads:
+        upload_map[u.get("name", "")] = u
+
+    uploaded_keys = []
+    for f in file_list:
+        upload_info = upload_map.get(f["name"])
+        if not upload_info:
+            emit_logs(["artifacts: no upload URL for " + f["name"] + " (skipping)"], level="warn", source="bootstrap")
+            continue
+        try:
+            with open(f["path"], "rb") as fh:
+                data = fh.read()
+            put_req = urllib.request.Request(upload_info["url"], data=data, method="PUT")
+            put_req.add_header("Content-Type", "application/octet-stream")
+            with urllib.request.urlopen(put_req, timeout=600) as _resp:
+                pass
+            uploaded_keys.append(upload_info["key"])
+            emit_logs(["artifacts: uploaded " + f["name"] + " (" + str(len(data)) + " bytes)"], source="bootstrap")
+        except Exception as err:
+            emit_logs(["artifacts: upload failed for " + f["name"] + ": " + str(err)], level="warn", source="bootstrap")
+
+    if uploaded_keys:
+        try:
+            api_request("POST", "/api/runs/" + RUN_ID + "/runtime/artifacts/commit", {"keys": uploaded_keys})
+            emit_logs(["artifacts: committed " + str(len(uploaded_keys)) + " artifact key(s)"], source="bootstrap")
+        except Exception as err:
+            emit_logs(["artifacts: commit failed: " + str(err)], level="warn", source="bootstrap")
+
+    emit_metrics([{"name": "artifacts_uploaded", "value": float(len(uploaded_keys)), "source": "bootstrap"}])
+    return uploaded_keys
 
 try:
     emit_status("provisioning", "in-pod bootstrap started")
@@ -820,7 +891,13 @@ try:
     )
     install_requirements()
     emit_status("running", "workspace materialized")
-    raise SystemExit(run_training())
+    exit_code = run_training()
+    if exit_code == 0:
+        upload_artifacts()
+        emit_status("completed", "entrypoint completed")
+    else:
+        emit_status("failed", "entrypoint failed", "entrypoint exited with status " + str(exit_code))
+    raise SystemExit(exit_code)
 except Exception as err:
     message = str(err).strip() or "bootstrap failed"
     emit_logs(["bootstrap failed: " + message], level="error")
@@ -1703,5 +1780,47 @@ export const completeRun = internalMutation({
       message: terminal === RUN_STATUS.COMPLETED ? "run completed" : "run cancelled",
     });
     return null;
+  },
+});
+
+export const ingestRuntimeArtifacts = internalMutation({
+  args: {
+    runId: v.id("runs"),
+    keys: v.array(v.string()),
+  },
+  returns: v.object({ accepted: v.number() }),
+  handler: async (ctx, args) => {
+    const row = await ctx.db.get("runs", args.runId);
+    if (!row) {
+      return { accepted: 0 };
+    }
+    const existing = row.artifactKeys || [];
+    const seen = new Set(existing);
+    const newKeys: string[] = [];
+    for (const key of args.keys) {
+      const trimmed = key.trim();
+      if (trimmed && !seen.has(trimmed)) {
+        seen.add(trimmed);
+        newKeys.push(trimmed);
+      }
+    }
+    if (newKeys.length > 0) {
+      await ctx.db.patch("runs", args.runId, {
+        artifactKeys: [...existing, ...newKeys],
+      });
+    }
+    return { accepted: newKeys.length };
+  },
+});
+
+export const internalGetRunOutputPath = internalQuery({
+  args: { runId: v.id("runs") },
+  returns: v.union(v.string(), v.null()),
+  handler: async (ctx, args) => {
+    const row = await ctx.db.get("runs", args.runId);
+    if (!row) {
+      return null;
+    }
+    return row.output || null;
   },
 });
