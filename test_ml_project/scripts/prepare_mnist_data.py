@@ -1,4 +1,11 @@
 #!/usr/bin/env python3
+# /// script
+# dependencies = [
+#   "torch",
+#   "torchvision",
+#   "pillow",
+# ]
+# ///
 from __future__ import annotations
 
 import argparse
