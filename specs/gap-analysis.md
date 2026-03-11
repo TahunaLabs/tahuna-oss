@@ -1,176 +1,150 @@
-Here's the full gap analysis — spec vs implementation — organized by feature area.
+# Gap Analysis — Specs vs Implementation
 
----
+Audit date: 2026-03-11  
+Audited code: `cli/main.go`, `web/convex/*`, `web/app/*`, `web/config.ts`, `cli` tests
 
-## Auth
+## Scope reviewed
+- `specs/auth.md`
+- `specs/init.md`
+- `specs/environments.md`
+- `specs/sync.md`
+- `specs/run-lifecycle.md`
+- `specs/pod-bootstrap.md`
+- `specs/dashboard.md`
+- `specs/cli-ux.md`
+- `specs/manual-review.md`
 
-| Requirement | Status | Detail |
-|-------------|--------|--------|
-| Email OTP only | **Done** | Better Auth with emailOtp plugin, no OAuth |
-| CLI-only key creation | **Done** | Only `/auth/cli` page creates keys |
-| 5-minute login timeout | **Done** | `time.After(5 * time.Minute)` in CLI |
-| Token resolution order | **Done** | env var -> config.env -> error |
-| Max 5 active keys per user | **Done** | Count check + auto-revoke oldest in `createApiKey` |
-| Max 1 key per machine | **Done** | `machineId` field + `by_user_and_machine` index; revokes existing key on same machine |
-| 90-day key expiry | **Done** | Expiry check via `_creationTime + 90d` in `authByApiKey` |
-| Auto-revoke oldest at limit | **Done** | Sorts active keys by `_creationTime`, revokes oldest when ≥5 |
+## Contrast vs Claude Findings
+### Confirmed
+- UV migration is incomplete end-to-end (init, project config, bootstrap command/deps).
+- `project.yaml`/project config is missing uv-era fields.
+- `environments` schema is missing `pythonVersion`.
+- `runs` schema is missing `name`.
+- `web/config.ts` is missing most shared constants (only upload limits exist).
+- Core CLI features are missing (`run rename`, `run create --name`, `run create -d`, `catalog gpus`, `data list/show`, `env data bind/unbind`).
+- Dashboard parity gaps are real (machines page, run detail/streaming, config editor, data binding, artifact rename, unified storage).
+- `lastUsedAt` is not updated on API key auth.
 
----
+### Added by this audit (not in Claude summary, but contract-level)
+- Run creation skips `queued` and starts directly at `provisioning` (`web/convex/runs.ts:1295`).
+- `run cancel` and `run delete` both call the same delete endpoint; `--force` currently changes only prompt text (`cli/main.go:2563`, `web/convex/runs.ts:1327`).
+- Dashboard can create environments, but spec says `tahuna init` is the only creation path (`web/app/dashboard/page.tsx:275`, `web/convex/environments.ts:227`).
+- Environment delete does not delete synced/manifests/artifacts in object storage (`web/convex/environments.ts:162` with no R2 cleanup).
+- Sync blob key contract differs from spec dedup model (env-scoped code blob keys, not `<user>/blobs/<sha>`; `web/convex/cli.ts:72`).
+- `/sync/commit` requires full manifest payload, while spec contract says hash commit after upload (`web/convex/cli.ts:676`).
+- Run creation incorrectly requires both code and data manifests (spec allows optional data) (`web/convex/runs.ts:1283`).
 
-## Init (`tahuna init`)
+### Re-prioritized nuance
+- `CONVEX_SITE_URL` naming: `cli-ux.md` currently allows legacy provider aliases for migration, while `manual-review.md` asks to remove provider naming. This is a cross-spec conflict and should be resolved explicitly; treated below as P1 doc/code alignment, not P0 runtime breakage.
 
-| Requirement | Status | Detail |
-|-------------|--------|--------|
-| No-arg defaults to `.` | **Done** | `target := "."` default |
-| Re-init is error | **Done** | Checks `.tahuna/environment_id` existence |
-| Entrypoint detection/scaffold | **Done** | train.py detect + template |
-| Data dir detection/scaffold | **Done** | data/ detect + mkdir |
-| Config detection/scaffold | **Done** | config.yaml detect + template |
-| Requirements detection/scaffold | **Done** | requirements.txt detect + template |
-| Output dir detection/scaffold | **Done** | `OutputDir` in `projectConfig`, detection + creation in init |
-| Output dir in project.yaml | **Done** | `saveProjectConfig()` includes `output_dir` |
-| Framework from requirements.txt only | **Done** | `detectFramework()` reads only `requirements.txt` |
-| GPU guardrails (max count per type) | **Partial** | Validates positive int but doesn't enforce catalog max |
+## Priority Matrix
 
----
+### P0 — Broken Contracts (must-fix first)
 
-## Environments
+| # | Gap | Evidence | Why P0 |
+|---|-----|----------|--------|
+| 1 | Init/bootstrap still anchored on `requirements.txt` instead of uv contract (`pyproject.toml` + `uv.lock`, `uv sync`) | `cli/main.go:2633`, `cli/main.go:2733`, `web/convex/runs.ts:774`, `web/convex/runs.ts:783` | Core runtime reproducibility contract is wrong |
+| 2 | Default run command is `python3 -u train.py` instead of `uv run python -u` | `web/convex/runs.ts:742` | Pod runtime does not honor spec execution contract |
+| 3 | Project config schema is missing uv/python/framework fields | `cli/main.go:2619`, `cli/main.go:2805` | Spec-defined local source of truth is incomplete |
+| 4 | DB schema gaps: `environments.pythonVersion` and `runs.name` missing | `web/convex/schema.ts:20`, `web/convex/schema.ts:35` | Required persisted fields absent |
+| 5 | Run lifecycle starts in `provisioning`, not `queued -> provisioning` | `web/convex/runs.ts:1295` | State machine contract violated |
+| 6 | Cancel/delete semantics are conflated; `--force` has no backend effect | `cli/main.go:2563`, `web/convex/runs.ts:1327` | CLI/API behavior deviates from cancel contract |
+| 7 | Dashboard creates environments, contrary to init-only creation rule | `web/app/dashboard/page.tsx:275`, `web/convex/environments.ts:227` | Ownership boundary from spec is broken |
+| 8 | Environment cascade delete does not remove synced objects/manifests/artifacts from object storage | `web/convex/environments.ts:162` | Leaves remote orphaned state |
+| 9 | Sync object key model is not spec-compliant for global blob dedup | `web/convex/cli.ts:72`, `web/convex/cli.ts:86` | Repro/dedup model contract mismatch |
+| 10 | `/sync/commit` requires manifest payload, not hash-only commit contract | `web/convex/cli.ts:676`, `web/convex/cli.ts:681` | External clients implementing spec will fail |
+| 11 | API key auth does not update `lastUsedAt` | `web/convex/auth.ts:133` | Auth identity lifecycle incomplete |
+| 12 | Shared constants are not centralized in `web/config.ts` | `web/config.ts:1`, hardcoded values in `cli/main.go:221`, `cli/main.go:1161`, `web/convex/auth.ts:59`, `web/convex/runs.ts:843` | Spec-defined config source-of-truth missing |
 
-| Requirement | Status | Detail |
-|-------------|--------|--------|
-| 1:1 project-env mapping | **Done** | Single `.tahuna/environment_id` |
-| Always creates new on init | **Done** | Always POSTs, no lookup |
-| Spec updates with validation | **Done** | `PATCH` with gpu_type/count/volume validation |
-| Overridable defaults per run | **Done** | Run creation applies overrides from flags |
-| Framework determines pod image | **Done** | `resolveImageName()` maps framework+version |
-| Cascade delete | **Done** | Deletes all runs, events, logs, metrics; terminates active pods via `internalTerminatePod` |
-| `tahuna pull` | **Future** | Not implemented (expected) |
+### P1 — Missing Core Features / Behavioral Gaps
 
----
+| # | Gap | Evidence |
+|---|-----|----------|
+| 13 | `run create --name/-n` missing, and no random word-based default name | `cli/main.go:913`, `web/convex/schema.ts:35` |
+| 14 | `run rename` command missing | `cli/main.go:546` |
+| 15 | `run create -d/--detached` missing (exists only on `train`) | `cli/main.go:913`, `cli/main.go:950` |
+| 16 | `catalog gpus` CLI command missing | `cli/main.go:65` (no `catalog` route) |
+| 17 | `data list/show` CLI commands missing | `cli/main.go:65` (no `data` route) |
+| 18 | `env data bind/unbind` missing (CLI + API + schema support) | `cli/main.go:524`, `web/convex/http.ts:39`, `web/convex/schema.ts:20` |
+| 19 | Local `.tahuna/environment_id` is not cleaned on env delete | `cli/main.go:831` |
+| 20 | GPU max-count validation is not enforced in init/update/run overrides | `cli/main.go:902`, `web/convex/environments.ts:140`, `web/convex/runs.ts:1297` |
+| 21 | CLI flag conventions diverge (`-n` used for lines; spec says `-l`) | `cli/main.go:2191`, `cli/main.go:2351` |
+| 22 | `run show` default output is raw JSON, not human summary UX | `cli/main.go:2221` |
+| 23 | Shell behavior diverges (allows `init/login`, no line history/editing guarantees) | `cli/main.go:257` |
+| 24 | Run creation currently requires data manifest instead of optional data manifest | `web/convex/runs.ts:1283` |
+| 25 | Spec conflict: provider env aliases (`CONVEX_*`) vs manual-review naming guidance | `cli/main.go:372`, `web/lib/auth-server.ts:3`, `specs/cli-ux.md`, `specs/manual-review.md` |
 
-## Sync
+### P2 — Dashboard / Web Parity Gaps
 
-| Requirement | Status | Detail |
-|-------------|--------|--------|
-| Incremental content-addressed sync | **Done** | SHA256 blobs + manifest diffing |
-| .gitignore respected | **Done** | Uses `git ls-files` |
-| Data bundled as tar.gz | **Done** | Deterministic archive with zero timestamps |
-| Manifest version history preserved | **Done** | Old manifests kept in R2 by hash |
-| Missing-blob dedup | **Done** | Only uploads new blobs |
-| Parallel upload workers | **Done** | 8 workers, configurable |
-| Commit retry with backoff | **Done** | 8 attempts, exponential |
-| Hardcoded exclusions | **Done** | Excludes `.git/`, `.tahuna/`, data dir, output dir, `node_modules/`, `__pycache__/` |
-| Output dir excluded from code sync | **Done** | Output dir added to `excludeDirs` in `prepareCodeManifest` |
-| Chunked/resumable upload | **Future** | Not implemented (expected) |
-| Rollback to previous manifest | **Future** | Not implemented (expected) |
+| # | Gap | Evidence |
+|---|-----|----------|
+| 26 | No `/machines` page; `/api-key` just redirects | `find web/app ...`, `web/app/api-key/page.tsx:3` |
+| 27 | No run detail page with real-time logs/metrics and charts | `web/app/dashboard/page.tsx:646`, no `/dashboard/runs/[id]` route |
+| 28 | No artifact rename workflow | no rename route/mutation in `web/convex/*` and no UI action in `web/app/dashboard/page.tsx` |
+| 29 | No environment config-file editor UI | `web/app/dashboard/page.tsx` environment form has only name/spec fields |
+| 30 | No data-binding UI for attaching existing datasets to environments | `web/app/dashboard/page.tsx` |
+| 31 | Storage section is data-upload list only; run output artifacts are not a unified storage surface | `web/app/dashboard/page.tsx:439`, `web/app/dashboard/page.tsx:646` |
+| 32 | Missing `/login` route name parity (current route is `/auth`) | `web/app/dashboard/layout.tsx:11`, app routes list |
+| 33 | Destructive actions do not require confirmation dialogs | `web/app/dashboard/page.tsx:339`, `web/app/dashboard/page.tsx:353` |
 
----
+### P3 — Future Features (explicitly future in specs)
 
-## Run Lifecycle
+| # | Feature | Current state |
+|---|---------|---------------|
+| 34 | Pod network restriction defaults | Missing |
+| 35 | Pod heartbeat/liveness termination when sync stops | Missing |
+| 36 | Chunked/resumable upload | Missing |
+| 37 | Sync history/rollback commands | Missing |
+| 38 | Optional no-capacity queue UX | Missing (workpool exists, no user queue UX) |
+| 39 | wandb-compatible SDK | Missing |
+| 40 | Custom Docker images | Missing |
+| 41 | Cross-environment data binding | Missing |
+| 42 | `tahuna pull` | Missing |
+| 43 | Per-user artifact size limits | Missing |
 
-| Requirement | Status | Detail |
-|-------------|--------|--------|
-| State machine (queued->provisioning->running->completed/failed/cancelled) | **Done** | All states defined and transitioned |
-| Pinned manifest hashes on run | **Done** | `codeManifestHash`/`dataManifestHash` stored |
-| Preflight sync before run creation | **Done** | `syncIncremental()` called in train/run create |
-| No-capacity 409 with interactive GPU fallback | **Done** | Prompts alternate GPU selection |
-| Detached mode (`-d`) | **Done** | Creates run and exits |
-| Artifact upload after exit 0 | **Done** | Walks `/workspace/outputs/`, uploads to R2 |
-| Runtime token per run | **Done** | SHA256 hashed, validated on pod callbacks |
-| Metric extraction via stdout regex | **Done** | `(\w+)=([\d.]+)` pattern |
-| Graceful cancellation (SIGTERM + 30s grace) | **Done** | Bootstrap handles SIGTERM, 30s grace, force kill, artifact upload on cancel |
-| `run cancel` command | **Done** | `tahuna run cancel <id>` with confirmation prompt |
-| `--force` flag on cancel | **Done** | `-f`/`--force` skips confirmation |
-| Cancel confirmation prompt | **Done** | Interactive yes/no before cancel |
-| Pod termination on cancel | **Done** | `internalTerminatePod` calls Runpod DELETE API; scheduled from both cancel and cascade delete |
-| Optional queue on no-capacity | **Future** | Workpool infrastructure exists but not user-facing |
-| Periodic output sync every N seconds | **Future** | Not implemented (expected) |
-| Artifact size limits per user | **Future** | Hardcoded limits exist, not per-user configurable |
-| wandb-compatible SDK | **Future** | Regex fallback done, SDK not built |
+## Action Plan (Execution Order)
 
----
+### Phase 1 — Close P0 contract breaks
+1. Complete uv migration:
+   - Init scaffolds `pyproject.toml` + `uv.lock`.
+   - Framework/python detection from uv files only.
+   - Bootstrap installs via `uv sync` and runs via `uv run python -u`.
+2. Schema and API contract corrections:
+   - Add `environments.pythonVersion`, `environments.boundDataManifestHashes`, `runs.name`.
+   - Start runs in `queued`; enforce valid transitions.
+   - Separate cancel vs delete semantics and make `--force` effective server-side.
+3. Sync contract corrections:
+   - Align blob/manifests key model to spec (or revise spec explicitly if env-scoped keys are intentional).
+   - Make `/sync/commit` accept hash-only commit payload per spec.
+4. Environment deletion correctness:
+   - Add R2 cleanup for manifests/blobs/run artifacts on cascade delete.
+5. Auth lifecycle:
+   - Update `lastUsedAt` on successful API key validation.
+6. Shared constants:
+   - Centralize all auth/sync/run/bootstrap constants in `web/config.ts` and consume consistently.
 
-## Pod Bootstrap
+### Phase 2 — Core CLI parity (P1)
+1. Add run naming (`--name`, random word-based default, `run rename`).
+2. Add `run create -d`.
+3. Add missing commands: `catalog gpus`, `data list/show`, `env data bind/unbind`.
+4. Enforce GPU max validation across init/env update/run create.
+5. Fix flag conventions (`-l` lines, `-n` name) and `run show` default UX.
+6. Delete cleanup of local environment link file.
+7. Resolve provider-env naming policy conflict between `cli-ux.md` and `manual-review.md`.
 
-| Requirement | Status | Detail |
-|-------------|--------|--------|
-| Bootstrap script injected in pod | **Done** | Embedded Python via env vars |
-| Code/data materialization with hash verification | **Done** | SHA256 check per file |
-| Dependency install | **Done** | `pip install -r requirements.txt` |
-| Status reporting to backend | **Done** | POST runtime/status |
-| Log streaming to backend | **Done** | POST runtime/logs |
-| Graceful SIGTERM handling | **Done** | `handle_sigterm()` + 30s grace period + force kill; reports `cancelled` status |
-| **uv replaces pip** | **Done** | `ensure_uv()` installs uv if needed; `uv pip install --system -r requirements.txt` replaces pip |
-| **Network restricted by default** | **Missing** | No network policy on pod creation |
-| **Periodic output sync** | **Missing** | Artifacts only uploaded at end |
-| **Pod termination on sync stop** | **Missing** | No heartbeat/liveness mechanism |
-| Custom Docker images | **Future** | Only catalog images supported |
+### Phase 3 — Dashboard parity (P2)
+1. Add `/machines` session management page.
+2. Add run detail route with streaming logs/metrics + charts.
+3. Add artifact management parity (rename + run-output browsing).
+4. Add environment config editor and data-binding UI.
+5. Build unified storage surface for data + run outputs.
+6. Add confirmation dialogs for destructive actions.
+7. Align auth route naming/theme policy (`/login` vs `/auth` decision).
 
----
+### Phase 4 — Future roadmap (P3)
+1. Networking, heartbeat, queue, rollback/history, multipart upload.
+2. wandb SDK, custom images, cross-env bindings, `tahuna pull`, per-user limits.
 
-## Dashboard
-
-| Requirement | Status | Detail |
-|-------------|--------|--------|
-| Create/delete environments | **Done** | Dashboard UI with Convex mutations |
-| Create/cancel runs | **Done** | Launch + remove via dashboard |
-| Upload data to R2 | **Done** | Presigned URL upload flow |
-| Browse + download artifacts | **Done** | Table view with download buttons |
-| Delete artifacts | **Done** | Remove mutation |
-| **Real-time streaming** | **Missing** | No run detail page; `useQuery` is reactive but no dedicated logs/metrics view |
-| **Artifact rename** | **Missing** | No rename UI or backend |
-| Cross-env data binding | **Future** | Not implemented (expected) |
-
----
-
-## CLI UX
-
-| Requirement | Status | Detail |
-|-------------|--------|--------|
-| `-v` / `--verbose` | **Done** | On most commands |
-| `-d` / `--detached` | **Done** | On train/run create |
-| `-n` for line count | **Done** | On run list |
-| `-a` for all | **Done** | On run list |
-| Human-readable tables | **Done** | `fmt.Printf` formatted output |
-| `tahuna shell` REPL | **Done** | Prompt loop with command dispatch |
-| `-f` / `--follow` on logs | **Done** | `tahuna run logs <id> -f` polls every 2s, stops on terminal status |
-| `-n` on `run logs` | **Done** | `maxLines` truncation in `printRunLogsSummary` |
-| Error message mapping | **Done** | `friendlyError()` maps 401/403/404/409/5xx to user-friendly messages |
-| Friendly errors (raw on -v) | **Done** | Friendly by default, raw error on verbose |
-
----
-
-## Action Plan Priority
-
-### P0 — Broken contract (spec says X, code does Y) — ✅ ALL DONE
-
-1. ~~Cascade delete on environment~~ ✅
-2. ~~Output dir~~ ✅
-3. ~~Framework detection~~ ✅
-4. ~~`run cancel` vs `run delete`~~ ✅
-5. ~~Hardcoded sync exclusions~~ ✅
-
-### P1 — Missing core features — ✅ ALL DONE (except #11 deferred)
-
-6. ~~API key limits (5/user, 1/machine, 90-day expiry, auto-revoke)~~ ✅
-7. ~~Graceful cancellation (SIGTERM + 30s grace in bootstrap)~~ ✅
-8. ~~Error message mapping in CLI (401/409/etc -> friendly messages)~~ ✅
-9. ~~`run logs -f` follow mode~~ ✅
-10. ~~`run logs -n N` line limit~~ ✅
-11. Dashboard real-time streaming — **Deferred to P2** (Convex `useQuery` is already reactive; gap is a run detail page)
-
-### P2 — Future features (acknowledged in spec)
-
-12. ~~uv replaces pip~~ ✅
-13. Periodic output dir sync
-14. Pod network isolation
-15. Chunked/resumable upload
-16. Sync rollback
-17. Optional capacity queue
-18. wandb-compatible SDK
-19. Custom Docker images
-20. Cross-env data binding
-21. Artifact rename in dashboard
-22. `tahuna pull`
-23. Per-user artifact size limits
-24. Dashboard run detail page with real-time logs/metrics (moved from P1-11)
+## Verification notes
+- CLI tests currently pass in this environment: `go test ./...` from `cli/`.
+- Passing tests do not currently cover most missing spec contracts above (naming, uv contract, dashboard parity, delete semantics, storage cleanup).
