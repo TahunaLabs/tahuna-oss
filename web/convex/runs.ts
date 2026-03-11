@@ -1529,7 +1529,8 @@ async function cancelRunForUserId(
   }
 
   if (row.podId) {
-    await ctx.scheduler.runAfter(0, internal.runs.internalTerminatePod, {
+    const terminationDelayMs = force ? 0 : RUN_CONFIG.cancellationGraceSeconds * 1000;
+    await ctx.scheduler.runAfter(terminationDelayMs, internal.runs.internalTerminatePod, {
       runId,
       podId: row.podId,
       force,
@@ -1543,7 +1544,9 @@ async function cancelRunForUserId(
   await ctx.db.insert("runEvents", {
     runId,
     status: RUN_STATUS.CANCELLING,
-    message: force ? "force cancellation requested" : "cancellation requested",
+    message: force
+      ? "force cancellation requested"
+      : `cancellation requested (grace period ${RUN_CONFIG.cancellationGraceSeconds}s before termination)`,
   });
   return { cancel_requested: true, forced: force, run_id: String(runId) };
 }
@@ -1838,6 +1841,13 @@ export const internalRename = internalMutation({
 export const internalTerminatePod = internalAction({
   args: { runId: v.id("runs"), podId: v.string(), force: v.optional(v.boolean()), attempt: v.optional(v.number()) },
   handler: async (ctx, args) => {
+    const shouldTerminate = await ctx.runQuery(internal.runs.internalShouldTerminatePod, {
+      runId: args.runId,
+      force: args.force === true,
+    });
+    if (!shouldTerminate) {
+      return;
+    }
     const attempt = args.attempt ?? 0;
     try {
       await terminateRunpodPod(args.podId);
@@ -1966,6 +1976,25 @@ export const internalShouldAbortProvisioning = internalQuery({
       return true;
     }
     return row.cancellationRequested || TERMINAL_STATUSES.has(row.status);
+  },
+});
+
+export const internalShouldTerminatePod = internalQuery({
+  args: { runId: v.id("runs"), force: v.optional(v.boolean()) },
+  returns: v.boolean(),
+  handler: async (ctx, args) => {
+    if (args.force === true) {
+      // Force paths (including environment cleanup) should terminate even if the run row is gone.
+      return true;
+    }
+    const row = await ctx.db.get("runs", args.runId);
+    if (!row) {
+      return false;
+    }
+    if (!row.cancellationRequested) {
+      return false;
+    }
+    return ACTIVE_STATUSES.has(row.status);
   },
 });
 
