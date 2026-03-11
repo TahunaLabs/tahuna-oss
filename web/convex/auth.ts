@@ -10,8 +10,9 @@ import authConfig from "@convex/auth.config";
 import { sha256Hex } from "@convex/crypto";
 import { shortId } from "@convex/ids";
 import { sendOtpEmail } from "@convex/resend";
+import { AUTH_CONFIG, NETWORK_CONFIG } from "../config";
 
-const siteUrl = process.env.SITE_URL || process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
+const siteUrl = process.env.SITE_URL || process.env.NEXT_PUBLIC_SITE_URL || NETWORK_CONFIG.defaultApiUrl;
 const apiKeyListItemValidator = v.object({
   _id: v.id("apiKeys"),
   _creationTime: v.number(),
@@ -56,8 +57,8 @@ export async function requireUser(ctx: GenericCtx<DataModel> | QueryCtx | Mutati
   return user;
 }
 
-const MAX_ACTIVE_KEYS = 5;
-const KEY_EXPIRY_MS = 90 * 24 * 60 * 60 * 1000; // 90 days
+const MAX_ACTIVE_KEYS = AUTH_CONFIG.maxActiveKeys;
+const KEY_EXPIRY_MS = AUTH_CONFIG.keyTtlDays * 24 * 60 * 60 * 1000;
 
 export const createApiKey = mutation({
   args: {
@@ -130,7 +131,7 @@ export const createApiKey = mutation({
   },
 });
 
-export const authByApiKey = query({
+export const authByApiKey = mutation({
   args: { apiKey: v.string() },
   returns: v.union(v.object({ userId: v.string() }), v.null()),
   handler: async (ctx, args) => {
@@ -152,6 +153,9 @@ export const authByApiKey = query({
     if (Date.now() - key._creationTime > KEY_EXPIRY_MS) {
       return null;
     }
+    await ctx.db.patch("apiKeys", key._id, {
+      lastUsedAt: Date.now(),
+    });
     return {
       userId: key.userId,
     };

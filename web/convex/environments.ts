@@ -1,10 +1,12 @@
 import { ConvexError, v } from "convex/values";
 import type { Doc, Id } from "@convex/_generated/dataModel";
-import { internal } from "@convex/_generated/api";
+import { components, internal } from "@convex/_generated/api";
 import { internalMutation, internalQuery, mutation, query, type MutationCtx, type QueryCtx } from "@convex/_generated/server";
 import { requireUser } from "@convex/auth";
 import { images } from "@convex/catalog";
 import { shortId } from "@convex/ids";
+import { R2 } from "@convex-dev/r2";
+import { PYTHON_CONFIG } from "../config";
 
 const environmentResponseValidator = v.object({
   environment_id: v.string(),
@@ -14,6 +16,7 @@ const environmentResponseValidator = v.object({
   gpu_type: v.string(),
   gpu_count: v.number(),
   volume_gb: v.number(),
+  python_version: v.string(),
   framework: v.string(),
   version: v.string(),
 });
@@ -27,9 +30,33 @@ const commitSyncPointersResponseValidator = v.object({
   code_manifest_hash: v.optional(v.string()),
   data_manifest_hash: v.optional(v.string()),
 });
+const r2 = new R2(components.r2);
 
 function environmentPath(userId: string, environmentId: string) {
   return `${userId}/environment/${environmentId}`;
+}
+
+async function deleteObjectsByPrefix(ctx: MutationCtx, prefix: string) {
+  let cursor: string | null = null;
+  let pages = 0;
+  while (pages < 100) {
+    const result = await r2.listMetadata(ctx, 100, cursor);
+    for (const item of result.page) {
+      if (!item.key.startsWith(prefix)) {
+        continue;
+      }
+      try {
+        await r2.deleteObject(ctx, item.key);
+      } catch {
+        // best-effort cleanup
+      }
+    }
+    if (result.isDone) {
+      return;
+    }
+    cursor = result.continueCursor;
+    pages += 1;
+  }
 }
 
 function validateEnvironmentPayload(args: {
@@ -61,6 +88,7 @@ function toEnvironmentResponse(row: Doc<"environments">) {
     gpu_type: row.gpuType,
     gpu_count: row.gpuCount,
     volume_gb: row.volumeGb,
+    python_version: row.pythonVersion || PYTHON_CONFIG.defaultVersion,
     framework: row.framework,
     version: row.version,
   };
@@ -97,6 +125,7 @@ async function createEnvironmentForUserId(
     gpu_type: string;
     gpu_count: number;
     volume_gb: number;
+    python_version: string;
     framework: string;
     version: string;
   },
@@ -111,6 +140,7 @@ async function createEnvironmentForUserId(
     gpuType: args.gpu_type,
     gpuCount: args.gpu_count,
     volumeGb: args.volume_gb,
+    pythonVersion: args.python_version || PYTHON_CONFIG.defaultVersion,
     framework: args.framework,
     version: args.version,
   });
@@ -160,7 +190,8 @@ async function updateEnvironmentSpecsForUserId(
 }
 
 async function removeEnvironmentForUserId(ctx: MutationCtx, userId: string, environmentId: Id<"environments">) {
-  await getOwnedEnvironment(ctx, userId, environmentId);
+  const env = await getOwnedEnvironment(ctx, userId, environmentId);
+  const artifactKeys = new Set<string>();
 
   // Cascade: delete all runs belonging to this environment
   const runs = await ctx.db
@@ -191,6 +222,9 @@ async function removeEnvironmentForUserId(ctx: MutationCtx, userId: string, envi
         .withIndex("by_run", (q) => q.eq("runId", run._id))
         .collect(),
     ]);
+    for (const key of run.artifactKeys || []) {
+      artifactKeys.add(key);
+    }
     await Promise.all([
       ...events.map((event) => ctx.db.delete(event._id)),
       ...runtimeLogs.map((entry) => ctx.db.delete(entry._id)),
@@ -198,6 +232,17 @@ async function removeEnvironmentForUserId(ctx: MutationCtx, userId: string, envi
     ]);
     await ctx.db.delete("runs", run._id);
   }
+
+  for (const key of artifactKeys) {
+    try {
+      await r2.deleteObject(ctx, key);
+    } catch {
+      // best-effort cleanup
+    }
+  }
+  await deleteObjectsByPrefix(ctx, `${environmentPath(userId, String(environmentId))}/`);
+  await deleteObjectsByPrefix(ctx, `${userId}/data/${env.dataId || String(environmentId)}/`);
+  await deleteObjectsByPrefix(ctx, `runs/${String(environmentId)}/`);
 
   await ctx.db.delete("environments", environmentId);
   return { deleted: true, environment_id: String(environmentId) };
@@ -230,21 +275,13 @@ export const create = mutation({
     gpu_type: v.string(),
     gpu_count: v.number(),
     volume_gb: v.number(),
+    python_version: v.optional(v.string()),
     framework: v.string(),
     version: v.string(),
   },
   returns: environmentResponseValidator,
-  handler: async (ctx, args) => {
-    const user = await requireUser(ctx);
-    return createEnvironmentForUserId(ctx, {
-      userId: String(user._id),
-      name: args.name,
-      gpu_type: args.gpu_type,
-      gpu_count: args.gpu_count,
-      volume_gb: args.volume_gb,
-      framework: args.framework,
-      version: args.version,
-    });
+  handler: async (_ctx, _args) => {
+    throw new ConvexError("environments can only be created via `tahuna init`");
   },
 });
 
@@ -283,12 +320,16 @@ export const internalCreate = internalMutation({
     gpu_type: v.string(),
     gpu_count: v.number(),
     volume_gb: v.number(),
+    python_version: v.optional(v.string()),
     framework: v.string(),
     version: v.string(),
   },
   returns: environmentResponseValidator,
   handler: async (ctx, args) => {
-    return createEnvironmentForUserId(ctx, args);
+    return createEnvironmentForUserId(ctx, {
+      ...args,
+      python_version: args.python_version || PYTHON_CONFIG.defaultVersion,
+    });
   },
 });
 

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -57,10 +56,7 @@ func (m *syncBackendMock) doJSON(method, path string, payload map[string]any) (m
 		m.missingKinds = append(m.missingKinds, kind)
 		missing := make([]string, 0, len(hashesAny))
 		for _, hash := range hashesAny {
-			key := fmt.Sprintf("user/environment/%s/blobs/%s/%s", environmentID, kind, hash)
-			if kind == "data" {
-				key = fmt.Sprintf("user/data/data-%s/blobs/%s", environmentID, hash)
-			}
+			key := fmt.Sprintf("user/blobs/%s", hash)
 			if !m.metadata[key] {
 				missing = append(missing, hash)
 			}
@@ -82,10 +78,8 @@ func (m *syncBackendMock) doJSON(method, path string, payload map[string]any) (m
 		}
 		kind := asString(payload["kind"])
 		sha := asString(payload["sha256"])
-		key := fmt.Sprintf("user/environment/%s/blobs/%s/%s", environmentID, kind, sha)
-		if kind == "data" {
-			key = fmt.Sprintf("user/data/data-%s/blobs/%s", environmentID, sha)
-		}
+		_ = kind
+		key := fmt.Sprintf("user/blobs/%s", sha)
 		m.blobUploadCount++
 		m.blobKinds = append(m.blobKinds, kind)
 		return map[string]any{"key": key, "url": "mock://upload?key=" + url.QueryEscape(key)}, nil
@@ -335,13 +329,8 @@ func TestSyncIncremental_DataScopeOnlyCommitsDataManifest(t *testing.T) {
 		}
 	}
 
-	manifestAny := lastCommit["data_manifest"]
-	manifestRaw, err := json.Marshal(manifestAny)
-	if err != nil {
-		t.Fatalf("failed to marshal manifest from commit payload: %v", err)
-	}
-	if len(manifestRaw) == 0 {
-		t.Fatalf("expected non-empty data_manifest payload")
+	if _, ok := lastCommit["data_manifest"]; ok {
+		t.Fatalf("did not expect data_manifest payload in commit request")
 	}
 }
 
