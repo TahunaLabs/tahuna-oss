@@ -434,16 +434,6 @@ func initProject(target string) error {
 		envName = "tahuna-project"
 	}
 
-	envID, err := guidedSetup(envName, frameworkKey, projectCfg.PythonVersion)
-	if err != nil {
-		return err
-	}
-	if err := saveLinkedEnvironmentID(envID); err != nil {
-		return fmt.Errorf("project initialized, but failed to save environment link: %w", err)
-	}
-	if err := saveProjectConfig(projectCfg); err != nil {
-		return fmt.Errorf("project initialized, but failed to save project config: %w", err)
-	}
 	if err := ensureProjectFile(projectCfg.ConfigYAMLPath, defaultConfigYAMLTemplate(projectCfg)); err != nil {
 		return fmt.Errorf("failed to create config yaml: %w", err)
 	}
@@ -461,6 +451,22 @@ func initProject(target string) error {
 	}
 	if err := os.MkdirAll(projectCfg.OutputDir, 0o755); err != nil {
 		return fmt.Errorf("failed to create output directory: %w", err)
+	}
+
+	if err := saveProjectConfig(projectCfg); err != nil {
+		return fmt.Errorf("failed to save project config: %w", err)
+	}
+
+	envID, err := guidedSetup(envName, frameworkKey, projectCfg.PythonVersion)
+	if err != nil {
+		return err
+	}
+	if saveErr := saveLinkedEnvironmentID(envID); saveErr != nil {
+		_, cleanupErr := doJSON(http.MethodDelete, "/environments/"+envID, nil)
+		if cleanupErr != nil {
+			return fmt.Errorf("failed to save environment link: %w (also failed to roll back environment %s: %v)", saveErr, envID, cleanupErr)
+		}
+		return fmt.Errorf("failed to save environment link: %w (rolled back environment %s)", saveErr, envID)
 	}
 	return nil
 }
@@ -2699,6 +2705,9 @@ func collectProjectInitConfig() (projectConfig, string, error) {
 		fmt.Printf("%s?%s No pyproject.toml found\n", cAmpGold, cReset)
 		cfg.PythonProjectFile = choosePathWhenMissing("Python project file", "pyproject.toml")
 	}
+	if filepath.Base(cfg.PythonProjectFile) != "pyproject.toml" {
+		return cfg, "", fmt.Errorf("python project file must be named pyproject.toml (got %s)", filepath.Base(cfg.PythonProjectFile))
+	}
 
 	if fileExists(cfg.UVLockFile) {
 		fmt.Printf("✓ Found %suv.lock%s\n", cAmpGold, cReset)
@@ -2992,9 +3001,11 @@ func ensureUVLockFile(pyprojectPath, uvLockPath string) error {
 	if !fileExists(projectPath) {
 		return fmt.Errorf("pyproject.toml not found at %s", projectPath)
 	}
+	if filepath.Base(projectPath) != "pyproject.toml" {
+		return fmt.Errorf("python project file must be named pyproject.toml (got %s)", filepath.Base(projectPath))
+	}
 
-	cmd := exec.Command("uv", "lock")
-	cmd.Dir = projectDir
+	cmd := exec.Command("uv", "lock", "--project", projectDir)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		if errors.Is(err, exec.ErrNotFound) {

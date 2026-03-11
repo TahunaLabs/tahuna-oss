@@ -18,6 +18,8 @@ export const RUN_CONFIG = {
   statusPollSeconds: 5,
   logsPollSeconds: 2,
   cancellationGraceSeconds: 30,
+  terminationRetryMaxAttempts: 5,
+  terminationRetryDelaySeconds: 10,
   runtimeLogTailLimit: 200,
   runtimeMetricTailLimit: 200,
   workpoolMaxParallelism: 3,

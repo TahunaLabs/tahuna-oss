@@ -13,9 +13,10 @@ import {
   type QueryCtx,
 } from "@convex/_generated/server";
 import { requireUser } from "@convex/auth";
+import { R2 } from "@convex-dev/r2";
 import { images } from "./catalog";
 import { shortId } from "@convex/ids";
-import { RUN_CONFIG } from "../config";
+import { RUN_CONFIG, SYNC_CONFIG } from "../config";
 
 const RUN_STATUS = {
   QUEUED: "queued",
@@ -151,7 +152,7 @@ const runtimeBootstrapPlanValidator = v.object({
     entries: v.array(runtimeBootstrapEntryValidator),
   }),
   data: v.object({
-    manifest_hash: v.string(),
+    manifest_hash: v.union(v.string(), v.null()),
     entries: v.array(runtimeBootstrapEntryValidator),
   }),
 });
@@ -160,6 +161,7 @@ const provisionPool = new Workpool(components.workpool, {
   maxParallelism: RUN_CONFIG.workpoolMaxParallelism,
   retryActionsByDefault: true,
 });
+const r2 = new R2(components.r2);
 const SHA256_HEX_RE = /^[a-f0-9]{64}$/i;
 const RUNTIME_LOG_TAIL_LIMIT = RUN_CONFIG.runtimeLogTailLimit;
 const RUNTIME_METRIC_TAIL_LIMIT = RUN_CONFIG.runtimeMetricTailLimit;
@@ -207,7 +209,7 @@ type RuntimeBootstrapPlan = {
     entries: RuntimeBootstrapEntry[];
   };
   data: {
-    manifest_hash: string;
+    manifest_hash: string | null;
     entries: RuntimeBootstrapEntry[];
   };
 };
@@ -446,6 +448,45 @@ function summarizeManifest(manifest: SyncManifestPayload) {
   };
 }
 
+function emptyDataManifest(): SyncManifestPayload {
+  return {
+    version: 1,
+    type: "data",
+    created_at: Date.now(),
+    entries: [],
+  };
+}
+
+async function sleepMs(ms: number) {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function getDownloadUrlWithMetadataSync(ctx: ActionCtx, key: string): Promise<string | null> {
+  const immediate = await r2.getMetadata(ctx, key);
+  if (immediate?.url) {
+    return immediate.url;
+  }
+  let delay = SYNC_CONFIG.objectMetadataPollInitialBackoffMs;
+  for (let attempt = 0; attempt < SYNC_CONFIG.objectMetadataPollAttempts; attempt += 1) {
+    try {
+      await r2.syncMetadata(ctx, key);
+    } catch {
+      // Missing keys and metadata races are handled by retry loop.
+    }
+    const metadata = await r2.getMetadata(ctx, key);
+    if (metadata?.url) {
+      return metadata.url;
+    }
+    if (attempt < SYNC_CONFIG.objectMetadataPollAttempts - 1) {
+      await sleepMs(delay);
+      if (delay < SYNC_CONFIG.objectMetadataPollMaxBackoffMs) {
+        delay *= 2;
+      }
+    }
+  }
+  return null;
+}
+
 async function resolveManifestDownloadEntries(
   ctx: ActionCtx,
   payload: {
@@ -461,7 +502,7 @@ async function resolveManifestDownloadEntries(
     const candidateKeys = blobKeys(payload, kind, entry.sha256);
     let downloadUrl: string | null = null;
     for (const key of candidateKeys) {
-      downloadUrl = await ctx.runQuery(internal.cli.internalGetObjectDownloadUrl, { key });
+      downloadUrl = await getDownloadUrlWithMetadataSync(ctx, key);
       if (downloadUrl) {
         break;
       }
@@ -1091,18 +1132,25 @@ async function createRunpodPod(args: {
 
 async function terminateRunpodPod(podId: string) {
   const apiKey = process.env.RUNPOD_API_KEY?.trim();
-  if (!apiKey || !podId) {
+  if (!podId) {
     return;
   }
-  try {
-    await fetch(`https://rest.runpod.io/v1/pods/${podId}`, {
-      method: "DELETE",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-      },
-    });
-  } catch {
-    // Best-effort: pod may already be terminated
+  if (!apiKey) {
+    throw new Error("RUNPOD_API_KEY is not set; cannot terminate pod");
+  }
+  const response = await fetch(`https://rest.runpod.io/v1/pods/${podId}`, {
+    method: "DELETE",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+    },
+  });
+  if (response.status === 404) {
+    // Already gone.
+    return;
+  }
+  if (!response.ok) {
+    const detail = (await response.text()).trim();
+    throw new Error(detail || `Runpod pod termination failed: http ${response.status}`);
   }
 }
 
@@ -1261,7 +1309,7 @@ async function createRunForUserId(
   const codeManifestHash = env.latestCodeManifestHash;
   const dataManifestHash = env.latestDataManifestHash;
   const dataId = env.dataId || String(env._id);
-  if (!codeManifestHash || !dataManifestHash) {
+  if (!codeManifestHash) {
     throw new ConvexError("environment is not synced; run `tahuna sync` before creating a run");
   }
 
@@ -1280,7 +1328,7 @@ async function createRunForUserId(
     effectiveGpuCount: args.gpu_count ?? env.gpuCount,
     effectiveVolumeGb: args.volume_gb ?? env.volumeGb,
     codeManifestHash: codeManifestHash,
-    dataManifestHash: dataManifestHash,
+    dataManifestHash: dataManifestHash || undefined,
   });
 
   await ctx.db.insert("runEvents", {
@@ -1318,13 +1366,7 @@ async function cancelRunForUserId(
     throw new ConvexError(`run is already ${row.status}`);
   }
 
-  if (row.podId) {
-    await ctx.scheduler.runAfter(0, internal.runs.internalTerminatePod, {
-      podId: row.podId,
-    });
-  }
-
-  if (force) {
+  if (!row.podId) {
     await ctx.db.patch("runs", runId, {
       status: RUN_STATUS.CANCELLED,
       cancellationRequested: true,
@@ -1332,9 +1374,17 @@ async function cancelRunForUserId(
     await ctx.db.insert("runEvents", {
       runId,
       status: RUN_STATUS.CANCELLED,
-      message: "force cancellation requested",
+      message: force ? "force cancellation requested before provisioning" : "run cancelled before provisioning",
     });
-    return { cancel_requested: true, forced: true, run_id: String(runId) };
+    return { cancel_requested: true, forced: force, run_id: String(runId) };
+  }
+
+  if (row.podId) {
+    await ctx.scheduler.runAfter(0, internal.runs.internalTerminatePod, {
+      runId,
+      podId: row.podId,
+      force,
+    });
   }
 
   await ctx.db.patch("runs", runId, {
@@ -1344,9 +1394,9 @@ async function cancelRunForUserId(
   await ctx.db.insert("runEvents", {
     runId,
     status: RUN_STATUS.CANCELLING,
-    message: "cancellation requested",
+    message: force ? "force cancellation requested" : "cancellation requested",
   });
-  return { cancel_requested: true, forced: false, run_id: String(runId) };
+  return { cancel_requested: true, forced: force, run_id: String(runId) };
 }
 
 async function deleteRunForUserId(ctx: MutationCtx, userId: string, runId: Id<"runs">) {
@@ -1506,10 +1556,114 @@ export const internalCancel = internalMutation({
   },
 });
 
+export const markCancelledAfterTermination = internalMutation({
+  args: { runId: v.id("runs"), force: v.optional(v.boolean()) },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const row = await ctx.db.get("runs", args.runId);
+    if (!row || !row.cancellationRequested || TERMINAL_STATUSES.has(row.status)) {
+      return null;
+    }
+    await ctx.db.patch("runs", args.runId, { status: RUN_STATUS.CANCELLED });
+    await ctx.db.insert("runEvents", {
+      runId: args.runId,
+      status: RUN_STATUS.CANCELLED,
+      message: args.force === true ? "force cancellation completed" : "cancellation completed",
+    });
+    return null;
+  },
+});
+
+export const markCancellationTerminationFailed = internalMutation({
+  args: { runId: v.id("runs"), error: v.string() },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const row = await ctx.db.get("runs", args.runId);
+    if (!row || !row.cancellationRequested || TERMINAL_STATUSES.has(row.status)) {
+      return null;
+    }
+    const errorText = sanitizeRuntimeMessage(args.error) || "failed to terminate pod during cancellation";
+    await ctx.db.patch("runs", args.runId, {
+      status: RUN_STATUS.FAILED,
+      error: `cancellation failed: ${errorText}`,
+      runtimeTokenHash: "revoked",
+    });
+    await ctx.db.insert("runEvents", {
+      runId: args.runId,
+      status: RUN_STATUS.FAILED,
+      message: "cancellation termination failed",
+      metadata: {
+        error: errorText,
+      },
+    });
+    return null;
+  },
+});
+
+export const scheduleTerminationRetry = internalMutation({
+  args: {
+    runId: v.id("runs"),
+    podId: v.string(),
+    force: v.optional(v.boolean()),
+    attempt: v.number(),
+    error: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const row = await ctx.db.get("runs", args.runId);
+    if (!row || !row.cancellationRequested || TERMINAL_STATUSES.has(row.status)) {
+      return null;
+    }
+    await ctx.db.insert("runEvents", {
+      runId: args.runId,
+      status: RUN_STATUS.CANCELLING,
+      message: `retrying pod termination (attempt ${args.attempt}/${RUN_CONFIG.terminationRetryMaxAttempts})`,
+      metadata: {
+        error: args.error,
+      },
+    });
+    await ctx.scheduler.runAfter(
+      RUN_CONFIG.terminationRetryDelaySeconds * 1000,
+      internal.runs.internalTerminatePod,
+      {
+        runId: args.runId,
+        podId: args.podId,
+        force: args.force === true,
+        attempt: args.attempt,
+      },
+    );
+    return null;
+  },
+});
+
 export const internalTerminatePod = internalAction({
-  args: { podId: v.string() },
-  handler: async (_ctx, args) => {
-    await terminateRunpodPod(args.podId);
+  args: { runId: v.id("runs"), podId: v.string(), force: v.optional(v.boolean()), attempt: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const attempt = args.attempt ?? 0;
+    try {
+      await terminateRunpodPod(args.podId);
+      await ctx.runMutation(internal.runs.markCancelledAfterTermination, {
+        runId: args.runId,
+        force: args.force === true,
+      });
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : "failed to terminate pod";
+      const nextAttempt = attempt + 1;
+      if (nextAttempt < RUN_CONFIG.terminationRetryMaxAttempts) {
+        await ctx.runMutation(internal.runs.scheduleTerminationRetry, {
+          runId: args.runId,
+          podId: args.podId,
+          force: args.force === true,
+          attempt: nextAttempt,
+          error: detail,
+        });
+        return;
+      }
+      await ctx.runMutation(internal.runs.markCancellationTerminationFailed, {
+        runId: args.runId,
+        error: `${detail} (retries exhausted)`,
+      });
+    }
   },
 });
 
@@ -1576,12 +1730,15 @@ export const internalGetRuntimeBootstrapPlan = internalAction({
     const dataManifestHash = provisioningPayload.data_manifest_hash;
     const codeManifestKey = provisioningPayload.code_manifest_key;
     const dataManifestKey = provisioningPayload.data_manifest_key;
-    if (!codeManifestHash || !dataManifestHash || !codeManifestKey || !dataManifestKey) {
+    if (!codeManifestHash || !codeManifestKey) {
       throw new Error("missing pinned manifest hash/key in provisioning payload");
     }
 
     const codeManifest = await fetchManifest(ctx, "code", codeManifestKey, codeManifestHash);
-    const dataManifest = await fetchManifest(ctx, "data", dataManifestKey, dataManifestHash);
+    const dataManifest =
+      dataManifestHash && dataManifestKey
+        ? await fetchManifest(ctx, "data", dataManifestKey, dataManifestHash)
+        : emptyDataManifest();
     const codeEntries = await resolveManifestDownloadEntries(ctx, provisioningPayload, "code", codeManifest);
     const dataEntries = await resolveManifestDownloadEntries(ctx, provisioningPayload, "data", dataManifest);
 
@@ -1594,10 +1751,22 @@ export const internalGetRuntimeBootstrapPlan = internalAction({
         entries: codeEntries,
       },
       data: {
-        manifest_hash: dataManifestHash,
+        manifest_hash: dataManifestHash ?? null,
         entries: dataEntries,
       },
     };
+  },
+});
+
+export const internalShouldAbortProvisioning = internalQuery({
+  args: { runId: v.id("runs") },
+  returns: v.boolean(),
+  handler: async (ctx, args) => {
+    const row = await ctx.db.get("runs", args.runId);
+    if (!row) {
+      return true;
+    }
+    return row.cancellationRequested || TERMINAL_STATUSES.has(row.status);
   },
 });
 
@@ -1628,17 +1797,23 @@ export const provisionRun = internalAction({
       runId: args.runId,
       provisioningPayload,
     });
+    if (await ctx.runQuery(internal.runs.internalShouldAbortProvisioning, { runId: args.runId })) {
+      return null;
+    }
     try {
       const codeManifestHash = provisioningPayload.code_manifest_hash;
       const dataManifestHash = provisioningPayload.data_manifest_hash;
       const codeManifestKey = provisioningPayload.code_manifest_key;
       const dataManifestKey = provisioningPayload.data_manifest_key;
-      if (!codeManifestHash || !dataManifestHash || !codeManifestKey || !dataManifestKey) {
+      if (!codeManifestHash || !codeManifestKey) {
         throw new Error("missing pinned manifest hash/key in provisioning payload");
       }
 
       const codeManifest = await fetchManifest(ctx, "code", codeManifestKey, codeManifestHash);
-      const dataManifest = await fetchManifest(ctx, "data", dataManifestKey, dataManifestHash);
+      const dataManifest =
+        dataManifestHash && dataManifestKey
+          ? await fetchManifest(ctx, "data", dataManifestKey, dataManifestHash)
+          : emptyDataManifest();
       const codeStats = summarizeManifest(codeManifest);
       const dataStats = summarizeManifest(dataManifest);
       const runtimeToken = generateRuntimeToken();
@@ -1647,6 +1822,9 @@ export const provisionRun = internalAction({
         runId: args.runId,
         runtimeTokenHash,
       });
+      if (await ctx.runQuery(internal.runs.internalShouldAbortProvisioning, { runId: args.runId })) {
+        return null;
+      }
       const imageName = resolveImageName(runSpec.framework, runSpec.version);
       const provisionResult = await createRunpodPod({
         runId: String(args.runId),
