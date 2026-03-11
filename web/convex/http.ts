@@ -9,15 +9,18 @@ import {
     createRun,
     getCatalog,
     getConfig,
+    getDataItem,
     getEnvironment,
     updateEnvironmentSpecs,
     getRunOrLogs,
     health,
     listMissingBlobHashes,
+    listDataItems,
     listEnvironments,
     listRuns,
     optionsHandler,
     postRunRuntime,
+    renameRun,
     removeEnvironment,
     removeRun,
 } from "@convex/cli";
@@ -31,6 +34,8 @@ http.route({ pathPrefix: "/api/", method: "OPTIONS", handler: optionsHandler });
 http.route({ path: "/api/health", method: "GET", handler: health });
 http.route({ path: "/api/catalog", method: "GET", handler: getCatalog });
 http.route({ path: "/api/config", method: "GET", handler: getConfig });
+http.route({ path: "/api/data", method: "GET", handler: listDataItems });
+http.route({ pathPrefix: "/api/data/", method: "GET", handler: getDataItem });
 
 // Sync helpers for CLI
 http.route({ path: "/api/sync/blobs/missing", method: "POST", handler: listMissingBlobHashes });
@@ -54,6 +59,8 @@ http.route({ path: "/api/runs", method: "POST", handler: createRun });
 http.route({ pathPrefix: "/api/runs/", method: "POST", handler: postRunRuntime });
 // Route prefix for getting runs by ID /api/runs/{run_id} or /logs
 http.route({ pathPrefix: "/api/runs/", method: "GET", handler: getRunOrLogs });
+// Route prefix for renaming runs by ID /api/runs/{run_id}
+http.route({ pathPrefix: "/api/runs/", method: "PATCH", handler: renameRun });
 // Route prefix for deleting runs by ID /api/runs/{run_id}
 http.route({ pathPrefix: "/api/runs/", method: "DELETE", handler: removeRun });
 

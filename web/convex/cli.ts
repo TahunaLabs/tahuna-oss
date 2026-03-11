@@ -58,9 +58,17 @@ type OwnedEnvironmentRef = {
 type CreateRunStrictArgs = {
   userId: string;
   environmentId: Id<"environments">;
+  name?: string;
   gpu_type?: string;
   gpu_count?: number;
   volume_gb?: number;
+};
+type CatalogGpuRow = {
+  id: string;
+  display_name: string;
+  memory_gb: number;
+  max_gpu_count: number;
+  price_per_hour: number | null;
 };
 type RuntimeStatus = (typeof RUNTIME_STATUS_VALUES)[number];
 
@@ -117,6 +125,45 @@ function parseSyncKind(value: unknown): SyncKind | null {
     return value;
   }
   return null;
+}
+
+function normalizeGpuType(value: string) {
+  return value.trim().toLowerCase();
+}
+
+async function loadGpuMaxCounts(ctx: ActionCtx) {
+  let dynamicGpus: Array<{ id: string; maxGpuCount: number }> = [];
+  try {
+    dynamicGpus = await ctx.runAction(api.catalog.getDynamicGpus);
+  } catch {
+    dynamicGpus = [];
+  }
+  const out = new Map<string, number>();
+  for (const gpu of dynamicGpus) {
+    const id = normalizeGpuType(gpu.id || "");
+    if (!id) continue;
+    const max = Number.isFinite(gpu.maxGpuCount) && gpu.maxGpuCount > 0 ? Math.floor(gpu.maxGpuCount) : 1;
+    out.set(id, max);
+  }
+  return out;
+}
+
+async function validateGpuCountLimit(ctx: ActionCtx, gpuType: string, gpuCount: number) {
+  if (!gpuType.trim() || !Number.isFinite(gpuCount) || gpuCount <= 0) {
+    return;
+  }
+  const maxByType = await loadGpuMaxCounts(ctx);
+  if (maxByType.size === 0) {
+    return;
+  }
+  const key = normalizeGpuType(gpuType);
+  const max = maxByType.get(key);
+  if (typeof max === "undefined") {
+    throw new Error(`GPU type ${gpuType} is not available. Run \`tahuna catalog gpus\`.`);
+  }
+  if (gpuCount > max) {
+    throw new Error(`Max GPU count for ${gpuType} is ${max}.`);
+  }
 }
 
 function normalizeSha256(value: unknown): string | null {
@@ -413,19 +460,43 @@ export const getConfig = httpAction(async () => {
 export const getCatalog = httpAction(async (ctx) => {
   try {
     const data = await ctx.runQuery(api.catalog.getCatalog);
-    let dynamicGpus: Array<{ id: string }> = [];
+    let dynamicGpus: Array<{
+      id: string;
+      displayName: string;
+      memoryInGb: number;
+      maxGpuCount: number;
+      pricePerHour?: number;
+    }> = [];
     try {
       dynamicGpus = await ctx.runAction(api.catalog.getDynamicGpus);
     } catch {
       dynamicGpus = [];
     }
 
-    const gpus = dynamicGpus.map((gpu) => gpu.id).filter(Boolean);
-    const fallbackGpus = ["NVIDIA GeForce RTX 4090"];
+    const gpus: CatalogGpuRow[] = dynamicGpus
+      .map((gpu) => ({
+        id: gpu.id,
+        display_name: gpu.displayName || gpu.id,
+        memory_gb: Number.isFinite(gpu.memoryInGb) ? gpu.memoryInGb : 0,
+        max_gpu_count: Number.isFinite(gpu.maxGpuCount) && gpu.maxGpuCount > 0 ? gpu.maxGpuCount : 1,
+        price_per_hour: typeof gpu.pricePerHour === "number" && Number.isFinite(gpu.pricePerHour) ? gpu.pricePerHour : null,
+      }))
+      .filter((gpu) => gpu.id);
+    const fallbackGpus: CatalogGpuRow[] = [
+      {
+        id: "NVIDIA GeForce RTX 4090",
+        display_name: "NVIDIA GeForce RTX 4090",
+        memory_gb: 24,
+        max_gpu_count: 1,
+        price_per_hour: null,
+      },
+    ];
+    const resolved = gpus.length > 0 ? gpus : fallbackGpus;
 
     return new Response(JSON.stringify({
       ...data,
-      gpus: gpus.length > 0 ? gpus : fallbackGpus,
+      gpus: resolved,
+      gpu_ids: resolved.map((gpu) => gpu.id),
     }), {
       status: 200,
       headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
@@ -434,6 +505,74 @@ export const getCatalog = httpAction(async (ctx) => {
     const detail = err instanceof Error ? err.message : "failed to load catalog";
     return new Response(JSON.stringify({ detail }), {
       status: 500,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+});
+
+// Data
+
+export const listDataItems = httpAction(async (ctx, request) => {
+  const userId = await authenticateApiRequest(ctx, request);
+  if (!userId) {
+    return new Response(JSON.stringify({ detail: "authentication required" }), {
+      status: 401,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+
+  try {
+    const data = await ctx.runQuery(internal.data.internalList, { userId });
+    return new Response(JSON.stringify(data), {
+      status: 200,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : "failed to list data items";
+    return new Response(JSON.stringify({ detail }), {
+      status: 400,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+});
+
+export const getDataItem = httpAction(async (ctx, request) => {
+  const userId = await authenticateApiRequest(ctx, request);
+  if (!userId) {
+    return new Response(JSON.stringify({ detail: "authentication required" }), {
+      status: 401,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+
+  const url = new URL(request.url);
+  const parts = url.pathname.split("/").filter(Boolean);
+  const dataIdx = parts.findIndex((part) => part === "data");
+  const dataId = dataIdx >= 0 ? parts[dataIdx + 1] : "";
+  if (!dataId || dataId === "data" || parts[dataIdx + 2]) {
+    return new Response(JSON.stringify({ detail: "path must be /api/data/{data_id}" }), {
+      status: 400,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+
+  try {
+    const data = await ctx.runQuery(internal.data.internalList, { userId });
+    const row = data.blobs.find((blob) => blob.blob_id === dataId);
+    if (!row) {
+      return new Response(JSON.stringify({ detail: "data item not found" }), {
+        status: 404,
+        headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+      });
+    }
+    return new Response(JSON.stringify(row), {
+      status: 200,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : "failed to load data item";
+    return new Response(JSON.stringify({ detail }), {
+      status: 400,
       headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
     });
   }
@@ -843,11 +982,14 @@ export const createEnvironment = httpAction(async (ctx, request) => {
   }
 
   try {
+    const gpuType = body?.gpu_type?.trim() || "";
+    const gpuCount = typeof body?.gpu_count === "number" ? body.gpu_count : 0;
+    await validateGpuCountLimit(ctx, gpuType, gpuCount);
     const data = await ctx.runMutation(internal.environments.internalCreate, {
       userId,
       name: body?.name?.trim() || "",
-      gpu_type: body?.gpu_type?.trim() || "",
-      gpu_count: body?.gpu_count ?? 0,
+      gpu_type: gpuType,
+      gpu_count: gpuCount,
       volume_gb: body?.volume_gb ?? 0,
       python_version: body?.python_version?.trim() || undefined,
       framework: body?.framework?.trim() || "",
@@ -867,6 +1009,12 @@ export const createEnvironment = httpAction(async (ctx, request) => {
 });
 
 export const removeEnvironment = httpAction(async (ctx, request) => {
+  const path = new URL(request.url).pathname;
+  const parsedDataBindings = parseEnvironmentDataBindingsPath(path);
+  if (parsedDataBindings) {
+    return handleUnbindEnvironmentData(ctx, request);
+  }
+
   const userId = await authenticateApiRequest(ctx, request);
   if (!userId) {
     return new Response(JSON.stringify({ detail: "authentication required" }), {
@@ -989,6 +1137,17 @@ export const updateEnvironmentSpecs = httpAction(async (ctx, request) => {
   }
 
   try {
+    if (typeof gpuCount === "number" && gpuCount > 0) {
+      let effectiveGpuType = gpuType || "";
+      if (!effectiveGpuType) {
+        const current = await ctx.runQuery(internal.environments.internalGet, {
+          userId,
+          environmentId: environmentId as Id<"environments">,
+        });
+        effectiveGpuType = current.gpu_type;
+      }
+      await validateGpuCountLimit(ctx, effectiveGpuType, gpuCount);
+    }
     const data = await ctx.runMutation(internal.environments.internalUpdateSpecs, {
       userId,
       environmentId: environmentId as Id<"environments">,
@@ -1009,7 +1168,130 @@ export const updateEnvironmentSpecs = httpAction(async (ctx, request) => {
   }
 });
 
+function parseEnvironmentDataBindingsPath(pathname: string) {
+  const parts = pathname.split("/").filter(Boolean);
+  const envIdx = parts.findIndex((part) => part === "environments");
+  const environmentId = envIdx >= 0 ? parts[envIdx + 1] : "";
+  const tail = parts[parts.length - 1] || "";
+  if (!environmentId || !tail || tail !== "data-bindings") {
+    return null;
+  }
+  return { environmentId };
+}
+
+async function handleBindEnvironmentData(ctx: ActionCtx, request: Request) {
+  const userId = await authenticateApiRequest(ctx, request);
+  if (!userId) {
+    return new Response(JSON.stringify({ detail: "authentication required" }), {
+      status: 401,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+
+  const parsed = parseEnvironmentDataBindingsPath(new URL(request.url).pathname);
+  if (!parsed) {
+    return new Response(JSON.stringify({ detail: "path must be /api/environments/{env_id}/data-bindings" }), {
+      status: 400,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+
+  const body = await readJsonBody(request);
+  const raw: unknown[] = Array.isArray(body?.data_ids) ? body.data_ids : [];
+  const dataIds = raw
+    .filter((value: unknown): value is string => typeof value === "string")
+    .map((value: string) => value.trim())
+    .filter(Boolean);
+  if (dataIds.length === 0) {
+    return new Response(JSON.stringify({ detail: "data_ids must contain at least one id" }), {
+      status: 400,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+
+  try {
+    const data = await ctx.runMutation(internal.environments.internalBindData, {
+      userId,
+      environmentId: parsed.environmentId as Id<"environments">,
+      data_ids: dataIds,
+    });
+    return new Response(JSON.stringify(data), {
+      status: 200,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : "failed to bind data";
+    return new Response(JSON.stringify({ detail }), {
+      status: 400,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+}
+
+export const bindEnvironmentData = httpAction(async (ctx, request) => {
+  return handleBindEnvironmentData(ctx, request);
+});
+
+async function handleUnbindEnvironmentData(ctx: ActionCtx, request: Request) {
+  const userId = await authenticateApiRequest(ctx, request);
+  if (!userId) {
+    return new Response(JSON.stringify({ detail: "authentication required" }), {
+      status: 401,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+
+  const parsed = parseEnvironmentDataBindingsPath(new URL(request.url).pathname);
+  if (!parsed) {
+    return new Response(JSON.stringify({ detail: "path must be /api/environments/{env_id}/data-bindings" }), {
+      status: 400,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+
+  const body = await readJsonBody(request);
+  const raw: unknown[] = Array.isArray(body?.data_ids) ? body.data_ids : [];
+  const dataIds = raw
+    .filter((value: unknown): value is string => typeof value === "string")
+    .map((value: string) => value.trim())
+    .filter(Boolean);
+  if (dataIds.length === 0) {
+    return new Response(JSON.stringify({ detail: "data_ids must contain at least one id" }), {
+      status: 400,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+
+  try {
+    const data = await ctx.runMutation(internal.environments.internalUnbindData, {
+      userId,
+      environmentId: parsed.environmentId as Id<"environments">,
+      data_ids: dataIds,
+    });
+    return new Response(JSON.stringify(data), {
+      status: 200,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : "failed to unbind data";
+    return new Response(JSON.stringify({ detail }), {
+      status: 400,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+}
+
+export const unbindEnvironmentData = httpAction(async (ctx, request) => {
+  return handleUnbindEnvironmentData(ctx, request);
+});
+
 export const createRunFromEnvironment = httpAction(async (ctx, request) => {
+  const path = new URL(request.url).pathname;
+  const parsedDataBindings = parseEnvironmentDataBindingsPath(path);
+  if (parsedDataBindings) {
+    return handleBindEnvironmentData(ctx, request);
+  }
+
   const userId = await authenticateApiRequest(ctx, request);
   if (!userId) {
     return new Response(JSON.stringify({ detail: "authentication required" }), {
@@ -1039,9 +1321,23 @@ export const createRunFromEnvironment = httpAction(async (ctx, request) => {
   }
 
   try {
+    const requestedGpuType = typeof body?.gpu_type === "string" ? body.gpu_type.trim() : "";
+    const requestedGpuCount = typeof body?.gpu_count === "number" ? body.gpu_count : 0;
+    if (requestedGpuCount > 0) {
+      let effectiveGpuType = requestedGpuType;
+      if (!effectiveGpuType) {
+        const current = await ctx.runQuery(internal.environments.internalGet, {
+          userId,
+          environmentId: environmentId as Id<"environments">,
+        });
+        effectiveGpuType = current.gpu_type;
+      }
+      await validateGpuCountLimit(ctx, effectiveGpuType, requestedGpuCount);
+    }
     const data = await createAndProvisionRunStrict(ctx, {
       userId,
       environmentId: environmentId as Id<"environments">,
+      name: typeof body?.name === "string" ? body.name : undefined,
       gpu_type: body?.gpu_type,
       gpu_count: body?.gpu_count,
       volume_gb: body?.volume_gb,
@@ -1318,9 +1614,23 @@ export const createRun = httpAction(async (ctx, request) => {
   }
 
   try {
+    const requestedGpuType = typeof body?.gpu_type === "string" ? body.gpu_type.trim() : "";
+    const requestedGpuCount = typeof body?.gpu_count === "number" ? body.gpu_count : 0;
+    if (requestedGpuCount > 0) {
+      let effectiveGpuType = requestedGpuType;
+      if (!effectiveGpuType) {
+        const current = await ctx.runQuery(internal.environments.internalGet, {
+          userId,
+          environmentId: body?.environment_id as Id<"environments">,
+        });
+        effectiveGpuType = current.gpu_type;
+      }
+      await validateGpuCountLimit(ctx, effectiveGpuType, requestedGpuCount);
+    }
     const data = await createAndProvisionRunStrict(ctx, {
       userId,
       environmentId: body?.environment_id as Id<"environments">,
+      name: typeof body?.name === "string" ? body.name : undefined,
       gpu_type: body?.gpu_type,
       gpu_count: body?.gpu_count,
       volume_gb: body?.volume_gb,
@@ -1334,6 +1644,54 @@ export const createRun = httpAction(async (ctx, request) => {
     const status = detail.toLowerCase().includes("no gpu capacity currently available") ? 409 : 400;
     return new Response(JSON.stringify({ detail }), {
       status,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+});
+
+export const renameRun = httpAction(async (ctx, request) => {
+  const userId = await authenticateApiRequest(ctx, request);
+  if (!userId) {
+    return new Response(JSON.stringify({ detail: "authentication required" }), {
+      status: 401,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+
+  const url = new URL(request.url);
+  const parts = url.pathname.split("/").filter(Boolean);
+  const runIdx = parts.findIndex((part) => part === "runs");
+  const runId = runIdx >= 0 ? parts[runIdx + 1] : "";
+  if (!runId || runId === "runs" || parts[runIdx + 2]) {
+    return new Response(JSON.stringify({ detail: "path must be /api/runs/{run_id}" }), {
+      status: 400,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+
+  const body = await readJsonBody(request);
+  const name = typeof body?.name === "string" ? body.name : "";
+  if (!name.trim()) {
+    return new Response(JSON.stringify({ detail: "name is required" }), {
+      status: 400,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+
+  try {
+    const data = await ctx.runMutation(internal.runs.internalRename, {
+      userId,
+      runId: runId as Id<"runs">,
+      name,
+    });
+    return new Response(JSON.stringify(data), {
+      status: 200,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : "failed to rename run";
+    return new Response(JSON.stringify({ detail }), {
+      status: 400,
       headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
     });
   }

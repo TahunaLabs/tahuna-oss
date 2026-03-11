@@ -132,6 +132,26 @@ Audited code: `cli/main.go`, `web/convex/*`, `web/app/*`, `web/config.ts`, `cli`
 6. Delete cleanup of local environment link file.
 7. Resolve provider-env naming policy conflict between `cli-ux.md` and `manual-review.md`.
 
+### P1 Dispatch (2026-03-11)
+- `COMPLETED (IMPLEMENTED)` — P1-RUN-PARITY-01
+  - Scope: #13, #14, #15 from the matrix
+  - Deliverables:
+    - `tahuna run create --name/-n`
+    - default word-based run name when omitted
+    - `tahuna run rename <id|name> --name <new-name>`
+    - `tahuna run create -d/--detached`
+  - Owner: Codex session
+  - Linear: `TAH-5`
+- `COMPLETED (IMPLEMENTED)` — P1-COMMAND-SURFACE-02
+  - Scope: #16, #17, #18 from the matrix
+  - Linear: `TAH-6`
+- `COMPLETED (IMPLEMENTED)` — P1-UX-VALIDATION-03
+  - Scope: #19, #20, #21, #22, #23, #24, #25 from the matrix
+  - Linear: `TAH-7`
+- `FOLLOW-UP` — P1-SHELL-UX-08
+  - Scope: shell line editing/history parity improvements split from #23
+  - Linear: `TAH-8` (closed)
+
 ### Phase 3 — Dashboard parity (P2)
 1. Add `/machines` session management page.
 2. Add run detail route with streaming logs/metrics + charts.

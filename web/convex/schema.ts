@@ -23,6 +23,8 @@ export default defineSchema({
     artifacts: v.string(),
     dataId: v.optional(v.string()),
     pythonVersion: v.optional(v.string()),
+    boundDataIds: v.optional(v.array(v.string())),
+    boundDataManifestHashes: v.optional(v.array(v.string())),
     gpuType: v.string(),
     gpuCount: v.number(),
     volumeGb: v.number(),

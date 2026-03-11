@@ -1,7 +1,17 @@
 import { convexBetterAuthNextJs } from "@convex-dev/better-auth/nextjs";
 
-const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL!;
-const convexSiteUrl = process.env.NEXT_PUBLIC_TAHUNA_SITE_URL || process.env.NEXT_PUBLIC_CONVEX_SITE_URL!;
+const tahunaApiUrl =
+  process.env.NEXT_PUBLIC_TAHUNA_API_URL ||
+  process.env.NEXT_PUBLIC_CONVEX_URL;
+const tahunaSiteUrl =
+  process.env.NEXT_PUBLIC_TAHUNA_SITE_URL ||
+  process.env.NEXT_PUBLIC_CONVEX_SITE_URL;
+
+if (!tahunaApiUrl || !tahunaSiteUrl) {
+  throw new Error(
+    "Missing NEXT_PUBLIC_TAHUNA_API_URL/NEXT_PUBLIC_TAHUNA_SITE_URL (or compatible legacy aliases).",
+  );
+}
 
 export const {
   handler,
@@ -11,7 +21,7 @@ export const {
   fetchAuthQuery,
   fetchAuthMutation,
   fetchAuthAction,
-} = convexBetterAuthNextJs({ convexUrl, convexSiteUrl });
+} = convexBetterAuthNextJs({ convexUrl: tahunaApiUrl, convexSiteUrl: tahunaSiteUrl });
 
 /** @deprecated Use `handler` directly instead. */
 export function getAuthHandlers() {

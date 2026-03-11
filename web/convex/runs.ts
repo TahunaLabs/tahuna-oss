@@ -165,6 +165,49 @@ const r2 = new R2(components.r2);
 const SHA256_HEX_RE = /^[a-f0-9]{64}$/i;
 const RUNTIME_LOG_TAIL_LIMIT = RUN_CONFIG.runtimeLogTailLimit;
 const RUNTIME_METRIC_TAIL_LIMIT = RUN_CONFIG.runtimeMetricTailLimit;
+const RUN_NAME_MAX_LENGTH = 64;
+const RUN_NAME_FIRST = [
+  "amber",
+  "brisk",
+  "crisp",
+  "drift",
+  "ember",
+  "frost",
+  "golden",
+  "lively",
+  "mellow",
+  "rapid",
+  "solar",
+  "vivid",
+];
+const RUN_NAME_SECOND = [
+  "cloud",
+  "field",
+  "forest",
+  "harbor",
+  "meadow",
+  "mesa",
+  "orbit",
+  "river",
+  "summit",
+  "trail",
+  "valley",
+  "wave",
+];
+const RUN_NAME_THIRD = [
+  "bear",
+  "eagle",
+  "falcon",
+  "fox",
+  "lynx",
+  "otter",
+  "owl",
+  "panda",
+  "raven",
+  "tiger",
+  "wolf",
+  "yak",
+];
 
 type SyncKind = "code" | "data";
 type ManifestEntry = {
@@ -214,10 +257,47 @@ type RuntimeBootstrapPlan = {
   };
 };
 
+function normalizeRunName(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .replace(/-{2,}/g, "-");
+}
+
+function validateRunName(value: string) {
+  const normalized = normalizeRunName(value);
+  if (!normalized) {
+    throw new ConvexError("run name is required");
+  }
+  if (normalized.length > RUN_NAME_MAX_LENGTH) {
+    throw new ConvexError(`run name must be <= ${RUN_NAME_MAX_LENGTH} characters`);
+  }
+  return normalized;
+}
+
+function fallbackRunName(runId: Id<"runs">) {
+  return `run-${String(runId).slice(0, 8)}`;
+}
+
+function getRunName(row: Doc<"runs">) {
+  const normalized = row.name ? normalizeRunName(row.name) : "";
+  return normalized || fallbackRunName(row._id);
+}
+
+function randomWord(list: string[]) {
+  return list[Math.floor(Math.random() * list.length)] || "run";
+}
+
+function generateWordRunName() {
+  return `${randomWord(RUN_NAME_FIRST)}-${randomWord(RUN_NAME_SECOND)}-${randomWord(RUN_NAME_THIRD)}`;
+}
+
 function toRunResponse(row: Doc<"runs">) {
   return {
     run_id: String(row._id),
-    name: row.name || `run-${String(row._id).slice(-6)}`,
+    name: getRunName(row),
     created_at: row._creationTime,
     env_id: String(row.environmentId),
     input: row.input,
@@ -1242,6 +1322,63 @@ async function getOwnedEnvironment(
   return env;
 }
 
+async function listRunsForUser(ctx: QueryCtx | MutationCtx, userId: string) {
+  return ctx.db
+    .query("runs")
+    .withIndex("by_user", (q) => q.eq("userId", userId))
+    .collect();
+}
+
+function hasActiveRunNameConflict(
+  rows: Array<Doc<"runs">>,
+  candidate: string,
+  ignoreRunId?: Id<"runs">,
+) {
+  const normalizedCandidate = normalizeRunName(candidate);
+  if (!normalizedCandidate) {
+    return false;
+  }
+  return rows.some((row) => {
+    if (!ACTIVE_STATUSES.has(row.status)) {
+      return false;
+    }
+    if (ignoreRunId && row._id === ignoreRunId) {
+      return false;
+    }
+    return normalizeRunName(row.name || "") === normalizedCandidate;
+  });
+}
+
+function appendRunNameSuffix(base: string, suffix: number) {
+  if (suffix <= 1) {
+    return base;
+  }
+  const suffixText = `-${suffix}`;
+  const available = RUN_NAME_MAX_LENGTH - suffixText.length;
+  if (available <= 1) {
+    return `run${suffixText}`;
+  }
+  return `${base.slice(0, available)}${suffixText}`;
+}
+
+function pickUniqueGeneratedRunName(rows: Array<Doc<"runs">>) {
+  for (let attempt = 0; attempt < 32; attempt += 1) {
+    const candidate = generateWordRunName();
+    if (!hasActiveRunNameConflict(rows, candidate)) {
+      return candidate;
+    }
+  }
+
+  const base = generateWordRunName();
+  for (let suffix = 2; suffix <= 999; suffix += 1) {
+    const candidate = appendRunNameSuffix(base, suffix);
+    if (!hasActiveRunNameConflict(rows, candidate)) {
+      return candidate;
+    }
+  }
+  return `run-${Date.now().toString(36)}`;
+}
+
 async function listRecentRuntimeLogs(ctx: QueryCtx, runId: Id<"runs">) {
   const rows = await ctx.db
     .query("runRuntimeLogs")
@@ -1299,6 +1436,7 @@ async function createRunForUserId(
   args: {
     userId: string;
     environmentId: Id<"environments">;
+    name?: string;
     gpu_type?: string;
     gpu_count?: number;
     volume_gb?: number;
@@ -1310,14 +1448,24 @@ async function createRunForUserId(
   const dataManifestHash = env.latestDataManifestHash;
   const dataId = env.dataId || String(env._id);
   if (!codeManifestHash) {
-    throw new ConvexError("environment is not synced; run `tahuna sync` before creating a run");
+    throw new ConvexError("environment code is not synced; run `tahuna sync` before creating a run");
+  }
+  const userRuns = await listRunsForUser(ctx, args.userId);
+  let runName = "";
+  if (typeof args.name === "string" && args.name.trim() !== "") {
+    runName = validateRunName(args.name);
+    if (hasActiveRunNameConflict(userRuns, runName)) {
+      throw new ConvexError("run name is already used by an active run");
+    }
+  } else {
+    runName = pickUniqueGeneratedRunName(userRuns);
   }
 
   const now = Date.now();
   const runId = await ctx.db.insert("runs", {
     userId: args.userId,
     environmentId: args.environmentId,
-    name: generateDefaultRunName(),
+    name: runName,
     dataId,
     input: `runs/${args.environmentId}/${now}/input`,
     output: `runs/${args.environmentId}/${now}/output`,
@@ -1336,6 +1484,7 @@ async function createRunForUserId(
     status: RUN_STATUS.QUEUED,
     message: "run queued for provisioning",
     metadata: {
+      name: runName,
       gpu_type: args.gpu_type || env.gpuType,
       gpu_count: args.gpu_count ?? env.gpuCount,
       volume_gb: args.volume_gb ?? env.volumeGb,
@@ -1428,6 +1577,36 @@ async function deleteRunForUserId(ctx: MutationCtx, userId: string, runId: Id<"r
   return { deleted: true, run_id: String(runId) };
 }
 
+async function renameRunForUserId(ctx: MutationCtx, userId: string, runId: Id<"runs">, name: string) {
+  const row = await getOwnedRun(ctx, userId, runId);
+  const nextName = validateRunName(name);
+  const currentName = getRunName(row);
+  if (normalizeRunName(currentName) === nextName && row.name) {
+    return toRunResponse(row);
+  }
+
+  const userRuns = await listRunsForUser(ctx, userId);
+  if (hasActiveRunNameConflict(userRuns, nextName, runId)) {
+    throw new ConvexError("run name is already used by an active run");
+  }
+
+  await ctx.db.patch("runs", runId, { name: nextName });
+  await ctx.db.insert("runEvents", {
+    runId,
+    status: row.status,
+    message: "run renamed",
+    metadata: {
+      old_name: currentName,
+      new_name: nextName,
+    },
+  });
+  const updated = await ctx.db.get("runs", runId);
+  if (!updated) {
+    throw new ConvexError("run not found");
+  }
+  return toRunResponse(updated);
+}
+
 // ---------- public (auth via ctx.auth) ----------
 
 export const list = query({
@@ -1471,6 +1650,7 @@ export const internalGetLogs = internalQuery({
 export const create = mutation({
   args: {
     environmentId: v.id("environments"),
+    name: v.optional(v.string()),
     gpu_type: v.optional(v.string()),
     gpu_count: v.optional(v.number()),
     volume_gb: v.optional(v.number()),
@@ -1481,6 +1661,7 @@ export const create = mutation({
     return createRunForUserId(ctx, {
       userId: String(user._id),
       environmentId: args.environmentId,
+      name: args.name,
       gpu_type: args.gpu_type,
       gpu_count: args.gpu_count,
       volume_gb: args.volume_gb,
@@ -1503,6 +1684,15 @@ export const cancel = mutation({
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
     return cancelRunForUserId(ctx, String(user._id), args.runId, args.force === true);
+  },
+});
+
+export const rename = mutation({
+  args: { runId: v.id("runs"), name: v.string() },
+  returns: runResponseValidator,
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    return renameRunForUserId(ctx, String(user._id), args.runId, args.name);
   },
 });
 
@@ -1529,6 +1719,7 @@ export const internalCreate = internalMutation({
   args: {
     userId: v.string(),
     environmentId: v.id("environments"),
+    name: v.optional(v.string()),
     gpu_type: v.optional(v.string()),
     gpu_count: v.optional(v.number()),
     volume_gb: v.optional(v.number()),
@@ -1636,6 +1827,14 @@ export const scheduleTerminationRetry = internalMutation({
   },
 });
 
+export const internalRename = internalMutation({
+  args: { userId: v.string(), runId: v.id("runs"), name: v.string() },
+  returns: runResponseValidator,
+  handler: async (ctx, args) => {
+    return renameRunForUserId(ctx, args.userId, args.runId, args.name);
+  },
+});
+
 export const internalTerminatePod = internalAction({
   args: { runId: v.id("runs"), podId: v.string(), force: v.optional(v.boolean()), attempt: v.optional(v.number()) },
   handler: async (ctx, args) => {
@@ -1731,16 +1930,16 @@ export const internalGetRuntimeBootstrapPlan = internalAction({
     const codeManifestKey = provisioningPayload.code_manifest_key;
     const dataManifestKey = provisioningPayload.data_manifest_key;
     if (!codeManifestHash || !codeManifestKey) {
-      throw new Error("missing pinned manifest hash/key in provisioning payload");
+      throw new Error("missing pinned code manifest hash/key in provisioning payload");
     }
 
     const codeManifest = await fetchManifest(ctx, "code", codeManifestKey, codeManifestHash);
-    const dataManifest =
-      dataManifestHash && dataManifestKey
-        ? await fetchManifest(ctx, "data", dataManifestKey, dataManifestHash)
-        : emptyDataManifest();
     const codeEntries = await resolveManifestDownloadEntries(ctx, provisioningPayload, "code", codeManifest);
-    const dataEntries = await resolveManifestDownloadEntries(ctx, provisioningPayload, "data", dataManifest);
+    let dataEntries: RuntimeBootstrapEntry[] = [];
+    if (dataManifestHash && dataManifestKey) {
+      const dataManifest = await fetchManifest(ctx, "data", dataManifestKey, dataManifestHash);
+      dataEntries = await resolveManifestDownloadEntries(ctx, provisioningPayload, "data", dataManifest);
+    }
 
     return {
       run_id: provisioningPayload.run_id,
@@ -1806,16 +2005,16 @@ export const provisionRun = internalAction({
       const codeManifestKey = provisioningPayload.code_manifest_key;
       const dataManifestKey = provisioningPayload.data_manifest_key;
       if (!codeManifestHash || !codeManifestKey) {
-        throw new Error("missing pinned manifest hash/key in provisioning payload");
+        throw new Error("missing pinned code manifest hash/key in provisioning payload");
       }
 
       const codeManifest = await fetchManifest(ctx, "code", codeManifestKey, codeManifestHash);
-      const dataManifest =
-        dataManifestHash && dataManifestKey
-          ? await fetchManifest(ctx, "data", dataManifestKey, dataManifestHash)
-          : emptyDataManifest();
       const codeStats = summarizeManifest(codeManifest);
-      const dataStats = summarizeManifest(dataManifest);
+      let dataStats = { fileCount: 0, totalBytes: 0 };
+      if (dataManifestHash && dataManifestKey) {
+        const dataManifest = await fetchManifest(ctx, "data", dataManifestKey, dataManifestHash);
+        dataStats = summarizeManifest(dataManifest);
+      }
       const runtimeToken = generateRuntimeToken();
       const runtimeTokenHash = await sha256Hex(runtimeToken);
       await ctx.runMutation(internal.runs.setRuntimeTokenHash, {

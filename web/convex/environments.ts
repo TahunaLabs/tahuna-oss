@@ -20,6 +20,8 @@ import { PYTHON_CONFIG } from "../config";
 const environmentResponseValidator = v.object({
   environment_id: v.string(),
   data_id: v.string(),
+  bound_data_ids: v.array(v.string()),
+  bound_data_manifest_hashes: v.array(v.string()),
   name: v.string(),
   artifacts: v.string(),
   gpu_type: v.string(),
@@ -188,6 +190,8 @@ function toEnvironmentResponse(row: Doc<"environments">) {
   return {
     environment_id: String(row._id),
     data_id: dataId,
+    bound_data_ids: row.boundDataIds || [],
+    bound_data_manifest_hashes: row.boundDataManifestHashes || [],
     name: row.name,
     artifacts: environmentPath(row.userId, String(row._id)),
     gpu_type: row.gpuType,
@@ -242,6 +246,8 @@ async function createEnvironmentForUserId(
     name: args.name,
     artifacts: "",
     dataId: shortId("data"),
+    boundDataIds: [],
+    boundDataManifestHashes: [],
     gpuType: args.gpu_type,
     gpuCount: args.gpu_count,
     volumeGb: args.volume_gb,
@@ -260,6 +266,93 @@ async function createEnvironmentForUserId(
   }
 
   return toEnvironmentResponse(env);
+}
+
+function normalizeDataId(value: string) {
+  return value.trim();
+}
+
+async function resolveOwnedDataIds(ctx: MutationCtx, userId: string) {
+  const data = await ctx.runQuery(internal.data.internalList, { userId });
+  const out = new Set<string>();
+  for (const row of data.blobs) {
+    const blobId = normalizeDataId(row.blob_id);
+    if (blobId) {
+      out.add(blobId);
+    }
+  }
+  return out;
+}
+
+function normalizeDataIdList(values: string[]) {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const raw of values) {
+    const id = normalizeDataId(raw);
+    if (!id || seen.has(id)) {
+      continue;
+    }
+    seen.add(id);
+    out.push(id);
+  }
+  return out;
+}
+
+async function bindDataForUserId(
+  ctx: MutationCtx,
+  args: {
+    userId: string;
+    environmentId: Id<"environments">;
+    data_ids: string[];
+  },
+) {
+  const env = await getOwnedEnvironment(ctx, args.userId, args.environmentId);
+  const requested = normalizeDataIdList(args.data_ids);
+  if (requested.length === 0) {
+    throw new ConvexError("at least one data id is required");
+  }
+  const owned = await resolveOwnedDataIds(ctx, args.userId);
+  for (const id of requested) {
+    if (!owned.has(id)) {
+      throw new ConvexError(`data item ${id} is not available for this environment`);
+    }
+  }
+
+  const current = normalizeDataIdList(env.boundDataIds || []);
+  const next = normalizeDataIdList([...current, ...requested]).sort();
+  await ctx.db.patch("environments", args.environmentId, {
+    boundDataIds: next,
+  });
+  const updated = await ctx.db.get("environments", args.environmentId);
+  if (!updated) {
+    throw new ConvexError("failed to update environment data bindings");
+  }
+  return toEnvironmentResponse(updated);
+}
+
+async function unbindDataForUserId(
+  ctx: MutationCtx,
+  args: {
+    userId: string;
+    environmentId: Id<"environments">;
+    data_ids: string[];
+  },
+) {
+  const env = await getOwnedEnvironment(ctx, args.userId, args.environmentId);
+  const requested = new Set(normalizeDataIdList(args.data_ids));
+  if (requested.size === 0) {
+    throw new ConvexError("at least one data id is required");
+  }
+  const current = normalizeDataIdList(env.boundDataIds || []);
+  const next = current.filter((id) => !requested.has(id)).sort();
+  await ctx.db.patch("environments", args.environmentId, {
+    boundDataIds: next,
+  });
+  const updated = await ctx.db.get("environments", args.environmentId);
+  if (!updated) {
+    throw new ConvexError("failed to update environment data bindings");
+  }
+  return toEnvironmentResponse(updated);
 }
 
 async function updateEnvironmentSpecsForUserId(
@@ -587,5 +680,29 @@ export const internalCommitSyncPointers = internalMutation({
       code_manifest_hash: args.code_manifest_hash ?? env.latestCodeManifestHash,
       data_manifest_hash: args.data_manifest_hash ?? env.latestDataManifestHash,
     };
+  },
+});
+
+export const internalBindData = internalMutation({
+  args: {
+    userId: v.string(),
+    environmentId: v.id("environments"),
+    data_ids: v.array(v.string()),
+  },
+  returns: environmentResponseValidator,
+  handler: async (ctx, args) => {
+    return bindDataForUserId(ctx, args);
+  },
+});
+
+export const internalUnbindData = internalMutation({
+  args: {
+    userId: v.string(),
+    environmentId: v.id("environments"),
+    data_ids: v.array(v.string()),
+  },
+  returns: environmentResponseValidator,
+  handler: async (ctx, args) => {
+    return unbindDataForUserId(ctx, args);
   },
 });
