@@ -4,7 +4,14 @@ import { ActionCtx, httpAction, internalQuery } from "@convex/_generated/server"
 import { R2 } from "@convex-dev/r2";
 import { components } from "@convex/_generated/api";
 import { v } from "convex/values";
-import { blobLimitByKind, manifestLimitByKind } from "../config";
+import {
+  AUTH_CONFIG,
+  NETWORK_CONFIG,
+  RUN_CONFIG,
+  SYNC_CONFIG,
+  blobLimitByKind,
+  manifestLimitByKind,
+} from "../config";
 
 function extractBearerToken(request: Request): string {
   const bearer = request.headers.get("authorization")?.trim() || "";
@@ -20,7 +27,7 @@ async function authenticateApiRequest(ctx: ActionCtx, request: Request): Promise
   if (!apiKey) {
     return null;
   }
-  const auth = await ctx.runQuery(api.auth.authByApiKey, { apiKey });
+  const auth = await ctx.runMutation(api.auth.authByApiKey, { apiKey });
   if (!auth) {
     return null;
   }
@@ -70,6 +77,10 @@ function dataPrefix(userId: string, dataId: string) {
 }
 
 function blobPrefix(userId: string, environmentId: string, dataId: string, kind: SyncKind) {
+  return `${userId}/blobs/`;
+}
+
+function legacyBlobPrefix(userId: string, environmentId: string, dataId: string, kind: SyncKind) {
   if (kind === "data") {
     return `${dataPrefix(userId, dataId)}blobs/`;
   }
@@ -85,6 +96,10 @@ function manifestPrefix(userId: string, environmentId: string, dataId: string, k
 
 function buildBlobObjectKey(userId: string, environmentId: string, dataId: string, kind: SyncKind, sha256: string) {
   return `${blobPrefix(userId, environmentId, dataId, kind)}${sha256}`;
+}
+
+function buildLegacyBlobObjectKey(userId: string, environmentId: string, dataId: string, kind: SyncKind, sha256: string) {
+  return `${legacyBlobPrefix(userId, environmentId, dataId, kind)}${sha256}`;
 }
 
 function buildManifestObjectKey(
@@ -132,9 +147,9 @@ async function sleepMs(ms: number) {
 async function objectExistsWithMetadataSync(
   ctx: ActionCtx,
   key: string,
-  attempts: number,
+  attempts: number = SYNC_CONFIG.objectMetadataPollAttempts,
 ): Promise<boolean> {
-  let delay = 150;
+  let delay = SYNC_CONFIG.objectMetadataPollInitialBackoffMs;
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     try {
       await r2.syncMetadata(ctx, key);
@@ -147,7 +162,7 @@ async function objectExistsWithMetadataSync(
     }
     if (attempt < attempts - 1) {
       await sleepMs(delay);
-      if (delay < 800) {
+      if (delay < SYNC_CONFIG.objectMetadataPollMaxBackoffMs) {
         delay *= 2;
       }
     }
@@ -281,6 +296,38 @@ function parseManifest(value: unknown, kind: SyncKind): SyncManifestPayload | nu
   };
 }
 
+async function fetchManifestFromR2(
+  ctx: ActionCtx,
+  key: string,
+  kind: SyncKind,
+  expectedHash: string,
+): Promise<SyncManifestPayload> {
+  const url = await ctx.runQuery(internal.cli.internalGetObjectDownloadUrl, { key });
+  if (!url) {
+    throw new Error(`${kind} manifest not found in object storage`);
+  }
+  const response = await fetch(url, { method: "GET" });
+  if (!response.ok) {
+    throw new Error(`${kind} manifest download failed with status ${response.status}`);
+  }
+  const rawText = await response.text();
+  const computedHash = await sha256Hex(rawText);
+  if (computedHash !== expectedHash) {
+    throw new Error(`${kind} manifest hash mismatch`);
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(rawText);
+  } catch {
+    throw new Error(`${kind} manifest is not valid JSON`);
+  }
+  const manifest = parseManifest(parsed, kind);
+  if (!manifest) {
+    throw new Error(`${kind} manifest payload is invalid`);
+  }
+  return manifest;
+}
+
 async function sha256Hex(value: string): Promise<string> {
   const bytes = new TextEncoder().encode(value);
   const digest = await crypto.subtle.digest("SHA-256", bytes);
@@ -346,6 +393,21 @@ export const health = httpAction(async () => {
     status: 200,
     headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
   });
+});
+
+export const getConfig = httpAction(async () => {
+  return new Response(
+    JSON.stringify({
+      auth: AUTH_CONFIG,
+      run: RUN_CONFIG,
+      sync: SYNC_CONFIG,
+      network: NETWORK_CONFIG,
+    }),
+    {
+      status: 200,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    },
+  );
 });
 
 export const getCatalog = httpAction(async (ctx) => {
@@ -450,8 +512,10 @@ export const listMissingBlobHashes = httpAction(async (ctx, request) => {
         }
         const hash = hashes[index];
         const key = buildBlobObjectKey(userId, environmentId, ownedEnvironment.dataId, kind, hash);
+        const legacyKey = buildLegacyBlobObjectKey(userId, environmentId, ownedEnvironment.dataId, kind, hash);
         const exists = await objectExistsWithMetadataSync(ctx, key, 2);
-        if (!exists) {
+        const legacyExists = exists ? false : await objectExistsWithMetadataSync(ctx, legacyKey, 2);
+        if (!exists && !legacyExists) {
           missingSet.add(hash);
         }
       }
@@ -641,8 +705,8 @@ export const commitSync = httpAction(async (ctx, request) => {
     typeof body?.code_manifest_hash === "string" ? body.code_manifest_hash : undefined;
   const dataManifestHashRaw =
     typeof body?.data_manifest_hash === "string" ? body.data_manifest_hash : undefined;
-  const codeManifestRaw = body?.code_manifest;
-  const dataManifestRaw = body?.data_manifest;
+  // Legacy payload keys (`code_manifest`, `data_manifest`) are tolerated
+  // but no longer required. Validation now uses uploaded manifest objects.
   const codeManifestHash =
     typeof codeManifestHashRaw === "undefined" ? undefined : (normalizeSha256(codeManifestHashRaw) ?? undefined);
   const dataManifestHash =
@@ -673,37 +737,6 @@ export const commitSync = httpAction(async (ctx, request) => {
     });
   }
 
-  const codeManifest =
-    typeof codeManifestHash === "undefined" ? undefined : parseManifest(codeManifestRaw, "code");
-  const dataManifest =
-    typeof dataManifestHash === "undefined" ? undefined : parseManifest(dataManifestRaw, "data");
-
-  if ((typeof codeManifestHash !== "undefined" && !codeManifest) || (typeof dataManifestHash !== "undefined" && !dataManifest)) {
-    return new Response(JSON.stringify({ detail: "manifest payload is invalid or missing for provided hash" }), {
-      status: 400,
-      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
-    });
-  }
-
-  if (codeManifestHash && codeManifest) {
-    const computedHash = await sha256Hex(JSON.stringify(codeManifest));
-    if (computedHash !== codeManifestHash) {
-      return new Response(JSON.stringify({ detail: "code manifest hash does not match manifest payload" }), {
-        status: 400,
-        headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
-      });
-    }
-  }
-  if (dataManifestHash && dataManifest) {
-    const computedHash = await sha256Hex(JSON.stringify(dataManifest));
-    if (computedHash !== dataManifestHash) {
-      return new Response(JSON.stringify({ detail: "data manifest hash does not match manifest payload" }), {
-        status: 400,
-        headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
-      });
-    }
-  }
-
   if (codeManifestHash) {
     const codeManifestKey = buildManifestObjectKey(
       userId,
@@ -712,9 +745,18 @@ export const commitSync = httpAction(async (ctx, request) => {
       "code",
       codeManifestHash,
     );
-    const exists = await objectExistsWithMetadataSync(ctx, codeManifestKey, 10);
+    const exists = await objectExistsWithMetadataSync(ctx, codeManifestKey);
     if (!exists) {
       return new Response(JSON.stringify({ detail: "code manifest not found in object storage" }), {
+        status: 400,
+        headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+      });
+    }
+    try {
+      await fetchManifestFromR2(ctx, codeManifestKey, "code", codeManifestHash);
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : "code manifest validation failed";
+      return new Response(JSON.stringify({ detail }), {
         status: 400,
         headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
       });
@@ -728,9 +770,18 @@ export const commitSync = httpAction(async (ctx, request) => {
       "data",
       dataManifestHash,
     );
-    const exists = await objectExistsWithMetadataSync(ctx, dataManifestKey, 10);
+    const exists = await objectExistsWithMetadataSync(ctx, dataManifestKey);
     if (!exists) {
       return new Response(JSON.stringify({ detail: "data manifest not found in object storage" }), {
+        status: 400,
+        headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+      });
+    }
+    try {
+      await fetchManifestFromR2(ctx, dataManifestKey, "data", dataManifestHash);
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : "data manifest validation failed";
+      return new Response(JSON.stringify({ detail }), {
         status: 400,
         headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
       });
@@ -798,6 +849,7 @@ export const createEnvironment = httpAction(async (ctx, request) => {
       gpu_type: body?.gpu_type?.trim() || "",
       gpu_count: body?.gpu_count ?? 0,
       volume_gb: body?.volume_gb ?? 0,
+      python_version: body?.python_version?.trim() || undefined,
       framework: body?.framework?.trim() || "",
       version: body?.version?.trim() || "",
     });
@@ -1216,6 +1268,11 @@ async function handleRuntimePost(ctx: ActionCtx, request: Request, route: Runtim
 }
 
 export const postRunRuntime = httpAction(async (ctx, request) => {
+  const pathname = new URL(request.url).pathname;
+  if (pathname.endsWith("/cancel")) {
+    return handleCancelRun(ctx, request);
+  }
+
   const route = parseRuntimeRoute(new URL(request.url).pathname);
   if (!route) {
     return new Response(JSON.stringify({ detail: "path must be /api/runs/{run_id}/runtime/{action}" }), {
@@ -1378,9 +1435,58 @@ export const removeRun = httpAction(async (ctx, request) => {
     });
   } catch (err) {
     const detail = err instanceof Error ? err.message : "failed to delete run";
+    const status = detail.toLowerCase().includes("cancel it before deleting") ? 409 : 400;
+    return new Response(JSON.stringify({ detail }), {
+      status,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+});
+
+async function handleCancelRun(ctx: ActionCtx, request: Request) {
+  const userId = await authenticateApiRequest(ctx, request);
+  if (!userId) {
+    return new Response(JSON.stringify({ detail: "authentication required" }), {
+      status: 401,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+
+  const url = new URL(request.url);
+  const parts = url.pathname.split("/").filter(Boolean);
+  // /api/runs/{run_id}/cancel
+  const runIdx = parts.findIndex((part) => part === "runs");
+  const runId = runIdx >= 0 ? parts[runIdx + 1] : "";
+  const tail = parts[parts.length - 1];
+  if (!runId || tail !== "cancel") {
+    return new Response(JSON.stringify({ detail: "path must be /api/runs/{run_id}/cancel" }), {
+      status: 400,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+
+  const body = await readJsonBody(request);
+  const force = body?.force === true;
+
+  try {
+    const data = await ctx.runMutation(internal.runs.internalCancel, {
+      userId,
+      runId: runId as Id<"runs">,
+      force,
+    });
+    return new Response(JSON.stringify(data), {
+      status: 200,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : "failed to cancel run";
     return new Response(JSON.stringify({ detail }), {
       status: 400,
       headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
     });
   }
+}
+
+export const cancelRun = httpAction(async (ctx, request) => {
+  return handleCancelRun(ctx, request);
 });

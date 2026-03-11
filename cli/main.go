@@ -55,6 +55,7 @@ const (
 
 // cliVersion is overridden at release build time via -ldflags.
 var cliVersion = "dev"
+var warnedLegacyAPIURLEnv bool
 
 func main() {
 	if len(os.Args) < 2 {
@@ -122,6 +123,8 @@ Environment:
 
 Auth:
   TAHUNA_API_URL      API base URL (default: http://localhost:3000)
+  TAHUNA_SITE_URL     Canonical site URL alias for API base
+  TAHUNA_PUBLIC_SITE_URL Public site URL alias for API base
   TAHUNA_BROWSER_URL  Browser auth URL base for "tahuna login" (optional)
   TAHUNA_API_KEY      Auth token (set automatically by "tahuna login")
 
@@ -368,11 +371,25 @@ func apiURL() string {
 	if v := lookupConfigValue("TAHUNA_API_URL"); v != "" {
 		return strings.TrimRight(v, "/")
 	}
-	// Convex site URL is the backend endpoint for HTTP actions (/api/*).
+	if v := lookupConfigValue("TAHUNA_SITE_URL"); v != "" {
+		return strings.TrimRight(v, "/")
+	}
+	if v := lookupConfigValue("TAHUNA_PUBLIC_SITE_URL"); v != "" {
+		return strings.TrimRight(v, "/")
+	}
+	// Legacy provider-specific aliases are supported temporarily for migration.
 	if v := lookupConfigValue("CONVEX_SITE_URL"); v != "" {
+		if !warnedLegacyAPIURLEnv {
+			fmt.Fprintf(os.Stderr, "warning: using a legacy backend URL env var; use TAHUNA_API_URL/TAHUNA_SITE_URL instead\n")
+			warnedLegacyAPIURLEnv = true
+		}
 		return strings.TrimRight(v, "/")
 	}
 	if v := lookupConfigValue("NEXT_PUBLIC_CONVEX_SITE_URL"); v != "" {
+		if !warnedLegacyAPIURLEnv {
+			fmt.Fprintf(os.Stderr, "warning: using a legacy backend URL env var; use TAHUNA_API_URL/TAHUNA_SITE_URL instead\n")
+			warnedLegacyAPIURLEnv = true
+		}
 		return strings.TrimRight(v, "/")
 	}
 	return defaultAPIURL
@@ -417,21 +434,14 @@ func initProject(target string) error {
 		envName = "tahuna-project"
 	}
 
-	envID, err := guidedSetup(envName, frameworkKey)
-	if err != nil {
-		return err
-	}
-	if err := saveLinkedEnvironmentID(envID); err != nil {
-		return fmt.Errorf("project initialized, but failed to save environment link: %w", err)
-	}
-	if err := saveProjectConfig(projectCfg); err != nil {
-		return fmt.Errorf("project initialized, but failed to save project config: %w", err)
-	}
 	if err := ensureProjectFile(projectCfg.ConfigYAMLPath, defaultConfigYAMLTemplate(projectCfg)); err != nil {
 		return fmt.Errorf("failed to create config yaml: %w", err)
 	}
-	if err := ensureProjectFile(projectCfg.RequirementsPath, defaultRequirementsTemplate()); err != nil {
-		return fmt.Errorf("failed to create requirements file: %w", err)
+	if err := ensureProjectFile(projectCfg.PythonProjectFile, defaultPyProjectTemplate(frameworkKey)); err != nil {
+		return fmt.Errorf("failed to create pyproject.toml: %w", err)
+	}
+	if err := ensureUVLockFile(projectCfg.PythonProjectFile, projectCfg.UVLockFile); err != nil {
+		return fmt.Errorf("failed to create uv.lock: %w", err)
 	}
 	if err := ensureProjectFile(projectCfg.TrainEntrypoint, defaultTrainEntrypointTemplate(projectCfg)); err != nil {
 		return fmt.Errorf("failed to create train entrypoint: %w", err)
@@ -442,10 +452,22 @@ func initProject(target string) error {
 	if err := os.MkdirAll(projectCfg.OutputDir, 0o755); err != nil {
 		return fmt.Errorf("failed to create output directory: %w", err)
 	}
-	if err := ensureFrameworkDependency(projectCfg.RequirementsPath, frameworkKey); err != nil {
-		return fmt.Errorf("failed to update requirements: %w", err)
+
+	if err := saveProjectConfig(projectCfg); err != nil {
+		return fmt.Errorf("failed to save project config: %w", err)
 	}
 
+	envID, err := guidedSetup(envName, frameworkKey, projectCfg.PythonVersion)
+	if err != nil {
+		return err
+	}
+	if saveErr := saveLinkedEnvironmentID(envID); saveErr != nil {
+		_, cleanupErr := doJSON(http.MethodDelete, "/environments/"+envID, nil)
+		if cleanupErr != nil {
+			return fmt.Errorf("failed to save environment link: %w (also failed to roll back environment %s: %v)", saveErr, envID, cleanupErr)
+		}
+		return fmt.Errorf("failed to save environment link: %w (rolled back environment %s)", saveErr, envID)
+	}
 	return nil
 }
 
@@ -481,7 +503,7 @@ func prepareProjectPath(target string) (string, bool, error) {
 	return projectPath, true, nil
 }
 
-func guidedSetup(environmentName, frameworkHint string) (string, error) {
+func guidedSetup(environmentName, frameworkHint, pythonVersion string) (string, error) {
 	gpus, versionsByFramework, err := fetchCatalog()
 	if err != nil {
 		return "", err
@@ -503,6 +525,7 @@ func guidedSetup(environmentName, frameworkHint string) (string, error) {
 		"gpu_type":  gpuType,
 		"gpu_count": gpuCount,
 		"volume_gb": volumeGB,
+		"python_version": strings.TrimSpace(pythonVersion),
 		"framework": framework,
 		"version":   version,
 	}
@@ -1146,7 +1169,6 @@ func syncIncremental(environmentID string, scope syncScope, options syncOptions)
 	}
 	for _, item := range prepared {
 		commitPayload[item.kind+"_manifest_hash"] = item.hash
-		commitPayload[item.kind+"_manifest"] = item.manifest
 	}
 
 	for _, item := range prepared {
@@ -2560,7 +2582,9 @@ func runCancel(args []string) {
 		}
 	}
 
-	resp, err := doJSON(http.MethodDelete, "/runs/"+runID, nil)
+	resp, err := doJSON(http.MethodPost, "/runs/"+runID+"/cancel", map[string]any{
+		"force": isForce,
+	})
 	must(err)
 
 	if cancelled, ok := resp["cancel_requested"]; ok && cancelled == true {
@@ -2617,20 +2641,24 @@ func projectEnvironmentFilePath() string {
 }
 
 type projectConfig struct {
-	DataDir          string
-	OutputDir        string
-	ConfigYAMLPath   string
-	TrainEntrypoint  string
-	RequirementsPath string
+	DataDir            string
+	OutputDir          string
+	ConfigYAMLPath     string
+	TrainEntrypoint    string
+	PythonProjectFile  string
+	UVLockFile         string
+	Framework          string
+	PythonVersion      string
 }
 
 func collectProjectInitConfig() (projectConfig, string, error) {
 	cfg := projectConfig{
-		DataDir:          "data",
-		OutputDir:        "outputs",
-		ConfigYAMLPath:   "config.yaml",
-		TrainEntrypoint:  "train.py",
-		RequirementsPath: "requirements.txt",
+		DataDir:            "data",
+		OutputDir:          "outputs",
+		ConfigYAMLPath:     "config.yaml",
+		TrainEntrypoint:    "train.py",
+		PythonProjectFile:  "pyproject.toml",
+		UVLockFile:         "uv.lock",
 	}
 
 	if fileExists(cfg.TrainEntrypoint) {
@@ -2670,12 +2698,23 @@ func collectProjectInitConfig() (projectConfig, string, error) {
 		cfg.ConfigYAMLPath = choosePathWhenMissing("Config file", "config.yaml")
 	}
 
-	if fileExists(cfg.RequirementsPath) {
-		fmt.Printf("✓ Found %srequirements.txt%s\n", cAmpGold, cReset)
-		cfg.RequirementsPath = choosePathWhenFound("Requirements file", cfg.RequirementsPath, "requirements.txt")
+	if fileExists(cfg.PythonProjectFile) {
+		fmt.Printf("✓ Found %spyproject.toml%s\n", cAmpGold, cReset)
+		cfg.PythonProjectFile = choosePathWhenFound("Python project file", cfg.PythonProjectFile, "pyproject.toml")
 	} else {
-		fmt.Printf("%s?%s No requirements.txt found\n", cAmpGold, cReset)
-		cfg.RequirementsPath = choosePathWhenMissing("Requirements file", "requirements.txt")
+		fmt.Printf("%s?%s No pyproject.toml found\n", cAmpGold, cReset)
+		cfg.PythonProjectFile = choosePathWhenMissing("Python project file", "pyproject.toml")
+	}
+	if filepath.Base(cfg.PythonProjectFile) != "pyproject.toml" {
+		return cfg, "", fmt.Errorf("python project file must be named pyproject.toml (got %s)", filepath.Base(cfg.PythonProjectFile))
+	}
+
+	if fileExists(cfg.UVLockFile) {
+		fmt.Printf("✓ Found %suv.lock%s\n", cAmpGold, cReset)
+		cfg.UVLockFile = choosePathWhenFound("uv lock file", cfg.UVLockFile, "uv.lock")
+	} else {
+		fmt.Printf("%s?%s No uv.lock found\n", cAmpGold, cReset)
+		cfg.UVLockFile = choosePathWhenMissing("uv lock file", "uv.lock")
 	}
 
 	framework := detectFramework(cfg)
@@ -2683,6 +2722,11 @@ func collectProjectInitConfig() (projectConfig, string, error) {
 		framework = promptChoice("No framework detected. PyTorch or TensorFlow?", []string{"pt", "tf"}, 0)
 	} else {
 		fmt.Printf("✓ Detected framework %s%s%s\n", cAmpGold, framework, cReset)
+	}
+	cfg.Framework = framework
+	cfg.PythonVersion = detectPythonVersion(cfg)
+	if strings.TrimSpace(cfg.PythonVersion) == "" {
+		cfg.PythonVersion = "3.11"
 	}
 
 	return cfg, framework, nil
@@ -2731,10 +2775,10 @@ func promptPath(label, defaultValue string) string {
 }
 
 func detectFramework(cfg projectConfig) string {
-	if cfg.RequirementsPath == "" {
+	if cfg.PythonProjectFile == "" {
 		return ""
 	}
-	raw, err := os.ReadFile(cfg.RequirementsPath)
+	raw, err := os.ReadFile(cfg.PythonProjectFile)
 	if err != nil {
 		return ""
 	}
@@ -2748,39 +2792,55 @@ func detectFramework(cfg projectConfig) string {
 	return ""
 }
 
-func ensureFrameworkDependency(requirementsPath, framework string) error {
-	dep := ""
-	switch framework {
-	case "pt":
-		dep = "torch"
-	case "tf":
-		dep = "tensorflow"
-	default:
-		return nil
+func detectPythonVersion(cfg projectConfig) string {
+	readAndExtract := func(path string) string {
+		if strings.TrimSpace(path) == "" {
+			return ""
+		}
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			return ""
+		}
+		return extractPythonVersionFromText(string(raw))
 	}
 
-	if strings.TrimSpace(requirementsPath) == "" {
-		return nil
+	if version := readAndExtract(cfg.UVLockFile); version != "" {
+		return version
 	}
-	if err := ensureProjectFile(requirementsPath, defaultRequirementsTemplate()); err != nil {
-		return err
-	}
+	return readAndExtract(cfg.PythonProjectFile)
+}
 
-	raw, err := os.ReadFile(requirementsPath)
-	if err != nil {
-		return err
+func extractPythonVersionFromText(text string) string {
+	lower := strings.ToLower(text)
+	lines := strings.Split(lower, "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if !strings.Contains(line, "requires-python") {
+			continue
+		}
+		idx := strings.Index(line, "=")
+		if idx < 0 || idx+1 >= len(line) {
+			continue
+		}
+		value := strings.TrimSpace(strings.Trim(line[idx+1:], `"'`))
+		for i := 0; i+3 <= len(value); i++ {
+			ch := value[i]
+			if ch < '0' || ch > '9' {
+				continue
+			}
+			segment := value[i:]
+			if len(segment) < 3 {
+				continue
+			}
+			if segment[1] == '.' && segment[0] >= '0' && segment[0] <= '9' && segment[2] >= '0' && segment[2] <= '9' {
+				return segment[:3]
+			}
+			if len(segment) >= 4 && segment[1] >= '0' && segment[1] <= '9' && segment[2] == '.' && segment[3] >= '0' && segment[3] <= '9' {
+				return segment[:4]
+			}
+		}
 	}
-	lower := strings.ToLower(string(raw))
-	if strings.Contains(lower, dep) {
-		return nil
-	}
-
-	content := string(raw)
-	if content != "" && !strings.HasSuffix(content, "\n") {
-		content += "\n"
-	}
-	content += dep + "\n"
-	return os.WriteFile(requirementsPath, []byte(content), 0o644)
+	return ""
 }
 
 func fileExists(path string) bool {
@@ -2802,23 +2862,28 @@ func saveProjectConfig(cfg projectConfig) error {
 		return err
 	}
 	body := fmt.Sprintf(
-		"data_dir: %q\noutput_dir: %q\nconfig_yaml: %q\ntrain_entrypoint: %q\nrequirements: %q\n",
+		"entrypoint: %q\ndata_dir: %q\noutput_dir: %q\nconfig_file: %q\npython_project_file: %q\nuv_lock_file: %q\nframework: %q\npython_version: %q\n",
+		cfg.TrainEntrypoint,
 		cfg.DataDir,
 		cfg.OutputDir,
 		cfg.ConfigYAMLPath,
-		cfg.TrainEntrypoint,
-		cfg.RequirementsPath,
+		cfg.PythonProjectFile,
+		cfg.UVLockFile,
+		cfg.Framework,
+		cfg.PythonVersion,
 	)
 	return os.WriteFile(projectConfigFilePath(), []byte(body), 0o600)
 }
 
 func loadProjectConfig() (projectConfig, error) {
 	cfg := projectConfig{
-		DataDir:          "data",
-		OutputDir:        "outputs",
-		ConfigYAMLPath:   "config.yaml",
-		TrainEntrypoint:  "train.py",
-		RequirementsPath: "requirements.txt",
+		DataDir:            "data",
+		OutputDir:          "outputs",
+		ConfigYAMLPath:     "config.yaml",
+		TrainEntrypoint:    "train.py",
+		PythonProjectFile:  "pyproject.toml",
+		UVLockFile:         "uv.lock",
+		PythonVersion:      "3.11",
 	}
 
 	raw, err := os.ReadFile(projectConfigFilePath())
@@ -2843,6 +2908,10 @@ func loadProjectConfig() (projectConfig, error) {
 		value = strings.Trim(value, "\"")
 
 		switch key {
+		case "entrypoint":
+			if value != "" {
+				cfg.TrainEntrypoint = filepath.Clean(value)
+			}
 		case "data_dir":
 			if value != "" {
 				cfg.DataDir = filepath.Clean(value)
@@ -2851,7 +2920,7 @@ func loadProjectConfig() (projectConfig, error) {
 			if value != "" {
 				cfg.OutputDir = filepath.Clean(value)
 			}
-		case "config_yaml":
+		case "config_yaml", "config_file":
 			if value != "" {
 				cfg.ConfigYAMLPath = filepath.Clean(value)
 			}
@@ -2859,10 +2928,24 @@ func loadProjectConfig() (projectConfig, error) {
 			if value != "" {
 				cfg.TrainEntrypoint = filepath.Clean(value)
 			}
-		case "requirements":
+		case "python_project_file":
 			if value != "" {
-				cfg.RequirementsPath = filepath.Clean(value)
+				cfg.PythonProjectFile = filepath.Clean(value)
 			}
+		case "uv_lock_file":
+			if value != "" {
+				cfg.UVLockFile = filepath.Clean(value)
+			}
+		case "framework":
+			if value != "" {
+				cfg.Framework = value
+			}
+		case "python_version":
+			if value != "" {
+				cfg.PythonVersion = value
+			}
+		case "requirements":
+			// Legacy key kept for backward compatibility with older project configs.
 		}
 	}
 
@@ -2891,8 +2974,67 @@ func defaultConfigYAMLTemplate(cfg projectConfig) string {
 	return fmt.Sprintf("project: %q\nentrypoint: %q\ndata:\n  path: %q\n", filepath.Base(mustGetwd()), cfg.TrainEntrypoint, cfg.DataDir)
 }
 
-func defaultRequirementsTemplate() string {
-	return "# Add Python dependencies here\n"
+func defaultPyProjectTemplate(framework string) string {
+	dependency := "torch"
+	if framework == "tf" {
+		dependency = "tensorflow"
+	}
+	return fmt.Sprintf("[project]\nname = %q\nversion = \"0.1.0\"\nrequires-python = \">=3.11\"\ndependencies = [\n  %q,\n]\n", filepath.Base(mustGetwd()), dependency)
+}
+
+func ensureUVLockFile(pyprojectPath, uvLockPath string) error {
+	if strings.TrimSpace(uvLockPath) == "" {
+		return nil
+	}
+	if fileExists(uvLockPath) {
+		return nil
+	}
+
+	projectPath := strings.TrimSpace(pyprojectPath)
+	if projectPath == "" {
+		projectPath = "pyproject.toml"
+	}
+	projectDir := filepath.Dir(projectPath)
+	if projectDir == "" {
+		projectDir = "."
+	}
+	if !fileExists(projectPath) {
+		return fmt.Errorf("pyproject.toml not found at %s", projectPath)
+	}
+	if filepath.Base(projectPath) != "pyproject.toml" {
+		return fmt.Errorf("python project file must be named pyproject.toml (got %s)", filepath.Base(projectPath))
+	}
+
+	cmd := exec.Command("uv", "lock", "--project", projectDir)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		if errors.Is(err, exec.ErrNotFound) {
+			return errors.New("uv is not installed; install uv and rerun `tahuna init`")
+		}
+		trimmed := strings.TrimSpace(string(output))
+		if trimmed == "" {
+			return fmt.Errorf("uv lock failed: %w", err)
+		}
+		return fmt.Errorf("uv lock failed: %s", trimmed)
+	}
+
+	generatedLockPath := filepath.Join(projectDir, "uv.lock")
+	targetLockPath := filepath.Clean(uvLockPath)
+	if targetLockPath == generatedLockPath {
+		return nil
+	}
+
+	content, readErr := os.ReadFile(generatedLockPath)
+	if readErr != nil {
+		return fmt.Errorf("failed to read generated uv.lock: %w", readErr)
+	}
+	lockDir := filepath.Dir(targetLockPath)
+	if lockDir != "." && lockDir != "" {
+		if mkdirErr := os.MkdirAll(lockDir, 0o755); mkdirErr != nil {
+			return fmt.Errorf("failed to create directory for uv.lock: %w", mkdirErr)
+		}
+	}
+	return os.WriteFile(targetLockPath, content, 0o644)
 }
 
 func defaultTrainEntrypointTemplate(cfg projectConfig) string {

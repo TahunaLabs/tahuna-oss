@@ -8,6 +8,7 @@ import {
     createRunFromEnvironment,
     createRun,
     getCatalog,
+    getConfig,
     getEnvironment,
     updateEnvironmentSpecs,
     getRunOrLogs,
@@ -29,6 +30,7 @@ http.route({ pathPrefix: "/api/", method: "OPTIONS", handler: optionsHandler });
 // Health and Catalog
 http.route({ path: "/api/health", method: "GET", handler: health });
 http.route({ path: "/api/catalog", method: "GET", handler: getCatalog });
+http.route({ path: "/api/config", method: "GET", handler: getConfig });
 
 // Sync helpers for CLI
 http.route({ path: "/api/sync/blobs/missing", method: "POST", handler: listMissingBlobHashes });

@@ -1,4 +1,6 @@
 /** @type {import('next').NextConfig} */
+const convexSiteUrl = process.env.NEXT_PUBLIC_TAHUNA_SITE_URL || process.env.NEXT_PUBLIC_CONVEX_SITE_URL
+
 const nextConfig = {
   typescript: {
     ignoreBuildErrors: true,
@@ -7,10 +9,13 @@ const nextConfig = {
     unoptimized: true,
   },
   async rewrites() {
+    if (!convexSiteUrl) {
+      return []
+    }
     return [
       {
         source: '/api/:path*',
-        destination: `${process.env.NEXT_PUBLIC_CONVEX_SITE_URL}/api/:path*`,
+        destination: `${convexSiteUrl}/api/:path*`,
       },
     ];
   },

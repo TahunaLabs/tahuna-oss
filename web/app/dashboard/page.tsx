@@ -1,6 +1,5 @@
 "use client"
 
-import { MachineSelector } from "@/components/machine-selector"
 import { useTheme } from "@/components/theme-provider"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -8,7 +7,6 @@ import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Notice } from "@/components/ui/notice"
-import { Select } from "@/components/ui/select"
 import { PageLoader } from "@/components/ui/spinner"
 import { Switch } from "@/components/ui/switch"
 import {
@@ -22,7 +20,7 @@ import {
 import { api } from "@convex/_generated/api"
 import type { Id } from "@convex/_generated/dataModel"
 import { authClient } from "@/lib/auth-client"
-import { useAction, useConvexAuth, useMutation, useQuery } from "convex/react"
+import { useConvexAuth, useMutation, useQuery } from "convex/react"
 import {
   Database,
   Download,
@@ -34,19 +32,9 @@ import {
   Trash2,
 } from "lucide-react"
 import { useRouter } from "next/navigation"
-import { useEffect, useMemo, useState, type ComponentType, type FormEvent, type ReactNode } from "react"
+import { useEffect, useState, type ComponentType, type FormEvent, type ReactNode } from "react"
 
 type MainSection = "data" | "environments" | "runs"
-
-type GPUInfo = {
-  id: string
-  displayName: string
-  memoryInGb: number
-  maxGpuCount: number
-  pricePerHour?: number | null
-}
-
-type CatalogData = { images: Record<string, Record<string, string>> }
 
 type DataBlob = {
   blob_id: string
@@ -161,98 +149,24 @@ export default function DashboardPage() {
 
   const [activeSection, setActiveSection] = useState<MainSection>("environments")
 
-  const [environmentNameInput, setEnvironmentNameInput] = useState("")
-  const [explicitEnvGPUType, setExplicitEnvGPUType] = useState("")
-  const [explicitEnvGPUCount, setExplicitEnvGPUCount] = useState("")
-  const [selectedImageKey, setSelectedImageKey] = useState("")
   const [selectedDataFiles, setSelectedDataFiles] = useState<File[]>([])
   const [uploadingData, setUploadingData] = useState(false)
   const [dataFileInputKey, setDataFileInputKey] = useState(0)
 
-  const catalog = useQuery(api.catalog.getCatalog) as CatalogData | undefined
-  const getDynamicGpus = useAction(api.catalog.getDynamicGpus)
   const currentUser = useQuery(api.auth.getCurrentUser)
   const dataResult = useQuery(api.data.list) as { blobs: DataBlob[] } | undefined
   const envResult = useQuery(api.environments.list) as { environments: EnvironmentRow[] } | undefined
   const runResult = useQuery(api.runs.list) as { runs: RunRow[] } | undefined
 
-  const [dynamicGpus, setDynamicGpus] = useState<GPUInfo[]>([])
-  const [loadingGpus, setLoadingGpus] = useState(true)
-
-  useEffect(() => {
-    if (!isAuthenticated) return
-
-    let cancelled = false
-
-    async function fetchGpus() {
-      try {
-        setLoadingGpus(true)
-        const gpus = await getDynamicGpus()
-        if (!cancelled) {
-          setDynamicGpus(gpus)
-        }
-      } catch (fetchError) {
-        console.error("Failed to fetch dynamic gpus", fetchError)
-      } finally {
-        if (!cancelled) {
-          setLoadingGpus(false)
-        }
-      }
-    }
-
-    void fetchGpus()
-
-    return () => {
-      cancelled = true
-    }
-  }, [getDynamicGpus, isAuthenticated])
-
   const environments: EnvironmentRow[] = envResult?.environments ?? []
   const runs: RunRow[] = runResult?.runs ?? []
 
-  const createEnvMutation = useMutation(api.environments.create)
   const generateDataUploadUrlMutation = useMutation(api.data.generateUploadUrl)
   const removeDataBlobMutation = useMutation(api.data.remove)
   const removeEnvMutation = useMutation(api.environments.remove)
   const createRunMutation = useMutation(api.runs.create)
-  const removeRunMutation = useMutation(api.runs.remove)
+  const cancelRunMutation = useMutation(api.runs.cancel)
   const syncDataMetadataMutation = useMutation(api.data.syncMetadata)
-
-  const frameworkOptions = useMemo(() => {
-    if (!catalog) return []
-
-    return Object.entries(catalog.images).flatMap(([framework, versions]) =>
-      Object.keys(versions).map((version) => ({
-        key: `${framework}:${version}`,
-        framework,
-        version,
-        label: `${framework.toUpperCase()} ${version}`,
-      })),
-    )
-  }, [catalog])
-
-  const envGPUType = explicitEnvGPUType || dynamicGpus[0]?.id || ""
-
-  const selectedGPU = useMemo(() => {
-    return dynamicGpus.find((gpu) => gpu.id === envGPUType) ?? null
-  }, [dynamicGpus, envGPUType])
-
-  const maxGPUs = selectedGPU?.maxGpuCount || 8
-  const envGPUCount = useMemo(() => {
-    const parsed = Number.parseInt(explicitEnvGPUCount || "1", 10)
-    if (!Number.isFinite(parsed)) return 1
-    return Math.min(Math.max(parsed, 1), maxGPUs)
-  }, [explicitEnvGPUCount, maxGPUs])
-
-  const imageSelection = useMemo(() => {
-    return frameworkOptions.find((option) => option.key === selectedImageKey) ?? frameworkOptions[0] ?? null
-  }, [frameworkOptions, selectedImageKey])
-
-  const defaultEnvironmentName = useMemo(() => {
-    const machineLabel = selectedGPU?.displayName ?? "Training"
-    const frameworkLabel = imageSelection?.label ?? "Environment"
-    return `${machineLabel} · ${frameworkLabel}`
-  }, [imageSelection, selectedGPU])
 
   const userEmail = currentUser?.email ?? ""
   const userInitial = userEmail.trim().charAt(0).toUpperCase() || "U"
@@ -270,23 +184,6 @@ export default function DashboardPage() {
     } finally {
       setBusy(false)
     }
-  }
-
-  async function createEnvironment(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    await withBusy(async () => {
-      const environmentName = environmentNameInput.trim() || defaultEnvironmentName
-      await createEnvMutation({
-        name: environmentName,
-        gpu_type: envGPUType,
-        gpu_count: envGPUCount,
-        volume_gb: 120,
-        framework: imageSelection?.framework ?? "pt",
-        version: imageSelection?.version ?? "",
-      })
-      setEnvironmentNameInput("")
-      setMessage("Environment created.")
-    })
   }
 
   async function uploadData(event: FormEvent<HTMLFormElement>) {
@@ -352,7 +249,7 @@ export default function DashboardPage() {
 
   async function cancelRun(runId: Id<"runs">) {
     await withBusy(async () => {
-      await removeRunMutation({ runId })
+      await cancelRunMutation({ runId, force: false })
       setMessage(`Run ${runId} cancellation requested.`)
     })
   }
@@ -528,64 +425,9 @@ export default function DashboardPage() {
             {activeSection === "environments" ? (
               <section className="flex h-full min-h-0 flex-col gap-3">
                 <Card variant="dashboard" className="shrink-0 p-4">
-                  <form onSubmit={createEnvironment} className="space-y-3">
-                    <div className="space-y-1.5">
-                      <Label htmlFor="environment-name">Environment name</Label>
-                      <Input
-                        id="environment-name"
-                        type="text"
-                        variant="dashboard"
-                        placeholder={defaultEnvironmentName}
-                        value={environmentNameInput}
-                        onChange={(event) => setEnvironmentNameInput(event.target.value)}
-                      />
-                    </div>
-
-                    <MachineSelector
-                      machines={dynamicGpus}
-                      value={envGPUType}
-                      loading={loadingGpus}
-                      onChange={setExplicitEnvGPUType}
-                      disabled={dynamicGpus.length === 0 && !loadingGpus}
-                    />
-
-                    <div className="grid gap-2.5 md:grid-cols-2">
-                      <div className="space-y-1.5">
-                        <Label htmlFor="framework">Framework</Label>
-                        <Select
-                          id="framework"
-                          variant="dashboard"
-                          value={imageSelection?.key ?? ""}
-                          onChange={(event) => setSelectedImageKey(event.target.value)}
-                        >
-                          {frameworkOptions.map((option) => (
-                            <option key={option.key} value={option.key}>{option.label}</option>
-                          ))}
-                        </Select>
-                      </div>
-
-                      <div className="space-y-1.5">
-                        <Label htmlFor="gpu-count">GPU Count</Label>
-                        <Input
-                          id="gpu-count"
-                          type="number"
-                          min={1}
-                          max={maxGPUs}
-                          variant="dashboard"
-                          value={String(envGPUCount)}
-                          onChange={(event) => setExplicitEnvGPUCount(event.target.value)}
-                        />
-                      </div>
-                    </div>
-
-                    <Button
-                      type="submit"
-                      variant="dashboard-primary"
-                      disabled={busy || dynamicGpus.length === 0 || !imageSelection}
-                    >
-                      {busy ? "Saving..." : "Create environment"}
-                    </Button>
-                  </form>
+                  <p className="text-sm text-dashboard-subtle">
+                    Environments are created via CLI init only. Run <code>tahuna init .</code> from your project folder.
+                  </p>
                 </Card>
 
                 {environments.length === 0 ? (
