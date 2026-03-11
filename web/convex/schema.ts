@@ -8,12 +8,14 @@ export default defineSchema({
     name: v.string(),
     keyPrefix: v.string(),
     keyHash: v.string(),
+    machineId: v.optional(v.string()),
     revokedAt: v.optional(v.number()),
     lastUsedAt: v.optional(v.number()),
   })
     .index("by_user", ["userId"])
     .index("by_user_and_name", ["userId", "name"])
-    .index("by_hash", ["keyHash"]),
+    .index("by_hash", ["keyHash"])
+    .index("by_user_and_machine", ["userId", "machineId"]),
 
   environments: defineTable({
     userId: v.string(),

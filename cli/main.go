@@ -148,10 +148,12 @@ func login() error {
 	defer listener.Close()
 
 	callbackURL := fmt.Sprintf("http://%s/callback", listener.Addr().String())
-	authURL := fmt.Sprintf("%s/auth/cli?state=%s&callback=%s",
+	hostname, _ := os.Hostname()
+	authURL := fmt.Sprintf("%s/auth/cli?state=%s&callback=%s&machine=%s",
 		resolvedBrowserBase,
 		neturl.QueryEscape(state),
 		neturl.QueryEscape(callbackURL),
+		neturl.QueryEscape(hostname),
 	)
 
 	tokenCh := make(chan string, 1)
@@ -2345,6 +2347,9 @@ func runWatch(args []string) {
 func runLogs(args []string) {
 	fs := flag.NewFlagSet("run logs", flag.ExitOnError)
 	id := fs.String("id", "", "Run ID")
+	lines := fs.Int("n", 0, "Show only the last N log lines (0 = all)")
+	follow := fs.Bool("f", false, "Follow log output (stream until run finishes)")
+	fs.BoolVar(follow, "follow", false, "Follow log output")
 	verbose := fs.Bool("verbose", false, "Show full logs payload")
 	fs.BoolVar(verbose, "v", false, "Show full logs payload")
 	fs.Parse(args)
@@ -2357,10 +2362,67 @@ func runLogs(args []string) {
 		printJSON(resp)
 		return
 	}
-	printRunLogsSummary(resp)
+	printRunLogsSummary(resp, *lines)
+
+	if !*follow {
+		return
+	}
+
+	// Follow mode: poll every 2s, print only new log lines, stop on terminal status.
+	lastTimestamp := highestLogTimestamp(resp)
+	for {
+		status := strings.TrimSpace(asString(resp["status"]))
+		if status == "completed" || status == "failed" || status == "cancelled" {
+			break
+		}
+		time.Sleep(2 * time.Second)
+
+		resp, err = doJSON(http.MethodGet, "/runs/"+runID+"/logs", nil)
+		must(err)
+
+		recentLogs, _ := resp["recent_logs"].([]any)
+		for _, raw := range recentLogs {
+			row, ok := raw.(map[string]any)
+			if !ok {
+				continue
+			}
+			ts := asInt64(row["timestamp"])
+			if ts <= lastTimestamp {
+				continue
+			}
+			message := strings.TrimSpace(asString(row["message"]))
+			if message == "" {
+				continue
+			}
+			timestamp := formatUnixMillis(ts)
+			level := strings.ToUpper(strings.TrimSpace(asString(row["level"])))
+			if level == "" {
+				level = "INFO"
+			}
+			source := strings.TrimSpace(asString(row["source"]))
+			if source == "" {
+				source = "runtime"
+			}
+			fmt.Printf("%s %-7s %-12s %s\n", timestamp, level, source, message)
+			lastTimestamp = ts
+		}
+	}
 }
 
-func printRunLogsSummary(resp map[string]any) {
+func highestLogTimestamp(resp map[string]any) int64 {
+	recentLogs, _ := resp["recent_logs"].([]any)
+	var highest int64
+	for _, raw := range recentLogs {
+		if row, ok := raw.(map[string]any); ok {
+			if ts := asInt64(row["timestamp"]); ts > highest {
+				highest = ts
+			}
+		}
+	}
+	return highest
+}
+
+func printRunLogsSummary(resp map[string]any, maxLines int) {
 	runID := strings.TrimSpace(asString(resp["run_id"]))
 	if runID != "" {
 		fmt.Printf("Run: %s\n", runID)
@@ -2381,6 +2443,9 @@ func printRunLogsSummary(resp map[string]any) {
 	fmt.Println()
 	fmt.Println("Recent logs:")
 	recentLogs, _ := resp["recent_logs"].([]any)
+	if maxLines > 0 && len(recentLogs) > maxLines {
+		recentLogs = recentLogs[len(recentLogs)-maxLines:]
+	}
 	if len(recentLogs) == 0 {
 		fmt.Println("(no log lines yet)")
 	} else {
@@ -3246,6 +3311,39 @@ func (e *apiRequestError) Error() string {
 	return fmt.Sprintf("api error (%d): %s", e.status, e.detail)
 }
 
+func friendlyError(err error) string {
+	var apiErr *apiRequestError
+	if errors.As(err, &apiErr) {
+		detail := strings.ToLower(apiErr.detail)
+		switch {
+		case apiErr.status == 401 && strings.Contains(detail, "expired"):
+			return "Session expired. Run `tahuna login` to re-authenticate."
+		case apiErr.status == 401:
+			return "Not authenticated. Run `tahuna login` first."
+		case apiErr.status == 403:
+			return "Access denied."
+		case apiErr.status == 404 && strings.Contains(detail, "environment"):
+			return "Environment not found."
+		case apiErr.status == 404 && strings.Contains(detail, "run"):
+			return "Run not found."
+		case apiErr.status == 404:
+			return "Resource not found."
+		case apiErr.status == 409:
+			return apiErr.detail
+		case apiErr.status == 400:
+			return apiErr.detail
+		case apiErr.status >= 500:
+			return "Something went wrong. Try again or check status."
+		}
+		return ""
+	}
+	var netErr net.Error
+	if errors.As(err, &netErr) {
+		return "Cannot reach Tahuna backend. Check your connection."
+	}
+	return ""
+}
+
 func doJSON(method, path string, payload map[string]any) (map[string]any, error) {
 	var body io.Reader
 	if payload != nil {
@@ -3571,6 +3669,10 @@ func must(err error) {
 	if err == nil {
 		return
 	}
-	fmt.Fprintln(os.Stderr, "error:", err)
+	if msg := friendlyError(err); msg != "" {
+		fmt.Fprintln(os.Stderr, "error:", msg)
+	} else {
+		fmt.Fprintln(os.Stderr, "error:", err)
+	}
 	os.Exit(1)
 }

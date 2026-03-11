@@ -56,9 +56,13 @@ export async function requireUser(ctx: GenericCtx<DataModel> | QueryCtx | Mutati
   return user;
 }
 
+const MAX_ACTIVE_KEYS = 5;
+const KEY_EXPIRY_MS = 90 * 24 * 60 * 60 * 1000; // 90 days
+
 export const createApiKey = mutation({
   args: {
     name: v.string(),
+    machineId: v.optional(v.string()),
   },
   returns: v.object({
     user_id: v.string(),
@@ -68,16 +72,42 @@ export const createApiKey = mutation({
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
     const name = args.name.trim() || "cli";
+    const machineId = args.machineId?.trim() || undefined;
+    const now = Date.now();
+    const userId = String(user._id);
 
-    const existingKeys = await ctx.db
+    // Fetch all keys for this user
+    const allKeys = await ctx.db
       .query("apiKeys")
-      .withIndex("by_user", (q) => q.eq("userId", String(user._id)))
-      .filter((q) => q.eq(q.field("name"), name))
+      .withIndex("by_user", (q) => q.eq("userId", userId))
       .collect();
 
-    const hasActiveKey = existingKeys.some((k) => !k.revokedAt);
-    if (hasActiveKey) {
-      throw new ConvexError(`An active API key with the name "${name}" already exists`);
+    // Active = not revoked AND not expired
+    const activeKeys = allKeys.filter(
+      (k) => !k.revokedAt && now - k._creationTime < KEY_EXPIRY_MS,
+    );
+
+    // Revoke any existing key on the same machine
+    if (machineId) {
+      for (const k of activeKeys) {
+        if (k.machineId === machineId) {
+          await ctx.db.patch(k._id, { revokedAt: now });
+        }
+      }
+    }
+
+    // Recount after machine revocation
+    const stillActive = activeKeys.filter(
+      (k) => !k.revokedAt && (machineId ? k.machineId !== machineId : true),
+    );
+
+    // Auto-revoke oldest if at or over limit
+    if (stillActive.length >= MAX_ACTIVE_KEYS) {
+      const sorted = [...stillActive].sort((a, b) => a._creationTime - b._creationTime);
+      const toRevoke = sorted.slice(0, stillActive.length - MAX_ACTIVE_KEYS + 1);
+      for (const k of toRevoke) {
+        await ctx.db.patch(k._id, { revokedAt: now });
+      }
     }
 
     const plaintext = `tk_${shortId()}${shortId()}`;
@@ -85,14 +115,15 @@ export const createApiKey = mutation({
     const keyPrefix = plaintext.slice(0, 10);
 
     const apiKeyId = await ctx.db.insert("apiKeys", {
-      userId: String(user._id),
+      userId,
       name,
       keyPrefix,
       keyHash,
+      machineId,
     });
 
     return {
-      user_id: String(user._id),
+      user_id: userId,
       api_key: plaintext,
       api_key_id: String(apiKeyId),
     };
@@ -115,6 +146,10 @@ export const authByApiKey = query({
       .first();
 
     if (!key || key.revokedAt) {
+      return null;
+    }
+    // 90-day expiry
+    if (Date.now() - key._creationTime > KEY_EXPIRY_MS) {
       return null;
     }
     return {

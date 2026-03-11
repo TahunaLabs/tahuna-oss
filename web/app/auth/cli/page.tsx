@@ -28,10 +28,11 @@ export default function CliAuthPage() {
 
   const state = useMemo(() => searchParams.get("state")?.trim() ?? "", [searchParams])
   const callback = useMemo(() => searchParams.get("callback")?.trim() ?? "", [searchParams])
+  const machine = useMemo(() => searchParams.get("machine")?.trim() ?? "", [searchParams])
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
-      const redirectPath = `/auth/cli?state=${encodeURIComponent(state)}&callback=${encodeURIComponent(callback)}`
+      const redirectPath = `/auth/cli?state=${encodeURIComponent(state)}&callback=${encodeURIComponent(callback)}&machine=${encodeURIComponent(machine)}`
       router.replace(`/auth?redirect=${encodeURIComponent(redirectPath)}`)
     }
   }, [callback, isAuthenticated, isLoading, router, state])
@@ -52,7 +53,7 @@ export default function CliAuthPage() {
       setStatus("creating")
       setError("")
       const keyName = `cli-login-${Date.now()}`
-      const result = await createApiKeyMutation({ name: keyName }) as { api_key: string }
+      const result = await createApiKeyMutation({ name: keyName, machineId: machine || undefined }) as { api_key: string }
       const redirect = new URL(callback)
       redirect.searchParams.set("state", state)
       redirect.searchParams.set("token", result.api_key)

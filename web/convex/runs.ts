@@ -58,6 +58,7 @@ const listRunsResponseValidator = v.object({
 });
 const runLogsResponseValidator = v.object({
   run_id: v.string(),
+  status: v.string(),
   logs_path: v.string(),
   log_file: v.string(),
   note: v.string(),
@@ -511,9 +512,13 @@ cat <<'PY' >/tmp/tahuna_bootstrap.py
 import hashlib
 import json
 import os
+import queue
 import re
+import signal
 import subprocess
 import tarfile
+import threading
+import time
 import urllib.error
 import urllib.request
 
@@ -525,6 +530,21 @@ DATA_ROOT = os.path.join(WORKSPACE_ROOT, "data")
 
 if not RUN_ID or not API_BASE or not RUNTIME_TOKEN:
     raise RuntimeError("missing runtime env vars: TAHUNA_RUN_ID / TAHUNA_API_BASE / TAHUNA_RUNTIME_TOKEN")
+
+CANCEL_REQUESTED = False
+ENTRYPOINT_PROC = None
+GRACE_PERIOD_SECONDS = 30
+
+def handle_sigterm(signum, frame):
+    global CANCEL_REQUESTED
+    CANCEL_REQUESTED = True
+    if ENTRYPOINT_PROC and ENTRYPOINT_PROC.poll() is None:
+        try:
+            ENTRYPOINT_PROC.send_signal(signal.SIGTERM)
+        except Exception:
+            pass
+
+signal.signal(signal.SIGTERM, handle_sigterm)
 
 def api_request(method, path, payload=None):
     url = API_BASE + path
@@ -754,6 +774,7 @@ def install_requirements():
     emit_logs(["bootstrap: dependency install complete"], source="bootstrap")
 
 def run_training():
+    global ENTRYPOINT_PROC
     command, source_config = load_command_from_config()
     normalized_command = normalize_command(command)
     if source_config:
@@ -782,25 +803,54 @@ def run_training():
         text=True,
         bufsize=1,
     )
+    ENTRYPOINT_PROC = proc
     metric_pattern = re.compile(r"([A-Za-z_][A-Za-z0-9_]*)=([-+]?(?:\\d+\\.\\d+|\\d+))")
     step = 0
-    for line in proc.stdout:
-        text = line.rstrip("\n")
-        if text:
-            emit_logs([text], source="train")
-            samples = []
-            for match in metric_pattern.finditer(text):
-                samples.append(
-                    {
-                        "name": match.group(1),
-                        "value": float(match.group(2)),
-                        "step": step,
-                        "source": "train",
-                    }
-                )
-            if samples:
-                emit_metrics(samples)
-        step += 1
+
+    line_queue = queue.Queue()
+    def stdout_reader():
+        for line in proc.stdout:
+            line_queue.put(line)
+        line_queue.put(None)
+
+    reader_thread = threading.Thread(target=stdout_reader, daemon=True)
+    reader_thread.start()
+
+    grace_deadline = None
+    while True:
+        if CANCEL_REQUESTED and grace_deadline is None:
+            grace_deadline = time.time() + GRACE_PERIOD_SECONDS
+            emit_logs(["SIGTERM received, graceful shutdown (" + str(GRACE_PERIOD_SECONDS) + "s grace)"], source="bootstrap")
+
+        if grace_deadline and time.time() > grace_deadline:
+            emit_logs(["grace period expired, force killing entrypoint"], source="bootstrap")
+            proc.kill()
+            break
+
+        try:
+            line = line_queue.get(timeout=0.5)
+            if line is None:
+                break
+            text = line.rstrip("\n")
+            if text:
+                emit_logs([text], source="train")
+                samples = []
+                for match in metric_pattern.finditer(text):
+                    samples.append(
+                        {
+                            "name": match.group(1),
+                            "value": float(match.group(2)),
+                            "step": step,
+                            "source": "train",
+                        }
+                    )
+                if samples:
+                    emit_metrics(samples)
+            step += 1
+        except queue.Empty:
+            if proc.poll() is not None:
+                break
+            continue
 
     return proc.wait()
 
@@ -892,7 +942,11 @@ try:
     install_requirements()
     emit_status("running", "workspace materialized")
     exit_code = run_training()
-    if exit_code == 0:
+    if CANCEL_REQUESTED:
+        upload_artifacts()
+        emit_status("cancelled", "run cancelled by user")
+        raise SystemExit(0)
+    elif exit_code == 0:
         upload_artifacts()
         emit_status("completed", "entrypoint completed")
     else:
@@ -1135,6 +1189,7 @@ async function toRunLogsResponse(ctx: QueryCtx, row: Doc<"runs">) {
   ]);
   return {
     run_id: String(row._id),
+    status: row.status,
     logs_path: row.logs,
     log_file: `${row.logs}/run.log`,
     note: "Runtime logs/metrics are streamed by the pod and persisted in Convex.",
