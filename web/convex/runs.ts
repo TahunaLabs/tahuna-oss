@@ -987,6 +987,23 @@ async function createRunpodPod(args: {
   };
 }
 
+async function terminateRunpodPod(podId: string) {
+  const apiKey = process.env.RUNPOD_API_KEY?.trim();
+  if (!apiKey || !podId) {
+    return;
+  }
+  try {
+    await fetch(`https://rest.runpod.io/v1/pods/${podId}`, {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+      },
+    });
+  } catch {
+    // Best-effort: pod may already be terminated
+  }
+}
+
 function normalizeGpuLabel(value: string) {
   return value.trim().toLowerCase().replace(/\s+/g, " ");
 }
@@ -1189,6 +1206,12 @@ async function removeRunForUserId(ctx: MutationCtx, userId: string, runId: Id<"r
   const row = await getOwnedRun(ctx, userId, runId);
 
   if (ACTIVE_STATUSES.has(row.status)) {
+    // Terminate the Runpod pod
+    if (row.podId) {
+      await ctx.scheduler.runAfter(0, internal.runs.internalTerminatePod, {
+        podId: row.podId,
+      });
+    }
     await ctx.db.patch("runs", runId, {
       status: RUN_STATUS.CANCELLING,
       cancellationRequested: true,
@@ -1338,6 +1361,13 @@ export const internalRemove = internalMutation({
   ),
   handler: async (ctx, args) => {
     return removeRunForUserId(ctx, args.userId, args.runId);
+  },
+});
+
+export const internalTerminatePod = internalAction({
+  args: { podId: v.string() },
+  handler: async (_ctx, args) => {
+    await terminateRunpodPod(args.podId);
   },
 });
 

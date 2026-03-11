@@ -1,5 +1,6 @@
 import { ConvexError, v } from "convex/values";
 import type { Doc, Id } from "@convex/_generated/dataModel";
+import { internal } from "@convex/_generated/api";
 import { internalMutation, internalQuery, mutation, query, type MutationCtx, type QueryCtx } from "@convex/_generated/server";
 import { requireUser } from "@convex/auth";
 import { images } from "@convex/catalog";
@@ -168,6 +169,13 @@ async function removeEnvironmentForUserId(ctx: MutationCtx, userId: string, envi
     .collect();
 
   for (const run of runs) {
+    // Terminate Runpod pod if active
+    if (run.podId) {
+      await ctx.scheduler.runAfter(0, internal.runs.internalTerminatePod, {
+        podId: run.podId,
+      });
+    }
+
     // Delete run events, logs, and metrics
     const [events, runtimeLogs, runtimeMetrics] = await Promise.all([
       ctx.db
