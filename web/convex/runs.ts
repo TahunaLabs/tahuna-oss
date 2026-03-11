@@ -748,15 +748,39 @@ def normalize_command(command):
             resolved.insert(1, "-u")
     return resolved
 
+def ensure_uv():
+    """Install uv package manager if not already available."""
+    try:
+        subprocess.run(["uv", "--version"], capture_output=True, check=True)
+        return
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        pass
+    emit_logs(["bootstrap: installing uv package manager"], source="bootstrap")
+    proc = subprocess.Popen(
+        ["python3", "-m", "pip", "install", "uv"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        bufsize=1,
+    )
+    for line in proc.stdout:
+        text = line.rstrip("\n")
+        if text:
+            emit_logs([text], source="bootstrap")
+    code = proc.wait()
+    if code != 0:
+        raise RuntimeError("failed to install uv")
+
 def install_requirements():
     requirements_path = os.path.join(WORKSPACE_ROOT, "requirements.txt")
     if not os.path.isfile(requirements_path):
         emit_logs(["bootstrap: no requirements.txt found (skipping install)"], source="bootstrap")
         return
 
-    emit_logs(["bootstrap: installing dependencies from requirements.txt"], source="bootstrap")
+    ensure_uv()
+    emit_logs(["bootstrap: installing dependencies with uv from requirements.txt"], source="bootstrap")
     proc = subprocess.Popen(
-        ["python3", "-m", "pip", "install", "-r", requirements_path],
+        ["uv", "pip", "install", "--system", "-r", requirements_path],
         cwd=WORKSPACE_ROOT,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
