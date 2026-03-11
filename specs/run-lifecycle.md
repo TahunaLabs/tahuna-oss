@@ -22,6 +22,7 @@ A run is a single training execution on a provisioned GPU pod. Runs are created 
 |-------|------|-------------|
 | `userId` | string | Owner |
 | `environmentId` | string | Parent environment |
+| `name` | string | User-facing run name (word-based random default if omitted) |
 | `status` | enum | Current state (see state machine) |
 | `error` | string? | Error message if failed |
 | `podId` | string? | Runpod pod identifier |
@@ -114,6 +115,8 @@ A run is a single training execution on a provisioned GPU pod. Runs are created 
 2. BUILD RUN PAYLOAD
    - Pin codeManifestHash from environment.latestCodeManifestHash
    - Pin dataManifestHash from environment.latestDataManifestHash
+   - Set run name from `--name` when provided
+   - If name not provided: generate word-based random name (for example `warm-river-fox`)
    - Apply GPU overrides from --gpu-type, --gpu-count, --volume-gb
      (fall back to environment defaults)
    - Validate overrides against GPU catalog guardrails
@@ -133,7 +136,7 @@ A run is a single training execution on a provisioned GPU pod. Runs are created 
      d. Retry from step 2 with new GPU type
 
 5. MONITOR (foreground mode)
-   - Poll GET /api/runs/{run_id} every 5 seconds
+   - Poll GET /api/runs/{run_id} at interval from shared config (`RUN_STATUS_POLL_SECONDS`)
    - Display status panel with live updates
    - Continue until terminal state reached
 
@@ -163,7 +166,7 @@ CLI receives 409 (no capacity):
 - When no capacity is available, user can opt to enter a queue.
 - Queue position is displayed in CLI and dashboard.
 - When capacity becomes available, run transitions from `queued` to `provisioning` automatically.
-- Queue timeout: configurable (default: 1 hour). Run fails if not provisioned within timeout.
+- Queue timeout is configured in shared config (`RUN_QUEUE_TIMEOUT_SECONDS`). Run fails if not provisioned within timeout.
 
 ### Cancellation
 
@@ -178,10 +181,22 @@ tahuna run cancel <run_id> [--force/-f]:
             |-- Set cancellationRequested = true
             |-- Transition to CANCELLING
             |-- Pod receives SIGTERM
-            |-- Grace period: 30 seconds for checkpoint save
-            |-- After grace period: force terminate pod
-            |-- Upload any artifacts saved during grace period
+            |-- Queue checkpoint/save request (non-blocking)
+            |-- Wait up to configured grace window from shared config
+            |-- After grace window: force terminate pod
+            |-- Upload any artifacts already flushed to output directory
             |-- Transition to CANCELLED
+```
+
+### Rename
+
+```
+tahuna run rename <id|name> --name <new-name>:
+  |
+  |-- Resolve run by ID or exact current name
+  |-- Validate new name (user-scoped uniqueness for active runs)
+  |-- PATCH /api/runs/{run_id}
+  |-- Emit run event: RENAMED (old_name -> new_name)
 ```
 
 ### Metric Extraction
@@ -211,9 +226,9 @@ After entrypoint exits 0:
   4. Artifact upload failures: warning only, do NOT fail the run
 
 Periodic output sync (future):
-  - Every N seconds while running, sync output directory to R2
+  - Every configured interval while running (`RUN_OUTPUT_SYNC_INTERVAL_SECONDS`), sync output directory to R2
   - Ensures partial results are preserved even on pod failure
-  - Cadence configurable (default: 60 seconds)
+  - Cadence comes from shared config
   - When periodic sync stops (pod gone), backend terminates the pod
 ```
 
@@ -229,11 +244,12 @@ Periodic output sync (future):
 |---------|-------------|
 | `tahuna train` | Sync + create run + monitor (foreground) |
 | `tahuna train -d` | Sync + create run + exit (detached) |
-| `tahuna run create` | Same as `tahuna train` |
-| `tahuna run list [-n N] [-a]` | List runs (newest first, default 10) |
+| `tahuna run create [-n NAME]` | Same as `tahuna train` + optional run name |
+| `tahuna run rename <id|name> --name <new-name>` | Rename an existing run |
+| `tahuna run list [-l N] [-a]` | List runs (newest first, default 10) |
 | `tahuna run show <id>` | Show run details + artifact keys |
 | `tahuna run watch <id>` | Live-follow run status |
-| `tahuna run logs <id> [-n N] [-f]` | Show/follow run logs |
+| `tahuna run logs <id> [-l N] [-f]` | Show/follow run logs |
 | `tahuna run delete <id>` | Delete run and its artifacts |
 | `tahuna run cancel <id> [-f]` | Cancel a running/queued run |
 
@@ -245,6 +261,12 @@ Periodic output sync (future):
 - Artifact upload failures never cause a successful run to be marked as failed.
 - Every state transition is logged as an immutable event in `runEvents`.
 - Effective GPU specs are stored on the run record, not derived from the environment at read time.
+- Run name is mutable via explicit rename operations only; run ID is immutable.
+
+## Shared Defaults & Constants
+
+- Polling intervals, queue timeout, cancellation grace windows, and retry budgets are defined in `web/config.ts`.
+- CLI/dashboard text should not hardcode durations (for example, "30 seconds"); they should render configured values.
 
 ## Error States
 
@@ -253,9 +275,10 @@ Periodic output sync (future):
 | No synced code | Error: "Environment has no synced code. Run `tahuna sync` first." |
 | No capacity (non-interactive) | Error: "No GPU capacity for <type>. Try a different GPU type." |
 | No capacity (interactive) | Prompt for alternate GPU selection. |
-| Pod bootstrap fails | Run transitions to FAILED with bootstrap error message. |
-| Runtime token invalid | Pod requests rejected with 401. Run eventually times out to FAILED. |
-| Run not found | 404: "Run not found." |
+| Pod bootstrap fails | Error: "Pod bootstrap failed: <reason>." Run transitions to `failed`. |
+| Runtime token invalid | Pod requests rejected with 401. Run eventually times out to `failed`. |
+| Run not found | Error: "Run not found." (HTTP 404) |
+| Rename target ambiguous | Error: "Multiple runs match name <name>. Use run ID." |
 | Cancel on terminal state | Error: "Run is already <status>." |
 
 ## Dependencies

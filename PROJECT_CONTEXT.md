@@ -1,6 +1,6 @@
 # Tahuna Project Context
 
-Last updated: 2026-03-09
+Last updated: 2026-03-11
 
 ## 1) What This Project Is
 
@@ -64,12 +64,12 @@ Setup:
 - `[~]` `tahuna init` supports `init .` and `init <project-name>` with guided environment creation + project env linking
 - `[x]` project path selection (`.`) implemented
 - `[~]` new project directory creation implemented (full repo bootstrap like `npx create-next` still pending)
-- `[x]` project file detection/selection prompts in `init` (entrypoint/data/config/requirements) with default creation paths
-- `[x]` framework detection prompt in `init` (auto-detect from config/requirements with fallback prompt)
+- `[x]` project file detection/selection prompts in `init` (entrypoint/data/config + uv project files) with default creation paths
+- `[x]` framework detection prompt in `init` (moving to uv-file source of truth with fallback prompt)
 - `[x]` framework/version selection exists in CLI prompts
 - `[ ]` framework persistence for future provisioning is not explicit beyond environment records
 - `[x]` data directory configuration in CLI `init` implemented
-- `[x]` config/requirements/entrypoint generation in CLI `init` implemented (basic templates)
+- `[x]` config/dependency metadata/entrypoint generation in CLI `init` implemented (basic templates)
 - `[x]` environment creation flow exists (CLI + Convex `environments`)
 
 Run:
@@ -118,7 +118,7 @@ Contract fixes applied on 2026-03-06:
    - GPU list uses dynamic Runpod data when available, with a fallback value.
 
 Current operational note:
-- CLI API URL resolution order is: `TAHUNA_API_URL` -> `CONVEX_SITE_URL` -> `NEXT_PUBLIC_CONVEX_SITE_URL` -> default `http://localhost:3000`.
+- CLI API URL resolution order is: `TAHUNA_API_URL` -> `TAHUNA_SITE_URL` -> `TAHUNA_PUBLIC_SITE_URL` -> default `http://localhost:3000`.
 - CLI browser login URL can be explicitly set with `TAHUNA_BROWSER_URL`; if missing, CLI auto-detects a working browser base and persists it.
 - CLI auth token is read from env vars or global config file `~/.config/tahuna/config.env`.
 
@@ -152,7 +152,7 @@ Current operational note:
   - upload/remove data blobs
 
 - [`web/app/api-key/page.tsx`](/Users/pazuzzu/Desktop/gigi/boob-ai/web/app/api-key/page.tsx)
-  - create/revoke API keys (legacy/manual path, still available)
+  - legacy API key page; target UX is machine/session management aligned with dashboard theme
 
 - [`web/app/auth/cli/page.tsx`](/Users/pazuzzu/Desktop/gigi/boob-ai/web/app/auth/cli/page.tsx)
   - browser authorization step for CLI login callback flow
@@ -283,7 +283,7 @@ Pod startup contract detail (Incremental Sync (0.1.0)):
 
 Update (completed 2026-03-06):
 - `tahuna init .` initializes current project, and `tahuna init <project-name>` creates/selects a project directory, then links created environment to `.tahuna/environment_id`.
-- `tahuna init` now collects local project setup inputs first (entrypoint/data/config/requirements), auto-detects framework when possible, then prompts machine/runtime settings.
+- `tahuna init` now collects local project setup inputs first (entrypoint/data/config + dependency metadata), auto-detects framework when possible, then prompts machine/runtime settings.
 - `tahuna train` requires a linked `.tahuna/environment_id` from `init`, creates a run through existing `/api/environments/{env_id}/runs`, prints concise summary, and monitors in foreground.
 - `tahuna train -d` creates a run and exits immediately after summary output.
 - `tahuna train` and `tahuna run create` now auto-sync before run creation:
@@ -301,6 +301,40 @@ Clarification (agreed direction):
   - Add manual sync command(s) in addition to mandatory run preflight sync.
   - Use incremental manifest/hash uploads, not full archive upload on every sync.
   - Keep R2 as canonical storage; pods fetch by pinned sync version/manifest.
+
+## 9) Spec Alignment Notes (Manual Review, 2026-03-11)
+
+The following are now documented in specs as target behavior and should guide implementation order:
+
+1. Run naming + rename:
+   - `run create -n/--name` sets run name.
+   - If omitted, backend assigns a word-based random name.
+   - `run rename <id|name> --name <new-name>` is canonical; compatibility alias documented as `run create --rename ...`.
+
+2. CLI discoverability:
+   - `catalog gpus` should list available GPUs and max counts.
+   - `data list` should list existing user data items for binding.
+   - `run list` default table includes `GPU#` and `VOL` headers.
+
+3. Naming/privacy cleanup:
+   - Provider-specific env var names should not appear in user-facing docs/UI.
+   - Use Tahuna-prefixed variables in docs and CLI messaging.
+
+4. Init/runtime dependency source of truth:
+   - Framework and Python runtime detection should come from uv files (`pyproject.toml`, `uv.lock`), not `requirements.txt`.
+   - Pod bootstrap default execution path should use uv (`uv sync`, `uv run ...`).
+
+5. Data/output model:
+   - Existing data can be selected/bound to environments (including multiple bound items).
+   - Local configured output directory is excluded from local sync.
+   - Output artifacts are synced from pod to Storage and represented as latest snapshot state (no output rollback/version history in v1).
+
+6. UX/theming:
+   - Login and machine/session pages should match dashboard theme.
+   - Environment config file should render as editable UI section before run creation.
+
+7. Shared constants:
+   - Retry counts, grace windows, polling intervals, and related defaults should be centralized in `web/config.ts` and referenced consistently across CLI/web docs.
 
 ---
 

@@ -10,12 +10,13 @@ Guided project setup that detects/scaffolds local project files, selects runtime
 |---------|------|-------------|
 | `.tahuna/` | Local directory | Project-local Tahuna state |
 | `.tahuna/environment_id` | Local file | Links this project to a remote environment |
-| `.tahuna/project.yaml` | Local file | Local project config (entrypoint, data dir, config path, requirements, output dir) |
+| `.tahuna/project.yaml` | Local file | Local project config (entrypoint, data dir, config path, uv files, output dir) |
 | `train.py` | Project file | Entrypoint script (default name, user can override) |
 | `data/` | Project directory | Training data directory (default name, user can override) |
 | `outputs/` | Project directory | Training output directory (default name, user can override) |
 | `config.yaml` | Project file | Hyperparameter configuration |
-| `requirements.txt` | Project file | Python dependencies (future: `pyproject.toml` with uv) |
+| `pyproject.toml` | Project file | Python project metadata + dependencies (uv source of truth) |
+| `uv.lock` | Project file | Locked dependency + Python resolution for reproducible runtime |
 | Remote environment | Backend record | Created in Convex `environments` table |
 
 ## Lifecycle
@@ -42,47 +43,50 @@ Guided project setup that detects/scaffolds local project files, selects runtime
      To reconfigure, delete .tahuna/ and run init again."
 
 3. PROJECT FILE DETECTION & SCAFFOLDING
-   For each of the 5 mandatory files:
+   For each mandatory project item:
 
    a. Entrypoint (default: train.py)
       - Detect: look for train.py in project root
       - If found: "Detected train.py. Use this? [Y/n/custom path]"
-      - If not found: "No entrypoint found. Creating train.py with template."
+      - If not found: "Creating train.py."
       - Template: minimal Python script with argparse + config loading
 
    b. Data directory (default: data/)
       - Detect: look for data/ directory
       - If found: "Detected data/. Use this? [Y/n/custom path]"
-      - If not found: "Creating data/ directory."
+      - If not found: "Creating data/."
+      - Also offer: "Bind existing Storage data now? [y/N]"
 
    c. Output directory (default: outputs/)
       - Detect: look for outputs/ directory
       - If found: "Detected outputs/. Use this? [Y/n/custom path]"
-      - If not found: "Creating outputs/ directory."
+      - If not found: "Creating outputs/."
 
    d. Config file (default: config.yaml)
       - Detect: look for config.yaml or config.yml
       - If found: "Detected config.yaml. Use this? [Y/n/custom path]"
-      - If not found: "Creating config.yaml with defaults."
+      - If not found: "Creating config.yaml."
       - Template: minimal YAML with learning_rate, epochs, batch_size
 
-   e. Requirements file (default: requirements.txt)
-      - Detect: look for requirements.txt
-      - If found: "Detected requirements.txt. Use this? [Y/n/custom path]"
-      - If not found: "Creating requirements.txt."
-      - Template: torch or tensorflow (based on framework detection)
+   e. UV project files (`pyproject.toml` + `uv.lock`)
+      - Detect: look for pyproject.toml (required) and uv.lock (preferred)
+      - If found: "Detected pyproject.toml/uv.lock. Use these? [Y/n/custom path]"
+      - If pyproject.toml missing: "Creating pyproject.toml."
+      - If uv.lock missing: run `uv lock` and print "Creating uv.lock."
+      - Template/default deps: torch or tensorflow (based on framework detection)
 
-4. FRAMEWORK DETECTION (single source of truth: requirements file)
-   - Parse requirements.txt for "torch"/"pytorch" -> PyTorch
-   - Parse requirements.txt for "tensorflow"/"keras" -> TensorFlow
+4. FRAMEWORK + PYTHON DETECTION (single source of truth: uv files)
+   - Parse pyproject.toml dependency groups for framework packages
+   - Parse uv.lock (or pyproject `requires-python`) for Python version
+   - Map "torch"/"pytorch" -> PyTorch, "tensorflow"/"keras" -> TensorFlow
    - If ambiguous or not found: prompt user to select
-   - Framework + version determines catalog filtering AND pod image
+   - Framework + version + Python version determine catalog filtering AND pod image
 
 5. RUNTIME CONFIGURATION
    - Fetch GPU catalog from backend (GET /api/catalog)
    - Prompt: GPU type (from available list, filtered by framework)
-   - Prompt: GPU count (default: 1, max from catalog per GPU type)
-   - Prompt: Volume size GB (default: 80)
+   - Prompt: GPU count (default from shared config, max from catalog per GPU type)
+   - Prompt: Volume size GB (default from shared config)
 
 6. ENVIRONMENT CREATION
    - POST /api/environments with: name, framework, version,
@@ -102,16 +106,18 @@ entrypoint: train.py
 data_dir: data
 output_dir: outputs
 config_file: config.yaml
-requirements: requirements.txt
-framework: pytorch       # detected from requirements
+python_project_file: pyproject.toml
+uv_lock_file: uv.lock
+framework: pytorch       # detected from uv files
+python_version: "3.11"   # detected from uv files
 ```
 
 ## Invariants
 
 - `.tahuna/` must not exist before init. Re-init is an error.
-- All 5 project files (entrypoint, data dir, output dir, config, requirements) are mandatory. If not present, they are created from templates.
+- All mandatory project items (entrypoint, data dir, output dir, config, uv project files) are created if missing.
 - One project directory maps to exactly one remote environment.
-- Framework detection reads from `requirements.txt` only. No separate framework prompt unless detection fails.
+- Framework/Python detection reads from uv files only (`pyproject.toml`, `uv.lock`) unless detection fails.
 - The environment ID file (`.tahuna/environment_id`) is the single link between local project and remote state.
 
 ## Error States
@@ -122,6 +128,8 @@ framework: pytorch       # detected from requirements
 | Not authenticated | Error: "Not authenticated. Run `tahuna login` first." |
 | Backend unreachable | Error: "Cannot reach Tahuna backend. Check your connection." |
 | GPU catalog empty | Error: "No GPUs available. Try again later." |
+| `pyproject.toml` invalid | Error: "Cannot parse pyproject.toml." |
+| uv resolution fails | Error: "`uv lock` failed. Fix dependency metadata and retry." |
 | Directory creation fails | Error: "Cannot create directory: <reason>" |
 
 ## Dependencies

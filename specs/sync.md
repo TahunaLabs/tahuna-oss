@@ -2,7 +2,7 @@
 
 ## Scope
 
-Content-addressed incremental sync of project code and data from local machine to R2 object storage. Sync produces versioned manifests that are pinned on runs for reproducibility.
+Content-addressed incremental sync of project code and data from local machine to R2 object storage. Sync produces versioned manifests that are pinned on runs for reproducibility. Pod-produced outputs are synced separately to Storage and are last-write snapshots (not manifest-versioned).
 
 ## Elements
 
@@ -86,7 +86,7 @@ syncIncremental(environmentID, scope):
        - If different: proceed with blob upload
 
     4. FIND MISSING BLOBS
-       - Chunk all entry hashes into batches of 500
+       - Chunk all entry hashes into batches from shared config (`SYNC_MISSING_BATCH_SIZE`)
        - POST /api/sync/blobs/missing with hash list
        - Backend returns subset of hashes not yet in R2
 
@@ -94,7 +94,7 @@ syncIncremental(environmentID, scope):
        - For each missing hash:
          a. POST /api/sync/blobs/upload-url -> signed R2 PUT URL
          b. PUT file content to signed URL
-       - Parallel upload with 8 workers (configurable: TAHUNA_SYNC_UPLOAD_WORKERS)
+       - Parallel upload workers come from shared config (`SYNC_UPLOAD_WORKERS`)
 
     6. UPLOAD MANIFEST
        - POST /api/sync/manifests/upload-url -> signed R2 PUT URL
@@ -111,7 +111,7 @@ syncIncremental(environmentID, scope):
          a. Manifest exists in R2 (with metadata sync + bounded polling for propagation)
          b. Manifest JSON schema is valid
          c. Updates environment latestCodeManifestHash / latestDataManifestHash
-       - Retry logic: up to 8 attempts with exponential backoff (250ms -> 500ms -> 1s -> ...)
+       - Retry logic: bounded attempts and exponential backoff from shared config
          for transient "manifest not found" errors (R2 propagation delay)
 
     8. UPDATE LOCAL CACHE
@@ -132,6 +132,11 @@ Code sync excludes:
 
 Data sync includes:
   - only the configured data directory
+
+Output sync rules:
+  - configured output directory is always excluded from local -> remote sync
+  - output artifacts are synced only from pod -> Storage/R2
+  - output artifact view keeps latest snapshot state (not rollback/version history)
 ```
 
 ### Sync Versioning (future: rollback support)
@@ -141,6 +146,14 @@ Data sync includes:
   - `tahuna sync history [code|data]` — list past manifest hashes with timestamps
   - `tahuna sync rollback <manifest-hash>` — set environment pointer to a previous manifest
 - Runs always pin the manifest hash at creation time, so historical runs always reference their exact version regardless of later syncs.
+- This versioning model applies to code/data manifests only, not output artifact snapshots.
+
+### Output Artifact Sync Semantics
+
+- Selected output directory contents are uploaded by pod runtime callbacks.
+- Output artifact keys are stored on the run record and surfaced in Storage.
+- Re-uploads overwrite latest visible artifact state for that run path; historical output snapshots are not retained in v1.
+- If historical output versioning is required later, it should be introduced as a separate artifact version index.
 
 ### Chunked Upload (future: large files)
 
@@ -166,14 +179,20 @@ Data sync includes:
 - Sync commit is atomic: either both pointers update or neither does (when syncing both scopes).
 - The sync cache (`.tahuna/sync_*_manifest.json`) is advisory. Deleting it forces a full re-check but not a full re-upload (missing-blob check handles dedup).
 - Manual sync (`tahuna sync`) is a convenience command. `train` and `run create` always auto-sync.
+- Local output directories are excluded from local sync and cannot override pod-synced output artifacts.
+
+## Shared Defaults & Constants
+
+- Upload worker count, retry budgets, and commit polling/backoff values are defined in `web/config.ts`.
+- CLI output and error messages should render configured values instead of hardcoding counts.
 
 ## Error States
 
 | Condition | Behavior |
 |-----------|----------|
 | No files to sync | Warning: "No files found for <scope> sync." Commit still runs (empty manifest). |
-| Blob upload fails | Retry 3 times per blob. If still failing: error with failed file list. |
-| Manifest not found on commit | Retry with re-upload, up to 8 attempts. |
+| Blob upload fails | Retry up to configured max attempts per blob. If still failing: error with failed file list. |
+| Manifest not found on commit | Retry with re-upload up to configured max attempts. |
 | Network timeout during upload | Error: "Upload timed out. Check your connection and run `tahuna sync` again." |
 | Environment not synced (on run create) | Error: "Environment has no synced code. Run `tahuna sync` first." |
 

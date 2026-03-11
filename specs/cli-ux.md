@@ -29,15 +29,23 @@ tahuna
     specs                        # Alias: env update
     delete    <id>               # Delete environment (cascade)
 
+  catalog
+    gpus                        # List available GPUs with max count per type
+
+  data
+    list      [-v]              # List existing data items available for binding
+    show      <id> [-v]         # Show data item details
+
   sync      [code | data]        # Manual sync
 
   train     [-d] [--gpu-type TYPE] [--gpu-count N] [--volume-gb N]
   run
-    create   [-d] [--gpu-type TYPE] [--gpu-count N] [--volume-gb N]
-    list     [-n N] [-a] [-v]
+    create   [-d] [-n NAME] [--gpu-type TYPE] [--gpu-count N] [--volume-gb N]
+    rename   <id|name> --name NEW_NAME
+    list     [-l N] [-a] [-v]
     show     <id> [-v]
     watch    <id> [--interval N]
-    logs     <id> [-n N] [-f] [-v]
+    logs     <id> [-l N] [-f] [-v]
     cancel   <id> [-f]
     delete   <id>
 
@@ -51,10 +59,12 @@ All commands follow these consistent flag rules:
 | Flag | Long form | Meaning | Applies to |
 |------|-----------|---------|------------|
 | `-v` | `--verbose` | Show HTTP details + timing | All commands |
-| `-n` | `--lines` | Number of items/lines to show (newest first) | `run list`, `run logs` |
+| `-l` | `--lines` | Number of items/lines to show (newest first) | `run list`, `run logs` |
+| `-n` | `--name` | Human-readable run name | `run create` |
 | `-f` | `--follow` | Follow/stream output (like `docker logs -f`) | `run logs` |
 | `-d` | `--detached` | Create and exit without monitoring | `train`, `run create` |
 | `-a` | `--all` | Show all items (no limit) | `run list` |
+| | `--rename` | Target run identifier for rename compatibility alias | `run create` (compat), `run rename` (canonical command uses positional id/name) |
 | | `--gpu-type` | GPU type override | `train`, `run create`, `env update` |
 | | `--gpu-count` | GPU count override | `train`, `run create`, `env update` |
 | | `--volume-gb` | Volume size override | `train`, `run create`, `env update` |
@@ -63,9 +73,9 @@ All commands follow these consistent flag rules:
 
 ### Flag Rules
 
-- Short flags use single dash + single letter: `-v`, `-n`, `-f`, `-d`, `-a`.
+- Short flags use single dash + single letter: `-v`, `-l`, `-n`, `-f`, `-d`, `-a`.
 - Long flags use double dash + full word: `--verbose`, `--lines`, `--follow`.
-- Flags that take values: `-n 10`, `--gpu-type "NVIDIA A100"`.
+- Flags that take values: `-l 10`, `-n "my-run"`, `--gpu-type "NVIDIA A100"`.
 - Boolean flags: `-v`, `-f`, `-d`, `-a` (presence = true).
 - Positional args: resource IDs come after the subcommand (`run show <id>`, not `run show --id <id>`). Exception: `env show --id <id>` for backward compatibility.
 
@@ -75,10 +85,10 @@ All commands follow these consistent flag rules:
 
 ```
 $ tahuna run list
- ID          STATUS      GPU TYPE         CREATED
- run_abc123  completed   NVIDIA A100 80GB 2 hours ago
- run_def456  running     NVIDIA H100 80GB 10 minutes ago
- run_ghi789  failed      NVIDIA A100 80GB 1 day ago
+ ID          NAME             STATUS      GPU TYPE         GPU#  VOL    CREATED
+ run_abc123  warm-river-fox   completed   NVIDIA A100 80GB 1     80GB   2 hours ago
+ run_def456  brave-cloud-owl  running     NVIDIA H100 80GB 2     120GB  10 minutes ago
+ run_ghi789  calm-lake-ant    failed      NVIDIA A100 80GB 1     80GB   1 day ago
 ```
 
 ### Verbose: Adds HTTP details + extended fields
@@ -86,13 +96,16 @@ $ tahuna run list
 ```
 $ tahuna run list -v
  GET /api/runs (200, 142ms)
- ID          STATUS      GPU TYPE         GPU#  VOL    CODE HASH    CREATED
- run_abc123  completed   NVIDIA A100 80GB 1     80GB   a1b2c3d4     2h ago
- run_def456  running     NVIDIA H100 80GB 2     120GB  e5f6g7h8     10m ago
+ ID          NAME             STATUS      GPU TYPE         GPU#  VOL    CODE HASH    CREATED
+ run_abc123  warm-river-fox   completed   NVIDIA A100 80GB 1     80GB   a1b2c3d4     2h ago
+ run_def456  brave-cloud-owl  running     NVIDIA H100 80GB 2     120GB  e5f6g7h8     10m ago
 ```
 
 - Verbose shows: request URL, response code, duration, and extended columns.
 - No raw JSON dump in verbose mode. Verbose is for debugging, not data export.
+- If `run create` is called without `--name`, backend assigns a word-based random name (for example `warm-river-fox`).
+- Canonical rename syntax is `tahuna run rename <id|name> --name <new-name>`.
+- Compatibility alias: `tahuna run create --rename <id|name> --name <new-name>`.
 
 ## Interactive Shell (`tahuna shell`)
 
@@ -105,13 +118,13 @@ Command REPL — type commands without the `tahuna` prefix.
 ```
 $ tahuna shell
 tahuna> run list
- ID          STATUS      GPU TYPE         CREATED
- run_abc123  completed   NVIDIA A100 80GB 2 hours ago
+ ID          NAME             STATUS      GPU TYPE         GPU#  VOL    CREATED
+ run_abc123  warm-river-fox   completed   NVIDIA A100 80GB 1     80GB   2 hours ago
 
 tahuna> train -d
 Syncing code... done.
 Syncing data... done.
-Run created: run_xyz789 (detached)
+Run created: run_xyz789 (bold-snow-wolf, detached)
 
 tahuna> exit
 $
@@ -166,12 +179,13 @@ Error: Not authenticated. Run `tahuna login` first.
 ### API URL Resolution Order
 
 1. `TAHUNA_API_URL` environment variable
-2. `CONVEX_SITE_URL` environment variable
-3. `NEXT_PUBLIC_CONVEX_SITE_URL` environment variable
+2. `TAHUNA_SITE_URL` environment variable
+3. `TAHUNA_PUBLIC_SITE_URL` environment variable
 4. Default: `http://localhost:3000`
 
 - If URL ends with `/api`, CLI does not double-prefix.
 - CLI auto-prefixes requests with `/api`.
+- Legacy provider-specific env aliases may still be read for migration, but they are not documented or displayed.
 
 ### Browser URL Resolution
 
@@ -186,8 +200,14 @@ Error: Not authenticated. Run `tahuna login` first.
 - Verbose adds HTTP debugging info, not full JSON payloads.
 - The shell is a local REPL only. It does not connect to a remote pod.
 - Error messages are actionable: they tell the user what to do next.
-- `-n` always means "number of items, newest first" (like `tail`).
+- `-l` always means "number of items, newest first" (like `tail`).
+- `-n`/`--name` always means "resource name" on create/rename commands.
 - `-f` always means "follow/stream" (like `tail -f` or `docker logs -f`).
+
+## Shared Defaults & Constants
+
+- Retry counts, grace/timeout durations, and polling intervals are defined in `web/config.ts`.
+- CLI help and error text should reference behavior from these shared constants rather than hardcoded numbers.
 
 ## Error States
 

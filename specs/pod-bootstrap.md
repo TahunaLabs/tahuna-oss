@@ -28,7 +28,8 @@ The pod bootstrap is the sequence that runs inside a Runpod GPU pod from startup
 /workspace/
   train.py              # entrypoint (from code manifest)
   config.yaml           # config (from code manifest)
-  requirements.txt      # dependencies (from code manifest)
+  pyproject.toml        # dependencies/runtime metadata (from code manifest)
+  uv.lock               # locked dependency graph (from code manifest)
   ...                   # other code files
   data/                 # extracted data directory
   outputs/              # training outputs (user writes here)
@@ -50,7 +51,9 @@ POD STARTS
      data: { entries: [...], download_urls: {...} },
      entrypoint: "train.py",
      config_file: "config.yaml",
-     requirements: "requirements.txt",
+     python_project_file: "pyproject.toml",
+     uv_lock_file: "uv.lock",
+     python_version: "3.11",
      output_dir: "outputs"
    }
     |
@@ -78,9 +81,10 @@ POD STARTS
     |
     v
 5. INSTALL DEPENDENCIES
-   - Detect package manager:
-     a. If pyproject.toml present: use uv (future default)
-     b. Else if requirements.txt present: pip install -r requirements.txt (current)
+   - Use uv as the default runtime package manager.
+   - If `uv.lock` exists: `uv sync --frozen --no-dev`
+   - If `uv.lock` missing but `pyproject.toml` exists: `uv sync --no-dev`
+   - If `pyproject.toml` missing: report FAILED (bootstrap contract violation)
    - Stream install output to:
      POST /api/runs/{RUN_ID}/runtime/logs
      Body: { level: "info", source: "bootstrap", message: "..." }
@@ -90,7 +94,7 @@ POD STARTS
 6. RUN ENTRYPOINT
    - Parse entrypoint command:
      a. Check config.yaml for `command:` field
-     b. Default: `python3 -u {entrypoint}`
+     b. Default: `uv run python -u {entrypoint}`
    - Execute with subprocess, capture stdout + stderr
    - Stream output to backend as logs:
      POST /api/runs/{RUN_ID}/runtime/logs
@@ -109,7 +113,7 @@ POD STARTS
     |
     v
 8. PERIODIC OUTPUT SYNC (future)
-   - Every N seconds (default: 60):
+   - Every configured interval (`RUN_OUTPUT_SYNC_INTERVAL_SECONDS`):
      a. Walk /workspace/outputs/
      b. Upload new/changed files to R2
      c. POST progress to backend
@@ -152,11 +156,12 @@ POD TERMINATES
 Pod receives SIGTERM (from cancel request):
   |
   |-- Forward SIGTERM to entrypoint process
-  |-- Start 30-second grace timer
-  |-- If entrypoint exits within grace period:
+  |-- Queue checkpoint/save request in training process (non-blocking)
+  |-- Start configured grace timer (from shared config)
+  |-- If entrypoint exits within grace window:
   |     Upload any artifacts in output directory
   |     Report status: cancelled
-  |-- If grace period expires:
+  |-- If grace window expires:
   |     Force kill entrypoint
   |     Upload any artifacts already written
   |     Report status: cancelled
@@ -170,12 +175,12 @@ Pod receives SIGTERM (from cancel request):
 
 | Framework | Image |
 |-----------|-------|
-| PyTorch 2.x | Tahuna-managed image with CUDA + PyTorch preinstalled |
-| TensorFlow 2.x | Tahuna-managed image with CUDA + TensorFlow preinstalled |
+| PyTorch 2.x | Tahuna-managed image with CUDA + PyTorch preinstalled (GPU-specific CUDA compatibility) |
+| TensorFlow 2.x | Tahuna-managed image with CUDA + TensorFlow preinstalled (GPU-specific CUDA compatibility) |
 | Custom (future) | User-provided Docker image URI |
 
-- Framework + version detected from `requirements.txt` (single source of truth).
-- Image includes: Python, CUDA drivers, uv (future), basic system tools.
+- Framework + version + Python version are detected from uv files (`pyproject.toml`, `uv.lock`).
+- Image includes: Python, CUDA drivers, uv, and basic system tools.
 - Image does NOT include: user code, data, or project-specific dependencies.
 
 ### Pod Networking
@@ -206,20 +211,25 @@ All runtime endpoints require `Authorization: Bearer {RUNTIME_TOKEN}`.
 - File integrity is verified by SHA256 hash after every download. Hash mismatch = bootstrap failure.
 - Runtime token is valid only for the specific run it was created for.
 - Artifact upload failures never change run completion status.
-- Pod is fully ephemeral. After termination, all local state is lost.
+- Pod is ephemeral. After termination, local pod state is lost except artifacts already synced from selected output directory to Storage/R2.
 - The bootstrap script is self-contained Python with no external dependencies beyond the base image.
+
+## Shared Defaults & Constants
+
+- Retry counts, grace windows, periodic sync intervals, and runtime timeout values are defined in `web/config.ts`.
+- Bootstrap logs/messages should reference configured values, not hardcoded literals.
 
 ## Error States
 
 | Condition | Behavior |
 |-----------|----------|
-| Bootstrap plan fetch fails | Retry 3 times. If still failing: report FAILED. |
+| Bootstrap plan fetch fails | Retry up to configured max attempts. If still failing: report FAILED. |
 | File hash mismatch | Report FAILED: "Integrity check failed for <path>." |
-| Dependency install fails | Report FAILED: "pip install failed: <error>." |
+| Dependency install fails | Report FAILED: "uv sync failed: <error>." |
 | Entrypoint not found | Report FAILED: "Entrypoint <file> not found." |
 | Runtime token rejected | All API calls fail with 401. Pod has no fallback. |
-| R2 download fails | Retry 3 times per file. If still failing: report FAILED. |
-| Artifact upload fails | Warn in logs. Run status remains COMPLETED. |
+| R2 download fails | Retry up to configured max attempts per file. If still failing: report FAILED. |
+| Artifact upload fails | Warn in logs. Run status remains `completed`. |
 
 ## Dependencies
 
