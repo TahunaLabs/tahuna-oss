@@ -180,19 +180,3 @@ export const internalList = internalQuery({
     return { blobs };
   },
 });
-
-export const remove = mutation({
-  args: {
-    key: v.string(),
-  },
-  returns: v.object({ deleted: v.boolean(), key: v.string() }),
-  handler: async (ctx, args) => {
-    const user = await requireUser(ctx);
-    if (!args.key.startsWith(buildDataPrefix(String(user._id)))) {
-      throw new ConvexError("blob not found");
-    }
-
-    await r2.deleteObject(ctx, args.key);
-    return { deleted: true, key: args.key };
-  },
-});
