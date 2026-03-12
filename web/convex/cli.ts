@@ -20,6 +20,7 @@ import {
   type SyncKind,
   type SyncManifestPayload,
 } from "@convex/syncManifest";
+import { sleepMs } from "@convex/sleep";
 
 function extractBearerToken(request: Request): string {
   const bearer = request.headers.get("authorization")?.trim() || "";
@@ -188,10 +189,6 @@ async function readJsonBody(request: Request) {
   } catch {
     return null;
   }
-}
-
-async function sleepMs(ms: number) {
-  await new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function isS3NotFoundError(error: unknown) {

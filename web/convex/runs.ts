@@ -24,6 +24,7 @@ import {
   type SyncKind,
   type SyncManifestPayload,
 } from "@convex/syncManifest";
+import { sleepMs } from "@convex/sleep";
 
 const RUN_STATUS = {
   QUEUED: "queued",
@@ -422,10 +423,6 @@ function summarizeManifest(manifest: SyncManifestPayload) {
     fileCount: manifest.entries.length,
     totalBytes: manifest.entries.reduce((sum, entry) => sum + entry.size, 0),
   };
-}
-
-async function sleepMs(ms: number) {
-  await new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function isS3NotFoundError(error: unknown) {
