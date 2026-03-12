@@ -71,6 +71,13 @@ type StorageItem = {
   data_blob_id?: string
 }
 
+type StorageSort = "created_desc" | "created_asc" | "name_asc" | "name_desc" | "size_desc" | "size_asc"
+type ArtifactRef = {
+  key: string
+  runId: string
+  runCreatedAt: number
+}
+
 function normalizeArtifactName(value: string) {
   const name = value.trim()
   if (!name) {
@@ -159,7 +166,7 @@ function normalizeOffset(value: number | undefined) {
   return Math.max(0, Math.floor(value))
 }
 
-function sortItems(items: StorageItem[], sort: "created_desc" | "created_asc" | "name_asc" | "name_desc" | "size_desc" | "size_asc") {
+function sortItems(items: StorageItem[], sort: StorageSort) {
   return items.sort((a, b) => {
     if (sort === "created_asc") {
       if (a.created_at !== b.created_at) return a.created_at - b.created_at
@@ -194,6 +201,10 @@ function matchesSearch(item: StorageItem, search: string) {
   return haystack.includes(search)
 }
 
+function shouldUseFullArtifactMetadata(sort: StorageSort) {
+  return sort === "size_asc" || sort === "size_desc"
+}
+
 async function listDataItemsForUser(ctx: QueryCtx, userId: string) {
   const prefix = buildDataPrefix(userId)
   const out: StorageItem[] = []
@@ -226,14 +237,13 @@ async function listDataItemsForUser(ctx: QueryCtx, userId: string) {
   return out
 }
 
-async function listArtifactItemsForUser(ctx: QueryCtx, userId: string) {
-  const out: StorageItem[] = []
+async function listArtifactRefsForUser(ctx: QueryCtx, userId: string): Promise<ArtifactRef[]> {
   const rows = await ctx.db
     .query("runs")
     .withIndex("by_user", (q) => q.eq("userId", userId))
     .collect()
 
-  const refs: Array<{ key: string; runId: string; runCreatedAt: number }> = []
+  const refs: ArtifactRef[] = []
   const sortedRuns = rows.sort((a, b) => b._creationTime - a._creationTime)
 
   for (const run of sortedRuns) {
@@ -253,6 +263,43 @@ async function listArtifactItemsForUser(ctx: QueryCtx, userId: string) {
     }
   }
 
+  return refs
+}
+
+async function listArtifactItemsForUserFast(refs: ArtifactRef[]) {
+  const out: StorageItem[] = []
+  for (let index = 0; index < refs.length; index += METADATA_LOOKUP_CONCURRENCY) {
+    const chunk = refs.slice(index, index + METADATA_LOOKUP_CONCURRENCY)
+    const items = await Promise.all(
+      chunk.map(async (ref) => {
+        try {
+          const downloadURL = await r2.getUrl(ref.key)
+          const leafName = ref.key.split("/").pop() || ref.key
+          return {
+            id: `artifact:${ref.key}`,
+            source: "run_artifact" as const,
+            key: ref.key,
+            name: leafName,
+            path: ref.key,
+            size: 0,
+            created_at: ref.runCreatedAt,
+            download_url: downloadURL,
+            run_id: ref.runId,
+          }
+        } catch {
+          return null
+        }
+      }),
+    )
+    for (const row of items) {
+      if (row) out.push(row)
+    }
+  }
+  return out
+}
+
+async function listArtifactItemsForUserWithMetadata(ctx: QueryCtx, refs: ArtifactRef[]) {
+  const out: StorageItem[] = []
   for (let index = 0; index < refs.length; index += METADATA_LOOKUP_CONCURRENCY) {
     const chunk = refs.slice(index, index + METADATA_LOOKUP_CONCURRENCY)
     const metadataRows = await Promise.all(
@@ -276,6 +323,47 @@ async function listArtifactItemsForUser(ctx: QueryCtx, userId: string) {
 
     for (const row of metadataRows) {
       if (row) out.push(row)
+    }
+  }
+
+  return out
+}
+
+async function hydrateVisibleArtifactMetadata(ctx: QueryCtx, pageItems: StorageItem[]) {
+  const out = [...pageItems]
+  const artifactIndexes: number[] = []
+  for (let i = 0; i < out.length; i += 1) {
+    if (out[i]?.source === "run_artifact") {
+      artifactIndexes.push(i)
+    }
+  }
+  if (artifactIndexes.length === 0) {
+    return out
+  }
+
+  for (let start = 0; start < artifactIndexes.length; start += METADATA_LOOKUP_CONCURRENCY) {
+    const slice = artifactIndexes.slice(start, start + METADATA_LOOKUP_CONCURRENCY)
+    const metadataRows = await Promise.all(
+      slice.map(async (itemIndex) => {
+        const row = out[itemIndex]
+        if (!row) return { itemIndex, metadata: null as null | { size?: number; lastModified?: string; url?: string } }
+        try {
+          const metadata = await r2.getMetadata(ctx, row.key)
+          return { itemIndex, metadata: metadata ?? null }
+        } catch {
+          return { itemIndex, metadata: null as null | { size?: number; lastModified?: string; url?: string } }
+        }
+      }),
+    )
+    for (const { itemIndex, metadata } of metadataRows) {
+      const row = out[itemIndex]
+      if (!row || !metadata) continue
+      out[itemIndex] = {
+        ...row,
+        size: typeof metadata.size === "number" ? metadata.size : row.size,
+        created_at: toTimestamp(metadata.lastModified, row.created_at),
+        download_url: metadata.url || row.download_url,
+      }
     }
   }
 
@@ -453,15 +541,20 @@ export const list = query({
     const userId = String(user._id)
 
     const source = args.source ?? "all"
-    const sort = args.sort ?? "created_desc"
+    const sort: StorageSort = args.sort ?? "created_desc"
     const search = (args.search || "").trim().slice(0, MAX_SEARCH_CHARS).toLowerCase()
     const limit = normalizeLimit(args.limit)
     const offset = normalizeOffset(args.offset)
 
+    const useFullArtifactMetadata = shouldUseFullArtifactMetadata(sort)
     const [dataItems, artifactItems] = await Promise.all([
       source === "all" || source === "data" ? listDataItemsForUser(ctx, userId) : Promise.resolve([] as StorageItem[]),
       source === "all" || source === "run_artifact"
-        ? listArtifactItemsForUser(ctx, userId)
+        ? listArtifactRefsForUser(ctx, userId).then((refs) =>
+            useFullArtifactMetadata
+              ? listArtifactItemsForUserWithMetadata(ctx, refs)
+              : listArtifactItemsForUserFast(refs),
+          )
         : Promise.resolve([] as StorageItem[]),
     ])
 
@@ -470,7 +563,8 @@ export const list = query({
       sort,
     )
     const total = combined.length
-    const items = combined.slice(offset, offset + limit)
+    const pageItems = combined.slice(offset, offset + limit)
+    const items = useFullArtifactMetadata ? pageItems : await hydrateVisibleArtifactMetadata(ctx, pageItems)
     const hasMore = offset + limit < total
 
     return {
