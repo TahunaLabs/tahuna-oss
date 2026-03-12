@@ -1336,11 +1336,7 @@ async function handleRuntimePost(ctx: ActionCtx, request: Request, route: Runtim
   const body = await readJsonBody(request);
 
   if (route.action === "logs") {
-    const fallbackLine: Array<Record<string, unknown>> =
-      typeof body?.line === "string"
-        ? [{ message: body.line, level: body?.level, source: body?.source, timestamp: body?.timestamp }]
-        : [];
-    const candidateLines: unknown[] = Array.isArray(body?.lines) ? (body.lines as unknown[]) : fallbackLine;
+    const candidateLines: unknown[] = Array.isArray(body?.lines) ? (body.lines as unknown[]) : [];
     const lines = candidateLines
       .filter((item): item is Record<string, unknown> => !!item && typeof item === "object")
       .map((item) => ({
