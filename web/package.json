@@ -9,7 +9,8 @@
     "convex:deploy": "convex deploy",
     "convex:dev": "convex dev",
     "dev": "next dev",
-    "lint": "eslint .",
+    "lint": "bun run lint:convex-consistency && bunx tsc --noEmit --noUnusedLocals --noUnusedParameters",
+    "lint:convex-consistency": "node ./scripts/lint-convex-consistency.mjs",
     "start": "next start"
   },
   "dependencies": {
