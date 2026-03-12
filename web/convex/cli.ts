@@ -122,18 +122,37 @@ function normalizeGpuType(value: string) {
   return value.trim().toLowerCase();
 }
 
-async function loadGpuMaxCounts(ctx: ActionCtx) {
-  let dynamicGpus: Array<{ id: string; maxGpuCount: number }> = [];
+async function loadDynamicGpuRows(ctx: ActionCtx): Promise<CatalogGpuRow[]> {
+  let dynamicGpus: Array<{
+    id: string;
+    displayName: string;
+    memoryInGb: number;
+    maxGpuCount: number;
+    pricePerHour?: number;
+  }> = [];
   try {
     dynamicGpus = await ctx.runAction(api.catalog.getDynamicGpus);
   } catch {
     dynamicGpus = [];
   }
+  return dynamicGpus
+    .map((gpu) => ({
+      id: gpu.id,
+      display_name: gpu.displayName || gpu.id,
+      memory_gb: Number.isFinite(gpu.memoryInGb) ? gpu.memoryInGb : 0,
+      max_gpu_count: Number.isFinite(gpu.maxGpuCount) && gpu.maxGpuCount > 0 ? gpu.maxGpuCount : 1,
+      price_per_hour: typeof gpu.pricePerHour === "number" && Number.isFinite(gpu.pricePerHour) ? gpu.pricePerHour : null,
+    }))
+    .filter((gpu) => gpu.id);
+}
+
+async function loadGpuMaxCounts(ctx: ActionCtx) {
+  const dynamicGpus = await loadDynamicGpuRows(ctx);
   const out = new Map<string, number>();
   for (const gpu of dynamicGpus) {
     const id = normalizeGpuType(gpu.id || "");
     if (!id) continue;
-    const max = Number.isFinite(gpu.maxGpuCount) && gpu.maxGpuCount > 0 ? Math.floor(gpu.maxGpuCount) : 1;
+    const max = Number.isFinite(gpu.max_gpu_count) && gpu.max_gpu_count > 0 ? Math.floor(gpu.max_gpu_count) : 1;
     out.set(id, max);
   }
   return out;
@@ -407,28 +426,7 @@ export const getConfig = httpAction(async () => {
 export const getCatalog = httpAction(async (ctx) => {
   try {
     const data = await ctx.runQuery(api.catalog.getCatalog);
-    let dynamicGpus: Array<{
-      id: string;
-      displayName: string;
-      memoryInGb: number;
-      maxGpuCount: number;
-      pricePerHour?: number;
-    }> = [];
-    try {
-      dynamicGpus = await ctx.runAction(api.catalog.getDynamicGpus);
-    } catch {
-      dynamicGpus = [];
-    }
-
-    const gpus: CatalogGpuRow[] = dynamicGpus
-      .map((gpu) => ({
-        id: gpu.id,
-        display_name: gpu.displayName || gpu.id,
-        memory_gb: Number.isFinite(gpu.memoryInGb) ? gpu.memoryInGb : 0,
-        max_gpu_count: Number.isFinite(gpu.maxGpuCount) && gpu.maxGpuCount > 0 ? gpu.maxGpuCount : 1,
-        price_per_hour: typeof gpu.pricePerHour === "number" && Number.isFinite(gpu.pricePerHour) ? gpu.pricePerHour : null,
-      }))
-      .filter((gpu) => gpu.id);
+    const gpus = await loadDynamicGpuRows(ctx);
     const fallbackGpus: CatalogGpuRow[] = [
       {
         id: "NVIDIA GeForce RTX 4090",
