@@ -56,7 +56,6 @@ export const getDynamicGpus = action({
   handler: async () => {
     const apiKey = process.env.RUNPOD_API_KEY;
     if (!apiKey) {
-      console.warn("RUNPOD_API_KEY is not set. Returning empty GPU list.");
       return [];
     }
 
@@ -76,13 +75,11 @@ export const getDynamicGpus = action({
       });
 
       if (!res.ok) {
-         console.warn("Failed to fetch from RunPod API.", res.statusText);
          return [];
       }
 
       const json = (await res.json()) as RunpodGraphqlResponse;
       if (json.errors) {
-        console.warn("GraphQL errors from RunPod API:", json.errors);
         return [];
       }
 
@@ -130,8 +127,7 @@ export const getDynamicGpus = action({
 
       return remoteGpus;
 
-    } catch (error) {
-       console.error("Error fetching dynamic GPUs:", error);
+    } catch {
        return [];
     }
   },
