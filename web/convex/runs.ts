@@ -458,12 +458,12 @@ async function sha256Hex(value: string | ArrayBuffer): Promise<string> {
     .join("");
 }
 
-async function fetchObjectBytes(ctx: ActionCtx, key: string): Promise<ArrayBuffer> {
-  const downloadUrl = await ctx.runQuery(internal.cli.internalGetObjectDownloadUrl, { key });
-  if (!downloadUrl) {
+async function fetchObjectBytes(_ctx: ActionCtx, key: string): Promise<ArrayBuffer> {
+  const downloadUrl = await r2.getUrl(key);
+  const response = await fetch(downloadUrl);
+  if (response.status === 404) {
     throw new Error(`object not found: ${key}`);
   }
-  const response = await fetch(downloadUrl);
   if (!response.ok) {
     throw new Error(`failed to fetch object ${key}: http ${response.status}`);
   }

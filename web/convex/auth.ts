@@ -180,7 +180,7 @@ export const internalTouchApiKeyLastUsed = internalMutation({
     }
     // Throttle writes to reduce contention during parallel sync requests.
     const now = typeof args.at === "number" && Number.isFinite(args.at) ? Math.floor(args.at) : Date.now();
-    if (typeof key.lastUsedAt === "number" && now-key.lastUsedAt < 60_000) {
+    if (typeof key.lastUsedAt === "number" && now - key.lastUsedAt < 60_000) {
       return { touched: false, lastUsedAt: key.lastUsedAt };
     }
     await ctx.db.patch("apiKeys", args.keyId, { lastUsedAt: now });

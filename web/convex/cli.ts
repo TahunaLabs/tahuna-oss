@@ -390,16 +390,16 @@ function parseManifest(value: unknown, kind: SyncKind): SyncManifestPayload | nu
 }
 
 async function fetchManifestFromR2(
-  ctx: ActionCtx,
+  _ctx: ActionCtx,
   key: string,
   kind: SyncKind,
   expectedHash: string,
 ): Promise<SyncManifestPayload> {
-  const url = await ctx.runQuery(internal.cli.internalGetObjectDownloadUrl, { key });
-  if (!url) {
+  const url = await r2.getUrl(key);
+  const response = await fetch(url, { method: "GET" });
+  if (response.status === 404) {
     throw new Error(`${kind} manifest not found in object storage`);
   }
-  const response = await fetch(url, { method: "GET" });
   if (!response.ok) {
     throw new Error(`${kind} manifest download failed with status ${response.status}`);
   }
