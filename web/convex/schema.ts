@@ -13,9 +13,7 @@ export default defineSchema({
     lastUsedAt: v.optional(v.number()),
   })
     .index("by_user", ["userId"])
-    .index("by_user_and_name", ["userId", "name"])
-    .index("by_hash", ["keyHash"])
-    .index("by_user_and_machine", ["userId", "machineId"]),
+    .index("by_hash", ["keyHash"]),
 
   environments: defineTable({
     userId: v.string(),
@@ -56,8 +54,7 @@ export default defineSchema({
     cancellationRequested: v.boolean(),
   })
     .index("by_user", ["userId"])
-    .index("by_user_and_environment", ["userId", "environmentId"])
-    .index("by_environment", ["environmentId"]),
+    .index("by_user_and_environment", ["userId", "environmentId"]),
 
   runEvents: defineTable({
     runId: v.id("runs"),
@@ -72,9 +69,7 @@ export default defineSchema({
     level: v.string(),
     source: v.string(),
     message: v.string(),
-  })
-    .index("by_run", ["runId"])
-    .index("by_run_and_timestamp", ["runId", "timestamp"]),
+  }).index("by_run", ["runId"]),
 
   runRuntimeMetrics: defineTable({
     runId: v.id("runs"),
@@ -84,7 +79,5 @@ export default defineSchema({
     step: v.optional(v.number()),
     unit: v.optional(v.string()),
     source: v.string(),
-  })
-    .index("by_run", ["runId"])
-    .index("by_run_and_timestamp", ["runId", "timestamp"]),
+  }).index("by_run", ["runId"]),
 });
