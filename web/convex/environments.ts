@@ -110,7 +110,7 @@ function manifestObjectKey(userId: string, ref: ManifestRef) {
 async function loadManifestBlobHashes(ctx: ActionCtx, userId: string, ref: ManifestRef): Promise<Set<string>> {
   const hashes = new Set<string>();
   const key = manifestObjectKey(userId, ref);
-  const downloadUrl = await ctx.runQuery(internal.cli.internalGetObjectDownloadUrl, { key });
+  const downloadUrl = await ctx.runQuery(internal.cli.sync.internalGetObjectDownloadUrl, { key });
   if (!downloadUrl) {
     return hashes;
   }

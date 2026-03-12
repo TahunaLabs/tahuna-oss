@@ -1,29 +1,22 @@
 import { httpRouter } from "convex/server";
 import { authComponent, createAuth } from "@convex/auth";
+import { getCatalog, getConfig, health, optionsHandler } from "@convex/cli/system";
+import { getDataItem, listDataItems } from "@convex/cli/data";
 import {
-    commitSync,
-    createBlobUploadUrl,
-    createEnvironment,
-    createManifestUploadUrl,
-    createRunFromEnvironment,
-    createRun,
-    getCatalog,
-    getConfig,
-    getDataItem,
-    getEnvironment,
-    updateEnvironmentSpecs,
-    getRunOrLogs,
-    health,
-    listMissingBlobHashes,
-    listDataItems,
-    listEnvironments,
-    listRuns,
-    optionsHandler,
-    postRunRuntime,
-    renameRun,
-    removeEnvironment,
-    removeRun,
-} from "@convex/cli";
+  commitSync,
+  createBlobUploadUrl,
+  createManifestUploadUrl,
+  listMissingBlobHashes,
+} from "@convex/cli/sync";
+import {
+  createEnvironment,
+  createRunFromEnvironment,
+  getEnvironment,
+  listEnvironments,
+  removeEnvironment,
+  updateEnvironmentSpecs,
+} from "@convex/cli/environments";
+import { createRun, getRunOrLogs, listRuns, postRunRuntime, removeRun, renameRun } from "@convex/cli/runs";
 
 const http = httpRouter();
 
