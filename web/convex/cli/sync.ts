@@ -1,0 +1,441 @@
+import type { Id } from "@convex/_generated/dataModel";
+import { httpAction, internalQuery, type ActionCtx } from "@convex/_generated/server";
+import { v } from "convex/values";
+import { blobLimitByKind, manifestLimitByKind } from "@convex/appConfig";
+import {
+  buildBlobObjectKey,
+  buildManifestObjectKey,
+  authenticateApiRequest,
+  corsHeaders,
+  objectExistsWithMetadataSync,
+  parseSizeBytes,
+  parseSyncKind,
+  r2,
+  readJsonBody,
+  requireOwnedEnvironment,
+} from "@convex/cli/shared";
+import { internal } from "@convex/_generated/api";
+import {
+  normalizeSha256,
+  parseManifest,
+  sha256Hex,
+  type SyncKind,
+  type SyncManifestPayload,
+} from "@convex/syncManifest";
+
+export const internalGetObjectDownloadUrl = internalQuery({
+  args: { key: v.string() },
+  returns: v.union(v.string(), v.null()),
+  handler: async (ctx, args) => {
+    const metadata = await r2.getMetadata(ctx, args.key);
+    return metadata?.url ?? null;
+  },
+});
+
+async function fetchManifestFromR2(
+  _ctx: ActionCtx,
+  key: string,
+  kind: SyncKind,
+  expectedHash: string,
+): Promise<SyncManifestPayload> {
+  const url = await r2.getUrl(key);
+  const response = await fetch(url, { method: "GET" });
+  if (response.status === 404) {
+    throw new Error(`${kind} manifest not found in object storage`);
+  }
+  if (!response.ok) {
+    throw new Error(`${kind} manifest download failed with status ${response.status}`);
+  }
+  const rawText = await response.text();
+  const computedHash = await sha256Hex(rawText);
+  if (computedHash !== expectedHash) {
+    throw new Error(`${kind} manifest hash mismatch`);
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(rawText);
+  } catch {
+    throw new Error(`${kind} manifest is not valid JSON`);
+  }
+  const manifest = parseManifest(parsed, kind, {
+    maxEntrySizeBytes: blobLimitByKind(kind),
+  });
+  if (!manifest) {
+    throw new Error(`${kind} manifest payload is invalid`);
+  }
+  return manifest;
+}
+
+export const listMissingBlobHashes = httpAction(async (ctx, request) => {
+  const userId = await authenticateApiRequest(ctx, request);
+  if (!userId) {
+    return new Response(JSON.stringify({ detail: "authentication required" }), {
+      status: 401,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+
+  const body = await readJsonBody(request);
+  const environmentId = typeof body?.environment_id === "string" ? body.environment_id.trim() : "";
+  if (!environmentId) {
+    return new Response(JSON.stringify({ detail: "environment_id is required" }), {
+      status: 400,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+
+  const ownedEnvironment = await requireOwnedEnvironment(ctx, userId, environmentId);
+  if (!ownedEnvironment) {
+    return new Response(JSON.stringify({ detail: "environment not found" }), {
+      status: 404,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+
+  const kind = parseSyncKind(body?.kind);
+  if (!kind) {
+    return new Response(JSON.stringify({ detail: "kind must be one of: code, data" }), {
+      status: 400,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+
+  if (!Array.isArray(body?.hashes)) {
+    return new Response(JSON.stringify({ detail: "hashes must be an array" }), {
+      status: 400,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+
+  const seen = new Set<string>();
+  const hashes: string[] = [];
+  for (const rawHash of body.hashes) {
+    const hash = normalizeSha256(rawHash);
+    if (!hash) {
+      return new Response(JSON.stringify({ detail: "hashes must contain valid sha256 hex values" }), {
+        status: 400,
+        headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+      });
+    }
+    if (!seen.has(hash)) {
+      seen.add(hash);
+      hashes.push(hash);
+    }
+  }
+
+  const missingSet = new Set<string>();
+  const maxConcurrency = 24;
+  let cursor = 0;
+  const workers = Math.min(maxConcurrency, Math.max(1, hashes.length));
+  await Promise.all(
+    Array.from({ length: workers }, async () => {
+      while (true) {
+        const index = cursor;
+        cursor += 1;
+        if (index >= hashes.length) {
+          return;
+        }
+        const hash = hashes[index];
+        const key = buildBlobObjectKey(userId, hash);
+        const exists = await objectExistsWithMetadataSync(ctx, key, 2);
+        if (!exists) {
+          missingSet.add(hash);
+        }
+      }
+    }),
+  );
+  const missing = hashes.filter((hash) => missingSet.has(hash));
+
+  return new Response(JSON.stringify({ missing }), {
+    status: 200,
+    headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+  });
+});
+
+export const createBlobUploadUrl = httpAction(async (ctx, request) => {
+  const userId = await authenticateApiRequest(ctx, request);
+  if (!userId) {
+    return new Response(JSON.stringify({ detail: "authentication required" }), {
+      status: 401,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+
+  const body = await readJsonBody(request);
+  const environmentId = typeof body?.environment_id === "string" ? body.environment_id.trim() : "";
+  if (!environmentId) {
+    return new Response(JSON.stringify({ detail: "environment_id is required" }), {
+      status: 400,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+
+  const ownedEnvironment = await requireOwnedEnvironment(ctx, userId, environmentId);
+  if (!ownedEnvironment) {
+    return new Response(JSON.stringify({ detail: "environment not found" }), {
+      status: 404,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+
+  const kind = parseSyncKind(body?.kind);
+  if (!kind) {
+    return new Response(JSON.stringify({ detail: "kind must be one of: code, data" }), {
+      status: 400,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+
+  const sha256 = normalizeSha256(body?.sha256);
+  if (!sha256) {
+    return new Response(JSON.stringify({ detail: "sha256 must be a valid sha256 hex value" }), {
+      status: 400,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+  const sizeBytes = parseSizeBytes(body?.size_bytes);
+  if (sizeBytes === null) {
+    return new Response(JSON.stringify({ detail: "size_bytes must be a positive integer" }), {
+      status: 400,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+  const maxSizeBytes = blobLimitByKind(kind);
+  if (sizeBytes > maxSizeBytes) {
+    return new Response(JSON.stringify({ detail: `${kind} blob exceeds limit of ${maxSizeBytes} bytes` }), {
+      status: 413,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+
+  try {
+    const key = buildBlobObjectKey(userId, sha256);
+    const upload = await r2.generateUploadUrl(key);
+    return new Response(
+      JSON.stringify({
+        key: upload.key,
+        url: upload.url,
+        environment_id: environmentId,
+        data_id: ownedEnvironment.dataId,
+      }),
+      {
+        status: 200,
+        headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+      },
+    );
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : "failed to generate blob upload URL";
+    return new Response(JSON.stringify({ detail }), {
+      status: 400,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+});
+
+export const createManifestUploadUrl = httpAction(async (ctx, request) => {
+  const userId = await authenticateApiRequest(ctx, request);
+  if (!userId) {
+    return new Response(JSON.stringify({ detail: "authentication required" }), {
+      status: 401,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+
+  const body = await readJsonBody(request);
+  const environmentId = typeof body?.environment_id === "string" ? body.environment_id.trim() : "";
+  if (!environmentId) {
+    return new Response(JSON.stringify({ detail: "environment_id is required" }), {
+      status: 400,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+
+  const ownedEnvironment = await requireOwnedEnvironment(ctx, userId, environmentId);
+  if (!ownedEnvironment) {
+    return new Response(JSON.stringify({ detail: "environment not found" }), {
+      status: 404,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+
+  const kind = parseSyncKind(body?.kind);
+  if (!kind) {
+    return new Response(JSON.stringify({ detail: "kind must be one of: code, data" }), {
+      status: 400,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+
+  const manifestHash = normalizeSha256(body?.manifest_hash);
+  if (!manifestHash) {
+    return new Response(JSON.stringify({ detail: "manifest_hash must be a valid sha256 hex value" }), {
+      status: 400,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+  const sizeBytes = parseSizeBytes(body?.size_bytes);
+  if (sizeBytes === null) {
+    return new Response(JSON.stringify({ detail: "size_bytes must be a positive integer" }), {
+      status: 400,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+  const maxSizeBytes = manifestLimitByKind(kind);
+  if (sizeBytes > maxSizeBytes) {
+    return new Response(JSON.stringify({ detail: `${kind} manifest exceeds limit of ${maxSizeBytes} bytes` }), {
+      status: 413,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+
+  try {
+    const key = buildManifestObjectKey(userId, environmentId, ownedEnvironment.dataId, kind, manifestHash);
+    const upload = await r2.generateUploadUrl(key);
+    return new Response(
+      JSON.stringify({
+        key: upload.key,
+        url: upload.url,
+        environment_id: environmentId,
+        data_id: ownedEnvironment.dataId,
+      }),
+      {
+        status: 200,
+        headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+      },
+    );
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : "failed to generate manifest upload URL";
+    return new Response(JSON.stringify({ detail }), {
+      status: 400,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+});
+
+export const commitSync = httpAction(async (ctx, request) => {
+  const userId = await authenticateApiRequest(ctx, request);
+  if (!userId) {
+    return new Response(JSON.stringify({ detail: "authentication required" }), {
+      status: 401,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+
+  const body = await readJsonBody(request);
+  const environmentId = typeof body?.environment_id === "string" ? body.environment_id.trim() : "";
+  if (!environmentId) {
+    return new Response(JSON.stringify({ detail: "environment_id is required" }), {
+      status: 400,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+
+  const codeManifestHashRaw =
+    typeof body?.code_manifest_hash === "string" ? body.code_manifest_hash : undefined;
+  const dataManifestHashRaw =
+    typeof body?.data_manifest_hash === "string" ? body.data_manifest_hash : undefined;
+  // Legacy payload keys (`code_manifest`, `data_manifest`) are tolerated
+  // but no longer required. Validation now uses uploaded manifest objects.
+  const codeManifestHash =
+    typeof codeManifestHashRaw === "undefined" ? undefined : (normalizeSha256(codeManifestHashRaw) ?? undefined);
+  const dataManifestHash =
+    typeof dataManifestHashRaw === "undefined" ? undefined : (normalizeSha256(dataManifestHashRaw) ?? undefined);
+
+  if (
+    (typeof codeManifestHashRaw !== "undefined" && !codeManifestHash) ||
+    (typeof dataManifestHashRaw !== "undefined" && !dataManifestHash)
+  ) {
+    return new Response(JSON.stringify({ detail: "manifest hashes must be valid sha256 hex values" }), {
+      status: 400,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+
+  if (!codeManifestHash && !dataManifestHash) {
+    return new Response(
+      JSON.stringify({ detail: "at least one of code_manifest_hash or data_manifest_hash is required" }),
+      {
+        status: 400,
+        headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+      },
+    );
+  }
+  const typedEnvironmentId = environmentId as Id<"environments">;
+  const ownedEnvironment = await requireOwnedEnvironment(ctx, userId, environmentId);
+  if (!ownedEnvironment) {
+    return new Response(JSON.stringify({ detail: "environment not found" }), {
+      status: 404,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+
+  if (codeManifestHash) {
+    const codeManifestKey = buildManifestObjectKey(
+      userId,
+      environmentId,
+      ownedEnvironment.dataId,
+      "code",
+      codeManifestHash,
+    );
+    const exists = await objectExistsWithMetadataSync(ctx, codeManifestKey);
+    if (!exists) {
+      return new Response(JSON.stringify({ detail: "code manifest not found in object storage" }), {
+        status: 400,
+        headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+      });
+    }
+    try {
+      await fetchManifestFromR2(ctx, codeManifestKey, "code", codeManifestHash);
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : "code manifest validation failed";
+      return new Response(JSON.stringify({ detail }), {
+        status: 400,
+        headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+      });
+    }
+  }
+  if (dataManifestHash) {
+    const dataManifestKey = buildManifestObjectKey(
+      userId,
+      environmentId,
+      ownedEnvironment.dataId,
+      "data",
+      dataManifestHash,
+    );
+    const exists = await objectExistsWithMetadataSync(ctx, dataManifestKey);
+    if (!exists) {
+      return new Response(JSON.stringify({ detail: "data manifest not found in object storage" }), {
+        status: 400,
+        headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+      });
+    }
+    try {
+      await fetchManifestFromR2(ctx, dataManifestKey, "data", dataManifestHash);
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : "data manifest validation failed";
+      return new Response(JSON.stringify({ detail }), {
+        status: 400,
+        headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+      });
+    }
+  }
+
+  try {
+    const data = await ctx.runMutation(internal.environments.internalCommitSyncPointers, {
+      userId,
+      environmentId: typedEnvironmentId,
+      code_manifest_hash: codeManifestHash,
+      data_manifest_hash: dataManifestHash,
+    });
+    return new Response(JSON.stringify(data), {
+      status: 200,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : "failed to commit sync pointers";
+    return new Response(JSON.stringify({ detail }), {
+      status: 400,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+});
