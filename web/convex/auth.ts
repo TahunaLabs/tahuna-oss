@@ -18,6 +18,9 @@ const apiKeyListItemValidator = v.object({
   _creationTime: v.number(),
   name: v.string(),
   keyPrefix: v.string(),
+  machineId: v.optional(v.string()),
+  status: v.union(v.literal("active"), v.literal("expired"), v.literal("revoked")),
+  expiresAt: v.number(),
   lastUsedAt: v.optional(v.number()),
   revokedAt: v.optional(v.number()),
 });
@@ -167,6 +170,7 @@ export const listApiKeys = query({
   returns: v.array(apiKeyListItemValidator),
   handler: async (ctx) => {
     const user = await requireUser(ctx);
+    const now = Date.now();
 
     const keys = await ctx.db
       .query("apiKeys")
@@ -174,14 +178,22 @@ export const listApiKeys = query({
       .order("desc")
       .collect();
 
-    return keys.map((key) => ({
-      _id: key._id,
-      _creationTime: key._creationTime,
-      name: key.name,
-      keyPrefix: key.keyPrefix,
-      lastUsedAt: key.lastUsedAt,
-      revokedAt: key.revokedAt,
-    }));
+    return keys.map((key) => {
+      const expiresAt = key._creationTime + KEY_EXPIRY_MS;
+      const status: "active" | "expired" | "revoked" =
+        key.revokedAt ? "revoked" : now > expiresAt ? "expired" : "active";
+      return {
+        _id: key._id,
+        _creationTime: key._creationTime,
+        name: key.name,
+        keyPrefix: key.keyPrefix,
+        machineId: key.machineId,
+        status,
+        expiresAt,
+        lastUsedAt: key.lastUsedAt,
+        revokedAt: key.revokedAt,
+      };
+    });
   },
 });
 

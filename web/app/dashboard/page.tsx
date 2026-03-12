@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Notice } from "@/components/ui/notice"
+import { Select } from "@/components/ui/select"
 import { PageLoader } from "@/components/ui/spinner"
 import { Switch } from "@/components/ui/switch"
 import {
@@ -22,8 +23,10 @@ import type { Id } from "@convex/_generated/dataModel"
 import { authClient } from "@/lib/auth-client"
 import { useConvexAuth, useMutation, useQuery } from "convex/react"
 import {
+  Monitor,
   Database,
   Download,
+  ExternalLink,
   LogOut,
   Moon,
   Play,
@@ -31,18 +34,34 @@ import {
   Sun,
   Trash2,
 } from "lucide-react"
+import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useEffect, useState, type ComponentType, type FormEvent, type ReactNode } from "react"
 
 type MainSection = "data" | "environments" | "runs"
 
-type DataBlob = {
-  blob_id: string
-  filename: string
+type StorageItem = {
+  id: string
+  source: "data" | "run_artifact"
   key: string
+  name: string
+  path: string
   size: number
   download_url: string
   created_at: number
+  run_id?: string
+  data_blob_id?: string
+}
+
+type StorageSort = "created_desc" | "created_asc" | "name_asc" | "name_desc" | "size_desc" | "size_asc"
+
+type StorageListResult = {
+  items: StorageItem[]
+  total: number
+  offset: number
+  limit: number
+  has_more: boolean
+  next_offset: number | null
 }
 
 type EnvironmentRow = {
@@ -84,6 +103,7 @@ const FEATURE_ITEMS: SidebarItem[] = [
 ]
 
 const CANCELLABLE_STATUSES = new Set(["queued", "provisioning", "running", "cancelling"])
+const STORAGE_PAGE_LIMIT = 25
 
 function formatBytes(size: number) {
   if (size <= 0) return "0 B"
@@ -152,9 +172,20 @@ export default function DashboardPage() {
   const [selectedDataFiles, setSelectedDataFiles] = useState<File[]>([])
   const [uploadingData, setUploadingData] = useState(false)
   const [dataFileInputKey, setDataFileInputKey] = useState(0)
+  const [storageSourceFilter, setStorageSourceFilter] = useState<"all" | "data" | "run_artifact">("all")
+  const [storageSort, setStorageSort] = useState<StorageSort>("created_desc")
+  const [storageSearch, setStorageSearch] = useState("")
+  const [storageSearchDebounced, setStorageSearchDebounced] = useState("")
+  const [storageOffset, setStorageOffset] = useState(0)
 
   const currentUser = useQuery(api.auth.getCurrentUser)
-  const dataResult = useQuery(api.data.list) as { blobs: DataBlob[] } | undefined
+  const storageResult = useQuery(api.storage.list, {
+    source: storageSourceFilter,
+    sort: storageSort,
+    search: storageSearchDebounced.trim() || undefined,
+    offset: storageOffset,
+    limit: STORAGE_PAGE_LIMIT,
+  }) as StorageListResult | undefined
   const envResult = useQuery(api.environments.list) as { environments: EnvironmentRow[] } | undefined
   const runResult = useQuery(api.runs.list) as { runs: RunRow[] } | undefined
 
@@ -162,7 +193,6 @@ export default function DashboardPage() {
   const runs: RunRow[] = runResult?.runs ?? []
 
   const generateDataUploadUrlMutation = useMutation(api.data.generateUploadUrl)
-  const removeDataBlobMutation = useMutation(api.data.remove)
   const removeEnvMutation = useMutation(api.environments.remove)
   const createRunMutation = useMutation(api.runs.create)
   const cancelRunMutation = useMutation(api.runs.cancel)
@@ -170,8 +200,35 @@ export default function DashboardPage() {
 
   const userEmail = currentUser?.email ?? ""
   const userInitial = userEmail.trim().charAt(0).toUpperCase() || "U"
-  const dataBlobs: DataBlob[] = dataResult?.blobs ?? []
+  const storageItems = storageResult?.items ?? []
+  const storageTotal = storageResult?.total ?? 0
+  const storageHasMore = storageResult?.has_more ?? false
   const isDark = resolvedTheme === "dark"
+
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      setStorageSearchDebounced(storageSearch)
+    }, 250)
+    return () => clearTimeout(timeout)
+  }, [storageSearch])
+
+  useEffect(() => {
+    setStorageOffset(0)
+  }, [storageSearchDebounced, storageSort, storageSourceFilter])
+
+  useEffect(() => {
+    if (!storageResult) return
+    if (storageTotal === 0 && storageOffset !== 0) {
+      setStorageOffset(0)
+      return
+    }
+    if (storageOffset >= storageTotal && storageTotal > 0) {
+      const previousPage = Math.max(0, Math.floor((storageTotal - 1) / STORAGE_PAGE_LIMIT) * STORAGE_PAGE_LIMIT)
+      if (previousPage !== storageOffset) {
+        setStorageOffset(previousPage)
+      }
+    }
+  }, [storageOffset, storageResult, storageTotal])
 
   async function withBusy(task: () => Promise<void>) {
     setBusy(true)
@@ -226,13 +283,6 @@ export default function DashboardPage() {
     }
   }
 
-  async function deleteDataBlob(key: string, blobId: string) {
-    await withBusy(async () => {
-      await removeDataBlobMutation({ key })
-      setMessage(`Deleted ${blobId}.`)
-    })
-  }
-
   async function deleteEnvironment(environmentId: Id<"environments">) {
     await withBusy(async () => {
       await removeEnvMutation({ environmentId })
@@ -256,7 +306,7 @@ export default function DashboardPage() {
 
   async function logout() {
     await authClient.signOut()
-    router.replace("/auth")
+    router.replace("/login")
   }
 
   if (authLoading || !isAuthenticated) {
@@ -312,6 +362,15 @@ export default function DashboardPage() {
             activeSection={activeSection}
             onSelect={setActiveSection}
           />
+
+          <div className="px-2 pt-2">
+            <Button asChild type="button" variant="dashboard-nav" size="none">
+              <Link href="/machines">
+                <Monitor className="h-[15px] w-[15px]" />
+                Machines
+              </Link>
+            </Button>
+          </div>
 
           <div className="mt-auto pt-2">
             <Button
@@ -369,47 +428,112 @@ export default function DashboardPage() {
                       {uploadingData ? "Uploading..." : "Ingest data"}
                     </Button>
                   </form>
+
+                  <div className="mt-4 border-t border-border pt-3">
+                    <h4 className="text-sm font-semibold">Browse storage</h4>
+                    <div className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-3">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="storage-search">Search</Label>
+                        <Input
+                          id="storage-search"
+                          variant="dashboard"
+                          value={storageSearch}
+                          onChange={(event) => setStorageSearch(event.target.value)}
+                          placeholder="File, path, run ID, or data ID"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="storage-source">Source</Label>
+                        <Select
+                          id="storage-source"
+                          variant="dashboard"
+                          value={storageSourceFilter}
+                          onChange={(event) => setStorageSourceFilter(event.target.value as "all" | "data" | "run_artifact")}
+                        >
+                          <option value="all">All</option>
+                          <option value="data">Data uploads</option>
+                          <option value="run_artifact">Run artifacts</option>
+                        </Select>
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="storage-sort">Sort</Label>
+                        <Select
+                          id="storage-sort"
+                          variant="dashboard"
+                          value={storageSort}
+                          onChange={(event) => setStorageSort(event.target.value as StorageSort)}
+                        >
+                          <option value="created_desc">Newest first</option>
+                          <option value="created_asc">Oldest first</option>
+                          <option value="name_asc">Name A-Z</option>
+                          <option value="name_desc">Name Z-A</option>
+                          <option value="size_desc">Largest first</option>
+                          <option value="size_asc">Smallest first</option>
+                        </Select>
+                      </div>
+                    </div>
+                  </div>
                 </Card>
 
-                {dataBlobs.length === 0 ? (
-                  <BottomHalfEmptyMessage>No ingested files yet.</BottomHalfEmptyMessage>
+                {storageResult === undefined ? (
+                  <BottomHalfEmptyMessage>Loading storage...</BottomHalfEmptyMessage>
+                ) : storageItems.length === 0 ? (
+                  <BottomHalfEmptyMessage>
+                    {storageSearch.trim() || storageSourceFilter !== "all"
+                      ? "No storage items match your current filters."
+                      : "No storage items yet."}
+                  </BottomHalfEmptyMessage>
                 ) : (
                   <Card variant="dashboard" className="h-full overflow-hidden">
                     <Table variant="dashboard">
                       <TableHeader variant="dashboard">
                         <TableRow variant="dashboard-head">
-                          <TableHead variant="dashboard">File</TableHead>
+                          <TableHead variant="dashboard">Name</TableHead>
+                          <TableHead variant="dashboard">Source</TableHead>
                           <TableHead variant="dashboard">Size</TableHead>
-                          <TableHead variant="dashboard">Uploaded</TableHead>
+                          <TableHead variant="dashboard">Created</TableHead>
+                          <TableHead variant="dashboard">Reference</TableHead>
                           <TableHead variant="dashboard">Actions</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {dataBlobs.map((blob) => (
-                          <TableRow key={blob.key} variant="dashboard">
-                            <TableCell variant="dashboard">{blob.filename}</TableCell>
-                            <TableCell variant="dashboard" className="text-muted-foreground">
-                              {formatBytes(blob.size)}
+                        {storageItems.map((item) => (
+                          <TableRow key={item.id} variant="dashboard">
+                            <TableCell variant="dashboard">
+                              <div className="min-w-0">
+                                <p className="truncate">{item.name}</p>
+                                <p className="mt-0.5 truncate font-mono text-[11px] text-muted-foreground">{item.path}</p>
+                              </div>
+                            </TableCell>
+                            <TableCell variant="dashboard">
+                              {item.source === "data" ? (
+                                <Badge variant="dashboard-run-status">Data</Badge>
+                              ) : (
+                                <Badge variant="dashboard-run-status">Run artifact</Badge>
+                              )}
                             </TableCell>
                             <TableCell variant="dashboard" className="text-muted-foreground">
-                              {new Date(blob.created_at).toLocaleString()}
+                              {formatBytes(item.size)}
+                            </TableCell>
+                            <TableCell variant="dashboard" className="text-muted-foreground">
+                              {new Date(item.created_at).toLocaleString()}
+                            </TableCell>
+                            <TableCell variant="dashboard" className="font-mono text-xs text-muted-foreground">
+                              {item.source === "data" ? item.data_blob_id || "—" : item.run_id || "—"}
                             </TableCell>
                             <TableCell variant="dashboard">
                               <div className="flex items-center gap-2">
                                 <Button asChild type="button" variant="dashboard-outline" size="none">
-                                  <a href={blob.download_url} target="_blank" rel="noreferrer">
-                                    <Download className="h-3.5 w-3.5" />
+                                  <a href={item.download_url} target="_blank" rel="noreferrer">
+                                    <ExternalLink className="h-3.5 w-3.5" />
                                     Open
                                   </a>
                                 </Button>
-                                <Button
-                                  type="button"
-                                  variant="dashboard-outline-icon"
-                                  size="none"
-                                  onClick={() => deleteDataBlob(blob.key, blob.blob_id)}
-                                  disabled={busy}
-                                >
-                                  <Trash2 className="h-3.5 w-3.5" />
+                                <Button asChild type="button" variant="dashboard-outline" size="none">
+                                  <a href={item.download_url} download={item.name}>
+                                    <Download className="h-3.5 w-3.5" />
+                                    Download
+                                  </a>
                                 </Button>
                               </div>
                             </TableCell>
@@ -417,6 +541,31 @@ export default function DashboardPage() {
                         ))}
                       </TableBody>
                     </Table>
+                    <div className="flex items-center justify-between border-t border-border px-3 py-2.5 text-sm text-muted-foreground">
+                      <span>
+                        Showing {storageTotal === 0 ? 0 : storageOffset + 1}-{storageOffset + storageItems.length} of {storageTotal}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          type="button"
+                          variant="dashboard-outline"
+                          size="none"
+                          disabled={storageOffset === 0}
+                          onClick={() => setStorageOffset((current) => Math.max(0, current - STORAGE_PAGE_LIMIT))}
+                        >
+                          Previous
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="dashboard-outline"
+                          size="none"
+                          disabled={!storageHasMore}
+                          onClick={() => setStorageOffset((current) => current + STORAGE_PAGE_LIMIT)}
+                        >
+                          Next
+                        </Button>
+                      </div>
+                    </div>
                   </Card>
                 )}
               </section>

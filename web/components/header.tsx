@@ -48,7 +48,7 @@ export function Header() {
             </Link>
           ))}
           <Button variant="pill" size="sm" asChild className="px-5 py-2 h-auto">
-            <Link href="/auth">
+            <Link href="/login">
               Sign In
             </Link>
           </Button>
@@ -81,7 +81,7 @@ export function Header() {
             </Link>
           ))}
           <Button variant="pill" asChild className="w-full justify-center px-5 py-2 h-auto">
-            <Link href="/auth" onClick={() => setMobileMenuOpen(false)}>
+            <Link href="/login" onClick={() => setMobileMenuOpen(false)}>
               Sign In
             </Link>
           </Button>

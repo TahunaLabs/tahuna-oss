@@ -33,7 +33,7 @@ export default function CliAuthPage() {
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
       const redirectPath = `/auth/cli?state=${encodeURIComponent(state)}&callback=${encodeURIComponent(callback)}&machine=${encodeURIComponent(machine)}`
-      router.replace(`/auth?redirect=${encodeURIComponent(redirectPath)}`)
+      router.replace(`/login?redirect=${encodeURIComponent(redirectPath)}`)
     }
   }, [callback, isAuthenticated, isLoading, router, state])
 

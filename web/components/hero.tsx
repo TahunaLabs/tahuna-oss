@@ -28,7 +28,7 @@ export function Hero() {
             </p>
 
             <Button variant="pill" size="lg" asChild className="mt-8 px-8 py-3.5 h-auto bg-primary/15 text-primary border-primary/30 hover:bg-primary/25">
-              <Link href="/auth">
+              <Link href="/login">
                 Get Started
                 <ArrowRight className="h-4 w-4" />
               </Link>
