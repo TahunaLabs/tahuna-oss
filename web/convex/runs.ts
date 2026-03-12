@@ -16,7 +16,6 @@ import { requireUser } from "@convex/auth";
 import { R2 } from "@convex-dev/r2";
 import { HeadObjectCommand } from "@aws-sdk/client-s3";
 import { images } from "./catalog";
-import { shortId } from "@convex/ids";
 import { RUN_CONFIG, SYNC_CONFIG } from "../config";
 
 const RUN_STATUS = {
@@ -317,10 +316,6 @@ function toRunResponse(row: Doc<"runs">) {
   };
 }
 
-function generateDefaultRunName() {
-  return shortId("run");
-}
-
 function normalizeRuntimeLevel(level: string | undefined) {
   const trimmed = (level || "").trim().toLowerCase();
   if (trimmed === "debug" || trimmed === "warn" || trimmed === "warning" || trimmed === "error") {
@@ -498,43 +493,17 @@ async function fetchManifest(
 function blobKeys(
   payload: {
     user_id: string;
-    environment_id: string;
-    data_manifest_key: string | null;
   },
-  kind: SyncKind,
+  _kind: SyncKind,
   sha256: string,
 ) {
-  const keys = [`${payload.user_id}/blobs/${sha256}`];
-  if (kind === "code") {
-    keys.push(`${payload.user_id}/environment/${payload.environment_id}/blobs/code/${sha256}`);
-    return keys;
-  }
-  const dataKey = payload.data_manifest_key;
-  if (!dataKey) {
-    throw new Error("data manifest key is missing");
-  }
-  const marker = "/manifests/";
-  const markerIndex = dataKey.indexOf(marker);
-  if (markerIndex <= 0) {
-    throw new Error("invalid data manifest key");
-  }
-  keys.push(`${dataKey.slice(0, markerIndex)}/blobs/${sha256}`);
-  return keys;
+  return [`${payload.user_id}/blobs/${sha256}`];
 }
 
 function summarizeManifest(manifest: SyncManifestPayload) {
   return {
     fileCount: manifest.entries.length,
     totalBytes: manifest.entries.reduce((sum, entry) => sum + entry.size, 0),
-  };
-}
-
-function emptyDataManifest(): SyncManifestPayload {
-  return {
-    version: 1,
-    type: "data",
-    created_at: Date.now(),
-    entries: [],
   };
 }
 
@@ -1577,14 +1546,12 @@ async function cancelRunForUserId(
     return { cancel_requested: true, forced: force, run_id: String(runId) };
   }
 
-  if (row.podId) {
-    const terminationDelayMs = force ? 0 : RUN_CONFIG.cancellationGraceSeconds * 1000;
-    await ctx.scheduler.runAfter(terminationDelayMs, internal.runs.internalTerminatePod, {
-      runId,
-      podId: row.podId,
-      force,
-    });
-  }
+  const terminationDelayMs = force ? 0 : RUN_CONFIG.cancellationGraceSeconds * 1000;
+  await ctx.scheduler.runAfter(terminationDelayMs, internal.runs.internalTerminatePod, {
+    runId,
+    podId: row.podId,
+    force,
+  });
 
   await ctx.db.patch("runs", runId, {
     status: RUN_STATUS.CANCELLING,

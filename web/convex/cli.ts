@@ -85,10 +85,6 @@ type CatalogGpuRow = {
 };
 type RuntimeStatus = (typeof RUNTIME_STATUS_VALUES)[number];
 
-function environmentPrefix(userId: string) {
-  return `${userId}/environment/`;
-}
-
 function dataRootPrefix(userId: string) {
   return `${userId}/data/`;
 }
@@ -97,15 +93,8 @@ function dataPrefix(userId: string, dataId: string) {
   return `${dataRootPrefix(userId)}${dataId}/`;
 }
 
-function blobPrefix(userId: string, environmentId: string, dataId: string, kind: SyncKind) {
+function blobPrefix(userId: string) {
   return `${userId}/blobs/`;
-}
-
-function legacyBlobPrefix(userId: string, environmentId: string, dataId: string, kind: SyncKind) {
-  if (kind === "data") {
-    return `${dataPrefix(userId, dataId)}blobs/`;
-  }
-  return `${userId}/environment/${environmentId}/blobs/${kind}/`;
 }
 
 function manifestPrefix(userId: string, environmentId: string, dataId: string, kind: SyncKind) {
@@ -115,12 +104,8 @@ function manifestPrefix(userId: string, environmentId: string, dataId: string, k
   return `${userId}/environment/${environmentId}/manifests/${kind}/`;
 }
 
-function buildBlobObjectKey(userId: string, environmentId: string, dataId: string, kind: SyncKind, sha256: string) {
-  return `${blobPrefix(userId, environmentId, dataId, kind)}${sha256}`;
-}
-
-function buildLegacyBlobObjectKey(userId: string, environmentId: string, dataId: string, kind: SyncKind, sha256: string) {
-  return `${legacyBlobPrefix(userId, environmentId, dataId, kind)}${sha256}`;
+function buildBlobObjectKey(userId: string, sha256: string) {
+  return `${blobPrefix(userId)}${sha256}`;
 }
 
 function buildManifestObjectKey(
@@ -696,11 +681,9 @@ export const listMissingBlobHashes = httpAction(async (ctx, request) => {
           return;
         }
         const hash = hashes[index];
-        const key = buildBlobObjectKey(userId, environmentId, ownedEnvironment.dataId, kind, hash);
-        const legacyKey = buildLegacyBlobObjectKey(userId, environmentId, ownedEnvironment.dataId, kind, hash);
+        const key = buildBlobObjectKey(userId, hash);
         const exists = await objectExistsWithMetadataSync(ctx, key, 2);
-        const legacyExists = exists ? false : await objectExistsWithMetadataSync(ctx, legacyKey, 2);
-        if (!exists && !legacyExists) {
+        if (!exists) {
           missingSet.add(hash);
         }
       }
@@ -771,7 +754,7 @@ export const createBlobUploadUrl = httpAction(async (ctx, request) => {
   }
 
   try {
-    const key = buildBlobObjectKey(userId, environmentId, ownedEnvironment.dataId, kind, sha256);
+    const key = buildBlobObjectKey(userId, sha256);
     const upload = await r2.generateUploadUrl(key);
     return new Response(JSON.stringify({
       key: upload.key,
