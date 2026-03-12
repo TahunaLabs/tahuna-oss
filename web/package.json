@@ -9,8 +9,7 @@
     "convex:deploy": "convex deploy",
     "convex:dev": "convex dev",
     "dev": "next dev",
-    "lint": "bun run lint:convex-consistency && bunx tsc --noEmit --noUnusedLocals --noUnusedParameters",
-    "lint:convex-consistency": "node ./scripts/lint-convex-consistency.mjs",
+    "lint": "eslint . --max-warnings=0 && bunx tsc --noEmit --noUnusedLocals --noUnusedParameters",
     "start": "next start"
   },
   "dependencies": {
@@ -73,10 +72,12 @@
     "zod": "3.25.76"
   },
   "devDependencies": {
+    "@typescript-eslint/parser": "^8.46.1",
     "@tailwindcss/postcss": "^4.1.9",
     "@types/node": "^22",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "eslint": "^9.39.1",
     "baseline-browser-mapping": "^2.10.0",
     "postcss": "^8.5",
     "tailwindcss": "^4.1.9",
