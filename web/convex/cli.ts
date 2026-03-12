@@ -1173,10 +1173,6 @@ async function handleBindEnvironmentData(ctx: ActionCtx, request: Request) {
   }
 }
 
-export const bindEnvironmentData = httpAction(async (ctx, request) => {
-  return handleBindEnvironmentData(ctx, request);
-});
-
 async function handleUnbindEnvironmentData(ctx: ActionCtx, request: Request) {
   const userId = await authenticateApiRequest(ctx, request);
   if (!userId) {
@@ -1225,10 +1221,6 @@ async function handleUnbindEnvironmentData(ctx: ActionCtx, request: Request) {
     });
   }
 }
-
-export const unbindEnvironmentData = httpAction(async (ctx, request) => {
-  return handleUnbindEnvironmentData(ctx, request);
-});
 
 export const createRunFromEnvironment = httpAction(async (ctx, request) => {
   const path = new URL(request.url).pathname;
@@ -1789,7 +1781,3 @@ async function handleCancelRun(ctx: ActionCtx, request: Request) {
     });
   }
 }
-
-export const cancelRun = httpAction(async (ctx, request) => {
-  return handleCancelRun(ctx, request);
-});
