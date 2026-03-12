@@ -2253,29 +2253,6 @@ export const ingestRuntimeStatus = internalMutation({
   },
 });
 
-export const completeRun = internalMutation({
-  args: { runId: v.id("runs") },
-  returns: v.null(),
-  handler: async (ctx, args) => {
-    const row = await ctx.db.get("runs", args.runId);
-    if (!row || TERMINAL_STATUSES.has(row.status)) {
-      return null;
-    }
-
-    const terminal = row.cancellationRequested ? RUN_STATUS.CANCELLED : RUN_STATUS.COMPLETED;
-    await ctx.db.patch("runs", args.runId, {
-      status: terminal,
-      runtimeTokenHash: "revoked",
-    });
-    await ctx.db.insert("runEvents", {
-      runId: args.runId,
-      status: terminal,
-      message: terminal === RUN_STATUS.COMPLETED ? "run completed" : "run cancelled",
-    });
-    return null;
-  },
-});
-
 export const ingestRuntimeArtifacts = internalMutation({
   args: {
     runId: v.id("runs"),
