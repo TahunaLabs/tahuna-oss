@@ -5,6 +5,17 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Notice } from "@/components/ui/notice"
 import { StatusDot } from "@/components/ui/status-dot"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { api } from "@convex/_generated/api"
 import type { Id } from "@convex/_generated/dataModel"
@@ -38,7 +49,6 @@ export default function MachinesPage() {
 
   const [message, setMessage] = useState("")
   const [error, setError] = useState("")
-  const [confirmRevokeId, setConfirmRevokeId] = useState<Id<"apiKeys"> | null>(null)
   const [revokingId, setRevokingId] = useState<Id<"apiKeys"> | null>(null)
 
   const enrichedKeys = keys ?? []
@@ -53,7 +63,6 @@ export default function MachinesPage() {
     setError("")
     try {
       await revokeApiKeyMutation({ id })
-      setConfirmRevokeId(null)
       setMessage(`Revoked ${name}.`)
     } catch (revokeError) {
       setError(revokeError instanceof Error ? revokeError.message : "Failed to revoke key.")
@@ -133,7 +142,6 @@ export default function MachinesPage() {
                 {enrichedKeys.map((key) => {
                   const isActive = key.status === "active"
                   const isBusy = revokingId === key._id
-                  const isConfirming = confirmRevokeId === key._id
                   return (
                     <TableRow key={key._id} variant="dashboard">
                       <TableCell variant="dashboard" className="font-medium">
@@ -159,42 +167,39 @@ export default function MachinesPage() {
                       </TableCell>
                       <TableCell variant="dashboard">
                         {isActive ? (
-                          isConfirming ? (
-                            <div className="flex items-center gap-2">
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
                               <Button
                                 type="button"
                                 variant="dashboard-outline"
                                 size="none"
                                 disabled={isBusy}
-                                onClick={() => revokeKey(key._id, key.name)}
+                                onClick={() => {
+                                  setMessage("")
+                                  setError("")
+                                }}
                               >
-                                {isBusy ? "Revoking..." : "Confirm revoke"}
+                                Revoke
                               </Button>
-                              <Button
-                                type="button"
-                                variant="dashboard-outline-icon"
-                                size="none"
-                                disabled={isBusy}
-                                onClick={() => setConfirmRevokeId(null)}
-                              >
-                                Cancel
-                              </Button>
-                            </div>
-                          ) : (
-                            <Button
-                              type="button"
-                              variant="dashboard-outline"
-                              size="none"
-                              disabled={isBusy}
-                              onClick={() => {
-                                setConfirmRevokeId(key._id)
-                                setMessage("")
-                                setError("")
-                              }}
-                            >
-                              Revoke
-                            </Button>
-                          )
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Revoke machine session?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  Session <code>{key.name}</code> ({key.machineId || "unknown machine"}) will lose API access immediately and must run <code>tahuna login</code> again.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Keep session</AlertDialogCancel>
+                                <AlertDialogAction
+                                  onClick={() => revokeKey(key._id, key.name)}
+                                  disabled={isBusy}
+                                >
+                                  {isBusy ? "Revoking..." : "Revoke session"}
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
                         ) : (
                           <span className="text-sm text-muted-foreground">—</span>
                         )}

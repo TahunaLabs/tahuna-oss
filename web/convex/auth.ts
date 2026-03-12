@@ -5,7 +5,7 @@ import { emailOTP } from "better-auth/plugins";
 import { ConvexError, v } from "convex/values";
 import { components } from "@convex/_generated/api";
 import type { DataModel } from "@convex/_generated/dataModel";
-import { mutation, query, type ActionCtx, type MutationCtx, type QueryCtx } from "@convex/_generated/server";
+import { internalMutation, mutation, query, type ActionCtx, type MutationCtx, type QueryCtx } from "@convex/_generated/server";
 import authConfig from "@convex/auth.config";
 import { sha256Hex } from "@convex/crypto";
 import { shortId } from "@convex/ids";
@@ -134,9 +134,9 @@ export const createApiKey = mutation({
   },
 });
 
-export const authByApiKey = mutation({
+export const authByApiKey = query({
   args: { apiKey: v.string() },
-  returns: v.union(v.object({ userId: v.string() }), v.null()),
+  returns: v.union(v.object({ userId: v.string(), keyId: v.id("apiKeys"), lastUsedAt: v.optional(v.number()) }), v.null()),
   handler: async (ctx, args) => {
     const apiKey = args.apiKey.trim();
     if (!apiKey) {
@@ -156,12 +156,35 @@ export const authByApiKey = mutation({
     if (Date.now() - key._creationTime > KEY_EXPIRY_MS) {
       return null;
     }
-    await ctx.db.patch("apiKeys", key._id, {
-      lastUsedAt: Date.now(),
-    });
     return {
       userId: key.userId,
+      keyId: key._id,
+      lastUsedAt: key.lastUsedAt,
     };
+  },
+});
+
+export const internalTouchApiKeyLastUsed = internalMutation({
+  args: {
+    keyId: v.id("apiKeys"),
+    at: v.optional(v.number()),
+  },
+  returns: v.object({
+    touched: v.boolean(),
+    lastUsedAt: v.optional(v.number()),
+  }),
+  handler: async (ctx, args) => {
+    const key = await ctx.db.get("apiKeys", args.keyId);
+    if (!key || key.revokedAt) {
+      return { touched: false, lastUsedAt: undefined };
+    }
+    // Throttle writes to reduce contention during parallel sync requests.
+    const now = typeof args.at === "number" && Number.isFinite(args.at) ? Math.floor(args.at) : Date.now();
+    if (typeof key.lastUsedAt === "number" && now-key.lastUsedAt < 60_000) {
+      return { touched: false, lastUsedAt: key.lastUsedAt };
+    }
+    await ctx.db.patch("apiKeys", args.keyId, { lastUsedAt: now });
+    return { touched: true, lastUsedAt: now };
   },
 });
 

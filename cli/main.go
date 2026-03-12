@@ -3578,6 +3578,9 @@ func monitorRunWithOptions(runID string, interval int, streamLogs bool) error {
 	lastStatus := ""
 	seenLogLines := map[string]struct{}{}
 	logFetchWarned := false
+	monitorStartedAt := time.Now()
+	lastLogSeenAt := monitorStartedAt
+	lastNoLogHintAt := time.Time{}
 
 	for {
 		resp, err := doJSON(http.MethodGet, "/runs/"+runID, nil)
@@ -3618,6 +3621,7 @@ func monitorRunWithOptions(runID string, interval int, streamLogs bool) error {
 					logFetchWarned = true
 				}
 			} else {
+				newLogCount := 0
 				for _, line := range parseRecentRunLogs(logResp) {
 					key := runtimeLogLineKey(line)
 					if _, exists := seenLogLines[key]; exists {
@@ -3625,6 +3629,24 @@ func monitorRunWithOptions(runID string, interval int, streamLogs bool) error {
 					}
 					seenLogLines[key] = struct{}{}
 					fmt.Println(formatRuntimeLogLine(line))
+					newLogCount++
+				}
+				if newLogCount > 0 {
+					lastLogSeenAt = time.Now()
+					lastNoLogHintAt = time.Time{}
+				}
+				if newLogCount == 0 && !isTerminalRunStatus(status) {
+					silentFor := time.Since(lastLogSeenAt)
+					if silentFor >= 30*time.Second && (lastNoLogHintAt.IsZero() || time.Since(lastNoLogHintAt) >= 30*time.Second) {
+						fmt.Printf(
+							"%sinfo:%s waiting for runtime logs (%ds since last log, %ds since monitor start)\n",
+							cAmpMuted,
+							cReset,
+							int(silentFor.Seconds()),
+							int(time.Since(monitorStartedAt).Seconds()),
+						)
+						lastNoLogHintAt = time.Now()
+					}
 				}
 			}
 
@@ -4342,9 +4364,9 @@ func browserBaseURL() string {
 func runDashboardURL(runID string) string {
 	base := strings.TrimRight(browserBaseURL(), "/")
 	if strings.TrimSpace(runID) == "" {
-		return base + "/runs"
+		return base + "/dashboard"
 	}
-	return fmt.Sprintf("%s/runs/%s", base, neturl.QueryEscape(runID))
+	return fmt.Sprintf("%s/dashboard/runs/%s", base, neturl.QueryEscape(runID))
 }
 
 func resolveLoginBrowserBaseURL() string {

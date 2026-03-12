@@ -11,6 +11,17 @@ import { Select } from "@/components/ui/select"
 import { PageLoader } from "@/components/ui/spinner"
 import { Switch } from "@/components/ui/switch"
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
+import {
   Table,
   TableBody,
   TableCell,
@@ -21,7 +32,7 @@ import {
 import { api } from "@convex/_generated/api"
 import type { Id } from "@convex/_generated/dataModel"
 import { authClient } from "@/lib/auth-client"
-import { useConvexAuth, useMutation, useQuery } from "convex/react"
+import { useAction, useConvexAuth, useMutation, useQuery } from "convex/react"
 import {
   Monitor,
   Database,
@@ -29,6 +40,7 @@ import {
   ExternalLink,
   LogOut,
   Moon,
+  Pencil,
   Play,
   Server,
   Sun,
@@ -36,7 +48,7 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { useEffect, useState, type ComponentType, type FormEvent, type ReactNode } from "react"
+import { useEffect, useMemo, useState, type ComponentType, type FormEvent, type ReactNode } from "react"
 
 type MainSection = "data" | "environments" | "runs"
 
@@ -66,12 +78,25 @@ type StorageListResult = {
 
 type EnvironmentRow = {
   environment_id: Id<"environments">
+  data_id: string
+  bound_data_ids: string[]
+  bound_data_manifest_hashes: string[]
   name: string
   gpu_type: string
   gpu_count: number
   volume_gb: number
   framework: string
   version: string
+}
+
+type DataBlobRow = {
+  blob_id: string
+  filename: string
+  key: string
+  content_type: string
+  size: number
+  download_url: string
+  created_at: number
 }
 
 type RunRow = {
@@ -104,6 +129,7 @@ const FEATURE_ITEMS: SidebarItem[] = [
 
 const CANCELLABLE_STATUSES = new Set(["queued", "provisioning", "running", "cancelling"])
 const STORAGE_PAGE_LIMIT = 25
+const MAX_ARTIFACT_NAME_CHARS = 255
 
 function formatBytes(size: number) {
   if (size <= 0) return "0 B"
@@ -119,6 +145,26 @@ function BottomHalfEmptyMessage({ children }: { children: ReactNode }) {
       <p className="px-5 text-center text-sm text-muted-foreground">{children}</p>
     </div>
   )
+}
+
+function validateArtifactRenameName(value: string) {
+  const name = value.trim()
+  if (!name) {
+    throw new Error("artifact name is required")
+  }
+  if (name.length > MAX_ARTIFACT_NAME_CHARS) {
+    throw new Error(`artifact name must be ${MAX_ARTIFACT_NAME_CHARS} characters or fewer`)
+  }
+  if (name === "." || name === "..") {
+    throw new Error("artifact name is invalid")
+  }
+  if (name.includes("/") || name.includes("\\")) {
+    throw new Error("artifact name must not include path separators")
+  }
+  if (/[\u0000-\u001f]/.test(name)) {
+    throw new Error("artifact name contains unsupported control characters")
+  }
+  return name
 }
 
 function SidebarSection({
@@ -178,6 +224,10 @@ export default function DashboardPage() {
   const [storageSearch, setStorageSearch] = useState("")
   const [storageSearchDebounced, setStorageSearchDebounced] = useState("")
   const [storageOffset, setStorageOffset] = useState(0)
+  const [renamingStorageId, setRenamingStorageId] = useState<string | null>(null)
+  const [artifactRenameDraft, setArtifactRenameDraft] = useState("")
+  const [artifactRenameBusyId, setArtifactRenameBusyId] = useState<string | null>(null)
+  const [bindSelectionByEnvironment, setBindSelectionByEnvironment] = useState<Record<string, string>>({})
   const shouldLoadQueries = !authLoading && isAuthenticated && !loggingOut
 
   const currentUser = useQuery(api.auth.getCurrentUser, shouldLoadQueries ? {} : "skip")
@@ -196,11 +246,15 @@ export default function DashboardPage() {
   const envResult = useQuery(api.environments.list, shouldLoadQueries ? {} : "skip") as
     | { environments: EnvironmentRow[] }
     | undefined
+  const dataResult = useQuery(api.data.list, shouldLoadQueries ? {} : "skip") as
+    | { blobs: DataBlobRow[] }
+    | undefined
   const runResult = useQuery(api.runs.list, shouldLoadQueries ? {} : "skip") as
     | { runs: RunRow[] }
     | undefined
 
   const environments: EnvironmentRow[] = envResult?.environments ?? []
+  const dataBlobs: DataBlobRow[] = dataResult?.blobs ?? []
   const runs: RunRow[] = runResult?.runs ?? []
 
   const generateDataUploadUrlMutation = useMutation(api.data.generateUploadUrl)
@@ -208,6 +262,9 @@ export default function DashboardPage() {
   const createRunMutation = useMutation(api.runs.create)
   const cancelRunMutation = useMutation(api.runs.cancel)
   const syncDataMetadataMutation = useMutation(api.data.syncMetadata)
+  const bindDataMutation = useMutation(api.environments.bindData)
+  const unbindDataMutation = useMutation(api.environments.unbindData)
+  const renameArtifactAction = useAction(api.storage.renameArtifact)
 
   const userEmail = currentUser?.email ?? ""
   const userInitial = userEmail.trim().charAt(0).toUpperCase() || "U"
@@ -215,6 +272,19 @@ export default function DashboardPage() {
   const storageTotal = storageResult?.total ?? 0
   const storageHasMore = storageResult?.has_more ?? false
   const isDark = resolvedTheme === "dark"
+  const uniqueDataBlobs = useMemo(() => {
+    const byId = new Map<string, DataBlobRow>()
+    for (const blob of dataBlobs) {
+      const existing = byId.get(blob.blob_id)
+      if (!existing || blob.created_at > existing.created_at) {
+        byId.set(blob.blob_id, blob)
+      }
+    }
+    return Array.from(byId.values()).sort((a, b) => b.created_at - a.created_at)
+  }, [dataBlobs])
+  const dataBlobsById = useMemo(() => {
+    return new Map(uniqueDataBlobs.map((blob) => [blob.blob_id, blob]))
+  }, [uniqueDataBlobs])
 
   useEffect(() => {
     const timeout = setTimeout(() => {
@@ -240,6 +310,15 @@ export default function DashboardPage() {
       }
     }
   }, [storageOffset, storageResult, storageTotal])
+
+  useEffect(() => {
+    if (!renamingStorageId) return
+    if (storageItems.some((item) => item.id === renamingStorageId)) {
+      return
+    }
+    setRenamingStorageId(null)
+    setArtifactRenameDraft("")
+  }, [renamingStorageId, storageItems])
 
   async function withBusy(task: () => Promise<void>) {
     setBusy(true)
@@ -313,6 +392,89 @@ export default function DashboardPage() {
       await cancelRunMutation({ runId, force: false })
       setMessage(`Run ${runId} cancellation requested.`)
     })
+  }
+
+  async function bindSelectedData(environment: EnvironmentRow) {
+    const selectedDataId = (bindSelectionByEnvironment[environment.environment_id] || "").trim()
+    if (!selectedDataId) {
+      setError("Select a dataset to bind.")
+      return
+    }
+    await withBusy(async () => {
+      await bindDataMutation({
+        environmentId: environment.environment_id,
+        data_ids: [selectedDataId],
+      })
+      setBindSelectionByEnvironment((current) => ({
+        ...current,
+        [environment.environment_id]: "",
+      }))
+      setMessage(`Bound ${selectedDataId} to environment ${environment.environment_id}.`)
+    })
+  }
+
+  async function unbindDataFromEnvironment(environmentId: Id<"environments">, dataId: string) {
+    await withBusy(async () => {
+      await unbindDataMutation({
+        environmentId,
+        data_ids: [dataId],
+      })
+      setMessage(`Unbound ${dataId} from environment ${environmentId}.`)
+    })
+  }
+
+  function startRenameArtifact(item: StorageItem) {
+    if (item.source !== "run_artifact") return
+    setError("")
+    setMessage("")
+    setRenamingStorageId(item.id)
+    setArtifactRenameDraft(item.name)
+  }
+
+  function cancelRenameArtifact() {
+    if (artifactRenameBusyId) return
+    setRenamingStorageId(null)
+    setArtifactRenameDraft("")
+  }
+
+  async function saveRenameArtifact(item: StorageItem) {
+    if (item.source !== "run_artifact" || !item.run_id) {
+      setError("only run artifacts can be renamed")
+      return
+    }
+    let nextName = ""
+    try {
+      nextName = validateArtifactRenameName(artifactRenameDraft)
+    } catch (renameValidationError) {
+      setError(renameValidationError instanceof Error ? renameValidationError.message : "invalid artifact name")
+      return
+    }
+    if (nextName === item.name) {
+      setError("new artifact name must differ from the current name")
+      return
+    }
+
+    setError("")
+    setMessage("")
+    setArtifactRenameBusyId(item.id)
+    try {
+      const renamed = await renameArtifactAction({
+        runId: item.run_id as Id<"runs">,
+        key: item.key,
+        name: nextName,
+      })
+      setRenamingStorageId(null)
+      setArtifactRenameDraft("")
+      setMessage(
+        renamed.cleanup_warning
+          ? `Renamed artifact to ${renamed.name}. Old object cleanup needs a retry.`
+          : `Renamed artifact to ${renamed.name}.`,
+      )
+    } catch (renameError) {
+      setError(renameError instanceof Error ? renameError.message : "failed to rename artifact")
+    } finally {
+      setArtifactRenameBusyId(null)
+    }
   }
 
   async function logout() {
@@ -541,20 +703,68 @@ export default function DashboardPage() {
                               {item.source === "data" ? item.data_blob_id || "—" : item.run_id || "—"}
                             </TableCell>
                             <TableCell variant="dashboard">
-                              <div className="flex items-center gap-2">
-                                <Button asChild type="button" variant="dashboard-outline" size="none">
-                                  <a href={item.download_url} target="_blank" rel="noreferrer">
-                                    <ExternalLink className="h-3.5 w-3.5" />
-                                    Open
-                                  </a>
-                                </Button>
-                                <Button asChild type="button" variant="dashboard-outline" size="none">
-                                  <a href={item.download_url} download={item.name}>
-                                    <Download className="h-3.5 w-3.5" />
-                                    Download
-                                  </a>
-                                </Button>
-                              </div>
+                              {renamingStorageId === item.id ? (
+                                <form
+                                  className="flex items-center gap-2"
+                                  onSubmit={(event) => {
+                                    event.preventDefault()
+                                    void saveRenameArtifact(item)
+                                  }}
+                                >
+                                  <Input
+                                    variant="dashboard"
+                                    value={artifactRenameDraft}
+                                    onChange={(event) => setArtifactRenameDraft(event.target.value)}
+                                    disabled={artifactRenameBusyId === item.id}
+                                    maxLength={MAX_ARTIFACT_NAME_CHARS}
+                                    className="h-8 w-40"
+                                  />
+                                  <Button
+                                    type="submit"
+                                    variant="dashboard-outline"
+                                    size="none"
+                                    disabled={artifactRenameBusyId === item.id}
+                                  >
+                                    {artifactRenameBusyId === item.id ? "Saving..." : "Save"}
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    variant="dashboard-outline"
+                                    size="none"
+                                    disabled={artifactRenameBusyId === item.id}
+                                    onClick={cancelRenameArtifact}
+                                  >
+                                    Cancel
+                                  </Button>
+                                </form>
+                              ) : (
+                                <div className="flex items-center gap-2">
+                                  <Button asChild type="button" variant="dashboard-outline" size="none">
+                                    <a href={item.download_url} target="_blank" rel="noreferrer">
+                                      <ExternalLink className="h-3.5 w-3.5" />
+                                      Open
+                                    </a>
+                                  </Button>
+                                  <Button asChild type="button" variant="dashboard-outline" size="none">
+                                    <a href={item.download_url} download={item.name}>
+                                      <Download className="h-3.5 w-3.5" />
+                                      Download
+                                    </a>
+                                  </Button>
+                                  {item.source === "run_artifact" ? (
+                                    <Button
+                                      type="button"
+                                      variant="dashboard-outline"
+                                      size="none"
+                                      disabled={artifactRenameBusyId !== null}
+                                      onClick={() => startRenameArtifact(item)}
+                                    >
+                                      <Pencil className="h-3.5 w-3.5" />
+                                      Rename
+                                    </Button>
+                                  ) : null}
+                                </div>
+                              )}
                             </TableCell>
                           </TableRow>
                         ))}
@@ -608,44 +818,124 @@ export default function DashboardPage() {
                           <TableHead variant="dashboard">ID</TableHead>
                           <TableHead variant="dashboard">Name</TableHead>
                           <TableHead variant="dashboard">Spec</TableHead>
+                          <TableHead variant="dashboard">Data bindings</TableHead>
                           <TableHead variant="dashboard">Actions</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {environments.map((env) => (
-                          <TableRow key={env.environment_id} variant="dashboard">
-                            <TableCell variant="dashboard" className="font-mono text-xs">
-                              {env.environment_id}
-                            </TableCell>
-                            <TableCell variant="dashboard">{env.name}</TableCell>
-                            <TableCell variant="dashboard" className="text-muted-foreground">
-                              {env.framework}:{env.version} | {env.gpu_type} x{env.gpu_count} | {env.volume_gb}GB
-                            </TableCell>
-                            <TableCell variant="dashboard">
-                              <div className="flex items-center gap-2">
-                                <Button
-                                  type="button"
-                                  variant="dashboard-outline"
-                                  size="none"
-                                  onClick={() => launchRun(env.environment_id)}
-                                  disabled={busy}
-                                >
-                                  <Play className="h-3.5 w-3.5" />
-                                  Run
-                                </Button>
-                                <Button
-                                  type="button"
-                                  variant="dashboard-outline-icon"
-                                  size="none"
-                                  onClick={() => deleteEnvironment(env.environment_id)}
-                                  disabled={busy}
-                                >
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                </Button>
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        ))}
+                        {environments.map((env) => {
+                          const availableDataBlobs = uniqueDataBlobs.filter((blob) => !env.bound_data_ids.includes(blob.blob_id))
+                          return (
+                            <TableRow key={env.environment_id} variant="dashboard">
+                              <TableCell variant="dashboard" className="font-mono text-xs">
+                                {env.environment_id}
+                              </TableCell>
+                              <TableCell variant="dashboard">{env.name}</TableCell>
+                              <TableCell variant="dashboard" className="text-muted-foreground">
+                                {env.framework}:{env.version} | {env.gpu_type} x{env.gpu_count} | {env.volume_gb}GB
+                              </TableCell>
+                              <TableCell variant="dashboard">
+                                <div className="space-y-2">
+                                  <div className="flex flex-wrap items-center gap-1.5">
+                                    {env.bound_data_ids.length === 0 ? (
+                                      <span className="text-xs text-muted-foreground">No bound datasets.</span>
+                                    ) : (
+                                      env.bound_data_ids.map((dataId) => {
+                                        const blob = dataBlobsById.get(dataId)
+                                        return (
+                                          <div key={`${env.environment_id}-${dataId}`} className="flex items-center gap-1">
+                                            <Badge variant="dashboard-run-status">{blob ? blob.filename : dataId}</Badge>
+                                            <Button
+                                              type="button"
+                                              variant="dashboard-outline"
+                                              size="none"
+                                              disabled={busy}
+                                              onClick={() => unbindDataFromEnvironment(env.environment_id, dataId)}
+                                            >
+                                              Unbind
+                                            </Button>
+                                          </div>
+                                        )
+                                      })
+                                    )}
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <Select
+                                      variant="dashboard"
+                                      value={bindSelectionByEnvironment[env.environment_id] || ""}
+                                      onChange={(event) =>
+                                        setBindSelectionByEnvironment((current) => ({
+                                          ...current,
+                                          [env.environment_id]: event.target.value,
+                                        }))
+                                      }
+                                      disabled={busy || availableDataBlobs.length === 0}
+                                    >
+                                      <option value="">{availableDataBlobs.length === 0 ? "No datasets available" : "Select dataset"}</option>
+                                      {availableDataBlobs.map((blob) => (
+                                        <option key={`${env.environment_id}-option-${blob.blob_id}`} value={blob.blob_id}>
+                                          {blob.filename} ({blob.blob_id})
+                                        </option>
+                                      ))}
+                                    </Select>
+                                    <Button
+                                      type="button"
+                                      variant="dashboard-outline"
+                                      size="none"
+                                      disabled={busy || availableDataBlobs.length === 0 || !(bindSelectionByEnvironment[env.environment_id] || "").trim()}
+                                      onClick={() => bindSelectedData(env)}
+                                    >
+                                      Bind
+                                    </Button>
+                                  </div>
+                                </div>
+                              </TableCell>
+                              <TableCell variant="dashboard">
+                                <div className="flex items-center gap-2">
+                                  <Button
+                                    type="button"
+                                    variant="dashboard-outline"
+                                    size="none"
+                                    onClick={() => launchRun(env.environment_id)}
+                                    disabled={busy}
+                                  >
+                                    <Play className="h-3.5 w-3.5" />
+                                    Run
+                                  </Button>
+                                  <AlertDialog>
+                                    <AlertDialogTrigger asChild>
+                                      <Button
+                                        type="button"
+                                        variant="dashboard-outline-icon"
+                                        size="none"
+                                        disabled={busy}
+                                      >
+                                        <Trash2 className="h-3.5 w-3.5" />
+                                      </Button>
+                                    </AlertDialogTrigger>
+                                    <AlertDialogContent>
+                                      <AlertDialogHeader>
+                                        <AlertDialogTitle>Delete environment?</AlertDialogTitle>
+                                        <AlertDialogDescription>
+                                          This will permanently delete environment <code>{env.environment_id}</code>, its runs, and associated runtime logs, metrics, and artifacts.
+                                        </AlertDialogDescription>
+                                      </AlertDialogHeader>
+                                      <AlertDialogFooter>
+                                        <AlertDialogCancel>Keep environment</AlertDialogCancel>
+                                        <AlertDialogAction
+                                          onClick={() => deleteEnvironment(env.environment_id)}
+                                          disabled={busy}
+                                        >
+                                          Delete environment
+                                        </AlertDialogAction>
+                                      </AlertDialogFooter>
+                                    </AlertDialogContent>
+                                  </AlertDialog>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          )
+                        })}
                       </TableBody>
                     </Table>
                   </Card>
@@ -688,16 +978,41 @@ export default function DashboardPage() {
                               {run.effective_gpu_type || "-"} / {run.effective_gpu_count || "-"} / {run.effective_volume_gb || "-"}GB
                             </TableCell>
                             <TableCell variant="dashboard">
-                              <Button
-                                type="button"
-                                variant="dashboard-outline"
-                                size="none"
-                                disabled={busy || !CANCELLABLE_STATUSES.has(run.status)}
-                                onClick={() => cancelRun(run.run_id)}
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                                Cancel
-                              </Button>
+                              <div className="flex items-center gap-2">
+                                <Button asChild type="button" variant="dashboard-outline" size="none">
+                                  <Link href={`/dashboard/runs/${run.run_id}`}>Details</Link>
+                                </Button>
+                                <AlertDialog>
+                                  <AlertDialogTrigger asChild>
+                                    <Button
+                                      type="button"
+                                      variant="dashboard-outline"
+                                      size="none"
+                                      disabled={busy || !CANCELLABLE_STATUSES.has(run.status)}
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                      Cancel
+                                    </Button>
+                                  </AlertDialogTrigger>
+                                  <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                      <AlertDialogTitle>Cancel this run?</AlertDialogTitle>
+                                      <AlertDialogDescription>
+                                        Run <code>{run.run_id}</code> will move to cancellation flow. In-progress compute may continue briefly during graceful shutdown.
+                                      </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                      <AlertDialogCancel>Keep running</AlertDialogCancel>
+                                      <AlertDialogAction
+                                        onClick={() => cancelRun(run.run_id)}
+                                        disabled={busy}
+                                      >
+                                        Cancel run
+                                      </AlertDialogAction>
+                                    </AlertDialogFooter>
+                                  </AlertDialogContent>
+                                </AlertDialog>
+                              </div>
                             </TableCell>
                           </TableRow>
                         ))}

@@ -521,6 +521,38 @@ export const create = mutation({
   },
 });
 
+export const bindData = mutation({
+  args: {
+    environmentId: v.id("environments"),
+    data_ids: v.array(v.string()),
+  },
+  returns: environmentResponseValidator,
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    return bindDataForUserId(ctx, {
+      userId: String(user._id),
+      environmentId: args.environmentId,
+      data_ids: args.data_ids,
+    });
+  },
+});
+
+export const unbindData = mutation({
+  args: {
+    environmentId: v.id("environments"),
+    data_ids: v.array(v.string()),
+  },
+  returns: environmentResponseValidator,
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    return unbindDataForUserId(ctx, {
+      userId: String(user._id),
+      environmentId: args.environmentId,
+      data_ids: args.data_ids,
+    });
+  },
+});
+
 export const remove = mutation({
   args: { environmentId: v.id("environments") },
   returns: v.object({ deleted: v.boolean(), environment_id: v.string() }),

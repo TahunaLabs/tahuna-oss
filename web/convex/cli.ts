@@ -3,6 +3,7 @@ import type { Id } from "@convex/_generated/dataModel";
 import { ActionCtx, httpAction, internalQuery } from "@convex/_generated/server";
 import { R2 } from "@convex-dev/r2";
 import { components } from "@convex/_generated/api";
+import { HeadObjectCommand } from "@aws-sdk/client-s3";
 import { v } from "convex/values";
 import {
   AUTH_CONFIG,
@@ -27,9 +28,21 @@ async function authenticateApiRequest(ctx: ActionCtx, request: Request): Promise
   if (!apiKey) {
     return null;
   }
-  const auth = await ctx.runMutation(api.auth.authByApiKey, { apiKey });
+  const auth = await ctx.runQuery(api.auth.authByApiKey, { apiKey });
   if (!auth) {
     return null;
+  }
+  const now = Date.now();
+  const shouldTouch = typeof auth.lastUsedAt !== "number" || now - auth.lastUsedAt >= 60_000;
+  if (shouldTouch) {
+    try {
+      await ctx.scheduler.runAfter(0, internal.auth.internalTouchApiKeyLastUsed, {
+        keyId: auth.keyId,
+        at: now,
+      });
+    } catch {
+      // Best effort only. Auth checks must not fail due to usage timestamp contention.
+    }
   }
 
   return auth.userId;
@@ -191,17 +204,50 @@ async function sleepMs(ms: number) {
   await new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function isS3NotFoundError(error: unknown) {
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+  const row = error as { name?: string; Code?: string; $metadata?: { httpStatusCode?: number } };
+  return row.name === "NotFound" || row.Code === "NotFound" || row.$metadata?.httpStatusCode === 404;
+}
+
+async function objectExistsInR2(key: string): Promise<boolean> {
+  try {
+    await r2.client.send(
+      new HeadObjectCommand({
+        Bucket: r2.config.bucket,
+        Key: key,
+      }),
+    );
+    return true;
+  } catch (error) {
+    if (isS3NotFoundError(error)) {
+      return false;
+    }
+    throw error;
+  }
+}
+
 async function objectExistsWithMetadataSync(
   ctx: ActionCtx,
   key: string,
   attempts: number = SYNC_CONFIG.objectMetadataPollAttempts,
 ): Promise<boolean> {
+  const immediate = await r2.getMetadata(ctx, key);
+  if (immediate?.url) {
+    return true;
+  }
+
   let delay = SYNC_CONFIG.objectMetadataPollInitialBackoffMs;
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     try {
-      await r2.syncMetadata(ctx, key);
+      const exists = await objectExistsInR2(key);
+      if (exists) {
+        return true;
+      }
     } catch {
-      // Ignore sync race errors and continue polling metadata.
+      // Transient object-store errors are handled by retry loop.
     }
     const metadata = await r2.getMetadata(ctx, key);
     if (metadata) {
@@ -558,7 +604,7 @@ export const getDataItem = httpAction(async (ctx, request) => {
 
   try {
     const data = await ctx.runQuery(internal.data.internalList, { userId });
-    const row = data.blobs.find((blob) => blob.blob_id === dataId);
+    const row = data.blobs.find((blob: { blob_id: string }) => blob.blob_id === dataId);
     if (!row) {
       return new Response(JSON.stringify({ detail: "data item not found" }), {
         status: 404,

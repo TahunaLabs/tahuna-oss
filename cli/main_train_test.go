@@ -121,7 +121,7 @@ func TestTrainDetached_EndToEndPreflightAndRunCreation(t *testing.T) {
 	if !strings.Contains(output, "run created: run-detached") {
 		t.Fatalf("expected run summary in output, got: %s", output)
 	}
-	if !strings.Contains(output, server.URL+"/runs/run-detached") {
+	if !strings.Contains(output, server.URL+"/dashboard/runs/run-detached") {
 		t.Fatalf("expected dashboard URL in output, got: %s", output)
 	}
 }

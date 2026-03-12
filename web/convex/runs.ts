@@ -14,6 +14,7 @@ import {
 } from "@convex/_generated/server";
 import { requireUser } from "@convex/auth";
 import { R2 } from "@convex-dev/r2";
+import { HeadObjectCommand } from "@aws-sdk/client-s3";
 import { images } from "./catalog";
 import { shortId } from "@convex/ids";
 import { RUN_CONFIG, SYNC_CONFIG } from "../config";
@@ -541,21 +542,49 @@ async function sleepMs(ms: number) {
   await new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function isS3NotFoundError(error: unknown) {
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+  const row = error as { name?: string; Code?: string; $metadata?: { httpStatusCode?: number } };
+  return row.name === "NotFound" || row.Code === "NotFound" || row.$metadata?.httpStatusCode === 404;
+}
+
+async function getSignedDownloadUrlByHead(key: string): Promise<string | null> {
+  try {
+    await r2.client.send(
+      new HeadObjectCommand({
+        Bucket: r2.config.bucket,
+        Key: key,
+      }),
+    );
+    return r2.getUrl(key);
+  } catch (error) {
+    if (isS3NotFoundError(error)) {
+      return null;
+    }
+    throw error;
+  }
+}
+
 async function getDownloadUrlWithMetadataSync(ctx: ActionCtx, key: string): Promise<string | null> {
   const immediate = await r2.getMetadata(ctx, key);
   if (immediate?.url) {
     return immediate.url;
   }
+  const direct = await getSignedDownloadUrlByHead(key);
+  if (direct) {
+    return direct;
+  }
   let delay = SYNC_CONFIG.objectMetadataPollInitialBackoffMs;
   for (let attempt = 0; attempt < SYNC_CONFIG.objectMetadataPollAttempts; attempt += 1) {
-    try {
-      await r2.syncMetadata(ctx, key);
-    } catch {
-      // Missing keys and metadata races are handled by retry loop.
-    }
     const metadata = await r2.getMetadata(ctx, key);
     if (metadata?.url) {
       return metadata.url;
+    }
+    const signedUrl = await getSignedDownloadUrlByHead(key);
+    if (signedUrl) {
+      return signedUrl;
     }
     if (attempt < SYNC_CONFIG.objectMetadataPollAttempts - 1) {
       await sleepMs(delay);
@@ -578,13 +607,33 @@ async function resolveManifestDownloadEntries(
   manifest: SyncManifestPayload,
 ): Promise<RuntimeBootstrapEntry[]> {
   const entries: RuntimeBootstrapEntry[] = [];
+  const keyUrlCache = new Map<string, string | null>();
   for (const entry of manifest.entries) {
     const candidateKeys = blobKeys(payload, kind, entry.sha256);
     let downloadUrl: string | null = null;
     for (const key of candidateKeys) {
-      downloadUrl = await getDownloadUrlWithMetadataSync(ctx, key);
+      if (keyUrlCache.has(key)) {
+        downloadUrl = keyUrlCache.get(key) || null;
+      } else {
+        const quickMetadata = await r2.getMetadata(ctx, key);
+        if (quickMetadata?.url) {
+          downloadUrl = quickMetadata.url;
+        } else {
+          downloadUrl = await getSignedDownloadUrlByHead(key);
+        }
+        keyUrlCache.set(key, downloadUrl);
+      }
       if (downloadUrl) {
         break;
+      }
+    }
+    if (!downloadUrl) {
+      for (const key of candidateKeys) {
+        downloadUrl = await getDownloadUrlWithMetadataSync(ctx, key);
+        if (downloadUrl) {
+          keyUrlCache.set(key, downloadUrl);
+          break;
+        }
       }
     }
     if (!downloadUrl) {

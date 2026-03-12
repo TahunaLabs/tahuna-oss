@@ -39,6 +39,16 @@ function parseKey(key: string) {
   };
 }
 
+function isTopLevelDataUploadKey(userId: string, key: string) {
+  const prefix = buildDataPrefix(userId);
+  if (!key.startsWith(prefix)) {
+    return false;
+  }
+  const relative = key.slice(prefix.length);
+  // Keep only upload objects shaped as "<blob_id>__<filename>" at the root data prefix.
+  return relative.includes("__") && !relative.includes("/");
+}
+
 const callbacks: R2Callbacks = {};
 
 const dataBlobValidator = v.object({
@@ -75,6 +85,7 @@ async function listBlobsForUserId(ctx: QueryCtx | MutationCtx, userId: string): 
     const result = await r2.listMetadata(ctx, 100, cursor);
     for (const item of result.page) {
       if (!item.key.startsWith(prefix)) continue;
+      if (!isTopLevelDataUploadKey(userId, item.key)) continue;
       const parsed = parseKey(item.key);
       blobs.push({
         blob_id: parsed.blobId,
