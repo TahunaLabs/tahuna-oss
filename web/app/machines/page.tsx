@@ -32,7 +32,8 @@ function formatDate(timestamp?: number) {
 
 export default function MachinesPage() {
   const { isAuthenticated, isLoading } = useConvexAuth()
-  const keys = useQuery(api.auth.listApiKeys) as ApiKeyRow[] | undefined
+  const shouldLoadQueries = !isLoading && isAuthenticated
+  const keys = useQuery(api.auth.listApiKeys, shouldLoadQueries ? {} : "skip") as ApiKeyRow[] | undefined
   const revokeApiKeyMutation = useMutation(api.auth.revokeApiKey)
 
   const [message, setMessage] = useState("")

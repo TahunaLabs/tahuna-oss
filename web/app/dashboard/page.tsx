@@ -162,6 +162,7 @@ export default function DashboardPage() {
   const router = useRouter()
   const { resolvedTheme, setTheme } = useTheme()
   const { isAuthenticated, isLoading: authLoading } = useConvexAuth()
+  const [loggingOut, setLoggingOut] = useState(false)
 
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState("")
@@ -177,17 +178,27 @@ export default function DashboardPage() {
   const [storageSearch, setStorageSearch] = useState("")
   const [storageSearchDebounced, setStorageSearchDebounced] = useState("")
   const [storageOffset, setStorageOffset] = useState(0)
+  const shouldLoadQueries = !authLoading && isAuthenticated && !loggingOut
 
-  const currentUser = useQuery(api.auth.getCurrentUser)
-  const storageResult = useQuery(api.storage.list, {
-    source: storageSourceFilter,
-    sort: storageSort,
-    search: storageSearchDebounced.trim() || undefined,
-    offset: storageOffset,
-    limit: STORAGE_PAGE_LIMIT,
-  }) as StorageListResult | undefined
-  const envResult = useQuery(api.environments.list) as { environments: EnvironmentRow[] } | undefined
-  const runResult = useQuery(api.runs.list) as { runs: RunRow[] } | undefined
+  const currentUser = useQuery(api.auth.getCurrentUser, shouldLoadQueries ? {} : "skip")
+  const storageResult = useQuery(
+    api.storage.list,
+    shouldLoadQueries
+      ? {
+          source: storageSourceFilter,
+          sort: storageSort,
+          search: storageSearchDebounced.trim() || undefined,
+          offset: storageOffset,
+          limit: STORAGE_PAGE_LIMIT,
+        }
+      : "skip",
+  ) as StorageListResult | undefined
+  const envResult = useQuery(api.environments.list, shouldLoadQueries ? {} : "skip") as
+    | { environments: EnvironmentRow[] }
+    | undefined
+  const runResult = useQuery(api.runs.list, shouldLoadQueries ? {} : "skip") as
+    | { runs: RunRow[] }
+    | undefined
 
   const environments: EnvironmentRow[] = envResult?.environments ?? []
   const runs: RunRow[] = runResult?.runs ?? []
@@ -305,11 +316,19 @@ export default function DashboardPage() {
   }
 
   async function logout() {
-    await authClient.signOut()
-    router.replace("/login")
+    setLoggingOut(true)
+    setError("")
+    setMessage("")
+    try {
+      await authClient.signOut()
+      router.replace("/login")
+    } catch (logoutError) {
+      setError(logoutError instanceof Error ? logoutError.message : "Failed to sign out.")
+      setLoggingOut(false)
+    }
   }
 
-  if (authLoading || !isAuthenticated) {
+  if (authLoading || loggingOut || !isAuthenticated) {
     return <PageLoader message="Loading dashboard…" />
   }
 
