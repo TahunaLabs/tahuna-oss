@@ -96,9 +96,6 @@ func printRunListSummary(runsAny []any) {
 			runName = "unnamed"
 		}
 		envID := strings.TrimSpace(asString(run["environment_id"]))
-		if envID == "" {
-			envID = strings.TrimSpace(asString(run["env_id"]))
-		}
 		envLabel := envNameByID[envID]
 		if envLabel == "" {
 			envLabel = "unknown"
@@ -232,9 +229,6 @@ func printRunSummary(resp map[string]any) {
 		fmt.Printf("Name: %s\n", runName)
 	}
 	envID := strings.TrimSpace(asString(resp["environment_id"]))
-	if envID == "" {
-		envID = strings.TrimSpace(asString(resp["env_id"]))
-	}
 	if envID != "" {
 		fmt.Printf("Environment ID: %s\n", envID)
 	}
