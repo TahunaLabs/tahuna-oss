@@ -58,6 +58,9 @@ type ManifestRef = {
 };
 
 const r2 = new R2(components.r2);
+const RUN_CLEANUP_QUERY_BATCH_SIZE = 12;
+const RUN_CLEANUP_DELETE_BATCH_SIZE = 200;
+const ARTIFACT_DELETE_BATCH_SIZE = 24;
 
 function environmentPath(userId: string, environmentId: string) {
   return `${userId}/environment/${environmentId}`;
@@ -163,6 +166,97 @@ async function deleteObjectsByPrefix(ctx: MutationCtx | ActionCtx, prefix: strin
     }
     cursor = result.continueCursor;
     pages += 1;
+  }
+}
+
+type RunCleanupRows = {
+  runId: Id<"runs">;
+  events: Array<Doc<"runEvents">>;
+  runtimeLogs: Array<Doc<"runRuntimeLogs">>;
+  runtimeMetrics: Array<Doc<"runRuntimeMetrics">>;
+};
+
+async function loadRunCleanupRows(
+  ctx: MutationCtx,
+  runIds: Array<Id<"runs">>,
+): Promise<RunCleanupRows[]> {
+  const out: RunCleanupRows[] = [];
+  for (let start = 0; start < runIds.length; start += RUN_CLEANUP_QUERY_BATCH_SIZE) {
+    const chunk = runIds.slice(start, start + RUN_CLEANUP_QUERY_BATCH_SIZE);
+    const chunkRows = await Promise.all(
+      chunk.map(async (runId) => {
+        const [events, runtimeLogs, runtimeMetrics] = await Promise.all([
+          ctx.db
+            .query("runEvents")
+            .withIndex("by_run", (q) => q.eq("runId", runId))
+            .collect(),
+          ctx.db
+            .query("runRuntimeLogs")
+            .withIndex("by_run", (q) => q.eq("runId", runId))
+            .collect(),
+          ctx.db
+            .query("runRuntimeMetrics")
+            .withIndex("by_run", (q) => q.eq("runId", runId))
+            .collect(),
+        ]);
+        return { runId, events, runtimeLogs, runtimeMetrics };
+      }),
+    );
+    out.push(...chunkRows);
+  }
+  return out;
+}
+
+async function deleteRunCleanupRows(ctx: MutationCtx, rows: RunCleanupRows[]) {
+  const eventIds: Array<Id<"runEvents">> = [];
+  const runtimeLogIds: Array<Id<"runRuntimeLogs">> = [];
+  const runtimeMetricIds: Array<Id<"runRuntimeMetrics">> = [];
+  const runIds: Array<Id<"runs">> = [];
+
+  for (const row of rows) {
+    runIds.push(row.runId);
+    for (const event of row.events) {
+      eventIds.push(event._id);
+    }
+    for (const log of row.runtimeLogs) {
+      runtimeLogIds.push(log._id);
+    }
+    for (const metric of row.runtimeMetrics) {
+      runtimeMetricIds.push(metric._id);
+    }
+  }
+
+  for (let start = 0; start < eventIds.length; start += RUN_CLEANUP_DELETE_BATCH_SIZE) {
+    const chunk = eventIds.slice(start, start + RUN_CLEANUP_DELETE_BATCH_SIZE);
+    await Promise.all(chunk.map((id) => ctx.db.delete("runEvents", id)));
+  }
+  for (let start = 0; start < runtimeLogIds.length; start += RUN_CLEANUP_DELETE_BATCH_SIZE) {
+    const chunk = runtimeLogIds.slice(start, start + RUN_CLEANUP_DELETE_BATCH_SIZE);
+    await Promise.all(chunk.map((id) => ctx.db.delete("runRuntimeLogs", id)));
+  }
+  for (let start = 0; start < runtimeMetricIds.length; start += RUN_CLEANUP_DELETE_BATCH_SIZE) {
+    const chunk = runtimeMetricIds.slice(start, start + RUN_CLEANUP_DELETE_BATCH_SIZE);
+    await Promise.all(chunk.map((id) => ctx.db.delete("runRuntimeMetrics", id)));
+  }
+  for (let start = 0; start < runIds.length; start += RUN_CLEANUP_DELETE_BATCH_SIZE) {
+    const chunk = runIds.slice(start, start + RUN_CLEANUP_DELETE_BATCH_SIZE);
+    await Promise.all(chunk.map((id) => ctx.db.delete("runs", id)));
+  }
+}
+
+async function deleteArtifactObjects(ctx: MutationCtx, keys: Set<string>) {
+  const keyList = Array.from(keys);
+  for (let start = 0; start < keyList.length; start += ARTIFACT_DELETE_BATCH_SIZE) {
+    const chunk = keyList.slice(start, start + ARTIFACT_DELETE_BATCH_SIZE);
+    await Promise.all(
+      chunk.map(async (key) => {
+        try {
+          await r2.deleteObject(ctx, key);
+        } catch {
+          // best-effort cleanup
+        }
+      }),
+    );
   }
 }
 
@@ -410,6 +504,8 @@ async function removeEnvironmentForUserId(ctx: MutationCtx, userId: string, envi
     .withIndex("by_user", (q) => q.eq("userId", userId))
     .collect();
   const otherRuns = allRunsForUser.filter((run) => run.environmentId !== environmentId);
+  const runIdsToDelete = runs.map((run) => run._id);
+  const podsToTerminate: Array<{ runId: Id<"runs">; podId: string }> = [];
 
   addManifestRef(deleteRefs, "code", env.latestCodeManifestHash, envIdString, envDataId);
   addManifestRef(deleteRefs, "data", env.latestDataManifestHash, envIdString, envDataId);
@@ -427,51 +523,34 @@ async function removeEnvironmentForUserId(ctx: MutationCtx, userId: string, envi
 
     // Terminate Runpod pod if active
     if (run.podId) {
-      await ctx.scheduler.runAfter(0, internal.runs.internalTerminatePod, {
-        runId: run._id,
-        podId: run.podId,
-        force: true,
-      });
+      podsToTerminate.push({ runId: run._id, podId: run.podId });
     }
-
-    // Delete run events, logs, and metrics
-    const [events, runtimeLogs, runtimeMetrics] = await Promise.all([
-      ctx.db
-        .query("runEvents")
-        .withIndex("by_run", (q) => q.eq("runId", run._id))
-        .collect(),
-      ctx.db
-        .query("runRuntimeLogs")
-        .withIndex("by_run", (q) => q.eq("runId", run._id))
-        .collect(),
-      ctx.db
-        .query("runRuntimeMetrics")
-        .withIndex("by_run", (q) => q.eq("runId", run._id))
-        .collect(),
-    ]);
     for (const key of run.artifactKeys || []) {
       artifactKeys.add(key);
     }
-    await Promise.all([
-      ...events.map((event) => ctx.db.delete(event._id)),
-      ...runtimeLogs.map((entry) => ctx.db.delete(entry._id)),
-      ...runtimeMetrics.map((entry) => ctx.db.delete(entry._id)),
-    ]);
-    await ctx.db.delete("runs", run._id);
   }
+  for (let start = 0; start < podsToTerminate.length; start += RUN_CLEANUP_QUERY_BATCH_SIZE) {
+    const chunk = podsToTerminate.slice(start, start + RUN_CLEANUP_QUERY_BATCH_SIZE);
+    await Promise.all(
+      chunk.map((pod) =>
+        ctx.scheduler.runAfter(0, internal.runs.internalTerminatePod, {
+          runId: pod.runId,
+          podId: pod.podId,
+          force: true,
+        }),
+      ),
+    );
+  }
+  const runCleanupRows = await loadRunCleanupRows(ctx, runIdsToDelete);
+  await deleteRunCleanupRows(ctx, runCleanupRows);
+
   for (const run of otherRuns) {
     const runDataId = run.dataId || String(run.environmentId);
     addManifestRef(retainRefs, "code", run.codeManifestHash, String(run.environmentId), runDataId);
     addManifestRef(retainRefs, "data", run.dataManifestHash, String(run.environmentId), runDataId);
   }
 
-  for (const key of artifactKeys) {
-    try {
-      await r2.deleteObject(ctx, key);
-    } catch {
-      // best-effort cleanup
-    }
-  }
+  await deleteArtifactObjects(ctx, artifactKeys);
   await ctx.scheduler.runAfter(0, internal.environments.internalCleanupDedupBlobs, {
     userId,
     environmentId: String(environmentId),
