@@ -1,2 +1,2 @@
-export { UPLOAD_LIMITS_BYTES, blobLimitByKind, manifestLimitByKind } from "../config";
-export type { SyncKind } from "../config";
+export { UPLOAD_LIMITS_BYTES, blobLimitByKind, manifestLimitByKind } from "@convex/appConfig";
+export type { SyncKind } from "@convex/appConfig";

@@ -15,8 +15,8 @@ import {
 import { requireUser } from "@convex/auth";
 import { R2 } from "@convex-dev/r2";
 import { HeadObjectCommand } from "@aws-sdk/client-s3";
-import { images } from "./catalog";
-import { RUN_CONFIG, SYNC_CONFIG } from "../config";
+import { images } from "@convex/catalog";
+import { RUN_CONFIG, SYNC_CONFIG } from "@convex/appConfig";
 import {
   parseManifest,
   sha256Hex,

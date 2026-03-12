@@ -12,7 +12,7 @@ import {
   SYNC_CONFIG,
   blobLimitByKind,
   manifestLimitByKind,
-} from "../config";
+} from "@convex/appConfig";
 import {
   normalizeSha256,
   parseManifest,

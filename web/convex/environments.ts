@@ -15,7 +15,7 @@ import { requireUser } from "@convex/auth";
 import { images } from "@convex/catalog";
 import { shortId } from "@convex/ids";
 import { R2 } from "@convex-dev/r2";
-import { PYTHON_CONFIG } from "../config";
+import { PYTHON_CONFIG } from "@convex/appConfig";
 
 const environmentResponseValidator = v.object({
   environment_id: v.string(),

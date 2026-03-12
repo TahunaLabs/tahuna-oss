@@ -5,7 +5,7 @@ import type { DataModel } from "@convex/_generated/dataModel";
 import { internalQuery, mutation, query, type MutationCtx, type QueryCtx } from "@convex/_generated/server";
 import { requireUser } from "@convex/auth";
 import { shortId } from "@convex/ids";
-import { UPLOAD_LIMITS_BYTES } from "../config";
+import { UPLOAD_LIMITS_BYTES } from "@convex/appConfig";
 
 const r2 = new R2(components.r2);
 const DEFAULT_LIST_LIMIT = 1000;
