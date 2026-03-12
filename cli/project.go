@@ -489,7 +489,10 @@ func clearLinkedEnvironmentIDIfMatches(environmentID string) error {
 
 func printTrainRunSummary(resp map[string]any) {
 	runID := asString(resp["run_id"])
-	envID := asString(resp["env_id"])
+	envID := strings.TrimSpace(asString(resp["environment_id"]))
+	if envID == "" {
+		envID = strings.TrimSpace(asString(resp["env_id"]))
+	}
 	status := asString(resp["status"])
 	if status == "" {
 		status = "queued"

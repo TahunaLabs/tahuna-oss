@@ -16,7 +16,7 @@ func TestRunShow_DefaultHumanSummary(t *testing.T) {
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"run_id":                 "run-1",
 				"name":                   "warm-river-fox",
-				"env_id":                 "env-1",
+				"environment_id":         "env-1",
 				"status":                 "running",
 				"effective_gpu_type":     "NVIDIA A100 80GB",
 				"effective_gpu_count":    1,

@@ -101,7 +101,7 @@ type DataBlobRow = {
 
 type RunRow = {
   run_id: Id<"runs">
-  env_id: string
+  environment_id: string
   status: string
   effective_gpu_type: string
   effective_gpu_count: number
@@ -1015,7 +1015,7 @@ export default function DashboardPage() {
                               <Badge variant="dashboard-run-status">{run.status}</Badge>
                             </TableCell>
                             <TableCell variant="dashboard" className="font-mono text-xs">
-                              {run.env_id}
+                              {run.environment_id}
                             </TableCell>
                             <TableCell variant="dashboard" className="text-muted-foreground">
                               {run.effective_gpu_type || "-"} / {run.effective_gpu_count || "-"} / {run.effective_volume_gb || "-"}GB

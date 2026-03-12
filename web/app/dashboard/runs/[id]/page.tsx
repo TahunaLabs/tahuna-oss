@@ -24,7 +24,7 @@ type RunDetail = {
   run_id: string
   name: string
   created_at: number
-  env_id: string
+  environment_id: string
   input: string
   output: string
   logs: string
@@ -135,7 +135,7 @@ export default function RunDetailPage() {
           <dl className="mt-3 space-y-2 text-sm">
             <div className="flex justify-between gap-3">
               <dt className="text-muted-foreground">Environment</dt>
-              <dd className="font-mono text-xs">{run.env_id}</dd>
+              <dd className="font-mono text-xs">{run.environment_id}</dd>
             </div>
             <div className="flex justify-between gap-3">
               <dt className="text-muted-foreground">Pod ID</dt>
