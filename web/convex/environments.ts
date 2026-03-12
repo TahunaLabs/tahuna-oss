@@ -574,32 +574,6 @@ export const list = query({
   },
 });
 
-export const get = query({
-  args: { environmentId: v.id("environments") },
-  returns: environmentResponseValidator,
-  handler: async (ctx, args) => {
-    const user = await requireUser(ctx);
-    const row = await getOwnedEnvironment(ctx, String(user._id), args.environmentId);
-    return toEnvironmentResponse(row);
-  },
-});
-
-export const create = mutation({
-  args: {
-    name: v.string(),
-    gpu_type: v.string(),
-    gpu_count: v.number(),
-    volume_gb: v.number(),
-    python_version: v.optional(v.string()),
-    framework: v.string(),
-    version: v.string(),
-  },
-  returns: environmentResponseValidator,
-  handler: async (_ctx, _args) => {
-    throw new ConvexError("environments can only be created via `tahuna init`");
-  },
-});
-
 export const bindData = mutation({
   args: {
     environmentId: v.id("environments"),
