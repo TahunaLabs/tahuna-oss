@@ -224,6 +224,10 @@ export default function DashboardPage() {
   const [storageSearch, setStorageSearch] = useState("")
   const [storageSearchDebounced, setStorageSearchDebounced] = useState("")
   const [storageOffset, setStorageOffset] = useState(0)
+  const [storageResult, setStorageResult] = useState<StorageListResult | undefined>(undefined)
+  const [storageLoading, setStorageLoading] = useState(false)
+  const [storageError, setStorageError] = useState("")
+  const [storageReloadToken, setStorageReloadToken] = useState(0)
   const [renamingStorageId, setRenamingStorageId] = useState<string | null>(null)
   const [artifactRenameDraft, setArtifactRenameDraft] = useState("")
   const [artifactRenameBusyId, setArtifactRenameBusyId] = useState<string | null>(null)
@@ -231,18 +235,6 @@ export default function DashboardPage() {
   const shouldLoadQueries = !authLoading && isAuthenticated && !loggingOut
 
   const currentUser = useQuery(api.auth.getCurrentUser, shouldLoadQueries ? {} : "skip")
-  const storageResult = useQuery(
-    api.storage.list,
-    shouldLoadQueries
-      ? {
-          source: storageSourceFilter,
-          sort: storageSort,
-          search: storageSearchDebounced.trim() || undefined,
-          offset: storageOffset,
-          limit: STORAGE_PAGE_LIMIT,
-        }
-      : "skip",
-  ) as StorageListResult | undefined
   const envResult = useQuery(api.environments.list, shouldLoadQueries ? {} : "skip") as
     | { environments: EnvironmentRow[] }
     | undefined
@@ -264,6 +256,7 @@ export default function DashboardPage() {
   const syncDataMetadataMutation = useMutation(api.data.syncMetadata)
   const bindDataMutation = useMutation(api.environments.bindData)
   const unbindDataMutation = useMutation(api.environments.unbindData)
+  const listStorageAction = useAction(api.storage.list)
   const renameArtifactAction = useAction(api.storage.renameArtifact)
 
   const userEmail = currentUser?.email ?? ""
@@ -296,6 +289,52 @@ export default function DashboardPage() {
   useEffect(() => {
     setStorageOffset(0)
   }, [storageSearchDebounced, storageSort, storageSourceFilter])
+
+  useEffect(() => {
+    let cancelled = false
+
+    if (!shouldLoadQueries) {
+      setStorageResult(undefined)
+      setStorageLoading(false)
+      setStorageError("")
+      return
+    }
+
+    setStorageLoading(true)
+    setStorageError("")
+    void listStorageAction({
+      source: storageSourceFilter,
+      sort: storageSort,
+      search: storageSearchDebounced.trim() || undefined,
+      offset: storageOffset,
+      limit: STORAGE_PAGE_LIMIT,
+    })
+      .then((result) => {
+        if (cancelled) return
+        setStorageResult(result as StorageListResult)
+      })
+      .catch((loadError) => {
+        if (cancelled) return
+        setStorageError(loadError instanceof Error ? loadError.message : "failed to load storage")
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setStorageLoading(false)
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [
+    listStorageAction,
+    shouldLoadQueries,
+    storageOffset,
+    storageReloadToken,
+    storageSearchDebounced,
+    storageSort,
+    storageSourceFilter,
+  ])
 
   useEffect(() => {
     if (!storageResult) return
@@ -360,6 +399,7 @@ export default function DashboardPage() {
       const uploadedCount = selectedDataFiles.length
       setSelectedDataFiles([])
       setDataFileInputKey((current) => current + 1)
+      setStorageReloadToken((current) => current + 1)
       setMessage(uploadedCount === 1 ? "Uploaded 1 file." : `Uploaded ${uploadedCount} files.`)
     } catch (uploadError) {
       const uploadMessage = uploadError instanceof Error ? uploadError.message : "unexpected error"
@@ -465,6 +505,7 @@ export default function DashboardPage() {
       })
       setRenamingStorageId(null)
       setArtifactRenameDraft("")
+      setStorageReloadToken((current) => current + 1)
       setMessage(
         renamed.cleanup_warning
           ? `Renamed artifact to ${renamed.name}. Old object cleanup needs a retry.`
@@ -656,8 +697,10 @@ export default function DashboardPage() {
                   </div>
                 </Card>
 
-                {storageResult === undefined ? (
+                {storageResult === undefined && storageLoading ? (
                   <BottomHalfEmptyMessage>Loading storage...</BottomHalfEmptyMessage>
+                ) : storageError ? (
+                  <BottomHalfEmptyMessage>{storageError}</BottomHalfEmptyMessage>
                 ) : storageItems.length === 0 ? (
                   <BottomHalfEmptyMessage>
                     {storageSearch.trim() || storageSourceFilter !== "all"

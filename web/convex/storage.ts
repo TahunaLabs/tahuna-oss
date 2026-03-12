@@ -3,14 +3,13 @@ import { ConvexError, v } from "convex/values"
 import { CopyObjectCommand } from "@aws-sdk/client-s3"
 import { components, internal } from "@convex/_generated/api"
 import type { Id } from "@convex/_generated/dataModel"
-import { action, internalMutation, query, type MutationCtx, type QueryCtx } from "@convex/_generated/server"
+import { action, internalMutation, type ActionCtx, type MutationCtx } from "@convex/_generated/server"
 import { requireUser } from "@convex/auth"
 
 const r2 = new R2(components.r2)
 
 const DEFAULT_LIMIT = 25
 const MAX_LIMIT = 100
-const MAX_DATA_LIST_PAGES = 20
 const MAX_ARTIFACTS_SCANNED = 600
 const METADATA_LOOKUP_CONCURRENCY = 20
 const MAX_SEARCH_CHARS = 120
@@ -77,6 +76,19 @@ type ArtifactRef = {
   runId: string
   runCreatedAt: number
 }
+type DataBlobListRow = {
+  blob_id: string
+  filename: string
+  key: string
+  size: number
+  download_url: string
+  created_at: number
+}
+type RunListRow = {
+  run_id: string
+  created_at: number
+  artifact_keys: string[]
+}
 
 function normalizeArtifactName(value: string) {
   const name = value.trim()
@@ -122,28 +134,6 @@ async function getOwnedRun(ctx: MutationCtx, userId: string, runId: Id<"runs">) 
     throw new ConvexError("run not found")
   }
   return run
-}
-
-function buildDataPrefix(userId: string) {
-  return `${userId}/data/`
-}
-
-function decodeFilename(encoded: string) {
-  try {
-    return decodeURIComponent(encoded)
-  } catch {
-    return encoded
-  }
-}
-
-function parseDataKey(key: string) {
-  const leaf = key.split("/").pop() ?? key
-  const [blobId, ...filenameParts] = leaf.split("__")
-  const encodedFilename = filenameParts.join("__")
-  return {
-    blobId,
-    filename: encodedFilename ? decodeFilename(encodedFilename) : blobId,
-  }
 }
 
 function toTimestamp(value: string | undefined, fallback: number) {
@@ -205,54 +195,17 @@ function shouldUseFullArtifactMetadata(sort: StorageSort) {
   return sort === "size_asc" || sort === "size_desc"
 }
 
-async function listDataItemsForUser(ctx: QueryCtx, userId: string) {
-  const prefix = buildDataPrefix(userId)
-  const out: StorageItem[] = []
-
-  let cursor: string | null = null
-  let pages = 0
-
-  while (pages < MAX_DATA_LIST_PAGES) {
-    const result = await r2.listMetadata(ctx, 100, cursor)
-    for (const item of result.page) {
-      if (!item.key.startsWith(prefix)) continue
-      const parsed = parseDataKey(item.key)
-      out.push({
-        id: `data:${item.key}`,
-        source: "data",
-        key: item.key,
-        name: parsed.filename,
-        path: item.key,
-        size: item.size || 0,
-        created_at: toTimestamp(item.lastModified, 0),
-        download_url: item.url,
-        data_blob_id: parsed.blobId,
-      })
-    }
-    if (result.isDone) break
-    cursor = result.continueCursor
-    pages += 1
-  }
-
-  return out
-}
-
-async function listArtifactRefsForUser(ctx: QueryCtx, userId: string): Promise<ArtifactRef[]> {
-  const rows = await ctx.db
-    .query("runs")
-    .withIndex("by_user", (q) => q.eq("userId", userId))
-    .collect()
-
+function listArtifactRefsFromRuns(rows: RunListRow[]): ArtifactRef[] {
   const refs: ArtifactRef[] = []
-  const sortedRuns = rows.sort((a, b) => b._creationTime - a._creationTime)
+  const sortedRuns = [...rows].sort((a, b) => b.created_at - a.created_at)
 
   for (const run of sortedRuns) {
-    for (const key of run.artifactKeys || []) {
+    for (const key of run.artifact_keys || []) {
       if (!key.trim()) continue
       refs.push({
         key: key.trim(),
-        runId: String(run._id),
-        runCreatedAt: run._creationTime,
+        runId: run.run_id,
+        runCreatedAt: run.created_at,
       })
       if (refs.length >= MAX_ARTIFACTS_SCANNED) {
         break
@@ -298,7 +251,7 @@ async function listArtifactItemsForUserFast(refs: ArtifactRef[]) {
   return out
 }
 
-async function listArtifactItemsForUserWithMetadata(ctx: QueryCtx, refs: ArtifactRef[]) {
+async function listArtifactItemsForUserWithMetadata(ctx: ActionCtx, refs: ArtifactRef[]) {
   const out: StorageItem[] = []
   for (let index = 0; index < refs.length; index += METADATA_LOOKUP_CONCURRENCY) {
     const chunk = refs.slice(index, index + METADATA_LOOKUP_CONCURRENCY)
@@ -329,7 +282,7 @@ async function listArtifactItemsForUserWithMetadata(ctx: QueryCtx, refs: Artifac
   return out
 }
 
-async function hydrateVisibleArtifactMetadata(ctx: QueryCtx, pageItems: StorageItem[]) {
+async function hydrateVisibleArtifactMetadata(ctx: ActionCtx, pageItems: StorageItem[]) {
   const out = [...pageItems]
   const artifactIndexes: number[] = []
   for (let i = 0; i < out.length; i += 1) {
@@ -527,7 +480,7 @@ export const renameArtifact = action({
   },
 })
 
-export const list = query({
+export const list = action({
   args: {
     source: v.optional(sourceFilterValidator),
     search: v.optional(v.string()),
@@ -547,16 +500,32 @@ export const list = query({
     const offset = normalizeOffset(args.offset)
 
     const useFullArtifactMetadata = shouldUseFullArtifactMetadata(sort)
-    const [dataItems, artifactItems] = await Promise.all([
-      source === "all" || source === "data" ? listDataItemsForUser(ctx, userId) : Promise.resolve([] as StorageItem[]),
+    const [dataRows, runRows] = await Promise.all([
+      source === "all" || source === "data"
+        ? ctx.runQuery(internal.data.internalList, { userId })
+        : Promise.resolve({ blobs: [] as DataBlobListRow[] }),
       source === "all" || source === "run_artifact"
-        ? listArtifactRefsForUser(ctx, userId).then((refs) =>
-            useFullArtifactMetadata
-              ? listArtifactItemsForUserWithMetadata(ctx, refs)
-              : listArtifactItemsForUserFast(refs),
-          )
-        : Promise.resolve([] as StorageItem[]),
+        ? ctx.runQuery(internal.runs.internalList, { userId })
+        : Promise.resolve({ runs: [] as RunListRow[] }),
     ])
+    const dataItems: StorageItem[] = dataRows.blobs.map((blob) => ({
+      id: `data:${blob.key}`,
+      source: "data",
+      key: blob.key,
+      name: blob.filename,
+      path: blob.key,
+      size: blob.size,
+      created_at: blob.created_at,
+      download_url: blob.download_url,
+      data_blob_id: blob.blob_id,
+    }))
+    const artifactRefs = listArtifactRefsFromRuns(runRows.runs)
+    const artifactItems =
+      source === "all" || source === "run_artifact"
+        ? useFullArtifactMetadata
+          ? await listArtifactItemsForUserWithMetadata(ctx, artifactRefs)
+          : await listArtifactItemsForUserFast(artifactRefs)
+        : []
 
     const combined = sortItems(
       [...dataItems, ...artifactItems].filter((item) => matchesSearch(item, search)),
