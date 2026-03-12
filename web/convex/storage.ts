@@ -46,6 +46,11 @@ const storageListValidator = v.object({
   limit: v.number(),
   has_more: v.boolean(),
   next_offset: v.union(v.number(), v.null()),
+  next_cursor: v.union(v.string(), v.null()),
+  scan_capped: v.object({
+    data: v.boolean(),
+    run_artifact: v.boolean(),
+  }),
 })
 
 const renameArtifactResultValidator = v.object({
@@ -84,10 +89,35 @@ type DataBlobListRow = {
   download_url: string
   created_at: number
 }
+type DataBlobListResult = {
+  blobs: DataBlobListRow[]
+  has_more: boolean
+  next_cursor: string | null
+  scan_capped: boolean
+}
 type RunListRow = {
   run_id: string
   created_at: number
   artifact_keys: string[]
+}
+type RunListResult = {
+  runs: RunListRow[]
+}
+
+function encodeOffsetCursor(offset: number) {
+  return `offset:${offset}`
+}
+
+function decodeOffsetCursor(cursor: string): number | null {
+  const value = cursor.trim()
+  if (!value.startsWith("offset:")) {
+    return null
+  }
+  const raw = Number(value.slice("offset:".length))
+  if (!Number.isFinite(raw)) {
+    return null
+  }
+  return Math.max(0, Math.floor(raw))
 }
 
 function normalizeArtifactName(value: string) {
@@ -195,9 +225,10 @@ function shouldUseFullArtifactMetadata(sort: StorageSort) {
   return sort === "size_asc" || sort === "size_desc"
 }
 
-function listArtifactRefsFromRuns(rows: RunListRow[]): ArtifactRef[] {
+function listArtifactRefsFromRuns(rows: RunListRow[]): { refs: ArtifactRef[]; scanCapped: boolean } {
   const refs: ArtifactRef[] = []
   const sortedRuns = [...rows].sort((a, b) => b.created_at - a.created_at)
+  let scanCapped = false
 
   for (const run of sortedRuns) {
     for (const key of run.artifact_keys || []) {
@@ -208,15 +239,17 @@ function listArtifactRefsFromRuns(rows: RunListRow[]): ArtifactRef[] {
         runCreatedAt: run.created_at,
       })
       if (refs.length >= MAX_ARTIFACTS_SCANNED) {
+        scanCapped = true
         break
       }
     }
     if (refs.length >= MAX_ARTIFACTS_SCANNED) {
+      scanCapped = true
       break
     }
   }
 
-  return refs
+  return { refs, scanCapped }
 }
 
 async function listArtifactItemsForUserFast(refs: ArtifactRef[]) {
@@ -485,6 +518,7 @@ export const list = action({
     source: v.optional(sourceFilterValidator),
     search: v.optional(v.string()),
     sort: v.optional(sortValidator),
+    cursor: v.optional(v.string()),
     offset: v.optional(v.number()),
     limit: v.optional(v.number()),
   },
@@ -497,17 +531,28 @@ export const list = action({
     const sort: StorageSort = args.sort ?? "created_desc"
     const search = (args.search || "").trim().slice(0, MAX_SEARCH_CHARS).toLowerCase()
     const limit = normalizeLimit(args.limit)
-    const offset = normalizeOffset(args.offset)
+    const cursorOffset = typeof args.cursor === "string" ? decodeOffsetCursor(args.cursor) : null
+    if (typeof args.cursor === "string" && cursorOffset === null) {
+      throw new ConvexError("invalid storage cursor")
+    }
+    const offset = cursorOffset ?? normalizeOffset(args.offset)
 
     const useFullArtifactMetadata = shouldUseFullArtifactMetadata(sort)
     const [dataRows, runRows] = await Promise.all([
       source === "all" || source === "data"
-        ? ctx.runQuery(internal.data.internalList, { userId })
-        : Promise.resolve({ blobs: [] as DataBlobListRow[] }),
+        ? ctx.runQuery(internal.data.internalList, { userId, limit: 1000 })
+        : Promise.resolve({
+            blobs: [] as DataBlobListRow[],
+            has_more: false,
+            next_cursor: null,
+            scan_capped: false,
+          }),
       source === "all" || source === "run_artifact"
         ? ctx.runQuery(internal.runs.internalList, { userId })
         : Promise.resolve({ runs: [] as RunListRow[] }),
     ])
+    const dataList = dataRows as DataBlobListResult
+    const runsList = runRows as RunListResult
     const dataItems: StorageItem[] = dataRows.blobs.map((blob) => ({
       id: `data:${blob.key}`,
       source: "data",
@@ -519,7 +564,7 @@ export const list = action({
       download_url: blob.download_url,
       data_blob_id: blob.blob_id,
     }))
-    const artifactRefs = listArtifactRefsFromRuns(runRows.runs)
+    const { refs: artifactRefs, scanCapped: artifactScanCapped } = listArtifactRefsFromRuns(runsList.runs)
     const artifactItems =
       source === "all" || source === "run_artifact"
         ? useFullArtifactMetadata
@@ -543,6 +588,11 @@ export const list = action({
       limit,
       has_more: hasMore,
       next_offset: hasMore ? offset + limit : null,
+      next_cursor: hasMore ? encodeOffsetCursor(offset + limit) : null,
+      scan_capped: {
+        data: dataList.scan_capped || dataList.has_more,
+        run_artifact: artifactScanCapped,
+      },
     }
   },
 })

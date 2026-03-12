@@ -8,6 +8,9 @@ import { shortId } from "@convex/ids";
 import { UPLOAD_LIMITS_BYTES } from "../config";
 
 const r2 = new R2(components.r2);
+const DEFAULT_LIST_LIMIT = 1000;
+const MAX_LIST_LIMIT = 1000;
+const MAX_LIST_SCAN_PAGES = 10;
 
 function buildDataPrefix(userId: string) {
   return `${userId}/data/`;
@@ -62,6 +65,9 @@ const dataBlobValidator = v.object({
 });
 const listDataBlobsValidator = v.object({
   blobs: v.array(dataBlobValidator),
+  has_more: v.boolean(),
+  next_cursor: v.union(v.string(), v.null()),
+  scan_capped: v.boolean(),
 });
 
 type DataBlobRow = {
@@ -74,15 +80,35 @@ type DataBlobRow = {
   created_at: number;
 };
 
-async function listBlobsForUserId(ctx: QueryCtx | MutationCtx, userId: string): Promise<DataBlobRow[]> {
+function normalizeListLimit(value: number | undefined) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return DEFAULT_LIST_LIMIT;
+  }
+  return Math.max(1, Math.min(MAX_LIST_LIMIT, Math.floor(value)));
+}
+
+async function listBlobsForUserId(
+  ctx: QueryCtx | MutationCtx,
+  userId: string,
+  options?: { cursor?: string; limit?: number },
+): Promise<{
+  blobs: DataBlobRow[];
+  has_more: boolean;
+  next_cursor: string | null;
+  scan_capped: boolean;
+}> {
   const prefix = buildDataPrefix(userId);
   const blobs: DataBlobRow[] = [];
+  const limit = normalizeListLimit(options?.limit);
 
-  let cursor: string | null = null;
+  let cursor: string | null = options?.cursor ?? null;
   let pages = 0;
+  let hasMore = false;
+  let nextCursor: string | null = null;
 
-  while (pages < 10) {
+  while (pages < MAX_LIST_SCAN_PAGES && blobs.length < limit) {
     const result = await r2.listMetadata(ctx, 100, cursor);
+    pages += 1;
     for (const item of result.page) {
       if (!item.key.startsWith(prefix)) continue;
       if (!isTopLevelDataUploadKey(userId, item.key)) continue;
@@ -96,15 +122,30 @@ async function listBlobsForUserId(ctx: QueryCtx | MutationCtx, userId: string): 
         download_url: item.url,
         created_at: new Date(item.lastModified).getTime(),
       });
+      if (blobs.length >= limit) {
+        break;
+      }
     }
 
-    if (result.isDone) break;
+    if (result.isDone) {
+      hasMore = false;
+      nextCursor = null;
+      break;
+    }
+
+    hasMore = true;
     cursor = result.continueCursor;
-    pages += 1;
+    nextCursor = cursor;
   }
 
   blobs.sort((a, b) => b.created_at - a.created_at);
-  return blobs;
+  const scanCapped = hasMore && pages >= MAX_LIST_SCAN_PAGES && blobs.length < limit;
+  return {
+    blobs,
+    has_more: hasMore,
+    next_cursor: hasMore ? nextCursor : null,
+    scan_capped: scanCapped,
+  };
 }
 
 export const { syncMetadata } = r2.clientApi<DataModel>({
@@ -163,20 +204,31 @@ export const generateUploadUrl = mutation({
 });
 
 export const list = query({
-  args: {},
+  args: {
+    cursor: v.optional(v.string()),
+    limit: v.optional(v.number()),
+  },
   returns: listDataBlobsValidator,
-  handler: async (ctx) => {
+  handler: async (ctx, args) => {
     const user = await requireUser(ctx);
-    const blobs = await listBlobsForUserId(ctx, String(user._id));
-    return { blobs };
+    return await listBlobsForUserId(ctx, String(user._id), {
+      cursor: args.cursor,
+      limit: args.limit,
+    });
   },
 });
 
 export const internalList = internalQuery({
-  args: { userId: v.string() },
+  args: {
+    userId: v.string(),
+    cursor: v.optional(v.string()),
+    limit: v.optional(v.number()),
+  },
   returns: listDataBlobsValidator,
   handler: async (ctx, args) => {
-    const blobs = await listBlobsForUserId(ctx, args.userId);
-    return { blobs };
+    return await listBlobsForUserId(ctx, args.userId, {
+      cursor: args.cursor,
+      limit: args.limit,
+    });
   },
 });
