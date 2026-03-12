@@ -13,6 +13,13 @@ import {
   blobLimitByKind,
   manifestLimitByKind,
 } from "../config";
+import {
+  normalizeSha256,
+  parseManifest,
+  sha256Hex,
+  type SyncKind,
+  type SyncManifestPayload,
+} from "@convex/syncManifest";
 
 function extractBearerToken(request: Request): string {
   const bearer = request.headers.get("authorization")?.trim() || "";
@@ -49,22 +56,8 @@ async function authenticateApiRequest(ctx: ActionCtx, request: Request): Promise
 }
 
 const r2 = new R2(components.r2);
-const SHA256_HEX_RE = /^[a-f0-9]{64}$/i;
 const RUNTIME_STATUS_VALUES = ["provisioning", "running", "completed", "failed", "cancelled"] as const;
 const RUNTIME_STATUS_SET = new Set<string>(RUNTIME_STATUS_VALUES);
-type SyncKind = "code" | "data";
-type ManifestEntry = {
-  path: string;
-  sha256: string;
-  size: number;
-  mode: number;
-};
-type SyncManifestPayload = {
-  version: number;
-  type: SyncKind;
-  created_at: number;
-  entries: ManifestEntry[];
-};
 type OwnedEnvironmentRef = {
   dataId: string;
 };
@@ -162,13 +155,6 @@ async function validateGpuCountLimit(ctx: ActionCtx, gpuType: string, gpuCount: 
   if (gpuCount > max) {
     throw new Error(`Max GPU count for ${gpuType} is ${max}.`);
   }
-}
-
-function normalizeSha256(value: unknown): string | null {
-  if (typeof value !== "string") return null;
-  const hash = value.trim().toLowerCase();
-  if (!SHA256_HEX_RE.test(hash)) return null;
-  return hash;
 }
 
 function parseSizeBytes(value: unknown): number | null {
@@ -310,70 +296,6 @@ export const internalGetObjectDownloadUrl = internalQuery({
   },
 });
 
-function parseManifestEntry(value: unknown): ManifestEntry | null {
-  if (!value || typeof value !== "object") {
-    return null;
-  }
-  const row = value as Record<string, unknown>;
-  const path = typeof row.path === "string" ? row.path.trim() : "";
-  const sha256 = normalizeSha256(row.sha256);
-  const size = typeof row.size === "number" ? row.size : NaN;
-  const mode = typeof row.mode === "number" ? row.mode : NaN;
-  if (!path || path.startsWith("/") || path.includes("\\") || path.includes("\0")) {
-    return null;
-  }
-  if (path === "." || path === ".." || path.includes("/../") || path.startsWith("../")) {
-    return null;
-  }
-  if (!sha256 || !Number.isFinite(size) || size < 0 || !Number.isInteger(size)) {
-    return null;
-  }
-  if (!Number.isFinite(mode) || mode < 0 || mode > 0o777 || !Number.isInteger(mode)) {
-    return null;
-  }
-  return { path, sha256, size, mode };
-}
-
-function parseManifest(value: unknown, kind: SyncKind): SyncManifestPayload | null {
-  if (!value || typeof value !== "object") {
-    return null;
-  }
-  const row = value as Record<string, unknown>;
-  const version = row.version;
-  const type = row.type;
-  const createdAt = row.created_at;
-  const entries = row.entries;
-  if (version !== 1 || type !== kind || typeof createdAt !== "number" || !Number.isFinite(createdAt)) {
-    return null;
-  }
-  if (!Array.isArray(entries)) {
-    return null;
-  }
-  const parsedEntries: ManifestEntry[] = [];
-  let previousPath = "";
-  const maxEntrySizeBytes = blobLimitByKind(kind);
-  for (const entry of entries) {
-    const parsed = parseManifestEntry(entry);
-    if (!parsed) {
-      return null;
-    }
-    if (previousPath !== "" && parsed.path < previousPath) {
-      return null;
-    }
-    if (parsed.size > maxEntrySizeBytes) {
-      return null;
-    }
-    previousPath = parsed.path;
-    parsedEntries.push(parsed);
-  }
-  return {
-    version: 1,
-    type: kind,
-    created_at: createdAt,
-    entries: parsedEntries,
-  };
-}
-
 async function fetchManifestFromR2(
   _ctx: ActionCtx,
   key: string,
@@ -399,19 +321,13 @@ async function fetchManifestFromR2(
   } catch {
     throw new Error(`${kind} manifest is not valid JSON`);
   }
-  const manifest = parseManifest(parsed, kind);
+  const manifest = parseManifest(parsed, kind, {
+    maxEntrySizeBytes: blobLimitByKind(kind),
+  });
   if (!manifest) {
     throw new Error(`${kind} manifest payload is invalid`);
   }
   return manifest;
-}
-
-async function sha256Hex(value: string): Promise<string> {
-  const bytes = new TextEncoder().encode(value);
-  const digest = await crypto.subtle.digest("SHA-256", bytes);
-  return Array.from(new Uint8Array(digest))
-    .map((byte) => byte.toString(16).padStart(2, "0"))
-    .join("");
 }
 
 type RuntimeRoute = {

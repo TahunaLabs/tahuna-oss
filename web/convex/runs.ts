@@ -17,6 +17,13 @@ import { R2 } from "@convex-dev/r2";
 import { HeadObjectCommand } from "@aws-sdk/client-s3";
 import { images } from "./catalog";
 import { RUN_CONFIG, SYNC_CONFIG } from "../config";
+import {
+  parseManifest,
+  sha256Hex,
+  type ManifestEntry,
+  type SyncKind,
+  type SyncManifestPayload,
+} from "@convex/syncManifest";
 
 const RUN_STATUS = {
   QUEUED: "queued",
@@ -162,7 +169,6 @@ const provisionPool = new Workpool(components.workpool, {
   retryActionsByDefault: true,
 });
 const r2 = new R2(components.r2);
-const SHA256_HEX_RE = /^[a-f0-9]{64}$/i;
 const RUNTIME_LOG_TAIL_LIMIT = RUN_CONFIG.runtimeLogTailLimit;
 const RUNTIME_METRIC_TAIL_LIMIT = RUN_CONFIG.runtimeMetricTailLimit;
 const RUN_NAME_MAX_LENGTH = 64;
@@ -209,19 +215,6 @@ const RUN_NAME_THIRD = [
   "yak",
 ];
 
-type SyncKind = "code" | "data";
-type ManifestEntry = {
-  path: string;
-  sha256: string;
-  size: number;
-  mode: number;
-};
-type SyncManifestPayload = {
-  version: number;
-  type: SyncKind;
-  created_at: number;
-  entries: ManifestEntry[];
-};
 type RuntimeBootstrapEntry = ManifestEntry & { download_url: string };
 type ProvisioningPayload = {
   run_id: string;
@@ -375,82 +368,6 @@ function toProvisioningPayload(row: Doc<"runs">): ProvisioningPayload {
     data_manifest_key: manifestKey(row.userId, row.environmentId, row.dataId, "data", row.dataManifestHash),
     contract_version: "sync-incremental-0.1.0",
   };
-}
-
-function normalizeSha256(value: unknown): string | null {
-  if (typeof value !== "string") return null;
-  const hash = value.trim().toLowerCase();
-  if (!SHA256_HEX_RE.test(hash)) return null;
-  return hash;
-}
-
-function parseManifestEntry(value: unknown): ManifestEntry | null {
-  if (!value || typeof value !== "object") {
-    return null;
-  }
-  const row = value as Record<string, unknown>;
-  const path = typeof row.path === "string" ? row.path.trim() : "";
-  const sha256 = normalizeSha256(row.sha256);
-  const size = typeof row.size === "number" ? row.size : NaN;
-  const mode = typeof row.mode === "number" ? row.mode : NaN;
-  if (!path || path.startsWith("/") || path.includes("\\") || path.includes("\0")) {
-    return null;
-  }
-  if (path === "." || path === ".." || path.includes("/../") || path.startsWith("../")) {
-    return null;
-  }
-  if (!sha256 || !Number.isFinite(size) || size < 0 || !Number.isInteger(size)) {
-    return null;
-  }
-  if (!Number.isFinite(mode) || mode < 0 || mode > 0o777 || !Number.isInteger(mode)) {
-    return null;
-  }
-  return { path, sha256, size, mode };
-}
-
-function parseManifest(value: unknown, kind: SyncKind): SyncManifestPayload | null {
-  if (!value || typeof value !== "object") {
-    return null;
-  }
-  const row = value as Record<string, unknown>;
-  const version = row.version;
-  const type = row.type;
-  const createdAt = row.created_at;
-  const entries = row.entries;
-  if (version !== 1 || type !== kind || typeof createdAt !== "number" || !Number.isFinite(createdAt)) {
-    return null;
-  }
-  if (!Array.isArray(entries)) {
-    return null;
-  }
-  const parsedEntries: ManifestEntry[] = [];
-  let previousPath = "";
-  for (const entry of entries) {
-    const parsed = parseManifestEntry(entry);
-    if (!parsed) {
-      return null;
-    }
-    if (previousPath !== "" && parsed.path < previousPath) {
-      return null;
-    }
-    previousPath = parsed.path;
-    parsedEntries.push(parsed);
-  }
-  return {
-    version: 1,
-    type: kind,
-    created_at: createdAt,
-    entries: parsedEntries,
-  };
-}
-
-async function sha256Hex(value: string | ArrayBuffer): Promise<string> {
-  const bytes =
-    typeof value === "string" ? new TextEncoder().encode(value) : new Uint8Array(value);
-  const digest = await crypto.subtle.digest("SHA-256", bytes);
-  return Array.from(new Uint8Array(digest))
-    .map((byte) => byte.toString(16).padStart(2, "0"))
-    .join("");
 }
 
 async function fetchObjectBytes(_ctx: ActionCtx, key: string): Promise<ArrayBuffer> {
