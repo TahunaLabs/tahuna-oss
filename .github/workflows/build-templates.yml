@@ -4,10 +4,6 @@ on:
   push:
     tags-ignore:
       - 'v*'
-    paths:
-      - 'runtime/images/**'
-      - 'runtime/warden/**'
-      - '.github/workflows/build-templates.yml'
   workflow_dispatch:
 
 jobs:
