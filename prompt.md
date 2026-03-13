@@ -7,6 +7,7 @@
 - One issue = one commit.
 - For every real change, log to Linear: issue, recommendation, commit hash, validation commands.
 - Validate before commit: `bun run lint` (must include ESLint + TypeScript unused checks).
+- For Go CLI changes, validate before commit with `make validate-cli`.
 - If blocked or ambiguous, pause and clarify before touching unrelated code.
 
 ## Convex Guardrails (Mandatory)
@@ -34,3 +35,27 @@ Use these rules for any Convex backend change.
 - Keep DTO naming consistent across modules (single canonical keys, e.g. `environment_id`).
 - No ad-hoc logging patterns.
 - Keep error contracts consistent (`detail` / structured errors only).
+
+## Go CLI Guardrails (Mandatory)
+
+Use these rules for any `cli/` change.
+
+1. Scope and dead code checks
+- Before removing or renaming anything in `cli/`, search the whole repo, not just `cli/`.
+- Remove dead code only after confirming there are no repo-wide callers.
+- Do not keep compatibility shims, deprecated aliases, or legacy branches unless explicitly requested.
+
+2. Validation and tooling
+- Validate before every CLI commit with `make validate-cli`.
+- `make validate-cli` is the required stack: `gofmt` check, `go vet`, `golangci-lint`, and `go test`.
+- If a rule is mechanical, enforce it in lint/tooling rather than adding prompt-only guidance.
+
+3. Command surface and architecture
+- Keep command parsing and user-facing output in the CLI command files; keep HTTP transport helpers in `cli/ui_api.go`; keep project state helpers in `cli/project.go`; keep sync internals in `cli/sync.go`.
+- New CLI flags should have one canonical spelling. Do not add deprecated aliases unless explicitly requested.
+- Keep default CLI output human-readable; reserve JSON for explicit `--verbose` paths.
+
+4. Reliability and consistency
+- Use explicit timeouts/contexts for networked behavior; do not add unbounded retries or sleeps.
+- Preserve one canonical error/output style per command family.
+- Add or update Go tests whenever command behavior, routing, or output contracts change.
