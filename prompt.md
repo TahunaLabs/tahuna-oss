@@ -1,7 +1,3 @@
-Good catch — that's a cross-cutting principle. Here's the full updated prompt with a **Consistency (All Sections)** rule added:
-
----
-
 # Agent Prompt
 
 ## General (Mandatory)
@@ -27,6 +23,7 @@ Good catch — that's a cross-cutting principle. Here's the full updated prompt 
 - Keep presentation separate from data/mutation orchestration. Extract repeated view logic into focused components.
 - One canonical path per screen state (loading/empty/success/error). No duplicate client state derivable from fetched data.
 - Preserve existing naming, copy tone, and interaction patterns. Reuse shared primitives before introducing variants.
+- Use shadcn/ui components when available; create a local shadcn-style component if the primitive doesn't exist yet.
 
 ## Convex (`web/convex/**`)
 
