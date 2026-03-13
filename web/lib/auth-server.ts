@@ -22,8 +22,3 @@ export const {
   fetchAuthMutation,
   fetchAuthAction,
 } = convexBetterAuthNextJs({ convexUrl: tahunaApiUrl, convexSiteUrl: tahunaSiteUrl });
-
-/** @deprecated Use `handler` directly instead. */
-export function getAuthHandlers() {
-  return handler;
-}

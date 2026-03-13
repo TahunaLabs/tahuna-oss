@@ -1,5 +1,18 @@
 import tsParser from "@typescript-eslint/parser";
 
+const appCodeFiles = ["app/**/*.{ts,tsx,js,mjs,cjs}", "components/**/*.{ts,tsx,js,mjs,cjs}", "lib/**/*.{ts,tsx,js,mjs,cjs}", "config.ts"];
+const noRelativeAppImportsRule = [
+  "error",
+  {
+    patterns: [
+      {
+        group: ["./*", "../*"],
+        message: 'Use the "@/..." alias for frontend app-code imports instead of relative paths.',
+      },
+    ],
+  },
+];
+
 export default [
   {
     ignores: [
@@ -17,9 +30,27 @@ export default [
     },
   },
   {
+    files: appCodeFiles,
+    ignores: ["app/layout.tsx"],
+    rules: {
+      "no-console": "error",
+      "no-debugger": "error",
+      "no-restricted-imports": noRelativeAppImportsRule,
+    },
+  },
+  {
+    files: ["app/layout.tsx"],
+    rules: {
+      "no-console": "error",
+      "no-debugger": "error",
+    },
+  },
+  {
     files: ["convex/**/*.ts"],
     ignores: ["convex/_generated/**", "convex/auth.ts"],
     rules: {
+      "no-console": "error",
+      "no-debugger": "error",
       "no-restricted-imports": [
         "error",
         {
@@ -42,6 +73,8 @@ export default [
   {
     files: ["convex/appConfig.ts"],
     rules: {
+      "no-console": "error",
+      "no-debugger": "error",
       "no-restricted-imports": [
         "error",
         {
