@@ -37,7 +37,6 @@ const (
 
 // cliVersion is overridden at release build time via -ldflags.
 var cliVersion = "dev"
-var warnedLegacyAPIURLEnv bool
 
 func main() {
 	if len(os.Args) < 2 {
@@ -369,21 +368,6 @@ func apiURL() string {
 		return strings.TrimRight(v, "/")
 	}
 	if v := lookupConfigValue("TAHUNA_PUBLIC_SITE_URL"); v != "" {
-		return strings.TrimRight(v, "/")
-	}
-	// Legacy provider-specific aliases are supported temporarily for migration.
-	if v := lookupConfigValue("CONVEX_SITE_URL"); v != "" {
-		if !warnedLegacyAPIURLEnv {
-			fmt.Fprintf(os.Stderr, "warning: using a legacy backend URL env var; use TAHUNA_API_URL/TAHUNA_SITE_URL instead\n")
-			warnedLegacyAPIURLEnv = true
-		}
-		return strings.TrimRight(v, "/")
-	}
-	if v := lookupConfigValue("NEXT_PUBLIC_CONVEX_SITE_URL"); v != "" {
-		if !warnedLegacyAPIURLEnv {
-			fmt.Fprintf(os.Stderr, "warning: using a legacy backend URL env var; use TAHUNA_API_URL/TAHUNA_SITE_URL instead\n")
-			warnedLegacyAPIURLEnv = true
-		}
 		return strings.TrimRight(v, "/")
 	}
 	return defaultAPIURL

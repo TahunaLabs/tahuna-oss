@@ -116,3 +116,16 @@ func TestEnvironmentShow_DefaultHumanReadable(t *testing.T) {
 		t.Fatalf("default show output should not be JSON: %s", output)
 	}
 }
+
+func TestAPIURL_IgnoresLegacyProviderEnvVars(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("TAHUNA_API_URL", "")
+	t.Setenv("TAHUNA_SITE_URL", "")
+	t.Setenv("TAHUNA_PUBLIC_SITE_URL", "")
+	t.Setenv("CONVEX_SITE_URL", "https://legacy.example.com")
+	t.Setenv("NEXT_PUBLIC_CONVEX_SITE_URL", "https://legacy-public.example.com")
+
+	if got := apiURL(); got != defaultAPIURL {
+		t.Fatalf("expected default API URL when only legacy provider env vars are set, got %q", got)
+	}
+}
