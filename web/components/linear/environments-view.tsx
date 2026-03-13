@@ -1,6 +1,7 @@
 "use client"
 
-import { Server, Plus, Filter, Settings2, LayoutGrid, Play, Trash2 } from "lucide-react"
+import { Server, Plus, Filter, Settings2, LayoutGrid, Play, Trash2, ExternalLink, Copy, Check } from "lucide-react"
+import { useState } from "react"
 import {
   type DataBlobRow,
   type EnvironmentRow,
@@ -83,35 +84,35 @@ export function EnvironmentsView({
         </div>
       </div>
 
-      {/* CLI hint */}
-      <div className="px-6 py-2 border-b border-border">
-        <p className="text-xs text-muted-foreground">
-          Environments are created via CLI. Run <code className="px-1 py-0.5 bg-secondary rounded">tahuna init .</code> from your project folder.
-        </p>
-      </div>
-
       {/* Content */}
       {!hasData ? (
         <div className="flex-1 flex items-center justify-center">
-          <div className="text-center max-w-md">
-            <div className="flex justify-center mb-6">
-              <Server className="w-16 h-16 text-muted-foreground/50" strokeWidth={1} />
+          <div className="w-full max-w-lg">
+            <div className="text-center mb-6">
+              <Server className="w-12 h-12 text-muted-foreground/40 mx-auto mb-4" strokeWidth={1} />
+              <h2 className="text-lg font-medium text-foreground mb-2">New Environment</h2>
+              <p className="text-sm text-muted-foreground leading-relaxed">
+                Create and manage compute environments using the Tahuna CLI.
+              </p>
             </div>
-            <h2 className="text-lg font-medium text-foreground mb-3">Environments</h2>
-            <p className="text-sm text-muted-foreground mb-6 leading-relaxed">
-              Configure and manage deployment environments. Set up development, staging,
-              and production environments with their own variables and settings.
-            </p>
-            <div className="flex items-center justify-center gap-3">
-              <button className="px-4 py-2 bg-accent text-accent-foreground text-sm rounded hover:opacity-90 flex items-center gap-2">
-                Create environment
-                <kbd className="px-1.5 py-0.5 bg-accent-foreground/20 rounded text-xs">N</kbd>
-                <span className="text-xs opacity-70">then</span>
-                <kbd className="px-1.5 py-0.5 bg-accent-foreground/20 rounded text-xs">E</kbd>
-              </button>
-              <button className="px-4 py-2 bg-secondary text-foreground text-sm rounded hover:bg-secondary/80">
-                Documentation
-              </button>
+
+            <div className="space-y-5 px-2">
+              <CliStep number={1} label="Install the Tahuna CLI" command="brew install tahuna" />
+              <CliStep number={2} label="Login to your account" command="tahuna login" />
+              <CliStep number={3} label="Set up your environment" command="tahuna init ." />
+              <CliStep number={4} label="Start a run" command="tahuna run" />
+
+              <p className="text-xs text-muted-foreground text-center">
+                You can explore example configs in <code className="px-1 py-0.5 bg-secondary rounded">/configs/</code>, or set up your own using <code className="px-1 py-0.5 bg-secondary rounded">tahuna init</code>.
+              </p>
+
+              <a
+                href="#"
+                className="flex items-center justify-center gap-2 w-full px-4 py-2.5 bg-secondary text-foreground text-sm rounded-lg hover:bg-secondary/80 transition-colors"
+              >
+                Full Documentation
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
             </div>
           </div>
         </div>
@@ -254,5 +255,33 @@ export function EnvironmentsView({
         </div>
       )}
     </main>
+  )
+}
+
+function CliStep({ number, label, command }: { number: number; label: string; command: string }) {
+  const [copied, setCopied] = useState(false)
+
+  const copyCommand = () => {
+    navigator.clipboard.writeText(command).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    })
+  }
+
+  return (
+    <div>
+      <p className="text-sm text-muted-foreground mb-1.5">
+        {number}. {label}
+      </p>
+      <div className="flex items-center justify-between gap-2 rounded-lg bg-secondary/70 border border-border px-4 py-2.5">
+        <code className="text-sm text-foreground font-mono">{command}</code>
+        <button
+          onClick={copyCommand}
+          className="p-1 rounded hover:bg-background/50 text-muted-foreground hover:text-foreground shrink-0 transition-colors"
+        >
+          {copied ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
+        </button>
+      </div>
+    </div>
   )
 }
