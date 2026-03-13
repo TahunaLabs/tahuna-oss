@@ -2,9 +2,11 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"net/http"
+	neturl "net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -42,8 +44,10 @@ func runShow(args []string) {
 		return
 	}
 	runID := resolveRunID(*id, fs.Args())
-	require(runID != "", "run_id is required (usage: tahuna run show <run_id>)")
-	resp, err := doJSON(http.MethodGet, "/runs/"+runID, nil)
+	require(runID != "", "run_id_or_name is required (usage: tahuna run show <run_id|run_name>)")
+	resolvedRunID, err := resolveRunIDByIDOrName(runID)
+	must(err)
+	resp, err := doJSON(http.MethodGet, "/runs/"+resolvedRunID, nil)
 	must(err)
 	if *verbose {
 		printJSON(resp)
@@ -181,10 +185,12 @@ func runWatch(args []string) {
 	interval := fs.Int("interval", 5, "Polling interval seconds")
 	mustParseFlags(fs, args)
 	runID := resolveRunID(*id, fs.Args())
-	require(runID != "", "run_id is required (usage: tahuna run watch <run_id>)")
+	require(runID != "", "run_id_or_name is required (usage: tahuna run watch <run_id|run_name>)")
+	resolvedRunID, err := resolveRunIDByIDOrName(runID)
+	must(err)
 	require(*interval > 0, "--interval must be >= 1")
 
-	must(monitorRun(runID, *interval))
+	must(monitorRun(resolvedRunID, *interval))
 }
 
 func runLogs(args []string) {
@@ -199,11 +205,13 @@ func runLogs(args []string) {
 	interval := fs.Int("interval", 2, "Polling interval seconds when following")
 	mustParseFlags(fs, args)
 	runID := resolveRunID(*id, fs.Args())
-	require(runID != "", "run_id is required (usage: tahuna run logs <run_id>)")
+	require(runID != "", "run_id_or_name is required (usage: tahuna run logs <run_id|run_name>)")
+	resolvedRunID, err := resolveRunIDByIDOrName(runID)
+	must(err)
 	require(*interval > 0, "--interval must be >= 1")
 	require(!(*follow && *verbose), "--follow (-f) cannot be used with --verbose (-v)")
 
-	resp, err := doJSON(http.MethodGet, "/runs/"+runID+"/logs", nil)
+	resp, err := doJSON(http.MethodGet, "/runs/"+resolvedRunID+"/logs", nil)
 	must(err)
 	if *verbose {
 		printJSON(resp)
@@ -214,7 +222,7 @@ func runLogs(args []string) {
 	if !*follow {
 		return
 	}
-	must(followRunLogs(runID, resp, *interval))
+	must(followRunLogs(resolvedRunID, resp, *interval))
 }
 
 func printRunSummary(resp map[string]any) {
@@ -438,13 +446,15 @@ func runCancel(args []string) {
 	forceLong := fs.Bool("force", false, "Force cancel (immediate termination, no graceful shutdown)")
 	mustParseFlags(fs, args)
 	runID := resolveRunID(*id, fs.Args())
-	require(runID != "", "run_id is required (usage: tahuna run cancel <run_id> [-f])")
+	require(runID != "", "run_id_or_name is required (usage: tahuna run cancel <run_id|run_name> [-f])")
+	resolvedRunID, err := resolveRunIDByIDOrName(runID)
+	must(err)
 
 	isForce := *force || *forceLong
 
 	if !isForce {
 		confirm := promptChoice(
-			fmt.Sprintf("Cancel run %s? This will attempt graceful shutdown.", runID),
+			fmt.Sprintf("Cancel run %s? This will attempt graceful shutdown.", resolvedRunID),
 			[]string{"Yes, cancel", "No, keep running"},
 			1,
 		)
@@ -454,19 +464,19 @@ func runCancel(args []string) {
 		}
 	}
 
-	resp, err := doJSON(http.MethodPost, "/runs/"+runID+"/cancel", map[string]any{
+	resp, err := doJSON(http.MethodPost, "/runs/"+resolvedRunID+"/cancel", map[string]any{
 		"force": isForce,
 	})
 	must(err)
 
 	if cancelled, ok := resp["cancel_requested"]; ok && cancelled == true {
 		if isForce {
-			fmt.Printf("%sForce cancellation requested for run %s.%s\n", cAmpGold, runID, cReset)
+			fmt.Printf("%sForce cancellation requested for run %s.%s\n", cAmpGold, resolvedRunID, cReset)
 		} else {
-			fmt.Printf("%sCancellation requested for run %s. Waiting for graceful shutdown...%s\n", cAmpGold, runID, cReset)
+			fmt.Printf("%sCancellation requested for run %s. Waiting for graceful shutdown...%s\n", cAmpGold, resolvedRunID, cReset)
 		}
 	} else if deleted, ok := resp["deleted"]; ok && deleted == true {
-		fmt.Printf("%sRun %s deleted.%s\n", cAmpGreen, runID, cReset)
+		fmt.Printf("%sRun %s deleted.%s\n", cAmpGreen, resolvedRunID, cReset)
 	} else {
 		printJSON(resp)
 	}
@@ -475,11 +485,38 @@ func runCancel(args []string) {
 func runDelete(args []string) {
 	fs := flag.NewFlagSet("run delete", flag.ExitOnError)
 	id := fs.String("id", "", "Run ID")
+	cancel := fs.Bool("cancel", false, "Cancel run first, then delete")
+	fs.BoolVar(cancel, "c", false, "Cancel run first, then delete")
+	force := fs.Bool("force", false, "Force delete active run (terminates pod immediately)")
+	fs.BoolVar(force, "f", false, "Force delete active run (terminates pod immediately)")
 	mustParseFlags(fs, args)
 	runID := resolveRunID(*id, fs.Args())
-	require(runID != "", "run_id is required (usage: tahuna run delete <run_id>)")
-
-	resp, err := doJSON(http.MethodDelete, "/runs/"+runID, nil)
+	require(runID != "", "run_id_or_name is required (usage: tahuna run delete <run_id|run_name>)")
+	resolvedRunID, err := resolveRunIDByIDOrName(runID)
 	must(err)
+
+	query := neturl.Values{}
+	if *cancel || *force {
+		query.Set("cancel", "1")
+	}
+	if *force {
+		query.Set("force", "1")
+	}
+	path := "/runs/" + resolvedRunID
+	if encoded := query.Encode(); encoded != "" {
+		path += "?" + encoded
+	}
+
+	resp, err := doJSON(http.MethodDelete, path, nil)
+	if err != nil {
+		var apiErr *apiRequestError
+		if errors.As(err, &apiErr) && *cancel && !*force && apiErr.status == http.StatusConflict {
+			if strings.Contains(strings.ToLower(apiErr.detail), "cancellation requested") {
+				fmt.Printf("%sCancellation requested for run %s. Delete will complete after shutdown; retry `tahuna run delete %s` in a moment.%s\n", cAmpGold, resolvedRunID, resolvedRunID, cReset)
+				return
+			}
+		}
+		must(err)
+	}
 	printJSON(resp)
 }

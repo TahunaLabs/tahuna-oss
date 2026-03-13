@@ -782,7 +782,7 @@ async function listRunsForUser(ctx: QueryCtx | MutationCtx, userId: string) {
     .collect();
 }
 
-function hasActiveRunNameConflict(
+function hasRunNameConflict(
   rows: Array<Doc<"runs">>,
   candidate: string,
   ignoreRunId?: Id<"runs">,
@@ -792,9 +792,6 @@ function hasActiveRunNameConflict(
     return false;
   }
   return rows.some((row) => {
-    if (!ACTIVE_STATUSES.has(row.status)) {
-      return false;
-    }
     if (ignoreRunId && row._id === ignoreRunId) {
       return false;
     }
@@ -817,7 +814,7 @@ function appendRunNameSuffix(base: string, suffix: number) {
 function pickUniqueGeneratedRunName(rows: Array<Doc<"runs">>) {
   for (let attempt = 0; attempt < 32; attempt += 1) {
     const candidate = generateWordRunName();
-    if (!hasActiveRunNameConflict(rows, candidate)) {
+    if (!hasRunNameConflict(rows, candidate)) {
       return candidate;
     }
   }
@@ -825,7 +822,7 @@ function pickUniqueGeneratedRunName(rows: Array<Doc<"runs">>) {
   const base = generateWordRunName();
   for (let suffix = 2; suffix <= 999; suffix += 1) {
     const candidate = appendRunNameSuffix(base, suffix);
-    if (!hasActiveRunNameConflict(rows, candidate)) {
+    if (!hasRunNameConflict(rows, candidate)) {
       return candidate;
     }
   }
@@ -907,8 +904,8 @@ async function createRunForUserId(
   let runName = "";
   if (typeof args.name === "string" && args.name.trim() !== "") {
     runName = validateRunName(args.name);
-    if (hasActiveRunNameConflict(userRuns, runName)) {
-      throw new ConvexError("run name is already used by an active run");
+    if (hasRunNameConflict(userRuns, runName)) {
+      throw new ConvexError("run name is already used");
     }
   } else {
     runName = pickUniqueGeneratedRunName(userRuns);
@@ -1002,10 +999,36 @@ async function cancelRunForUserId(
   return { cancel_requested: true, forced: force, run_id: String(runId) };
 }
 
-async function deleteRunForUserId(ctx: MutationCtx, userId: string, runId: Id<"runs">) {
-  const row = await getOwnedRun(ctx, userId, runId);
+async function deleteRunForUserId(
+  ctx: MutationCtx,
+  userId: string,
+  runId: Id<"runs">,
+  options?: { cancelActive?: boolean; force?: boolean },
+) {
+  let row = await getOwnedRun(ctx, userId, runId);
+  const shouldCancelActive = options?.cancelActive === true || options?.force === true;
+  const shouldForceDelete = options?.force === true;
+
   if (ACTIVE_STATUSES.has(row.status)) {
-    throw new ConvexError("run is active; cancel it before deleting");
+    if (!shouldCancelActive) {
+      throw new ConvexError("run is active; cancel it before deleting");
+    }
+
+    if (shouldForceDelete) {
+      if (row.podId) {
+        await ctx.scheduler.runAfter(0, internal.runs.internalTerminatePod, {
+          runId,
+          podId: row.podId,
+          force: true,
+        });
+      }
+    } else {
+      await cancelRunForUserId(ctx, userId, runId, false);
+      row = await getOwnedRun(ctx, userId, runId);
+      if (ACTIVE_STATUSES.has(row.status)) {
+        throw new ConvexError("cancellation requested; run is still shutting down");
+      }
+    }
   }
 
   const [events, runtimeLogs, runtimeMetrics] = await Promise.all([
@@ -1040,8 +1063,8 @@ async function renameRunForUserId(ctx: MutationCtx, userId: string, runId: Id<"r
   }
 
   const userRuns = await listRunsForUser(ctx, userId);
-  if (hasActiveRunNameConflict(userRuns, nextName, runId)) {
-    throw new ConvexError("run name is already used by an active run");
+  if (hasRunNameConflict(userRuns, nextName, runId)) {
+    throw new ConvexError("run name is already used");
   }
 
   await ctx.db.patch("runs", runId, { name: nextName });
@@ -1168,10 +1191,18 @@ export const internalCreate = internalMutation({
 });
 
 export const internalRemove = internalMutation({
-  args: { userId: v.string(), runId: v.id("runs") },
+  args: {
+    userId: v.string(),
+    runId: v.id("runs"),
+    cancelActive: v.optional(v.boolean()),
+    force: v.optional(v.boolean()),
+  },
   returns: v.object({ deleted: v.boolean(), run_id: v.string() }),
   handler: async (ctx, args) => {
-    return deleteRunForUserId(ctx, args.userId, args.runId);
+    return deleteRunForUserId(ctx, args.userId, args.runId, {
+      cancelActive: args.cancelActive === true,
+      force: args.force === true,
+    });
   },
 });
 

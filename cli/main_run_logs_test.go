@@ -13,6 +13,14 @@ import (
 func TestRunLogs_DefaultHumanReadable(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+		if r.Method == http.MethodGet && r.URL.Path == "/api/runs" {
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"runs": []map[string]any{
+					{"run_id": "run-123", "name": "run-123"},
+				},
+			})
+			return
+		}
 		if r.Method == http.MethodGet && r.URL.Path == "/api/runs/run-123/logs" {
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"run_id":    "run-123",
@@ -77,6 +85,14 @@ func TestRunLogs_DefaultHumanReadable(t *testing.T) {
 func TestRunLogs_VerboseShowsJSON(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+		if r.Method == http.MethodGet && r.URL.Path == "/api/runs" {
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"runs": []map[string]any{
+					{"run_id": "run-456", "name": "run-456"},
+				},
+			})
+			return
+		}
 		if r.Method == http.MethodGet && r.URL.Path == "/api/runs/run-456/logs" {
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"run_id":         "run-456",
@@ -118,6 +134,13 @@ func TestRunLogs_FollowStreamsUntilTerminal(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/runs":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"runs": []map[string]any{
+					{"run_id": "run-follow", "name": "run-follow"},
+				},
+			})
+			return
 		case r.Method == http.MethodGet && r.URL.Path == "/api/runs/run-follow":
 			mu.Lock()
 			statusCalls++

@@ -463,6 +463,8 @@ export const removeRun = httpAction(async (ctx, request) => {
   const url = new URL(request.url);
   const parts = url.pathname.split("/");
   const runId = parts[parts.length - 1];
+  const cancelActive = url.searchParams.get("cancel") === "1" || url.searchParams.get("cancel") === "true";
+  const forceDelete = url.searchParams.get("force") === "1" || url.searchParams.get("force") === "true";
 
   if (!runId || runId === "runs") {
     return new Response(JSON.stringify({ detail: "run_id is required" }), {
@@ -475,6 +477,8 @@ export const removeRun = httpAction(async (ctx, request) => {
     const data = await ctx.runMutation(internal.runs.internalRemove, {
       userId,
       runId: runId as Id<"runs">,
+      cancelActive,
+      force: forceDelete,
     });
     return new Response(JSON.stringify(data), {
       status: 200,
@@ -482,7 +486,9 @@ export const removeRun = httpAction(async (ctx, request) => {
     });
   } catch (err) {
     const detail = err instanceof Error ? err.message : "failed to delete run";
-    const status = detail.toLowerCase().includes("cancel it before deleting") ? 409 : 400;
+    const lower = detail.toLowerCase();
+    const status =
+      lower.includes("cancel it before deleting") || lower.includes("cancellation requested") ? 409 : 400;
     return new Response(JSON.stringify({ detail }), {
       status,
       headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),

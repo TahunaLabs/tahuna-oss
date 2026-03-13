@@ -97,12 +97,12 @@ Run list:
   tahuna run list -l <N>         Show last N runs
   tahuna run list -a             Show all runs
   tahuna run list --verbose      Show full JSON payload
-  tahuna run show <run_id>
+  tahuna run show <run_id|run_name>
   tahuna run rename <run_id|run_name> --name <new_name>
-  tahuna run watch <run_id> [--interval 5]
-  tahuna run logs <run_id> [--verbose] [--follow]
-  tahuna run cancel <run_id> [-f]
-  tahuna run delete <run_id>
+  tahuna run watch <run_id|run_name> [--interval 5]
+  tahuna run logs <run_id|run_name> [--verbose] [--follow]
+  tahuna run cancel <run_id|run_name> [-f]
+  tahuna run delete <run_id|run_name> [--cancel|-c] [--force|-f]
 
 Environment:
   tahuna env list [--verbose]
