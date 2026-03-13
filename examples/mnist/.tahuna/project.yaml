@@ -1,8 +1,0 @@
-entrypoint: "train.py"
-data_dir: "data"
-output_dir: "outputs"
-config_file: "config.yaml"
-python_project_file: "pyproject.toml"
-uv_lock_file: "uv.lock"
-framework: "pt"
-python_version: "3.1"

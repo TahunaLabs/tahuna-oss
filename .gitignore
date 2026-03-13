@@ -60,3 +60,4 @@ web/tsconfig.tsbuildinfo
 */.convex/*
 **/.tahuna/
 test_ml_project/data/*
+**/data/
