@@ -34,6 +34,10 @@ func TestRunnerTransitionsToFailedWhenStepsNotImplemented(t *testing.T) {
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(`{"ok":true,"accepted":1}`))
 			return
+		case r.Method == http.MethodPost && r.URL.Path == "/api/runs/run_123/runtime/metrics":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"ok":true,"accepted":4}`))
+			return
 		case r.Method == http.MethodGet && r.URL.Path == "/api/runs/run_123/runtime/bootstrap":
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(`{"run_id":"run_123","contract_version":"0.1.0","workspace_root":"/workspace","code":{"manifest_hash":"abc","entries":[]},"data":{"manifest_hash":null,"entries":[]}}`))
@@ -48,7 +52,7 @@ func TestRunnerTransitionsToFailedWhenStepsNotImplemented(t *testing.T) {
 		RunID:             "run_123",
 		APIBase:           server.URL,
 		RuntimeToken:      "token_123",
-		WorkspaceRoot:     "/workspace",
+		WorkspaceRoot:     t.TempDir(),
 		RequestTimeoutSec: 30,
 	}
 
