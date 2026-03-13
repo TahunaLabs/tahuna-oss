@@ -2,9 +2,14 @@ name: Build Runtime Images
 
 on:
   push:
+    # MVP phase: trigger from develop.
+    # TODO: switch this back to `main` once MVP is complete.
     branches:
       - develop
   workflow_dispatch:
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 jobs:
   # First job: read runtime image definitions and output matrix
@@ -17,7 +22,7 @@ jobs:
       - id: set-matrix
         run: |
           # Convert images.json to matrix format: [{tag, base}, ...]
-          MATRIX=$(jq -c '[to_entries[] | .key as $fw | .value | to_entries[] | {tag: "\($fw)-\(.key)", base: .value}]' runtime/images/images.json)
+          MATRIX=$(jq -c '[to_entries[] | .key as $fw | .value | to_entries[] | {tag: "\($fw)-\(.key)", base: .value}]' web/convex/runtime-images.json)
           echo "images=$MATRIX" >> $GITHUB_OUTPUT
 
   # Second job: build each image

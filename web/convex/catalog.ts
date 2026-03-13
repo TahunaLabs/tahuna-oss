@@ -1,18 +1,22 @@
 import { action, query } from "@convex/_generated/server";
 import { v } from "convex/values";
+import runtimeImageBases from "@/convex/runtime-images.json";
 
 const MANAGED_RUNTIME_IMAGE_REPO = (
   process.env.TAHUNA_RUNTIME_IMAGE_REPO?.trim() ||
   "docker.io/pazuzzu/tahuna"
 ).replace(/\/+$/, "");
 
-const managedImageTags: Record<string, Record<string, string>> = {
-  pt: {
-    "2.8.0-cu128": "pt-2.8.0-cu128",
-    "2.4.0-cu124": "pt-2.4.0-cu124",
-    "2.2.0-cu121": "pt-2.2.0-cu121",
-  },
-};
+const managedImageTags: Record<string, Record<string, string>> = Object.fromEntries(
+  Object.entries(runtimeImageBases as Record<string, Record<string, string>>).map(
+    ([framework, versions]) => [
+      framework,
+      Object.fromEntries(
+        Object.keys(versions).map((version) => [version, `${framework}-${version}`]),
+      ),
+    ],
+  ),
+);
 
 function buildManagedImages(repo: string, tags: Record<string, Record<string, string>>) {
   const out: Record<string, Record<string, string>> = {};

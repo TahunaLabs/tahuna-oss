@@ -1,6 +1,6 @@
 # Tahuna Project Context
 
-Last updated: 2026-03-11
+Last updated: 2026-03-13
 
 ## 1) What This Project Is
 
@@ -259,6 +259,11 @@ Latest update (2026-03-10):
 - `[x]` Commit finalization hardened: CLI uploads manifests before commit and retries boundedly on transient manifest-visibility errors.
 - `[x]` Backend `/api/sync/commit` manifest existence checks now perform metadata sync + longer bounded polling to reduce object-store propagation races.
 - `[x]` **Artifact persistence implemented**: training output artifacts (`/workspace/outputs/*`) are now uploaded to R2 after successful training and committed to the run record.
+
+Latest update (2026-03-13):
+- `[x]` Runtime image CI push trigger was fixed and re-validated on `develop`; push events now create `Build Runtime Images` runs again.
+- `[x]` Current release policy is MVP-only: `.github/workflows/build-templates.yml` triggers on `develop`.
+- `[ ]` Post-MVP cleanup required: switch runtime image publish trigger branch from `develop` back to `main`.
 
 Artifact persistence detail (2026-03-10):
 - Schema: `runs` table has optional `artifactKeys: string[]` field storing R2 object keys.

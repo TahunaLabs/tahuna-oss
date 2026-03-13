@@ -1,8 +1,8 @@
 # Tahuna CLI
 
-Standalone Go CLI for managing environments and runs.
+Standalone Go CLI for login, project init, sync, and run lifecycle management.
 
-## Setup
+## Run locally
 
 ```bash
 cd cli
@@ -10,21 +10,29 @@ go mod download
 go run .
 ```
 
-## Environment
-
-```bash
-export TAHUNA_API_URL=http://localhost:3000
-```
-
-## Common commands
+## Common flow
 
 ```bash
 go run . login
-go run . init
-go run . env create --name demo --gpu-type "NVIDIA GeForce RTX 4090" --gpu-count 1 --volume-gb 80 --framework pt --version 2.8.0-cu128
-go run . env list
-go run . run create --environment-id <environment_id> --watch
-go run . run watch --id <run_id> --interval 5
+go run . init .
+go run . train
+go run . run list
+go run . sync
 ```
 
-`login` opens the browser, completes auth on the web app, then stores `TAHUNA_API_KEY` in `cli/.env.local`.
+`login` opens the browser auth flow and stores CLI credentials locally.
+
+## Validation
+
+From repo root:
+
+```bash
+make validate-cli
+```
+
+Or from `cli/`:
+
+```bash
+./tests/run_go_lint.sh
+./tests/run_go_tests.sh
+```
