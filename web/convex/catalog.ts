@@ -1,13 +1,34 @@
 import { action, query } from "@convex/_generated/server";
 import { v } from "convex/values";
 
-export const images: Record<string, Record<string, string>> = {
+const MANAGED_RUNTIME_IMAGE_REPO = (
+  process.env.TAHUNA_RUNTIME_IMAGE_REPO?.trim() ||
+  "ghcr.io/tahuna-ai/tahuna-runtime"
+).replace(/\/+$/, "");
+
+const managedImageTags: Record<string, Record<string, string>> = {
   pt: {
-    "2.8.0-cu128": "runpod/pytorch:1.0.2-cu1281-torch280-ubuntu2404",
-    "2.4.0-cu124": "runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04",
-    "2.2.0-cu121": "runpod/pytorch:2.2.0-py3.10-cuda12.1.1-devel-ubuntu22.04",
+    "2.8.0-cu128": "pt-2.8.0-cu128",
+    "2.4.0-cu124": "pt-2.4.0-cu124",
+    "2.2.0-cu121": "pt-2.2.0-cu121",
   },
 };
+
+function buildManagedImages(repo: string, tags: Record<string, Record<string, string>>) {
+  const out: Record<string, Record<string, string>> = {};
+  for (const [framework, versions] of Object.entries(tags)) {
+    out[framework] = {};
+    for (const [version, tag] of Object.entries(versions)) {
+      out[framework][version] = `${repo}:${tag}`;
+    }
+  }
+  return out;
+}
+
+export const images: Record<string, Record<string, string>> = buildManagedImages(
+  MANAGED_RUNTIME_IMAGE_REPO,
+  managedImageTags,
+);
 
 export const getCatalog = query({
   args: {},

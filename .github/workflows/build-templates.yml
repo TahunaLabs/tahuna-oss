@@ -1,15 +1,17 @@
-name: Build Templates
+name: Build Runtime Images
 
 on:
   push:
     tags-ignore:
       - 'v*'
     paths:
-      - 'backend/templates/**'
+      - 'runtime/images/**'
+      - 'runtime/warden/**'
+      - '.github/workflows/build-templates.yml'
   workflow_dispatch:
 
 jobs:
-  # First job: read images.json and output matrix
+  # First job: read runtime image definitions and output matrix
   matrix:
     runs-on: ubuntu-latest
     outputs:
@@ -19,7 +21,7 @@ jobs:
       - id: set-matrix
         run: |
           # Convert images.json to matrix format: [{tag, base}, ...]
-          MATRIX=$(jq -c '[to_entries[] | .key as $fw | .value | to_entries[] | {tag: "\($fw)-\(.key)", base: .value}]' backend/templates/images.json)
+          MATRIX=$(jq -c '[to_entries[] | .key as $fw | .value | to_entries[] | {tag: "\($fw)-\(.key)", base: .value}]' runtime/images/images.json)
           echo "images=$MATRIX" >> $GITHUB_OUTPUT
 
   # Second job: build each image
@@ -56,7 +58,7 @@ jobs:
       - name: Check if image exists
         id: check
         run: |
-          if docker manifest inspect ${{ secrets.DOCKER_USERNAME }}/tahuna:${{ matrix.tag }} > /dev/null 2>&1; then
+          if docker manifest inspect ${{ secrets.DOCKER_USERNAME }}/tahuna-runtime:${{ matrix.tag }} > /dev/null 2>&1; then
             echo "exists=true" >> $GITHUB_OUTPUT
           else
             echo "exists=false" >> $GITHUB_OUTPUT
@@ -66,9 +68,10 @@ jobs:
         if: steps.check.outputs.exists == 'false'
         uses: docker/build-push-action@v5
         with:
-          context: ./backend/templates
+          context: .
+          file: runtime/images/Dockerfile
           push: true
-          tags: ${{ secrets.DOCKER_USERNAME }}/tahuna:${{ matrix.tag }}
+          tags: ${{ secrets.DOCKER_USERNAME }}/tahuna-runtime:${{ matrix.tag }}
           build-args: |
             BASE_IMAGE=${{ matrix.base }}
           cache-from: type=gha
