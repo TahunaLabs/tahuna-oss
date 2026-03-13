@@ -19,7 +19,7 @@ func Run(ctx context.Context, stdout, stderr io.Writer) int {
 
 	fmt.Fprintf(stdout, "warden startup run_id=%s workspace=%s\n", cfg.RunID, cfg.WorkspaceRoot)
 	if err := bootstrap.Run(ctx, cfg); err != nil {
-		if errors.Is(err, bootstrap.ErrNotImplemented) || errors.Is(err, bootstrap.ErrArtifactsNotImplemented) {
+		if errors.Is(err, bootstrap.ErrNotImplemented) {
 			fmt.Fprintln(stderr, "warden bootstrap not implemented yet")
 			return 3
 		}

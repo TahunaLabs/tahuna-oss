@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	"warden/internal/artifacts"
 	"warden/internal/config"
 	"warden/internal/materialize"
 	"warden/internal/runtimeapi"
@@ -16,7 +17,6 @@ import (
 )
 
 var ErrNotImplemented = errors.New("warden runtime bootstrap is not implemented yet")
-var ErrArtifactsNotImplemented = errors.New("artifact upload is not implemented yet")
 
 type State string
 
@@ -184,7 +184,8 @@ func (r *Runner) Run(ctx context.Context) error {
 		return r.failWithError(ctx, err)
 	}
 	if cancelled {
-		r.transition(StateFailed)
+		r.transition(StateArtifacts)
+		r.syncArtifacts(ctx, hooks)
 		_ = r.api.EmitStatus(ctx, runtimeapi.StatusUpdate{
 			Status:  runtimeapi.StatusCancelled,
 			Message: "run cancelled by user",
@@ -196,7 +197,13 @@ func (r *Runner) Run(ctx context.Context) error {
 	}
 
 	r.transition(StateArtifacts)
-	return r.failWithError(ctx, ErrArtifactsNotImplemented)
+	r.syncArtifacts(ctx, hooks)
+	r.transition(StateCompleted)
+	_ = r.api.EmitStatus(ctx, runtimeapi.StatusUpdate{
+		Status:  runtimeapi.StatusCompleted,
+		Message: "entrypoint completed",
+	})
+	return nil
 }
 
 func (r *Runner) failWithError(ctx context.Context, reason error) error {
@@ -215,6 +222,23 @@ func (r *Runner) failWithError(ctx context.Context, reason error) error {
 		Error:   message,
 	})
 	return reason
+}
+
+func (r *Runner) syncArtifacts(ctx context.Context, hooks train.Hooks) {
+	result := artifacts.Sync(
+		ctx,
+		r.api,
+		r.cfg.WorkspaceRoot,
+		r.cfg.RequestTimeout(),
+		hooks.EmitLog,
+	)
+	_, _ = r.api.EmitMetrics(ctx, []runtimeapi.MetricSample{
+		{
+			Name:   "artifacts_uploaded",
+			Value:  float64(result.Uploaded),
+			Source: "bootstrap",
+		},
+	})
 }
 
 func maxInt(a, b int) int {
