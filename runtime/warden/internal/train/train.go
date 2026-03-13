@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -19,6 +20,86 @@ import (
 type Hooks struct {
 	EmitLog     func(level, source, message string)
 	EmitMetrics func(samples []runtimeapi.MetricSample)
+}
+
+const tahunaWandbPath = "/api/monitoring/wandb"
+
+func splitEnvEntry(entry string) (string, string, bool) {
+	separator := strings.Index(entry, "=")
+	if separator <= 0 {
+		return "", "", false
+	}
+	return entry[:separator], entry[separator+1:], true
+}
+
+func lookupEnvValue(env []string, key string) (string, bool) {
+	value := ""
+	found := false
+	for _, entry := range env {
+		name, rawValue, ok := splitEnvEntry(entry)
+		if !ok || name != key {
+			continue
+		}
+		value = rawValue
+		found = true
+	}
+	return value, found
+}
+
+func normalizeWandbPath(path string) string {
+	trimmed := strings.TrimSpace(path)
+	if trimmed == "" {
+		return ""
+	}
+	normalized := strings.TrimRight(trimmed, "/")
+	if normalized == "" {
+		return "/"
+	}
+	if !strings.HasPrefix(normalized, "/") {
+		return "/" + normalized
+	}
+	return normalized
+}
+
+func isTahunaWandbBaseURL(raw string) bool {
+	baseURL := strings.TrimSpace(raw)
+	if baseURL == "" {
+		return false
+	}
+
+	parsed, err := url.Parse(baseURL)
+	if err == nil && (parsed.Scheme != "" || parsed.Host != "") {
+		return normalizeWandbPath(parsed.Path) == tahunaWandbPath
+	}
+
+	if slash := strings.Index(baseURL, "/"); slash >= 0 {
+		return normalizeWandbPath(baseURL[slash:]) == tahunaWandbPath
+	}
+	return normalizeWandbPath(baseURL) == tahunaWandbPath
+}
+
+func resolveTrainEnvironment(baseEnv []string) []string {
+	if _, exists := lookupEnvValue(baseEnv, "WANDB_API_KEY"); exists {
+		return baseEnv
+	}
+
+	runtimeToken, tokenSet := lookupEnvValue(baseEnv, "TAHUNA_RUNTIME_TOKEN")
+	if !tokenSet {
+		return baseEnv
+	}
+	runtimeToken = strings.TrimSpace(runtimeToken)
+	if runtimeToken == "" {
+		return baseEnv
+	}
+
+	wandbBaseURL, _ := lookupEnvValue(baseEnv, "WANDB_BASE_URL")
+	if !isTahunaWandbBaseURL(wandbBaseURL) {
+		return baseEnv
+	}
+
+	environment := append([]string{}, baseEnv...)
+	environment = append(environment, "WANDB_API_KEY="+runtimeToken)
+	return environment
 }
 
 func InstallDependencies(ctx context.Context, workspaceRoot string, hooks Hooks) error {
@@ -72,6 +153,7 @@ func RunEntrypoint(
 	emitLog(hooks, "info", "train", "starting entrypoint")
 	cmd := exec.Command(normalized[0], normalized[1:]...) // #nosec G204
 	cmd.Dir = workspaceRoot
+	cmd.Env = resolveTrainEnvironment(os.Environ())
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return 0, false, fmt.Errorf("create stdout pipe: %w", err)
