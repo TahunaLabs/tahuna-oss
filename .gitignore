@@ -34,6 +34,7 @@ ENV/
 *.swo
 .DS_Store
 .cache/
+.pnpm-store/
 
 # Go build artifacts
 *.test
@@ -54,10 +55,16 @@ cli/tahuna-cli
 # Web generated artifacts
 web/.next/
 web/node_modules/
+web/.source/
 web/tsconfig.tsbuildinfo
+docs/.next/
+docs/node_modules/
+docs/.source/
+docs/tsconfig.tsbuildinfo
 
 
 */.convex/*
 **/.tahuna/
 test_ml_project/data/*
 **/data/
+*/node_modules/*

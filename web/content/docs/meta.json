@@ -1,0 +1,13 @@
+{
+  "title": "Tahuna",
+  "root": true,
+  "pages": [
+    "index",
+    "installation",
+    "quickstart",
+    "environments",
+    "runs",
+    "storage",
+    "cli"
+  ]
+}

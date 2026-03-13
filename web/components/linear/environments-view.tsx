@@ -2,6 +2,7 @@
 
 import { Server, Plus, Filter, Settings2, LayoutGrid, Play, Trash2, ExternalLink, Copy, Check } from "lucide-react"
 import { useState } from "react"
+import Link from "next/link"
 import {
   type DataBlobRow,
   type EnvironmentRow,
@@ -106,13 +107,13 @@ export function EnvironmentsView({
                 You can explore example configs in <code className="px-1 py-0.5 bg-secondary rounded">/configs/</code>, or set up your own using <code className="px-1 py-0.5 bg-secondary rounded">tahuna init</code>.
               </p>
 
-              <a
-                href="#"
+              <Link
+                href="/docs"
                 className="flex items-center justify-center gap-2 w-full px-4 py-2.5 bg-secondary text-foreground text-sm rounded-lg hover:bg-secondary/80 transition-colors"
               >
                 Full Documentation
                 <ExternalLink className="w-3.5 h-3.5" />
-              </a>
+              </Link>
             </div>
           </div>
         </div>

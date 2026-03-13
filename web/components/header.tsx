@@ -11,6 +11,7 @@ export function Header() {
   const pathname = usePathname()
 
   const navLinks = [
+    { label: "Documentation", href: "/docs" },
     { label: "Manifesto", href: "/#manifesto" },
     { label: "Get in Touch", href: "/#waitlist" },
   ]

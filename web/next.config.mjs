@@ -1,5 +1,8 @@
+import { createMDX } from "fumadocs-mdx/next"
+
 /** @type {import('next').NextConfig} */
 const convexSiteUrl = process.env.NEXT_PUBLIC_TAHUNA_SITE_URL || process.env.NEXT_PUBLIC_CONVEX_SITE_URL
+const withMDX = createMDX()
 
 const nextConfig = {
   typescript: {
@@ -21,4 +24,4 @@ const nextConfig = {
   },
 }
 
-export default nextConfig
+export default withMDX(nextConfig)
