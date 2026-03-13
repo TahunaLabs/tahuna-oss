@@ -6,4 +6,6 @@ dependencies = [
   "numpy",
   "torch",
   "torchvision",
+  "transformers",
+  "wandb",
 ]
