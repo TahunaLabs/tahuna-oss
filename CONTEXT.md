@@ -263,7 +263,7 @@ Latest update (2026-03-10):
 Artifact persistence detail (2026-03-10):
 - Schema: `runs` table has optional `artifactKeys: string[]` field storing R2 object keys.
 - API response: `artifact_keys` array exposed in run GET response.
-- Pod bootstrap: after entrypoint exits 0, `upload_artifacts()` walks `/workspace/outputs`, requests signed upload URLs via `POST /api/runs/{run_id}/runtime/artifacts/upload-url`, PUTs each file to R2, then commits keys via `POST /api/runs/{run_id}/runtime/artifacts/commit`.
+- Pod runtime (`warden`): after entrypoint exits 0, it walks `/workspace/outputs`, requests signed upload URLs via `POST /api/runs/{run_id}/runtime/artifacts/upload-url`, PUTs each file to R2, then commits keys via `POST /api/runs/{run_id}/runtime/artifacts/commit`.
 - Failure behavior: artifact upload failures emit warning logs but do **not** mark the run as failed; training success is preserved.
 - Artifact R2 key pattern: `runs/<environment_id>/<timestamp>/output/<filename>`.
 - CLI: `tahuna run show <run_id>` automatically includes `artifact_keys` in JSON output.

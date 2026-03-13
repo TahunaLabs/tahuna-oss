@@ -8,7 +8,7 @@ The pod bootstrap is the sequence that runs inside a Runpod GPU pod from startup
 
 | Element | Type | Description |
 |---------|------|-------------|
-| Bootstrap script | Embedded Python | Injected into pod via Runpod env vars / CMD override |
+| Warden runtime | Embedded Go binary | Bundled into Tahuna runtime image and launched as pod entrypoint |
 | Runtime token | Bearer token | One-time credential for pod -> backend auth |
 | Workspace | Pod filesystem | `/workspace` — root for code, data, and outputs |
 | Bootstrap plan | JSON response | Code/data manifest entries + signed download URLs |
@@ -212,7 +212,7 @@ All runtime endpoints require `Authorization: Bearer {RUNTIME_TOKEN}`.
 - Runtime token is valid only for the specific run it was created for.
 - Artifact upload failures never change run completion status.
 - Pod is ephemeral. After termination, local pod state is lost except artifacts already synced from selected output directory to Storage/R2.
-- The bootstrap script is self-contained Python with no external dependencies beyond the base image.
+- The runtime is a self-contained Go binary (`/usr/local/bin/warden`) embedded in the pod image.
 
 ## Shared Defaults & Constants
 
