@@ -22,6 +22,7 @@ import type * as data from "../data.js";
 import type * as environments from "../environments.js";
 import type * as http from "../http.js";
 import type * as ids from "../ids.js";
+import type * as monitoring_wandb from "../monitoring/wandb.js";
 import type * as resend from "../resend.js";
 import type * as runs from "../runs.js";
 import type * as sleep from "../sleep.js";
@@ -50,6 +51,7 @@ declare const fullApi: ApiFromModules<{
   environments: typeof environments;
   http: typeof http;
   ids: typeof ids;
+  "monitoring/wandb": typeof monitoring_wandb;
   resend: typeof resend;
   runs: typeof runs;
   sleep: typeof sleep;

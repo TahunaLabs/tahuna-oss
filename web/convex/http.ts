@@ -17,6 +17,7 @@ import {
   updateEnvironmentSpecs,
 } from "@convex/cli/environments";
 import { createRun, getRunOrLogs, listRuns, postRunRuntime, removeRun, renameRun } from "@convex/cli/runs";
+import { fileStream as wandbFileStream, graphql as wandbGraphql, upload as wandbUpload } from "@convex/monitoring/wandb";
 
 const http = httpRouter();
 
@@ -56,6 +57,11 @@ http.route({ pathPrefix: "/api/runs/", method: "GET", handler: getRunOrLogs });
 http.route({ pathPrefix: "/api/runs/", method: "PATCH", handler: renameRun });
 // Route prefix for deleting runs by ID /api/runs/{run_id}
 http.route({ pathPrefix: "/api/runs/", method: "DELETE", handler: removeRun });
+
+// Monitoring (W&B-compatible)
+http.route({ path: "/api/monitoring/wandb/graphql", method: "POST", handler: wandbGraphql });
+http.route({ pathPrefix: "/api/monitoring/wandb/files/", method: "POST", handler: wandbFileStream });
+http.route({ pathPrefix: "/api/monitoring/wandb/upload/", method: "PUT", handler: wandbUpload });
 
 // Let's just mount getRunLogs explicitly using a custom handler that delegates if we could, or just let getRun dispatch.
 // No, the user provided exact matches for CLI endpoints in nextjs. We can register BetterAuth routes below.
