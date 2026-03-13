@@ -486,16 +486,3 @@ func clearLinkedEnvironmentIDIfMatches(environmentID string) error {
 	}
 	return nil
 }
-
-func printTrainRunSummary(resp map[string]any) {
-	runID := asString(resp["run_id"])
-	envID := strings.TrimSpace(asString(resp["environment_id"]))
-	status := asString(resp["status"])
-	if status == "" {
-		status = "queued"
-	}
-
-	fmt.Printf("%s✓%s Run created: %s\n", cAmpGreen, cReset, runID)
-	fmt.Printf("Environment: %s\n", envID)
-	fmt.Printf("Status: %s\n", status)
-}

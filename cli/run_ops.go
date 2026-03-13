@@ -20,7 +20,7 @@ func runShow(args []string) {
 	fs.BoolVar(all, "a", false, "Show all runs")
 	verbose := fs.Bool("verbose", false, "Show full run payload")
 	fs.BoolVar(verbose, "v", false, "Show full run payload")
-	fs.Parse(args)
+	mustParseFlags(fs, args)
 
 	if *list {
 		resp, err := doJSON(http.MethodGet, "/runs", nil)
@@ -179,7 +179,7 @@ func runWatch(args []string) {
 	fs := flag.NewFlagSet("run watch", flag.ExitOnError)
 	id := fs.String("id", "", "Run ID")
 	interval := fs.Int("interval", 5, "Polling interval seconds")
-	fs.Parse(args)
+	mustParseFlags(fs, args)
 	runID := resolveRunID(*id, fs.Args())
 	require(runID != "", "run_id is required (usage: tahuna run watch <run_id>)")
 	require(*interval > 0, "--interval must be >= 1")
@@ -197,7 +197,7 @@ func runLogs(args []string) {
 	verbose := fs.Bool("verbose", false, "Show full logs payload")
 	fs.BoolVar(verbose, "v", false, "Show full logs payload")
 	interval := fs.Int("interval", 2, "Polling interval seconds when following")
-	fs.Parse(args)
+	mustParseFlags(fs, args)
 	runID := resolveRunID(*id, fs.Args())
 	require(runID != "", "run_id is required (usage: tahuna run logs <run_id>)")
 	require(*interval > 0, "--interval must be >= 1")
@@ -436,7 +436,7 @@ func runCancel(args []string) {
 	id := fs.String("id", "", "Run ID")
 	force := fs.Bool("f", false, "Force cancel (immediate termination, no graceful shutdown)")
 	forceLong := fs.Bool("force", false, "Force cancel (immediate termination, no graceful shutdown)")
-	fs.Parse(args)
+	mustParseFlags(fs, args)
 	runID := resolveRunID(*id, fs.Args())
 	require(runID != "", "run_id is required (usage: tahuna run cancel <run_id> [-f])")
 
@@ -475,7 +475,7 @@ func runCancel(args []string) {
 func runDelete(args []string) {
 	fs := flag.NewFlagSet("run delete", flag.ExitOnError)
 	id := fs.String("id", "", "Run ID")
-	fs.Parse(args)
+	mustParseFlags(fs, args)
 	runID := resolveRunID(*id, fs.Args())
 	require(runID != "", "run_id is required (usage: tahuna run delete <run_id>)")
 

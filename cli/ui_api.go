@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"flag"
 	"fmt"
 	"github.com/manifoldco/promptui"
 	"io"
@@ -586,7 +587,7 @@ func isRetryableUploadError(err error) bool {
 		}
 	}
 	var netErr net.Error
-	if errors.As(err, &netErr) && (netErr.Timeout() || netErr.Temporary()) {
+	if errors.As(err, &netErr) && netErr.Timeout() {
 		return true
 	}
 	if errors.Is(err, io.EOF) {
@@ -787,16 +788,12 @@ func normalizedAPIPath(path string) string {
 func browserBaseURL() string {
 	if v := lookupConfigValue("TAHUNA_BROWSER_URL"); v != "" {
 		base := strings.TrimRight(v, "/")
-		if strings.HasSuffix(base, apiPrefix) {
-			base = strings.TrimSuffix(base, apiPrefix)
-		}
+		base = strings.TrimSuffix(base, apiPrefix)
 		return base
 	}
 
 	base := strings.TrimRight(apiURL(), "/")
-	if strings.HasSuffix(base, apiPrefix) {
-		base = strings.TrimSuffix(base, apiPrefix)
-	}
+	base = strings.TrimSuffix(base, apiPrefix)
 	// Convex backend hosts serve /api routes but not Next.js app routes like /auth/cli.
 	// Default to local web app URL unless browser base is explicitly configured.
 	if strings.Contains(base, ".convex.cloud") {
@@ -851,9 +848,7 @@ func loginBrowserCandidates() []string {
 
 func cleanBrowserBaseURL(raw string) string {
 	base := strings.TrimSpace(strings.TrimRight(raw, "/"))
-	if strings.HasSuffix(base, apiPrefix) {
-		base = strings.TrimSuffix(base, apiPrefix)
-	}
+	base = strings.TrimSuffix(base, apiPrefix)
 	return base
 }
 
@@ -939,6 +934,10 @@ func printJSON(v any) {
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
 	_ = enc.Encode(v)
+}
+
+func mustParseFlags(fs *flag.FlagSet, args []string) {
+	must(fs.Parse(args))
 }
 
 func asString(v any) string {

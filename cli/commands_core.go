@@ -241,7 +241,7 @@ func catalogGPUs(args []string) {
 	fs := flag.NewFlagSet("catalog gpus", flag.ExitOnError)
 	verbose := fs.Bool("verbose", false, "Show full catalog payload")
 	fs.BoolVar(verbose, "v", false, "Show full catalog payload")
-	fs.Parse(args)
+	mustParseFlags(fs, args)
 
 	resp, err := doJSON(http.MethodGet, "/catalog", nil)
 	must(err)
@@ -282,7 +282,7 @@ func dataList(args []string) {
 	fs := flag.NewFlagSet("data list", flag.ExitOnError)
 	verbose := fs.Bool("verbose", false, "Show full data payload")
 	fs.BoolVar(verbose, "v", false, "Show full data payload")
-	fs.Parse(args)
+	mustParseFlags(fs, args)
 
 	resp, err := doJSON(http.MethodGet, "/data", nil)
 	must(err)
@@ -321,7 +321,7 @@ func dataShow(args []string) {
 	id := fs.String("id", "", "Data item ID")
 	verbose := fs.Bool("verbose", false, "Show full data payload")
 	fs.BoolVar(verbose, "v", false, "Show full data payload")
-	fs.Parse(args)
+	mustParseFlags(fs, args)
 
 	dataID := resolveRunID(*id, fs.Args())
 	require(dataID != "", "data_id is required (usage: tahuna data show <data_id>)")
@@ -499,7 +499,7 @@ func environmentShow(args []string) {
 	list := fs.Bool("list", false, "List all environments")
 	verbose := fs.Bool("verbose", false, "Show full environment payload")
 	fs.BoolVar(verbose, "v", false, "Show full environment payload")
-	fs.Parse(args)
+	mustParseFlags(fs, args)
 
 	if *list {
 		resp, err := doJSON(http.MethodGet, "/environments", nil)
@@ -640,7 +640,7 @@ func defaultString(value, fallback string) string {
 func environmentDelete(args []string) {
 	fs := flag.NewFlagSet("environment delete", flag.ExitOnError)
 	id := fs.String("id", "", "Environment ID")
-	fs.Parse(args)
+	mustParseFlags(fs, args)
 	require(*id != "", "--id is required")
 
 	resp, err := doJSON(http.MethodDelete, "/environments/"+*id, nil)
@@ -659,7 +659,7 @@ func environmentUpdate(args []string) {
 	gpuType := fs.String("gpu-type", "", "GPU type")
 	gpuCount := fs.Int("gpu-count", 0, "GPU count")
 	volumeGB := fs.Int("volume-gb", 0, "Volume in GB")
-	fs.Parse(args)
+	mustParseFlags(fs, args)
 
 	environmentID := strings.TrimSpace(*id)
 	if environmentID == "" && len(fs.Args()) > 0 {
@@ -747,7 +747,7 @@ func runCreate(args []string) {
 	monitor := fs.Bool("monitor", false, "Alias for --watch")
 	verbose := fs.Bool("verbose", false, "Show full run payload")
 	fs.BoolVar(verbose, "v", false, "Show full run payload")
-	fs.Parse(args)
+	mustParseFlags(fs, args)
 	require(!(*detached && (*watch || *monitor)), "--detached cannot be used with --watch/--monitor")
 	environmentID, err := resolveEnvironmentID()
 	must(err)
@@ -897,7 +897,7 @@ func train(args []string) {
 	volumeGB := fs.Int("volume-gb", 0, "Override volume size")
 	detached := fs.Bool("detached", false, "Create run and exit immediately")
 	fs.BoolVar(detached, "d", false, "Create run and exit immediately")
-	fs.Parse(args)
+	mustParseFlags(fs, args)
 
 	resolvedEnvironmentID, err := resolveEnvironmentID()
 	must(err)
