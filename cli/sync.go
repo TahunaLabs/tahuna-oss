@@ -207,44 +207,6 @@ func prepareDataManifest() (preparedManifest, error) {
 	return buildManifest("data", cachePath, nil)
 }
 
-func dataSyncVersionNamePath() string {
-	return filepath.Join(projectStateDir, "sync_data_version_name")
-}
-
-func loadDataSyncVersionName() string {
-	raw, err := os.ReadFile(dataSyncVersionNamePath())
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(string(raw))
-}
-
-func saveDataSyncVersionName(name string) error {
-	if strings.TrimSpace(name) == "" {
-		return nil
-	}
-	if err := os.MkdirAll(projectStateDir, 0o755); err != nil {
-		return err
-	}
-	return os.WriteFile(dataSyncVersionNamePath(), []byte(strings.TrimSpace(name)+"\n"), 0o600)
-}
-
-func defaultDataSyncVersionName() string {
-	cfg, err := loadProjectConfig()
-	if err != nil {
-		return "data"
-	}
-	resolved := strings.TrimSpace(cfg.DataDir)
-	if resolved == "" {
-		resolved = "data"
-	}
-	base := strings.TrimSpace(filepath.Base(filepath.Clean(resolved)))
-	if base == "" || base == "." || base == string(filepath.Separator) {
-		return "data"
-	}
-	return base
-}
-
 func buildManifest(kind, cachePath string, excludeDirs []string) (preparedManifest, error) {
 	entries, filesByID, cleanup, err := collectManifestEntries(kind, excludeDirs)
 	if err != nil {
