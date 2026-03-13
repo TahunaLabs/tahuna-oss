@@ -64,11 +64,84 @@ export type DataBlobRow = {
 
 export type RunRow = {
   run_id: Id<"runs">
+  name: string
+  created_at: number
   environment_id: string
   status: string
   effective_gpu_type: string
   effective_gpu_count: number
   effective_volume_gb: number
+}
+
+export type RunDetail = {
+  run_id: string
+  name: string
+  created_at: number
+  environment_id: string
+  input: string
+  output: string
+  logs: string
+  status: string
+  error: string
+  pod_id: string
+  effective_gpu_type: string
+  effective_gpu_count: number
+  effective_volume_gb: number
+  code_manifest_hash: string
+  data_manifest_hash: string
+  cancellation_requested: boolean
+  artifact_keys: string[]
+}
+
+export type RunLogsDetail = {
+  run_id: string
+  status: string
+  logs_path: string
+  log_file: string
+  note: string
+  recent_logs: Array<{
+    timestamp: number
+    level: string
+    source: string
+    message: string
+  }>
+  recent_metrics: Array<{
+    timestamp: number
+    name: string
+    value: number
+    step: number | null
+    unit: string | null
+    source: string
+  }>
+}
+
+export function metricSeries(logs: RunLogsDetail | undefined) {
+  if (!logs) return []
+  const grouped = new Map<string, Array<{ x: number; label: string; value: number }>>()
+  for (const sample of logs.recent_metrics) {
+    const points = grouped.get(sample.name) || []
+    points.push({
+      x: sample.timestamp,
+      label: new Date(sample.timestamp).toLocaleTimeString(),
+      value: sample.value,
+    })
+    grouped.set(sample.name, points)
+  }
+  return Array.from(grouped.entries()).map(([name, points]) => ({
+    name,
+    points: points.sort((a, b) => a.x - b.x),
+  }))
+}
+
+export function relativeTime(timestamp: number) {
+  const seconds = Math.floor((Date.now() - timestamp) / 1000)
+  if (seconds < 60) return "just now"
+  const minutes = Math.floor(seconds / 60)
+  if (minutes < 60) return `${minutes}m ago`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours}h ago`
+  const days = Math.floor(hours / 24)
+  return `${days}d ago`
 }
 
 type SidebarItem = {

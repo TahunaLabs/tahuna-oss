@@ -1,25 +1,20 @@
 "use client"
 
-import {
-  EnvironmentsSection,
-  RunsSection,
-  StorageSection,
-} from "@/components/dashboard/sections"
+import { Sidebar } from "@/components/linear/sidebar"
+import { StorageView } from "@/components/linear/storage-view"
+import { EnvironmentsView } from "@/components/linear/environments-view"
+import { RunsView } from "@/components/linear/runs-view"
 import { useTheme } from "@/components/theme-provider"
-import { Button } from "@/components/ui/button"
 import { Notice } from "@/components/ui/notice"
 import { PageLoader } from "@/components/ui/spinner"
-import { Switch } from "@/components/ui/switch"
 import {
-  FEATURE_ITEMS,
-  PAGE_TITLES,
-  SidebarSection,
   STORAGE_PAGE_LIMIT,
   validateArtifactRenameName,
   type DataBlobRow,
   type EnvironmentRow,
-  type MainSection,
   type RunRow,
+  type RunDetail,
+  type RunLogsDetail,
   type StorageListResult,
   type StorageSort,
   type StorageItem,
@@ -29,8 +24,6 @@ import { api } from "@convex/_generated/api"
 import type { Id } from "@convex/_generated/dataModel"
 import { authClient } from "@/lib/auth-client"
 import { useAction, useConvexAuth, useMutation, useQuery } from "convex/react"
-import { LogOut, Monitor, Moon, Sun } from "lucide-react"
-import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useEffect, useMemo, useState, type FormEvent } from "react"
 
@@ -44,7 +37,7 @@ export default function DashboardPage() {
   const [error, setError] = useState("")
   const [message, setMessage] = useState("")
 
-  const [activeSection, setActiveSection] = useState<MainSection>("environments")
+  const [activeView, setActiveView] = useState("environments")
 
   const [selectedDataFiles, setSelectedDataFiles] = useState<File[]>([])
   const [uploadingData, setUploadingData] = useState(false)
@@ -61,6 +54,7 @@ export default function DashboardPage() {
   const [renamingStorageId, setRenamingStorageId] = useState<string | null>(null)
   const [artifactRenameDraft, setArtifactRenameDraft] = useState("")
   const [artifactRenameBusyId, setArtifactRenameBusyId] = useState<string | null>(null)
+  const [selectedRunId, setSelectedRunId] = useState<string | null>(null)
   const [bindSelectionByEnvironment, setBindSelectionByEnvironment] = useState<Record<string, string>>({})
   const shouldLoadQueries = !authLoading && isAuthenticated && !loggingOut
 
@@ -74,6 +68,16 @@ export default function DashboardPage() {
   const runResult = useQuery(api.runs.list, shouldLoadQueries ? {} : "skip") as
     | { runs: RunRow[] }
     | undefined
+
+  const shouldLoadRunDetail = shouldLoadQueries && selectedRunId !== null
+  const runDetail = useQuery(
+    api.runs.get,
+    shouldLoadRunDetail ? { runId: selectedRunId as Id<"runs"> } : "skip"
+  ) as RunDetail | undefined
+  const runLogs = useQuery(
+    api.runs.getLogs,
+    shouldLoadRunDetail ? { runId: selectedRunId as Id<"runs"> } : "skip"
+  ) as RunLogsDetail | undefined
 
   const environments: EnvironmentRow[] = envResult?.environments ?? []
   const dataBlobs: DataBlobRow[] = dataResult?.blobs ?? []
@@ -94,6 +98,7 @@ export default function DashboardPage() {
   const storageItems = storageResult?.items ?? []
   const storageTotal = storageResult?.total ?? 0
   const isDark = resolvedTheme === "dark"
+
   const uniqueDataBlobs = useMemo(() => {
     const byId = new Map<string, DataBlobRow>()
     for (const blob of dataBlobs) {
@@ -104,6 +109,7 @@ export default function DashboardPage() {
     }
     return Array.from(byId.values()).sort((a, b) => b.created_at - a.created_at)
   }, [dataBlobs])
+
   const dataBlobsById = useMemo(() => {
     return new Map(uniqueDataBlobs.map((blob) => [blob.blob_id, blob]))
   }, [uniqueDataBlobs])
@@ -364,160 +370,110 @@ export default function DashboardPage() {
     return <PageLoader message="Loading dashboard…" />
   }
 
-  return (
-    <div
-      className="h-screen overflow-hidden bg-background text-foreground"
-      style={{
-        fontFamily:
-          "ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif",
-      }}
-    >
-      <header className="flex h-12 items-center justify-between border-b border-border px-5">
-        <div className="flex items-center">
-          <span className="text-logo font-serif text-[18px] font-bold tracking-[0.01em]">Tahuna</span>
-        </div>
-
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2">
-            {isDark ? (
-              <Moon className="h-3.5 w-3.5 text-muted-foreground" />
-            ) : (
-              <Sun className="h-3.5 w-3.5 text-muted-foreground" />
-            )}
-            <Switch
-              id="dashboard-theme"
-              aria-label="Toggle dark theme"
-              checked={isDark}
-              onCheckedChange={(checked) => setTheme(checked ? "dark" : "light")}
-            />
-          </div>
-          <Button type="button" variant="dashboard-top-link" size="none">
-            Dashboard
-          </Button>
-          <Button asChild variant="dashboard-top-link" size="none">
-            <a href="https://platform.openai.com/docs" target="_blank" rel="noreferrer">
-              API Docs
-            </a>
-          </Button>
-          <div className="flex h-7 w-7 items-center justify-center rounded-full bg-secondary text-xs font-semibold text-secondary-foreground">
-            {userInitial}
-          </div>
-        </div>
-      </header>
-
-      <div className="flex h-[calc(100vh-3rem)]">
-        <aside className="flex h-full w-[168px] shrink-0 flex-col gap-0.5 overflow-y-auto border-r border-border bg-card p-2">
-          <SidebarSection
-            label="Features"
-            items={FEATURE_ITEMS}
-            activeSection={activeSection}
-            onSelect={setActiveSection}
+  const renderMainContent = () => {
+    switch (activeView) {
+      case "storage":
+        return (
+          <StorageView
+            selectedDataFiles={selectedDataFiles}
+            uploadingData={uploadingData}
+            dataFileInputKey={dataFileInputKey}
+            storageSearch={storageSearch}
+            storageSourceFilter={storageSourceFilter}
+            storageSort={storageSort}
+            storageResult={storageResult}
+            storageLoading={storageLoading}
+            storageError={storageError}
+            renamingStorageId={renamingStorageId}
+            artifactRenameDraft={artifactRenameDraft}
+            artifactRenameBusyId={artifactRenameBusyId}
+            onUploadData={uploadData}
+            onSelectDataFiles={setSelectedDataFiles}
+            onStorageSearchChange={setStorageSearch}
+            onStorageSourceFilterChange={setStorageSourceFilter}
+            onStorageSortChange={setStorageSort}
+            onArtifactRenameDraftChange={setArtifactRenameDraft}
+            onSaveRenameArtifact={(item) => {
+              void saveRenameArtifact(item)
+            }}
+            onCancelRenameArtifact={cancelRenameArtifact}
+            onStartRenameArtifact={startRenameArtifact}
+            onPreviousStoragePage={() =>
+              setStorageOffset((current) => Math.max(0, current - STORAGE_PAGE_LIMIT))
+            }
+            onNextStoragePage={() =>
+              setStorageOffset((current) => current + STORAGE_PAGE_LIMIT)
+            }
           />
+        )
+      case "environments":
+        return (
+          <EnvironmentsView
+            environments={environments}
+            uniqueDataBlobs={uniqueDataBlobs}
+            dataBlobsById={dataBlobsById}
+            bindSelectionByEnvironment={bindSelectionByEnvironment}
+            busy={busy}
+            onBindSelectionChange={(environmentId, value) =>
+              setBindSelectionByEnvironment((current) => ({
+                ...current,
+                [environmentId]: value,
+              }))
+            }
+            onBindSelectedData={(environment) => {
+              void bindSelectedData(environment)
+            }}
+            onUnbindData={(environmentId, dataId) => {
+              void unbindDataFromEnvironment(environmentId, dataId)
+            }}
+            onLaunchRun={(environmentId) => {
+              void launchRun(environmentId)
+            }}
+            onDeleteEnvironment={(environmentId) => {
+              void deleteEnvironment(environmentId)
+            }}
+          />
+        )
+      case "runs":
+        return (
+          <RunsView
+            environments={environments}
+            runs={runs}
+            busy={busy}
+            selectedRunId={selectedRunId}
+            runDetail={runDetail}
+            runLogs={runLogs}
+            onSelectRun={setSelectedRunId}
+            onCancelRun={(runId) => {
+              void cancelRun(runId)
+            }}
+          />
+        )
+      default:
+        return null
+    }
+  }
 
-          <div className="px-2 pt-2">
-            <Button asChild type="button" variant="dashboard-nav" size="none">
-              <Link href="/machines">
-                <Monitor className="h-[15px] w-[15px]" />
-                Machines
-              </Link>
-            </Button>
+  return (
+    <div className="flex h-screen bg-sidebar dark">
+      <Sidebar
+        activeView={activeView}
+        onViewChange={setActiveView}
+        userInitial={userInitial}
+        isDark={isDark}
+        onThemeToggle={() => setTheme(isDark ? "light" : "dark")}
+        onLogout={logout}
+      />
+      <main className="flex-1 bg-background rounded-tl-xl border-l border-border overflow-hidden flex flex-col">
+        {/* Notices */}
+        {(error || message) && (
+          <div className="px-6 pt-3">
+            {error ? <Notice variant="error" className="mb-2">{error}</Notice> : null}
+            {message ? <Notice className="mb-2">{message}</Notice> : null}
           </div>
-
-          <div className="mt-auto pt-2">
-            <Button
-              type="button"
-              variant="dashboard-logout"
-              size="none"
-              onClick={logout}
-            >
-              <LogOut className="h-[15px] w-[15px]" />
-              Sign out
-            </Button>
-          </div>
-        </aside>
-
-        <main className="relative flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-5">
-          <h1 className="mb-5 text-[17px] font-semibold">{PAGE_TITLES[activeSection]}</h1>
-
-          {error ? <Notice variant="error" className="mb-4">{error}</Notice> : null}
-          {message ? <Notice className="mb-4">{message}</Notice> : null}
-
-          <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col pb-6">
-            {activeSection === "data" ? (
-              <StorageSection
-                selectedDataFiles={selectedDataFiles}
-                uploadingData={uploadingData}
-                dataFileInputKey={dataFileInputKey}
-                storageSearch={storageSearch}
-                storageSourceFilter={storageSourceFilter}
-                storageSort={storageSort}
-                storageResult={storageResult}
-                storageLoading={storageLoading}
-                storageError={storageError}
-                renamingStorageId={renamingStorageId}
-                artifactRenameDraft={artifactRenameDraft}
-                artifactRenameBusyId={artifactRenameBusyId}
-                onUploadData={uploadData}
-                onSelectDataFiles={setSelectedDataFiles}
-                onStorageSearchChange={setStorageSearch}
-                onStorageSourceFilterChange={setStorageSourceFilter}
-                onStorageSortChange={setStorageSort}
-                onArtifactRenameDraftChange={setArtifactRenameDraft}
-                onSaveRenameArtifact={(item) => {
-                  void saveRenameArtifact(item)
-                }}
-                onCancelRenameArtifact={cancelRenameArtifact}
-                onStartRenameArtifact={startRenameArtifact}
-                onPreviousStoragePage={() =>
-                  setStorageOffset((current) => Math.max(0, current - STORAGE_PAGE_LIMIT))
-                }
-                onNextStoragePage={() =>
-                  setStorageOffset((current) => current + STORAGE_PAGE_LIMIT)
-                }
-              />
-            ) : null}
-
-            {activeSection === "environments" ? (
-              <EnvironmentsSection
-                environments={environments}
-                uniqueDataBlobs={uniqueDataBlobs}
-                dataBlobsById={dataBlobsById}
-                bindSelectionByEnvironment={bindSelectionByEnvironment}
-                busy={busy}
-                onBindSelectionChange={(environmentId, value) =>
-                  setBindSelectionByEnvironment((current) => ({
-                    ...current,
-                    [environmentId]: value,
-                  }))
-                }
-                onBindSelectedData={(environment) => {
-                  void bindSelectedData(environment)
-                }}
-                onUnbindData={(environmentId, dataId) => {
-                  void unbindDataFromEnvironment(environmentId, dataId)
-                }}
-                onLaunchRun={(environmentId) => {
-                  void launchRun(environmentId)
-                }}
-                onDeleteEnvironment={(environmentId) => {
-                  void deleteEnvironment(environmentId)
-                }}
-              />
-            ) : null}
-
-            {activeSection === "runs" ? (
-              <RunsSection
-                environments={environments}
-                runs={runs}
-                busy={busy}
-                onCancelRun={(runId) => {
-                  void cancelRun(runId)
-                }}
-              />
-            ) : null}
-          </div>
-        </main>
-      </div>
+        )}
+        {renderMainContent()}
+      </main>
     </div>
   )
 }
