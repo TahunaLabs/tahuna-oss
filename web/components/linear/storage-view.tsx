@@ -317,7 +317,7 @@ export function StorageView({
                           </button>
                         </form>
                       ) : (
-                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100">
+                        <div className="flex items-center gap-1">
                           <a
                             href={item.download_url}
                             target="_blank"
@@ -333,7 +333,7 @@ export function StorageView({
                           >
                             <Download className="w-3.5 h-3.5" />
                           </a>
-                          {item.source === "run_artifact" && (
+                          {item.source === "data" && (
                             <button
                               onClick={() => onStartRenameArtifact(item)}
                               disabled={artifactRenameBusyId !== null}

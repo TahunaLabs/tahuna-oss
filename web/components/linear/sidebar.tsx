@@ -3,9 +3,6 @@
 import { useState } from "react"
 import {
   ChevronDown,
-  Inbox,
-  CircleDot,
-  FolderKanban,
   MoreHorizontal,
   Search,
   SquarePen,
@@ -59,24 +56,8 @@ export function Sidebar({ activeView, onViewChange, userInitial, isDark, onTheme
 
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto px-2 py-1">
-        {/* Main items */}
-        <div className="space-y-0.5">
-          <SidebarItem
-            icon={<Inbox className="w-4 h-4" />}
-            label="Inbox"
-            active={activeView === "inbox"}
-            onClick={() => onViewChange("inbox")}
-          />
-          <SidebarItem
-            icon={<CircleDot className="w-4 h-4" />}
-            label="My issues"
-            active={activeView === "my-issues"}
-            onClick={() => onViewChange("my-issues")}
-          />
-        </div>
-
         {/* Workspace section */}
-        <div className="mt-4">
+        <div>
           <button
             className="flex items-center gap-1 px-2 py-1 text-xs text-muted-foreground hover:text-sidebar-foreground w-full"
             onClick={() => setWorkspaceOpen(!workspaceOpen)}
@@ -86,18 +67,6 @@ export function Sidebar({ activeView, onViewChange, userInitial, isDark, onTheme
           </button>
           {workspaceOpen && (
             <div className="mt-1 space-y-0.5">
-              <SidebarItem
-                icon={<FolderKanban className="w-4 h-4" />}
-                label="Projects"
-                active={activeView === "projects"}
-                onClick={() => onViewChange("projects")}
-              />
-              <SidebarItem
-                icon={<CircleDot className="w-4 h-4" />}
-                label="Issues"
-                active={activeView === "issues"}
-                onClick={() => onViewChange("issues")}
-              />
               <SidebarItem
                 icon={<HardDrive className="w-4 h-4" />}
                 label="Storage"

@@ -4,10 +4,6 @@ import { Sidebar } from "@/components/linear/sidebar"
 import { StorageView } from "@/components/linear/storage-view"
 import { EnvironmentsView } from "@/components/linear/environments-view"
 import { RunsView } from "@/components/linear/runs-view"
-import { InboxView } from "@/components/linear/inbox-view"
-import { MyIssuesView } from "@/components/linear/my-issues-view"
-import { IssuesView } from "@/components/linear/issues-view"
-import { ProjectsView } from "@/components/linear/projects-view"
 import { useTheme } from "@/components/theme-provider"
 import { Notice } from "@/components/ui/notice"
 import { PageLoader } from "@/components/ui/spinner"
@@ -376,14 +372,6 @@ export default function DashboardPage() {
 
   const renderMainContent = () => {
     switch (activeView) {
-      case "inbox":
-        return <InboxView />
-      case "my-issues":
-        return <MyIssuesView />
-      case "projects":
-        return <ProjectsView />
-      case "issues":
-        return <IssuesView />
       case "storage":
         return (
           <StorageView
@@ -462,7 +450,7 @@ export default function DashboardPage() {
           />
         )
       default:
-        return <IssuesView />
+        return null
     }
   }
 
