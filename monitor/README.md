@@ -5,7 +5,6 @@ Minimal W&B-compatible tracking SDK for Tahuna runtime pods.
 ## Scope
 
 - Import contract: `import tahuna.monitor as wandb`
-- Compatibility shim: plain `import wandb` is supported and routes to Tahuna monitor MVP APIs
 - Supported API: `wandb.init()`, `wandb.log()`, `wandb.finish()`, `wandb.config`
 - Transport: runtime callbacks to existing Tahuna endpoints:
   - `POST /api/runs/{run_id}/runtime/logs`
@@ -39,3 +38,4 @@ Pruned snapshot is vendored at `monitor/third_party/wandb-pruned/`.
 - Secret-like keys are dropped (`token`, `secret`, `password`, `api_key`, etc.).
 - Signed URLs are redacted from emitted event messages.
 - Only numeric values are accepted for metrics.
+
