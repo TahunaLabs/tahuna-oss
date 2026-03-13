@@ -9,6 +9,30 @@
 - Validate before commit: `bun run lint` (must include ESLint + TypeScript unused checks).
 - If blocked or ambiguous, pause and clarify before touching unrelated code.
 
+## Frontend Guardrails (Mandatory)
+
+Use these rules for any `web/` frontend change outside `web/convex/**`.
+
+1. Scope and review discipline
+- Search the whole monorepo before deleting or rewriting frontend code; usage may live outside `web/`.
+- Remove dead UI, duplicate helpers, and legacy flows once the forward path is confirmed.
+- Do not keep backward-compatibility layers in the frontend unless explicitly requested.
+
+2. Component boundaries
+- Keep presentation separate from data and mutation orchestration where practical.
+- Do not let page files grow into monolithic client components with unrelated concerns mixed together.
+- Extract repeated view logic and section-sized UI into focused components instead of copying JSX branches.
+
+3. UI state consistency
+- Keep loading, empty, success, and error states consistent with adjacent product surfaces.
+- Prefer one canonical path per screen state; remove fallback UI branches that no longer represent real behavior.
+- Avoid duplicated client state when it can be derived from fetched data or existing local state.
+
+4. Product consistency
+- Preserve naming, copy tone, and interaction patterns already established in the active frontend.
+- Reuse shared UI primitives and shared helpers before introducing one-off variants.
+- Keep business rules out of purely presentational components whenever possible.
+
 ## Convex Guardrails (Mandatory)
 
 Use these rules for any Convex backend change.
