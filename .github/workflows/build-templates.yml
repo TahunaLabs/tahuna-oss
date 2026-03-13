@@ -2,8 +2,8 @@ name: Build Runtime Images
 
 on:
   push:
-    tags-ignore:
-      - 'v*'
+    branches:
+      - develop
   workflow_dispatch:
 
 jobs:
