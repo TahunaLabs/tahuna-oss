@@ -5,13 +5,14 @@ Minimal W&B-compatible tracking SDK for Tahuna runtime pods.
 ## Scope
 
 - Import contract: `import tahuna.monitor as wandb`
-- Compatibility shim: plain `import wandb` is supported and routes to Tahuna monitor MVP APIs
-- Existing scripts can keep `import wandb` unchanged for supported API calls.
 - Supported API: `wandb.init()`, `wandb.log()`, `wandb.finish()`, `wandb.config`
 - Transport: runtime callbacks to existing Tahuna endpoints:
   - `POST /api/runs/{run_id}/runtime/logs`
   - `POST /api/runs/{run_id}/runtime/metrics`
 - No fallback paths: requires `TAHUNA_API_BASE`, `TAHUNA_RUN_ID`, `TAHUNA_RUNTIME_TOKEN`
+- Intentional separation from classic W&B:
+  - `tahuna.monitor` is opt-in and targets Tahuna backend.
+  - `import wandb` remains reserved for classic W&B when users install and choose it.
 
 ## Upstream W&B Prune (Required Step)
 
