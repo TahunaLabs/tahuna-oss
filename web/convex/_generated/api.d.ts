@@ -8,9 +8,15 @@
  * @module
  */
 
+import type * as appConfig from "../appConfig.js";
 import type * as auth from "../auth.js";
 import type * as catalog from "../catalog.js";
-import type * as cli from "../cli.js";
+import type * as cli_data from "../cli/data.js";
+import type * as cli_environments from "../cli/environments.js";
+import type * as cli_runs from "../cli/runs.js";
+import type * as cli_shared from "../cli/shared.js";
+import type * as cli_sync from "../cli/sync.js";
+import type * as cli_system from "../cli/system.js";
 import type * as crypto from "../crypto.js";
 import type * as data from "../data.js";
 import type * as environments from "../environments.js";
@@ -18,7 +24,9 @@ import type * as http from "../http.js";
 import type * as ids from "../ids.js";
 import type * as resend from "../resend.js";
 import type * as runs from "../runs.js";
+import type * as sleep from "../sleep.js";
 import type * as storage from "../storage.js";
+import type * as syncManifest from "../syncManifest.js";
 import type * as uploadLimits from "../uploadLimits.js";
 
 import type {
@@ -28,9 +36,15 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  appConfig: typeof appConfig;
   auth: typeof auth;
   catalog: typeof catalog;
-  cli: typeof cli;
+  "cli/data": typeof cli_data;
+  "cli/environments": typeof cli_environments;
+  "cli/runs": typeof cli_runs;
+  "cli/shared": typeof cli_shared;
+  "cli/sync": typeof cli_sync;
+  "cli/system": typeof cli_system;
   crypto: typeof crypto;
   data: typeof data;
   environments: typeof environments;
@@ -38,7 +52,9 @@ declare const fullApi: ApiFromModules<{
   ids: typeof ids;
   resend: typeof resend;
   runs: typeof runs;
+  sleep: typeof sleep;
   storage: typeof storage;
+  syncManifest: typeof syncManifest;
   uploadLimits: typeof uploadLimits;
 }>;
 
