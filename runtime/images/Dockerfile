@@ -8,4 +8,6 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o
 
 FROM ${BASE_IMAGE}
 COPY --from=warden-builder /out/warden /usr/local/bin/warden
+COPY monitor/tahuna /opt/tahuna-monitor/tahuna
 RUN chmod +x /usr/local/bin/warden
+ENV PYTHONPATH=/opt/tahuna-monitor:${PYTHONPATH}

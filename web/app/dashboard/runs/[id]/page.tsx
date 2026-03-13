@@ -60,6 +60,12 @@ type RunLogsDetail = {
     unit: string | null
     source: string
   }>
+  monitor_events: Array<{
+    timestamp: number
+    level: string
+    source: string
+    message: string
+  }>
 }
 
 function metricSeries(logs: RunLogsDetail | undefined) {
@@ -221,6 +227,28 @@ export default function RunDetailPage() {
               ))}
             </div>
           )}
+        </Card>
+      </section>
+
+      <section>
+        <Card variant="dashboard" className="p-4">
+          <h2 className="text-sm font-semibold">Monitor events</h2>
+          <p className="mt-1 text-xs text-muted-foreground">
+            SDK lifecycle and monitor-specific ingestion notices.
+          </p>
+          <div className="mt-3 max-h-[220px] space-y-1 overflow-y-auto rounded-lg border border-border bg-card p-2 font-mono text-xs">
+            {logs.monitor_events.length === 0 ? (
+              <p className="text-muted-foreground">No monitor events yet.</p>
+            ) : (
+              logs.monitor_events.map((line, index) => (
+                <p key={`${line.timestamp}-${index}`} className="break-words">
+                  <span className="text-muted-foreground">[{new Date(line.timestamp).toLocaleTimeString()}]</span>{" "}
+                  <span className="text-muted-foreground">{line.level || "info"}</span>{" "}
+                  {line.message}
+                </p>
+              ))
+            )}
+          </div>
         </Card>
       </section>
     </main>

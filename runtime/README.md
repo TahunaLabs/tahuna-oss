@@ -10,6 +10,7 @@ Runtime subtree for pod execution and runtime image publishing.
 ## Images (`runtime/images`)
 
 - `Dockerfile`: embeds `warden` into runtime images.
+- Also ships the Tahuna monitor SDK at `/opt/tahuna-monitor` (`import tahuna.monitor as wandb`).
 - Canonical image matrix lives at `web/convex/runtime-images.json`.
 - CI workflow `.github/workflows/build-templates.yml` builds/pushes image tags from that matrix.
 

@@ -69,7 +69,9 @@ export default defineSchema({
     level: v.string(),
     source: v.string(),
     message: v.string(),
-  }).index("by_run", ["runId"]),
+  })
+    .index("by_run", ["runId"])
+    .index("by_run_and_source_timestamp", ["runId", "source", "timestamp"]),
 
   runRuntimeMetrics: defineTable({
     runId: v.id("runs"),
