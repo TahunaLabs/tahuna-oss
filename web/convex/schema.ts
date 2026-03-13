@@ -54,7 +54,39 @@ export default defineSchema({
     cancellationRequested: v.boolean(),
   })
     .index("by_user", ["userId"])
-    .index("by_user_and_environment", ["userId", "environmentId"]),
+    .index("by_user_and_environment", ["userId", "environmentId"])
+    .index("by_runtime_token_hash", ["runtimeTokenHash"]),
+
+  wandbRuns: defineTable({
+    runId: v.id("runs"),
+    wandbRunId: v.string(),
+    entity: v.optional(v.string()),
+    project: v.optional(v.string()),
+    displayName: v.optional(v.string()),
+    state: v.optional(v.string()),
+    config: v.optional(v.any()),
+    configYaml: v.optional(v.string()),
+    metadata: v.optional(v.any()),
+    requirementsTxt: v.optional(v.string()),
+    summary: v.optional(v.any()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_run", ["runId"])
+    .index("by_run_and_wandb_run", ["runId", "wandbRunId"]),
+
+  wandbMetrics: defineTable({
+    runId: v.id("runs"),
+    wandbRunId: v.string(),
+    timestamp: v.number(),
+    step: v.optional(v.number()),
+    key: v.string(),
+    value: v.number(),
+    source: v.optional(v.string()),
+    createdAt: v.number(),
+  })
+    .index("by_run", ["runId"])
+    .index("by_run_and_wandb_run", ["runId", "wandbRunId"]),
 
   runEvents: defineTable({
     runId: v.id("runs"),

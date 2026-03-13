@@ -174,6 +174,8 @@ type RunCleanupRows = {
   events: Array<Doc<"runEvents">>;
   runtimeLogs: Array<Doc<"runRuntimeLogs">>;
   runtimeMetrics: Array<Doc<"runRuntimeMetrics">>;
+  wandbRuns: Array<Doc<"wandbRuns">>;
+  wandbMetrics: Array<Doc<"wandbMetrics">>;
 };
 
 async function loadRunCleanupRows(
@@ -185,7 +187,7 @@ async function loadRunCleanupRows(
     const chunk = runIds.slice(start, start + RUN_CLEANUP_QUERY_BATCH_SIZE);
     const chunkRows = await Promise.all(
       chunk.map(async (runId) => {
-        const [events, runtimeLogs, runtimeMetrics] = await Promise.all([
+        const [events, runtimeLogs, runtimeMetrics, wandbRuns, wandbMetrics] = await Promise.all([
           ctx.db
             .query("runEvents")
             .withIndex("by_run", (q) => q.eq("runId", runId))
@@ -198,8 +200,16 @@ async function loadRunCleanupRows(
             .query("runRuntimeMetrics")
             .withIndex("by_run", (q) => q.eq("runId", runId))
             .collect(),
+          ctx.db
+            .query("wandbRuns")
+            .withIndex("by_run", (q) => q.eq("runId", runId))
+            .collect(),
+          ctx.db
+            .query("wandbMetrics")
+            .withIndex("by_run", (q) => q.eq("runId", runId))
+            .collect(),
         ]);
-        return { runId, events, runtimeLogs, runtimeMetrics };
+        return { runId, events, runtimeLogs, runtimeMetrics, wandbRuns, wandbMetrics };
       }),
     );
     out.push(...chunkRows);
@@ -211,6 +221,8 @@ async function deleteRunCleanupRows(ctx: MutationCtx, rows: RunCleanupRows[]) {
   const eventIds: Array<Id<"runEvents">> = [];
   const runtimeLogIds: Array<Id<"runRuntimeLogs">> = [];
   const runtimeMetricIds: Array<Id<"runRuntimeMetrics">> = [];
+  const wandbRunIds: Array<Id<"wandbRuns">> = [];
+  const wandbMetricIds: Array<Id<"wandbMetrics">> = [];
   const runIds: Array<Id<"runs">> = [];
 
   for (const row of rows) {
@@ -223,6 +235,12 @@ async function deleteRunCleanupRows(ctx: MutationCtx, rows: RunCleanupRows[]) {
     }
     for (const metric of row.runtimeMetrics) {
       runtimeMetricIds.push(metric._id);
+    }
+    for (const wandbRun of row.wandbRuns) {
+      wandbRunIds.push(wandbRun._id);
+    }
+    for (const wandbMetric of row.wandbMetrics) {
+      wandbMetricIds.push(wandbMetric._id);
     }
   }
 
@@ -237,6 +255,14 @@ async function deleteRunCleanupRows(ctx: MutationCtx, rows: RunCleanupRows[]) {
   for (let start = 0; start < runtimeMetricIds.length; start += RUN_CLEANUP_DELETE_BATCH_SIZE) {
     const chunk = runtimeMetricIds.slice(start, start + RUN_CLEANUP_DELETE_BATCH_SIZE);
     await Promise.all(chunk.map((id) => ctx.db.delete("runRuntimeMetrics", id)));
+  }
+  for (let start = 0; start < wandbRunIds.length; start += RUN_CLEANUP_DELETE_BATCH_SIZE) {
+    const chunk = wandbRunIds.slice(start, start + RUN_CLEANUP_DELETE_BATCH_SIZE);
+    await Promise.all(chunk.map((id) => ctx.db.delete("wandbRuns", id)));
+  }
+  for (let start = 0; start < wandbMetricIds.length; start += RUN_CLEANUP_DELETE_BATCH_SIZE) {
+    const chunk = wandbMetricIds.slice(start, start + RUN_CLEANUP_DELETE_BATCH_SIZE);
+    await Promise.all(chunk.map((id) => ctx.db.delete("wandbMetrics", id)));
   }
   for (let start = 0; start < runIds.length; start += RUN_CLEANUP_DELETE_BATCH_SIZE) {
     const chunk = runIds.slice(start, start + RUN_CLEANUP_DELETE_BATCH_SIZE);

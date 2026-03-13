@@ -123,6 +123,15 @@ const runProvisionSpecValidator = v.object({
   framework: v.string(),
   version: v.string(),
 });
+const runtimeTokenRunLookupValidator = v.union(
+  v.null(),
+  v.object({
+    runId: v.id("runs"),
+    userId: v.string(),
+    status: v.string(),
+    runtimeTokenHash: v.string(),
+  }),
+);
 const runtimeLogLineValidator = v.object({
   message: v.string(),
   level: v.optional(v.string()),
@@ -1031,7 +1040,7 @@ async function deleteRunForUserId(
     }
   }
 
-  const [events, runtimeLogs, runtimeMetrics] = await Promise.all([
+  const [events, runtimeLogs, runtimeMetrics, wandbRuns, wandbMetrics] = await Promise.all([
     ctx.db
       .query("runEvents")
       .withIndex("by_run", (q) => q.eq("runId", runId))
@@ -1044,11 +1053,21 @@ async function deleteRunForUserId(
       .query("runRuntimeMetrics")
       .withIndex("by_run", (q) => q.eq("runId", runId))
       .collect(),
+    ctx.db
+      .query("wandbRuns")
+      .withIndex("by_run", (q) => q.eq("runId", runId))
+      .collect(),
+    ctx.db
+      .query("wandbMetrics")
+      .withIndex("by_run", (q) => q.eq("runId", runId))
+      .collect(),
   ]);
   await Promise.all([
     ...events.map((event) => ctx.db.delete(event._id)),
     ...runtimeLogs.map((entry) => ctx.db.delete(entry._id)),
     ...runtimeMetrics.map((entry) => ctx.db.delete(entry._id)),
+    ...wandbRuns.map((entry) => ctx.db.delete(entry._id)),
+    ...wandbMetrics.map((entry) => ctx.db.delete(entry._id)),
   ]);
   await ctx.db.delete("runs", runId);
   return { deleted: true, run_id: String(runId) };
@@ -1171,6 +1190,30 @@ export const internalGet = internalQuery({
   handler: async (ctx, args) => {
     const row = await getOwnedRun(ctx, args.userId, args.runId);
     return toRunResponse(row);
+  },
+});
+
+export const internalGetByRuntimeTokenHash = internalQuery({
+  args: { tokenHash: v.string() },
+  returns: runtimeTokenRunLookupValidator,
+  handler: async (ctx, args) => {
+    const tokenHash = args.tokenHash.trim();
+    if (!tokenHash) {
+      return null;
+    }
+    const row = await ctx.db
+      .query("runs")
+      .withIndex("by_runtime_token_hash", (q) => q.eq("runtimeTokenHash", tokenHash))
+      .first();
+    if (!row || !row.runtimeTokenHash || row.runtimeTokenHash === "revoked") {
+      return null;
+    }
+    return {
+      runId: row._id,
+      userId: row.userId,
+      status: row.status,
+      runtimeTokenHash: row.runtimeTokenHash,
+    };
   },
 });
 
