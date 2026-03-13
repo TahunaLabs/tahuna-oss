@@ -4,14 +4,19 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os/signal"
 	"path/filepath"
+	"syscall"
+	"time"
 
 	"warden/internal/config"
 	"warden/internal/materialize"
 	"warden/internal/runtimeapi"
+	"warden/internal/train"
 )
 
 var ErrNotImplemented = errors.New("warden runtime bootstrap is not implemented yet")
+var ErrArtifactsNotImplemented = errors.New("artifact upload is not implemented yet")
 
 type State string
 
@@ -142,11 +147,56 @@ func (r *Runner) Run(ctx context.Context) error {
 	})
 
 	r.transition(StateInstall)
-	return r.failNotImplemented(ctx)
-}
+	hooks := train.Hooks{
+		EmitLog: func(level, source, message string) {
+			_, _ = r.api.EmitLogs(ctx, []runtimeapi.LogLine{
+				{
+					Message: message,
+					Level:   level,
+					Source:  source,
+				},
+			})
+		},
+		EmitMetrics: func(samples []runtimeapi.MetricSample) {
+			_, _ = r.api.EmitMetrics(ctx, samples)
+		},
+	}
+	if err := train.InstallDependencies(ctx, r.cfg.WorkspaceRoot, hooks); err != nil {
+		return r.failWithError(ctx, err)
+	}
+	if err := r.api.EmitStatus(ctx, runtimeapi.StatusUpdate{
+		Status:  runtimeapi.StatusRunning,
+		Message: "workspace materialized",
+	}); err != nil {
+		return r.failWithError(ctx, err)
+	}
 
-func (r *Runner) failNotImplemented(ctx context.Context) error {
-	return r.failWithError(ctx, ErrNotImplemented)
+	r.transition(StateTraining)
+	trainCtx, stopSignals := signal.NotifyContext(ctx, syscall.SIGTERM, syscall.SIGINT)
+	defer stopSignals()
+	exitCode, cancelled, err := train.RunEntrypoint(
+		trainCtx,
+		r.cfg.WorkspaceRoot,
+		time.Duration(r.cfg.CancellationGraceSec)*time.Second,
+		hooks,
+	)
+	if err != nil {
+		return r.failWithError(ctx, err)
+	}
+	if cancelled {
+		r.transition(StateFailed)
+		_ = r.api.EmitStatus(ctx, runtimeapi.StatusUpdate{
+			Status:  runtimeapi.StatusCancelled,
+			Message: "run cancelled by user",
+		})
+		return nil
+	}
+	if exitCode != 0 {
+		return r.failWithError(ctx, fmt.Errorf("entrypoint exited with status %d", exitCode))
+	}
+
+	r.transition(StateArtifacts)
+	return r.failWithError(ctx, ErrArtifactsNotImplemented)
 }
 
 func (r *Runner) failWithError(ctx context.Context, reason error) error {

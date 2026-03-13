@@ -3,7 +3,6 @@ package bootstrap
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -11,7 +10,7 @@ import (
 	"warden/internal/config"
 )
 
-func TestRunnerTransitionsToFailedWhenStepsNotImplemented(t *testing.T) {
+func TestRunnerEmitsFailedStatusWhenBootstrapErrors(t *testing.T) {
 	statuses := []string{}
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -57,8 +56,8 @@ func TestRunnerTransitionsToFailedWhenStepsNotImplemented(t *testing.T) {
 	}
 
 	err := Run(context.Background(), cfg)
-	if !errors.Is(err, ErrNotImplemented) {
-		t.Fatalf("expected ErrNotImplemented, got %v", err)
+	if err == nil {
+		t.Fatal("expected bootstrap error")
 	}
 	if len(statuses) != 2 {
 		t.Fatalf("expected 2 status updates, got %d", len(statuses))
