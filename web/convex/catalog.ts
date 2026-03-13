@@ -3,7 +3,7 @@ import { v } from "convex/values";
 
 const MANAGED_RUNTIME_IMAGE_REPO = (
   process.env.TAHUNA_RUNTIME_IMAGE_REPO?.trim() ||
-  "ghcr.io/tahuna-ai/tahuna-runtime"
+  "docker.io/pazuzzu/tahuna"
 ).replace(/\/+$/, "");
 
 const managedImageTags: Record<string, Record<string, string>> = {

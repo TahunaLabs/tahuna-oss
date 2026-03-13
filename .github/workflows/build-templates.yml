@@ -55,23 +55,14 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_TOKEN }}
           
-      - name: Check if image exists
-        id: check
-        run: |
-          if docker manifest inspect ${{ secrets.DOCKER_USERNAME }}/tahuna-runtime:${{ matrix.tag }} > /dev/null 2>&1; then
-            echo "exists=true" >> $GITHUB_OUTPUT
-          else
-            echo "exists=false" >> $GITHUB_OUTPUT
-          fi
-          
       - name: Build and push
-        if: steps.check.outputs.exists == 'false'
         uses: docker/build-push-action@v5
         with:
           context: .
           file: runtime/images/Dockerfile
+          pull: true
           push: true
-          tags: ${{ secrets.DOCKER_USERNAME }}/tahuna-runtime:${{ matrix.tag }}
+          tags: ${{ secrets.DOCKER_USERNAME }}/tahuna:${{ matrix.tag }}
           build-args: |
             BASE_IMAGE=${{ matrix.base }}
           cache-from: type=gha
