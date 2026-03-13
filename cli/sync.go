@@ -245,55 +245,6 @@ func defaultDataSyncVersionName() string {
 	return base
 }
 
-func decideDataSyncUpload(item preparedManifest) (dataSyncDecision, error) {
-	currentName := loadDataSyncVersionName()
-	if currentName == "" {
-		currentName = defaultDataSyncVersionName()
-	}
-
-	_, previousHash, previousOK := loadManifestCache(item.cachePath)
-	changed := !previousOK || previousHash != item.hash
-	if !changed {
-		return dataSyncDecision{upload: true, versionName: currentName}, nil
-	}
-	if !previousOK {
-		if err := saveDataSyncVersionName(currentName); err != nil {
-			return dataSyncDecision{}, err
-		}
-		return dataSyncDecision{upload: true, versionName: currentName}, nil
-	}
-
-	if !syncSupportsInteractivePrompts() {
-		return dataSyncDecision{}, errors.New("data changed; interactive confirmation required (run `tahuna sync data` in a terminal)")
-	}
-
-	fmt.Printf("%sData files changed.%s\n", cAmpGold, cReset)
-	choice := syncPromptChoice("Data sync action", []string{
-		fmt.Sprintf("Re-upload and overwrite \"%s\"", currentName),
-		"Re-upload as a new data name",
-		"Cancel",
-	}, 0)
-
-	switch choice {
-	case "Cancel":
-		return dataSyncDecision{upload: false, versionName: currentName}, nil
-	case "Re-upload as a new data name":
-		nextName := strings.TrimSpace(syncPromptString("New data name", currentName+"-v2"))
-		if nextName == "" {
-			return dataSyncDecision{}, errors.New("data name is required")
-		}
-		if err := saveDataSyncVersionName(nextName); err != nil {
-			return dataSyncDecision{}, err
-		}
-		return dataSyncDecision{upload: true, versionName: nextName}, nil
-	default:
-		if err := saveDataSyncVersionName(currentName); err != nil {
-			return dataSyncDecision{}, err
-		}
-		return dataSyncDecision{upload: true, versionName: currentName}, nil
-	}
-}
-
 func buildManifest(kind, cachePath string, excludeDirs []string) (preparedManifest, error) {
 	entries, filesByID, cleanup, err := collectManifestEntries(kind, excludeDirs)
 	if err != nil {

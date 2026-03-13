@@ -208,22 +208,13 @@ func installSyncStubs(t *testing.T, mock *syncBackendMock) {
 	prevDoJSON := syncDoJSON
 	prevUploadFile := syncUploadFileToSignedURLRetry
 	prevUploadBytes := syncUploadBytesToSignedURLRetry
-	prevPromptChoice := syncPromptChoice
-	prevPromptString := syncPromptString
-	prevSupportsInteractive := syncSupportsInteractivePrompts
 	syncDoJSON = mock.doJSON
 	syncUploadFileToSignedURLRetry = mock.uploadFile
 	syncUploadBytesToSignedURLRetry = mock.uploadBytes
-	syncPromptChoice = promptChoice
-	syncPromptString = promptString
-	syncSupportsInteractivePrompts = supportsInteractivePrompts
 	t.Cleanup(func() {
 		syncDoJSON = prevDoJSON
 		syncUploadFileToSignedURLRetry = prevUploadFile
 		syncUploadBytesToSignedURLRetry = prevUploadBytes
-		syncPromptChoice = prevPromptChoice
-		syncPromptString = prevPromptString
-		syncSupportsInteractivePrompts = prevSupportsInteractive
 	})
 }
 
@@ -371,9 +362,8 @@ func TestSyncIncremental_DataChangedWithoutInteractiveStillSyncs(t *testing.T) {
 		t.Fatalf("failed to mutate data file: %v", err)
 	}
 
-	syncSupportsInteractivePrompts = func() bool { return false }
 	if err := syncIncremental("env-test", syncScope{data: true}, syncOptions{}); err != nil {
-		t.Fatalf("expected changed data sync to proceed without interactive prompts, got: %v", err)
+		t.Fatalf("expected changed data sync to proceed non-interactively, got: %v", err)
 	}
 }
 

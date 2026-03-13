@@ -465,18 +465,10 @@ type syncOptions struct {
 	dynamicStatus bool
 }
 
-type dataSyncDecision struct {
-	upload      bool
-	versionName string
-}
-
 var (
 	syncDoJSON                      = doJSON
 	syncUploadFileToSignedURLRetry  = uploadFileToSignedURLWithRetry
 	syncUploadBytesToSignedURLRetry = uploadBytesToSignedURLWithRetry
-	syncPromptChoice                = promptChoice
-	syncPromptString                = promptString
-	syncSupportsInteractivePrompts  = supportsInteractivePrompts
 	runLogsFollowSleep              = time.Sleep
 )
 
