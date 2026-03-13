@@ -35,7 +35,7 @@ func TestWriteManifestEntriesMaterializesVerifiedBlob(t *testing.T) {
 	}
 
 	root := t.TempDir()
-	stats, err := WriteManifestEntries(context.Background(), NewDownloader(5*time.Second), entries, root, "code")
+	stats, err := WriteManifestEntries(context.Background(), NewDownloader(5*time.Second), entries, root, "code", nil)
 	if err != nil {
 		t.Fatalf("WriteManifestEntries returned error: %v", err)
 	}
@@ -67,9 +67,69 @@ func TestWriteManifestEntriesRejectsHashMismatch(t *testing.T) {
 		},
 	}
 
-	_, err := WriteManifestEntries(context.Background(), NewDownloader(5*time.Second), entries, t.TempDir(), "code")
+	_, err := WriteManifestEntries(context.Background(), NewDownloader(5*time.Second), entries, t.TempDir(), "code", nil)
 	if err == nil {
 		t.Fatal("expected hash mismatch error")
+	}
+}
+
+func TestWriteManifestEntriesReportsProgress(t *testing.T) {
+	contentA := []byte("file-a")
+	hashA := sha256.Sum256(contentA)
+	shaA := hex.EncodeToString(hashA[:])
+	contentB := []byte("file-b")
+	hashB := sha256.Sum256(contentB)
+	shaB := hex.EncodeToString(hashB[:])
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/a":
+			_, _ = w.Write(contentA)
+		case "/b":
+			_, _ = w.Write(contentB)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	entries := []runtimeapi.BootstrapEntry{
+		{
+			Path:        "a.txt",
+			SHA256:      shaA,
+			Size:        int64(len(contentA)),
+			Mode:        0o644,
+			DownloadURL: server.URL + "/a",
+		},
+		{
+			Path:        "b.txt",
+			SHA256:      shaB,
+			Size:        int64(len(contentB)),
+			Mode:        0o644,
+			DownloadURL: server.URL + "/b",
+		},
+	}
+
+	var snapshots []Progress
+	_, err := WriteManifestEntries(
+		context.Background(),
+		NewDownloader(5*time.Second),
+		entries,
+		t.TempDir(),
+		"code",
+		func(progress Progress) {
+			snapshots = append(snapshots, progress)
+		},
+	)
+	if err != nil {
+		t.Fatalf("WriteManifestEntries returned error: %v", err)
+	}
+	if len(snapshots) == 0 {
+		t.Fatal("expected at least one progress snapshot")
+	}
+	last := snapshots[len(snapshots)-1]
+	if last.CompletedFiles != 2 || last.TotalFiles != 2 {
+		t.Fatalf("unexpected final progress files: %#v", last)
 	}
 }
 

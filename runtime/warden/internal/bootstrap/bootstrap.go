@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -74,24 +75,50 @@ func (r *Runner) Run(ctx context.Context) error {
 
 	r.transition(StateMaterialize)
 	downloader := materialize.NewDownloader(r.cfg.RequestTimeout())
+	codeTotalBytes := sumEntryBytes(plan.Code.Entries)
+	_, _ = r.api.EmitLogs(ctx, []runtimeapi.LogLine{
+		{
+			Message: fmt.Sprintf(
+				"bootstrap: materializing code files=%d bytes=%s",
+				len(plan.Code.Entries),
+				formatBytes(codeTotalBytes),
+			),
+			Level:  "info",
+			Source: "bootstrap",
+		},
+	})
 	codeStats, err := materialize.WriteManifestEntries(
 		ctx,
 		downloader,
 		plan.Code.Entries,
 		r.cfg.WorkspaceRoot,
 		"code",
+		r.newProgressReporter(ctx, "code"),
 	)
 	if err != nil {
 		return r.failWithError(ctx, err)
 	}
 
 	dataRoot := filepath.Join(r.cfg.WorkspaceRoot, "data")
+	dataTotalBytes := sumEntryBytes(plan.Data.Entries)
+	_, _ = r.api.EmitLogs(ctx, []runtimeapi.LogLine{
+		{
+			Message: fmt.Sprintf(
+				"bootstrap: materializing data files=%d bytes=%s",
+				len(plan.Data.Entries),
+				formatBytes(dataTotalBytes),
+			),
+			Level:  "info",
+			Source: "bootstrap",
+		},
+	})
 	dataStats, err := materialize.WriteManifestEntries(
 		ctx,
 		downloader,
 		plan.Data.Entries,
 		dataRoot,
 		"data",
+		r.newProgressReporter(ctx, "data"),
 	)
 	if err != nil {
 		return r.failWithError(ctx, err)
@@ -239,6 +266,86 @@ func (r *Runner) syncArtifacts(ctx context.Context, hooks train.Hooks) {
 			Source: "bootstrap",
 		},
 	})
+}
+
+func (r *Runner) newProgressReporter(ctx context.Context, kind string) func(materialize.Progress) {
+	lastEmit := time.Time{}
+	return func(progress materialize.Progress) {
+		if progress.TotalFiles <= 0 {
+			return
+		}
+		now := time.Now()
+		isDone := progress.CompletedFiles >= progress.TotalFiles
+		if !isDone && !lastEmit.IsZero() && now.Sub(lastEmit) < 2*time.Second {
+			return
+		}
+		lastEmit = now
+		pct := float64(progress.CompletedFiles) / float64(progress.TotalFiles)
+		if pct < 0 {
+			pct = 0
+		}
+		if pct > 1 {
+			pct = 1
+		}
+		_, _ = r.api.EmitLogs(ctx, []runtimeapi.LogLine{
+			{
+				Message: fmt.Sprintf(
+					"bootstrap: materializing %s %s %3.0f%% files=%d/%d bytes=%s/%s",
+					kind,
+					progressBar(pct, 20),
+					pct*100,
+					progress.CompletedFiles,
+					progress.TotalFiles,
+					formatBytes(progress.CompletedBytes),
+					formatBytes(progress.TotalBytes),
+				),
+				Level:  "info",
+				Source: "bootstrap",
+			},
+		})
+	}
+}
+
+func sumEntryBytes(entries []runtimeapi.BootstrapEntry) int64 {
+	total := int64(0)
+	for _, entry := range entries {
+		total += entry.Size
+	}
+	return total
+}
+
+func progressBar(progress float64, width int) string {
+	if width <= 0 {
+		width = 20
+	}
+	if progress < 0 {
+		progress = 0
+	}
+	if progress > 1 {
+		progress = 1
+	}
+	filled := int(progress * float64(width))
+	if filled > width {
+		filled = width
+	}
+	return "[" + strings.Repeat("#", filled) + strings.Repeat("-", width-filled) + "]"
+}
+
+func formatBytes(bytes int64) string {
+	if bytes < 1024 {
+		return fmt.Sprintf("%dB", bytes)
+	}
+	units := []string{"KB", "MB", "GB", "TB"}
+	value := float64(bytes)
+	unit := "B"
+	for _, candidate := range units {
+		value /= 1024.0
+		unit = candidate
+		if value < 1024.0 {
+			break
+		}
+	}
+	return fmt.Sprintf("%.1f%s", value, unit)
 }
 
 func maxInt(a, b int) int {

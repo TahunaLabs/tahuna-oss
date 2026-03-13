@@ -23,6 +23,15 @@ type Stats struct {
 	TotalBytes int64
 }
 
+type Progress struct {
+	Kind           string
+	CompletedFiles int
+	TotalFiles     int
+	CompletedBytes int64
+	TotalBytes     int64
+	CurrentPath    string
+}
+
 type Downloader struct {
 	http *http.Client
 }
@@ -69,12 +78,18 @@ func WriteManifestEntries(
 	entries []runtimeapi.BootstrapEntry,
 	rootDir string,
 	kind string,
+	onProgress func(Progress),
 ) (Stats, error) {
 	if downloader == nil {
 		return Stats{}, fmt.Errorf("downloader is required")
 	}
 	if err := os.MkdirAll(rootDir, 0o755); err != nil {
 		return Stats{}, fmt.Errorf("create root dir %s: %w", rootDir, err)
+	}
+
+	totalBytes := int64(0)
+	for _, entry := range entries {
+		totalBytes += entry.Size
 	}
 
 	stats := Stats{}
@@ -110,6 +125,16 @@ func WriteManifestEntries(
 
 		stats.FileCount += 1
 		stats.TotalBytes += int64(len(blob))
+		if onProgress != nil {
+			onProgress(Progress{
+				Kind:           kind,
+				CompletedFiles: stats.FileCount,
+				TotalFiles:     len(entries),
+				CompletedBytes: stats.TotalBytes,
+				TotalBytes:     totalBytes,
+				CurrentPath:    rel,
+			})
+		}
 	}
 	return stats, nil
 }
