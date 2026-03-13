@@ -17,6 +17,8 @@ import {
   type DataBlobRow,
   type EnvironmentRow,
   type RunRow,
+  type RunDetail,
+  type RunLogsDetail,
   type StorageListResult,
   type StorageSort,
   type StorageItem,
@@ -56,6 +58,7 @@ export default function DashboardPage() {
   const [renamingStorageId, setRenamingStorageId] = useState<string | null>(null)
   const [artifactRenameDraft, setArtifactRenameDraft] = useState("")
   const [artifactRenameBusyId, setArtifactRenameBusyId] = useState<string | null>(null)
+  const [selectedRunId, setSelectedRunId] = useState<string | null>(null)
   const [bindSelectionByEnvironment, setBindSelectionByEnvironment] = useState<Record<string, string>>({})
   const shouldLoadQueries = !authLoading && isAuthenticated && !loggingOut
 
@@ -69,6 +72,16 @@ export default function DashboardPage() {
   const runResult = useQuery(api.runs.list, shouldLoadQueries ? {} : "skip") as
     | { runs: RunRow[] }
     | undefined
+
+  const shouldLoadRunDetail = shouldLoadQueries && selectedRunId !== null
+  const runDetail = useQuery(
+    api.runs.get,
+    shouldLoadRunDetail ? { runId: selectedRunId as Id<"runs"> } : "skip"
+  ) as RunDetail | undefined
+  const runLogs = useQuery(
+    api.runs.getLogs,
+    shouldLoadRunDetail ? { runId: selectedRunId as Id<"runs"> } : "skip"
+  ) as RunLogsDetail | undefined
 
   const environments: EnvironmentRow[] = envResult?.environments ?? []
   const dataBlobs: DataBlobRow[] = dataResult?.blobs ?? []
@@ -439,6 +452,10 @@ export default function DashboardPage() {
             environments={environments}
             runs={runs}
             busy={busy}
+            selectedRunId={selectedRunId}
+            runDetail={runDetail}
+            runLogs={runLogs}
+            onSelectRun={setSelectedRunId}
             onCancelRun={(runId) => {
               void cancelRun(runId)
             }}

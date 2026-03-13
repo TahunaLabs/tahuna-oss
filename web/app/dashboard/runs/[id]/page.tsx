@@ -11,6 +11,11 @@ import { useConvexAuth, useQuery } from "convex/react"
 import Link from "next/link"
 import { useParams } from "next/navigation"
 import {
+  metricSeries,
+  type RunDetail,
+  type RunLogsDetail,
+} from "@/components/dashboard/shared"
+import {
   CartesianGrid,
   Line,
   LineChart,
@@ -19,66 +24,6 @@ import {
   XAxis,
   YAxis,
 } from "recharts"
-
-type RunDetail = {
-  run_id: string
-  name: string
-  created_at: number
-  environment_id: string
-  input: string
-  output: string
-  logs: string
-  status: string
-  error: string
-  pod_id: string
-  effective_gpu_type: string
-  effective_gpu_count: number
-  effective_volume_gb: number
-  code_manifest_hash: string
-  data_manifest_hash: string
-  cancellation_requested: boolean
-  artifact_keys: string[]
-}
-
-type RunLogsDetail = {
-  run_id: string
-  status: string
-  logs_path: string
-  log_file: string
-  note: string
-  recent_logs: Array<{
-    timestamp: number
-    level: string
-    source: string
-    message: string
-  }>
-  recent_metrics: Array<{
-    timestamp: number
-    name: string
-    value: number
-    step: number | null
-    unit: string | null
-    source: string
-  }>
-}
-
-function metricSeries(logs: RunLogsDetail | undefined) {
-  if (!logs) return []
-  const grouped = new Map<string, Array<{ x: number; label: string; value: number }>>()
-  for (const sample of logs.recent_metrics) {
-    const points = grouped.get(sample.name) || []
-    points.push({
-      x: sample.timestamp,
-      label: new Date(sample.timestamp).toLocaleTimeString(),
-      value: sample.value,
-    })
-    grouped.set(sample.name, points)
-  }
-  return Array.from(grouped.entries()).map(([name, points]) => ({
-    name,
-    points: points.sort((a, b) => a.x - b.x),
-  }))
-}
 
 export default function RunDetailPage() {
   const params = useParams<{ id: string }>()
