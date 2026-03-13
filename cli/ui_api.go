@@ -808,9 +808,9 @@ func browserBaseURL() string {
 func runDashboardURL(runID string) string {
 	base := strings.TrimRight(browserBaseURL(), "/")
 	if strings.TrimSpace(runID) == "" {
-		return base + "/runs"
+		return base + "/dashboard/runs"
 	}
-	return fmt.Sprintf("%s/runs/%s", base, neturl.QueryEscape(runID))
+	return fmt.Sprintf("%s/dashboard/runs/%s", base, neturl.QueryEscape(runID))
 }
 
 func resolveLoginBrowserBaseURL() string {
