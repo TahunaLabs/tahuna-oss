@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help install-web run-web install-cli install-cli-tools run-cli lint-cli test-cli validate-cli
+.PHONY: help install-web run-web install-cli install-cli-tools run-cli lint-cli test-cli validate-cli install-runtime-tools lint-warden test-warden validate-warden
 
 help:
 	@echo "Available targets:"
@@ -11,6 +11,10 @@ help:
 	@echo "  lint-cli     Run Go CLI formatting, vet, and lint checks"
 	@echo "  test-cli     Run Go CLI tests"
 	@echo "  validate-cli Run the full Go CLI validation stack"
+	@echo "  install-runtime-tools  Install pinned Go runtime lint tooling"
+	@echo "  lint-warden  Run Warden runtime formatting, vet, and lint checks"
+	@echo "  test-warden  Run Warden runtime tests"
+	@echo "  validate-warden Run the full Warden runtime validation stack"
 	@echo "  run-cli      Run the CLI"
 
 install-web:
@@ -35,6 +39,17 @@ test-cli:
 	cd cli && ./tests/run_go_tests.sh
 
 validate-cli: lint-cli test-cli
+
+install-runtime-tools:
+	cd runtime/warden && GOBIN="$$(go env GOPATH)/bin" go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.8
+
+lint-warden:
+	cd runtime/warden && ./tests/run_go_lint.sh
+
+test-warden:
+	cd runtime/warden && ./tests/run_go_tests.sh
+
+validate-warden: lint-warden test-warden
 
 run-cli:
 	@set -a; \

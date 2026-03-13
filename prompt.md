@@ -40,3 +40,12 @@
 - Command parsing/output → command files. HTTP helpers → `ui_api.go`. Project state → `project.go`. Sync internals → `sync.go`.
 - One canonical flag spelling. Human-readable default output; JSON only under `--verbose`.
 - Explicit timeouts/contexts for all networked calls. One canonical error/output style per command family.
+
+## Go Runtime (`runtime/warden/`)
+
+- Search whole repo before removing or renaming any runtime contract references.
+- Validate every commit with `make validate-warden` (`gofmt`, `go vet`, `golangci-lint`, `go test`).
+- Runtime contract client, workspace materialization, dependency install, training execution, metrics extraction, and artifact sync each live in dedicated packages. Keep `cmd/warden` as thin orchestration only.
+- One canonical startup path only. No embedded script fallback or duplicate runtime implementations.
+- Explicit contexts/timeouts/retry budgets for all networked calls. Keep retry constants centralized and sourced from shared config/env (no hardcoded magic numbers in flow logic).
+- Structured logging and `detail`-style errors only. Never log secrets (runtime token, signed URLs, auth headers).
