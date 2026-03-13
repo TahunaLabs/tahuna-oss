@@ -1,0 +1,69 @@
+---
+title: Environments
+description: Create and manage GPU-accelerated compute environments.
+---
+
+An environment is an isolated compute configuration that defines what infrastructure your runs execute on. Environments are created and managed through the Tahuna CLI.
+
+## Creating an environment
+
+Initialize an environment in your project:
+
+```bash
+tahuna init .
+```
+
+This generates a `tahuna.toml` file with your environment configuration.
+
+## Configuration
+
+The `tahuna.toml` file defines your environment:
+
+```toml
+[environment]
+name = "training-env"
+framework = "pytorch"
+version = "2.4"
+gpu_type = "A100"
+gpu_count = 1
+volume_gb = 50
+```
+
+### Fields
+
+| Field | Description | Example |
+| --- | --- | --- |
+| `name` | Human-readable name for the environment | `"training-env"` |
+| `framework` | ML framework to use | `"pytorch"`, `"jax"` |
+| `version` | Framework version | `"2.4"` |
+| `gpu_type` | GPU model | `"A100"`, `"H100"`, `"L40S"` |
+| `gpu_count` | Number of GPUs | `1`, `2`, `4`, `8` |
+| `volume_gb` | Persistent volume size in GB | `50`, `100`, `500` |
+
+## Data bindings
+
+Environments can have data bound to them. Bound data is automatically mounted when a run starts.
+
+You can bind data from the dashboard's Environments view, or via the CLI:
+
+```bash
+tahuna data bind <environment-id> <data-id>
+```
+
+To unbind:
+
+```bash
+tahuna data unbind <environment-id> <data-id>
+```
+
+## Deleting an environment
+
+```bash
+tahuna env delete <environment-id>
+```
+
+This permanently removes the environment, all its runs, and associated logs, metrics, and artifacts.
+
+## Dashboard
+
+The Environments view in the dashboard shows all your environments with their specs, bound data, and quick actions (launch run, delete).

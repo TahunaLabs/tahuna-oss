@@ -1,0 +1,125 @@
+---
+title: CLI Reference
+description: Full reference for the Tahuna command-line interface.
+---
+
+## Installation
+
+```bash
+brew install tahuna
+```
+
+## Authentication
+
+### `tahuna login`
+
+Authenticate with your Tahuna account. Opens a browser window for OAuth.
+
+```bash
+tahuna login
+```
+
+### `tahuna logout`
+
+Clear stored credentials.
+
+```bash
+tahuna logout
+```
+
+## Environments
+
+### `tahuna init`
+
+Initialize an environment in the current directory. Creates a `tahuna.toml` configuration file.
+
+```bash
+tahuna init .
+```
+
+### `tahuna env list`
+
+List all environments in your workspace.
+
+```bash
+tahuna env list
+```
+
+### `tahuna env delete`
+
+Delete an environment and all its associated runs, logs, and artifacts.
+
+```bash
+tahuna env delete <environment-id>
+```
+
+## Runs
+
+### `tahuna run`
+
+Launch a run in the current environment.
+
+```bash
+tahuna run
+tahuna run --env <environment-id>
+```
+
+### `tahuna run cancel`
+
+Cancel a running or queued run.
+
+```bash
+tahuna run cancel <run-id>
+```
+
+### `tahuna logs`
+
+Stream logs from a run.
+
+```bash
+tahuna logs <run-id>
+tahuna logs <run-id> --follow
+```
+
+## Data
+
+### `tahuna data upload`
+
+Upload data files to cloud storage.
+
+```bash
+tahuna data upload ./file.json
+tahuna data upload ./data/*.parquet
+```
+
+### `tahuna data download`
+
+Download a file from storage.
+
+```bash
+tahuna data download <file-key> -o ./output_path
+```
+
+### `tahuna data bind`
+
+Bind a data file to an environment. Bound data is mounted when runs start.
+
+```bash
+tahuna data bind <environment-id> <data-id>
+```
+
+### `tahuna data unbind`
+
+Remove a data binding from an environment.
+
+```bash
+tahuna data unbind <environment-id> <data-id>
+```
+
+## Global Options
+
+| Flag | Description |
+| --- | --- |
+| `--version` | Print the CLI version |
+| `--help` | Show help for any command |
+| `--verbose` | Enable verbose output |

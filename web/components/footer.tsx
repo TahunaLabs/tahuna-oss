@@ -17,7 +17,7 @@ export function Footer() {
           </div>
 
           <div className="flex items-center gap-6 text-sm text-muted-foreground">
-            <Link href="/docs" className="hover:text-foreground transition-colors">
+            <Link href="https://github.com/Pazuzzu/tahuna/tree/develop/docs" className="hover:text-foreground transition-colors">
               Documentation
             </Link>
             <Link href="#" className="hover:text-foreground transition-colors">

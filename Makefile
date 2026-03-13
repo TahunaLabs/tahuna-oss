@@ -1,11 +1,14 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help install-web run-web install-cli install-cli-tools run-cli lint-cli test-cli validate-cli install-runtime-tools lint-warden test-warden validate-warden
+.PHONY: help install-web run-web install-docs run-docs build-docs install-cli install-cli-tools run-cli lint-cli test-cli validate-cli install-runtime-tools lint-warden test-warden validate-warden
 
 help:
 	@echo "Available targets:"
 	@echo "  install-web  Install web dependencies"
 	@echo "  run-web      Run Convex + Next.js dev server"
+	@echo "  install-docs Install documentation dependencies"
+	@echo "  run-docs     Run documentation dev server"
+	@echo "  build-docs   Build documentation app"
 	@echo "  install-cli  Install CLI dependencies"
 	@echo "  install-cli-tools  Install pinned Go CLI lint tooling"
 	@echo "  lint-cli     Run Go CLI formatting, vet, and lint checks"
@@ -25,6 +28,15 @@ run-web:
 	cd web && bun run convex:dev & \
 	cd web && bun run dev & \
 	wait
+
+install-docs:
+	cd docs && bun install
+
+run-docs:
+	cd docs && bun run dev
+
+build-docs:
+	cd docs && bunx --bun next build --webpack
 
 install-cli:
 	cd cli && go mod download

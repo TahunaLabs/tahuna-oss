@@ -3,11 +3,14 @@
   "root": true,
   "pages": [
     "index",
+    "---Getting Started---",
     "installation",
     "quickstart",
+    "---Core Concepts---",
     "environments",
     "runs",
     "storage",
+    "---Reference---",
     "cli"
   ]
 }

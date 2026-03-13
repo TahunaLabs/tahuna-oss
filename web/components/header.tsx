@@ -11,7 +11,7 @@ export function Header() {
   const pathname = usePathname()
 
   const navLinks = [
-    { label: "Documentation", href: "/docs" },
+    { label: "Documentation", href: "https://github.com/Pazuzzu/tahuna/tree/develop/docs" },
     { label: "Manifesto", href: "/#manifesto" },
     { label: "Get in Touch", href: "/#waitlist" },
   ]

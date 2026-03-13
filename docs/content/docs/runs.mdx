@@ -1,0 +1,68 @@
+---
+title: Runs
+description: Launch, monitor, and manage training runs.
+---
+
+A run is a single execution of your code within an environment. Tahuna handles provisioning, code sync, log streaming, and artifact collection.
+
+## Launching a run
+
+From your project directory:
+
+```bash
+tahuna run
+```
+
+Or target a specific environment:
+
+```bash
+tahuna run --env <environment-id>
+```
+
+## Run lifecycle
+
+Each run goes through these statuses:
+
+| Status | Description |
+| --- | --- |
+| `queued` | Run is waiting for a GPU pod |
+| `provisioning` | Pod is being allocated and configured |
+| `running` | Code is executing on the pod |
+| `completed` | Run finished successfully |
+| `failed` | Run exited with an error |
+| `cancelling` | Cancellation has been requested |
+| `cancelled` | Run was cancelled |
+
+## Monitoring
+
+### Live logs
+
+Tahuna streams stdout and stderr from your run in real-time. View logs from the CLI:
+
+```bash
+tahuna logs <run-id>
+```
+
+Or from the dashboard by selecting a run in the Runs view. The detail panel shows live logs with timestamps, log levels, and source labels.
+
+### Live metrics
+
+If your training code emits metrics (loss, accuracy, learning rate, etc.), they are captured and displayed as real-time charts in the dashboard's run detail panel.
+
+## Cancelling a run
+
+Cancel a running or queued run:
+
+```bash
+tahuna run cancel <run-id>
+```
+
+Or use the cancel button in the dashboard's run detail panel.
+
+## Artifacts
+
+When a run writes files to its output directory, they are automatically collected as artifacts and stored in cloud storage. View and download artifacts from the Storage view in the dashboard.
+
+## Dashboard
+
+The Runs view uses a list-detail layout. The left panel shows all runs with status indicators. Click a run to see its full detail on the right — diagnostics, paths, live logs, and live metric charts.

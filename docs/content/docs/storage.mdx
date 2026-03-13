@@ -1,0 +1,56 @@
+---
+title: Storage
+description: Manage data uploads and run artifacts.
+---
+
+Tahuna provides unified cloud storage for your training data and run-produced artifacts. All files are stored in Cloudflare R2 and accessible from the dashboard and CLI.
+
+## Data uploads
+
+Upload files that your runs need as input:
+
+```bash
+tahuna data upload ./my_dataset.json
+```
+
+Upload multiple files at once:
+
+```bash
+tahuna data upload ./data/*.parquet
+```
+
+Uploaded data appears in the Storage view under the **Data** tab.
+
+### Renaming data
+
+Data files can be renamed from the dashboard. Click the pencil icon next to a data file to edit its name.
+
+## Run artifacts
+
+When a run writes to its output directory, those files are automatically collected and stored as artifacts. Artifacts appear in the Storage view under the **Artifacts** tab.
+
+Artifacts are read-only and cannot be renamed. They are linked to the run that produced them.
+
+## Browsing storage
+
+The dashboard's Storage view shows all files across three tabs:
+
+- **All storage** — everything in one list
+- **Data** — uploaded data files only
+- **Artifacts** — run-produced artifacts only
+
+Each item shows its name, source type (Data or Artifact), file size, creation date, and reference ID. Actions include opening, downloading, and renaming (data only).
+
+## Downloading files
+
+From the CLI:
+
+```bash
+tahuna data download <file-key> -o ./local_path
+```
+
+From the dashboard, use the download button next to any storage item.
+
+## Storage limits
+
+Storage quotas depend on your plan. Contact support if you need more capacity.

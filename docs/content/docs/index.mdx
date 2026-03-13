@@ -1,0 +1,27 @@
+---
+title: Introduction
+description: Welcome to the Tahuna documentation.
+---
+
+Tahuna is a compute platform for machine learning. It lets you create GPU-accelerated environments, upload training data, launch runs, and collect artifacts — all from a simple CLI.
+
+## What is Tahuna?
+
+Tahuna provides managed infrastructure for ML workloads. Instead of manually provisioning GPUs, configuring drivers, and managing storage, you define an environment once and Tahuna handles the rest.
+
+## Key Concepts
+
+- **Environments** — Isolated compute configurations that specify a framework (e.g. PyTorch), GPU type, GPU count, and volume size. Created via the CLI.
+- **Runs** — A single execution of your code within an environment. Tahuna provisions the pod, streams logs and metrics in real-time, and collects output artifacts.
+- **Storage** — A unified view of your uploaded data files and run-produced artifacts, stored in cloud object storage (R2).
+
+## Quick Start
+
+```bash
+brew install tahuna
+tahuna login
+tahuna init .
+tahuna run
+```
+
+See the [Installation](/docs/installation) and [Quickstart](/docs/quickstart) guides for detailed steps.

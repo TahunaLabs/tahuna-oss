@@ -108,7 +108,7 @@ export function EnvironmentsView({
               </p>
 
               <Link
-                href="/docs"
+                href="https://github.com/Pazuzzu/tahuna/tree/develop/docs"
                 className="flex items-center justify-center gap-2 w-full px-4 py-2.5 bg-secondary text-foreground text-sm rounded-lg hover:bg-secondary/80 transition-colors"
               >
                 Full Documentation
