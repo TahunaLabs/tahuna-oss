@@ -92,14 +92,6 @@ const runLogsResponseValidator = v.object({
       source: v.string(),
     }),
   ),
-  monitor_events: v.array(
-    v.object({
-      timestamp: v.number(),
-      level: v.string(),
-      source: v.string(),
-      message: v.string(),
-    }),
-  ),
 });
 const provisioningPayloadValidator = v.object({
   run_id: v.string(),
@@ -180,8 +172,6 @@ const provisionPool = new Workpool(components.workpool, {
 const r2 = new R2(components.r2);
 const RUNTIME_LOG_TAIL_LIMIT = RUN_CONFIG.runtimeLogTailLimit;
 const RUNTIME_METRIC_TAIL_LIMIT = RUN_CONFIG.runtimeMetricTailLimit;
-const MONITOR_EVENT_TAIL_LIMIT = 120;
-const MONITOR_RUNTIME_SOURCE = "monitor";
 const RUN_NAME_MAX_LENGTH = 64;
 const RUN_NAME_FIRST = [
   "amber",
@@ -878,30 +868,10 @@ async function listRecentRuntimeMetrics(ctx: QueryCtx, runId: Id<"runs">) {
     }));
 }
 
-async function listRecentMonitorEvents(ctx: QueryCtx, runId: Id<"runs">) {
-  const rows = await ctx.db
-    .query("runRuntimeLogs")
-    .withIndex("by_run_and_source_timestamp", (q) =>
-      q.eq("runId", runId).eq("source", MONITOR_RUNTIME_SOURCE),
-    )
-    .order("desc")
-    .take(MONITOR_EVENT_TAIL_LIMIT);
-  return rows
-    .slice()
-    .reverse()
-    .map((row) => ({
-      timestamp: row.timestamp,
-      level: row.level,
-      source: row.source,
-      message: row.message,
-    }));
-}
-
 async function toRunLogsResponse(ctx: QueryCtx, row: Doc<"runs">) {
-  const [recentLogs, recentMetrics, monitorEvents] = await Promise.all([
+  const [recentLogs, recentMetrics] = await Promise.all([
     listRecentRuntimeLogs(ctx, row._id),
     listRecentRuntimeMetrics(ctx, row._id),
-    listRecentMonitorEvents(ctx, row._id),
   ]);
   return {
     run_id: String(row._id),
@@ -911,7 +881,6 @@ async function toRunLogsResponse(ctx: QueryCtx, row: Doc<"runs">) {
     note: "Runtime logs/metrics are streamed by the pod and persisted in Convex.",
     recent_logs: recentLogs,
     recent_metrics: recentMetrics,
-    monitor_events: monitorEvents,
   };
 }
 

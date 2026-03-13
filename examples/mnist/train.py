@@ -7,8 +7,6 @@ import pathlib
 import sys
 from datetime import datetime, timezone
 
-import tahuna.monitor as wandb
-
 try:
     import torch
     from torch import nn
@@ -94,18 +92,6 @@ def main() -> None:
     output_dir = pathlib.Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    wandb.init(
-        project="mnist",
-        name="mnist-cnn",
-        config={
-            "epochs": args.epochs,
-            "batch_size": args.batch_size,
-            "learning_rate": args.learning_rate,
-            "num_workers": args.num_workers,
-            "data_dir": str(data_dir),
-        },
-    )
-
     require_prepared_mnist(data_dir)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -163,14 +149,6 @@ def main() -> None:
             f"epoch={epoch} train_loss={train_loss:.4f} "
             f"val_loss={val_loss:.4f} val_acc={val_acc:.4f}"
         )
-        wandb.log(
-            {
-                "train_loss": train_loss,
-                "val_loss": val_loss,
-                "val_acc": val_acc,
-            },
-            step=epoch,
-        )
 
     torch.save(model.state_dict(), output_dir / "model.pt")
     summary = {
@@ -183,7 +161,6 @@ def main() -> None:
         "metrics": metrics,
     }
     (output_dir / "metrics.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
-    wandb.finish()
     print("Training complete.")
 
 

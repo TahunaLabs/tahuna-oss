@@ -1,2 +1,0 @@
-"""Tahuna SDK namespace package."""
-
