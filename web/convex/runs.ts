@@ -1873,6 +1873,9 @@ export const ingestRuntimeStatus = internalMutation({
         source: "pod-runtime",
       },
     });
+    if (status === RUN_STATUS.COMPLETED || status === RUN_STATUS.CANCELLED) {
+      await scheduleForcedPodTermination(ctx, args.runId, row.podId);
+    }
     return { status };
   },
 });

@@ -252,6 +252,31 @@ function parseHistoryMetrics(lines: string[]) {
   return out;
 }
 
+function parseSummaryMetrics(payload: Record<string, unknown>) {
+  const out: ParsedMetrics[] = [];
+  const timestamp = normalizeTimestamp(payload._timestamp);
+  const step =
+    typeof payload._step === "number" && Number.isFinite(payload._step)
+      ? Math.floor(payload._step)
+      : undefined;
+  for (const [key, value] of Object.entries(payload)) {
+    if (!key || key.startsWith("_")) {
+      continue;
+    }
+    if (typeof value !== "number" || !Number.isFinite(value)) {
+      continue;
+    }
+    out.push({
+      timestamp,
+      step,
+      key,
+      value,
+      source: "wandb",
+    });
+  }
+  return out;
+}
+
 function parseCreateRunFiles(filePayload: unknown): string[] {
   if (!Array.isArray(filePayload)) {
     return [];
@@ -655,6 +680,9 @@ export const fileStream = httpAction(async (ctx, request) => {
       ? parseJsonObjectLine(summaryLines[summaryLines.length - 1] || "")
       : null;
   const points = parseHistoryMetrics(historyLines);
+  if (points.length === 0 && summaryPayload) {
+    points.push(...parseSummaryMetrics(summaryPayload));
+  }
 
   await ctx.runMutation(internal.monitoring.wandb.upsertRun, {
     runId: authenticated.runId,
