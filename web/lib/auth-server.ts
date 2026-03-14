@@ -13,12 +13,68 @@ if (!tahunaApiUrl || !tahunaSiteUrl) {
   );
 }
 
-export const {
+const {
   handler,
-  isAuthenticated,
-  getToken,
+  isAuthenticated: rawIsAuthenticated,
+  getToken: rawGetToken,
   preloadAuthQuery,
   fetchAuthQuery,
   fetchAuthMutation,
   fetchAuthAction,
 } = convexBetterAuthNextJs({ convexUrl: tahunaApiUrl, convexSiteUrl: tahunaSiteUrl });
+
+function isRecoverableAuthConnectivityError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  const candidate = error as Error & {
+    code?: string;
+    cause?: unknown;
+    path?: string;
+  };
+
+  if (candidate.code === "ConnectionRefused") {
+    return true;
+  }
+
+  if (candidate.path?.includes("/api/auth/convex/token")) {
+    return true;
+  }
+
+  if (candidate.message.includes("Unable to connect")) {
+    return true;
+  }
+
+  return false;
+}
+
+export async function getToken() {
+  try {
+    return await rawGetToken();
+  } catch (error) {
+    if (isRecoverableAuthConnectivityError(error)) {
+      return null;
+    }
+    throw error;
+  }
+}
+
+export async function isAuthenticated() {
+  try {
+    return await rawIsAuthenticated();
+  } catch (error) {
+    if (isRecoverableAuthConnectivityError(error)) {
+      return false;
+    }
+    throw error;
+  }
+}
+
+export {
+  handler,
+  preloadAuthQuery,
+  fetchAuthQuery,
+  fetchAuthMutation,
+  fetchAuthAction,
+};
