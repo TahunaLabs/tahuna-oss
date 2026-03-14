@@ -126,6 +126,12 @@ export default function RunDetailPage() {
         <Card variant="dashboard" className="min-h-0 p-4">
           <h2 className="text-sm font-semibold">Live logs</h2>
           <p className="mt-1 text-xs text-muted-foreground">{logs.note}</p>
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            Showing {logs.logs_window.returned_logs} logs (tail {logs.logs_window.tail_limit}
+            {logs.logs_window.includes_pinned_bootstrap
+              ? ` + ${logs.logs_window.pinned_bootstrap_count} pinned bootstrap`
+              : ""}).
+          </p>
           <div className="mt-3 max-h-[420px] space-y-1 overflow-y-auto rounded-lg border border-border bg-card p-2 font-mono text-xs">
             {logs.recent_logs.length === 0 ? (
               <p className="text-muted-foreground">No runtime logs yet.</p>
@@ -144,6 +150,13 @@ export default function RunDetailPage() {
 
         <Card variant="dashboard" className="p-4">
           <h2 className="text-sm font-semibold">Live metrics</h2>
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            Showing {logs.metrics_window.returned_points} points across {logs.metrics_window.returned_series} series
+            (scan {logs.metrics_window.scanned_points}/{logs.metrics_window.scan_limit}).
+            {logs.metrics_window.dropped_series_count > 0
+              ? ` ${logs.metrics_window.dropped_series_count} series omitted by window limits.`
+              : ""}
+          </p>
           {series.length === 0 ? (
             <p className="mt-3 text-sm text-muted-foreground">No runtime metrics yet.</p>
           ) : (

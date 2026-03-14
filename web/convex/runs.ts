@@ -74,6 +74,27 @@ const runLogsResponseValidator = v.object({
   logs_path: v.string(),
   log_file: v.string(),
   note: v.string(),
+  logs_window: v.object({
+    tail_limit: v.number(),
+    startup_scan_limit: v.number(),
+    pinned_bootstrap_limit: v.number(),
+    scanned_tail: v.number(),
+    scanned_startup: v.number(),
+    pinned_bootstrap_count: v.number(),
+    returned_logs: v.number(),
+    includes_pinned_bootstrap: v.boolean(),
+  }),
+  metrics_window: v.object({
+    scan_limit: v.number(),
+    series_limit: v.number(),
+    per_series_limit: v.number(),
+    scanned_points: v.number(),
+    scanned_series: v.number(),
+    returned_series: v.number(),
+    returned_points: v.number(),
+    dropped_series_count: v.number(),
+    dropped_points_count: v.number(),
+  }),
   recent_logs: v.array(
     v.object({
       timestamp: v.number(),
@@ -181,7 +202,12 @@ const provisionPool = new Workpool(components.workpool, {
 });
 const r2 = new R2(components.r2);
 const RUNTIME_LOG_TAIL_LIMIT = RUN_CONFIG.runtimeLogTailLimit;
-const RUNTIME_METRIC_TAIL_LIMIT = RUN_CONFIG.runtimeMetricTailLimit;
+const RUNTIME_LOG_STARTUP_SCAN_LIMIT = RUN_CONFIG.runtimeLogStartupScanLimit;
+const RUNTIME_LOG_PINNED_BOOTSTRAP_LIMIT = RUN_CONFIG.runtimeLogPinnedBootstrapLimit;
+const RUNTIME_METRIC_SCAN_LIMIT = RUN_CONFIG.runtimeMetricScanLimit;
+const RUNTIME_METRIC_SERIES_LIMIT = RUN_CONFIG.runtimeMetricSeriesLimit;
+const RUNTIME_METRIC_PER_SERIES_LIMIT = RUN_CONFIG.runtimeMetricPerSeriesLimit;
+const BOOTSTRAP_LOG_SOURCE = "bootstrap";
 const RUN_NAME_MAX_LENGTH = 64;
 const RUN_NAME_FIRST = [
   "amber",
@@ -850,39 +876,109 @@ function pickUniqueGeneratedRunName(rows: Array<Doc<"runs">>) {
 }
 
 async function listRecentRuntimeLogs(ctx: QueryCtx, runId: Id<"runs">) {
-  const rows = await ctx.db
-    .query("runRuntimeLogs")
-    .withIndex("by_run", (q) => q.eq("runId", runId))
-    .order("desc")
-    .take(RUNTIME_LOG_TAIL_LIMIT);
-  return rows
-    .slice()
-    .reverse()
-    .map((row) => ({
+  const [tailRowsDesc, startupRowsAsc] = await Promise.all([
+    ctx.db
+      .query("runRuntimeLogs")
+      .withIndex("by_run", (q) => q.eq("runId", runId))
+      .order("desc")
+      .take(RUNTIME_LOG_TAIL_LIMIT),
+    ctx.db
+      .query("runRuntimeLogs")
+      .withIndex("by_run", (q) => q.eq("runId", runId))
+      .order("asc")
+      .take(RUNTIME_LOG_STARTUP_SCAN_LIMIT),
+  ]);
+  const pinnedBootstrapRows = startupRowsAsc
+    .filter((row) => row.source === BOOTSTRAP_LOG_SOURCE)
+    .slice(0, RUNTIME_LOG_PINNED_BOOTSTRAP_LIMIT);
+
+  const mergedById = new Map<string, Doc<"runRuntimeLogs">>();
+  for (const row of tailRowsDesc) {
+    mergedById.set(String(row._id), row);
+  }
+  for (const row of pinnedBootstrapRows) {
+    mergedById.set(String(row._id), row);
+  }
+
+  const rows = Array.from(mergedById.values()).sort((a, b) => {
+    if (a.timestamp !== b.timestamp) return a.timestamp - b.timestamp;
+    if (a._creationTime !== b._creationTime) return a._creationTime - b._creationTime;
+    return String(a._id).localeCompare(String(b._id));
+  });
+
+  return {
+    logs: rows.map((row) => ({
       timestamp: row.timestamp,
       level: row.level,
       source: row.source,
       message: row.message,
-    }));
+    })),
+    window: {
+      tail_limit: RUNTIME_LOG_TAIL_LIMIT,
+      startup_scan_limit: RUNTIME_LOG_STARTUP_SCAN_LIMIT,
+      pinned_bootstrap_limit: RUNTIME_LOG_PINNED_BOOTSTRAP_LIMIT,
+      scanned_tail: tailRowsDesc.length,
+      scanned_startup: startupRowsAsc.length,
+      pinned_bootstrap_count: pinnedBootstrapRows.length,
+      returned_logs: rows.length,
+      includes_pinned_bootstrap: pinnedBootstrapRows.length > 0,
+    },
+  };
 }
 
 async function listRecentRuntimeMetrics(ctx: QueryCtx, runId: Id<"runs">) {
-  const rows = await ctx.db
+  const scannedRowsDesc = await ctx.db
     .query("runRuntimeMetrics")
     .withIndex("by_run", (q) => q.eq("runId", runId))
     .order("desc")
-    .take(RUNTIME_METRIC_TAIL_LIMIT);
-  return rows
-    .slice()
-    .reverse()
-    .map((row) => ({
+    .take(RUNTIME_METRIC_SCAN_LIMIT);
+
+  const grouped = new Map<string, Array<Doc<"runRuntimeMetrics">>>();
+  for (const row of scannedRowsDesc) {
+    const key = `${row.source}:${row.name}`;
+    const points = grouped.get(key) || [];
+    points.push(row);
+    grouped.set(key, points);
+  }
+
+  const groupedEntries = Array.from(grouped.entries());
+  const selectedEntries = groupedEntries.slice(0, RUNTIME_METRIC_SERIES_LIMIT);
+  const selectedRows: Array<Doc<"runRuntimeMetrics">> = [];
+  for (const [, points] of selectedEntries) {
+    selectedRows.push(...points.slice(0, RUNTIME_METRIC_PER_SERIES_LIMIT));
+  }
+
+  selectedRows.sort((a, b) => {
+    if (a.timestamp !== b.timestamp) return a.timestamp - b.timestamp;
+    if (a._creationTime !== b._creationTime) return a._creationTime - b._creationTime;
+    return String(a._id).localeCompare(String(b._id));
+  });
+
+  const droppedSeriesCount = Math.max(0, groupedEntries.length - selectedEntries.length);
+  const totalScannedPoints = scannedRowsDesc.length;
+  const droppedPointsCount = Math.max(0, totalScannedPoints - selectedRows.length);
+
+  return {
+    metrics: selectedRows.map((row) => ({
       timestamp: row.timestamp,
       name: row.name,
       value: row.value,
       step: row.step ?? null,
       unit: row.unit ?? null,
       source: row.source,
-    }));
+    })),
+    window: {
+      scan_limit: RUNTIME_METRIC_SCAN_LIMIT,
+      series_limit: RUNTIME_METRIC_SERIES_LIMIT,
+      per_series_limit: RUNTIME_METRIC_PER_SERIES_LIMIT,
+      scanned_points: scannedRowsDesc.length,
+      scanned_series: groupedEntries.length,
+      returned_series: selectedEntries.length,
+      returned_points: selectedRows.length,
+      dropped_series_count: droppedSeriesCount,
+      dropped_points_count: droppedPointsCount,
+    },
+  };
 }
 
 async function toRunLogsResponse(ctx: QueryCtx, row: Doc<"runs">) {
@@ -896,8 +992,10 @@ async function toRunLogsResponse(ctx: QueryCtx, row: Doc<"runs">) {
     logs_path: row.logs,
     log_file: `${row.logs}/run.log`,
     note: "Runtime logs/metrics are streamed by the pod and persisted in Convex.",
-    recent_logs: recentLogs,
-    recent_metrics: recentMetrics,
+    logs_window: recentLogs.window,
+    metrics_window: recentMetrics.window,
+    recent_logs: recentLogs.logs,
+    recent_metrics: recentMetrics.metrics,
   };
 }
 

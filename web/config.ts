@@ -21,7 +21,11 @@ export const RUN_CONFIG = {
   terminationRetryMaxAttempts: 5,
   terminationRetryDelaySeconds: 10,
   runtimeLogTailLimit: 200,
-  runtimeMetricTailLimit: 200,
+  runtimeLogStartupScanLimit: 600,
+  runtimeLogPinnedBootstrapLimit: 40,
+  runtimeMetricScanLimit: 5000,
+  runtimeMetricSeriesLimit: 40,
+  runtimeMetricPerSeriesLimit: 80,
   workpoolMaxParallelism: 3,
 } as const;
 

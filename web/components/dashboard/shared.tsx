@@ -106,6 +106,27 @@ export type RunLogsDetail = {
   logs_path: string
   log_file: string
   note: string
+  logs_window: {
+    tail_limit: number
+    startup_scan_limit: number
+    pinned_bootstrap_limit: number
+    scanned_tail: number
+    scanned_startup: number
+    pinned_bootstrap_count: number
+    returned_logs: number
+    includes_pinned_bootstrap: boolean
+  }
+  metrics_window: {
+    scan_limit: number
+    series_limit: number
+    per_series_limit: number
+    scanned_points: number
+    scanned_series: number
+    returned_series: number
+    returned_points: number
+    dropped_series_count: number
+    dropped_points_count: number
+  }
   recent_logs: Array<{
     timestamp: number
     level: string

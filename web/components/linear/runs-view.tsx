@@ -372,7 +372,15 @@ export function RunsView({
                     <div className="rounded-lg border border-border p-4">
                       <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">Live logs</h3>
                       {runLogs && (
-                        <p className="text-xs text-muted-foreground mb-3">{runLogs.note}</p>
+                        <div className="mb-3 space-y-1">
+                          <p className="text-xs text-muted-foreground">{runLogs.note}</p>
+                          <p className="text-[11px] text-muted-foreground">
+                            Showing {runLogs.logs_window.returned_logs} logs (tail {runLogs.logs_window.tail_limit}
+                            {runLogs.logs_window.includes_pinned_bootstrap
+                              ? ` + ${runLogs.logs_window.pinned_bootstrap_count} pinned bootstrap`
+                              : ""}).
+                          </p>
+                        </div>
                       )}
                       <div className="max-h-[320px] space-y-1 overflow-y-auto rounded border border-border bg-background/50 p-2 font-mono text-xs">
                         {!runLogs || runLogs.recent_logs.length === 0 ? (
@@ -395,6 +403,15 @@ export function RunsView({
                 <div className="px-6 pb-6">
                   <div className="rounded-lg border border-border p-4">
                     <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Live metrics</h3>
+                    {runLogs && (
+                      <p className="mb-3 text-[11px] text-muted-foreground">
+                        Showing {runLogs.metrics_window.returned_points} points across {runLogs.metrics_window.returned_series} series
+                        (scan {runLogs.metrics_window.scanned_points}/{runLogs.metrics_window.scan_limit}).
+                        {runLogs.metrics_window.dropped_series_count > 0
+                          ? ` ${runLogs.metrics_window.dropped_series_count} series omitted by window limits.`
+                          : ""}
+                      </p>
+                    )}
                     {series.length === 0 ? (
                       <p className="text-sm text-muted-foreground">No runtime metrics yet.</p>
                     ) : (
