@@ -165,14 +165,16 @@ func RunEntrypoint(
 	}
 
 	lineCh := make(chan string, 128)
+	scanErrCh := make(chan error, 1)
 	go func() {
-		defer close(lineCh)
 		scanner := bufio.NewScanner(stdout)
 		buf := make([]byte, 0, 64*1024)
 		scanner.Buffer(buf, 4*1024*1024)
 		for scanner.Scan() {
 			lineCh <- scanner.Text()
 		}
+		scanErrCh <- scanner.Err()
+		close(lineCh)
 	}()
 
 	waitCh := make(chan error, 1)
@@ -192,17 +194,14 @@ func RunEntrypoint(
 			if !ok {
 				continue
 			}
-			text := strings.TrimRight(line, "\n")
-			if text == "" {
-				continue
-			}
-			emitLog(hooks, "info", "train", text)
-			samples := extractMetrics(metricPattern, text, step)
-			if len(samples) > 0 {
-				emitMetrics(hooks, samples)
-			}
-			step += 1
+			step = emitTrainOutputLine(hooks, metricPattern, line, step)
 		case waitErr := <-waitCh:
+			for buffered := range lineCh {
+				step = emitTrainOutputLine(hooks, metricPattern, buffered, step)
+			}
+			if scanErr := <-scanErrCh; scanErr != nil {
+				return 0, cancelled, fmt.Errorf("stream entrypoint output: %w", scanErr)
+			}
 			if waitErr == nil {
 				return 0, cancelled, nil
 			}
@@ -238,6 +237,24 @@ func RunEntrypoint(
 			}
 		}
 	}
+}
+
+func emitTrainOutputLine(
+	hooks Hooks,
+	metricPattern *regexp.Regexp,
+	line string,
+	step int64,
+) int64 {
+	text := strings.TrimRight(line, "\n")
+	if text == "" {
+		return step
+	}
+	emitLog(hooks, "info", "train", text)
+	samples := extractMetrics(metricPattern, text, step)
+	if len(samples) > 0 {
+		emitMetrics(hooks, samples)
+	}
+	return step + 1
 }
 
 func LoadCommandFromConfig(workspaceRoot string) ([]string, string) {
