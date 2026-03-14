@@ -29,7 +29,8 @@ RUN python3 -m pip install --no-cache-dir uv \
     && FW_VER="${PREBAKE_VERSION%%-*}" \
     && CUDA_TAG="${PREBAKE_VERSION##*-}" \
     && UV_CACHE_DIR=/opt/tahuna/.uv-cache \
-       "${TAHUNA_PREBAKED_VENV}/bin/python" -m uv pip install \
+       uv pip install \
+         --python "${TAHUNA_PREBAKED_VENV}/bin/python" \
          --index-url "https://download.pytorch.org/whl/${CUDA_TAG}" \
          "torch==${FW_VER}" torchvision torchaudio triton \
     && rm -rf /opt/tahuna/.uv-cache
