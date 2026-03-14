@@ -1008,6 +1008,22 @@ async function cancelRunForUserId(
   return { cancel_requested: true, forced: force, run_id: String(runId) };
 }
 
+async function scheduleForcedPodTermination(
+  ctx: MutationCtx,
+  runId: Id<"runs">,
+  podId: string | undefined,
+) {
+  const podIdValue = podId?.trim() || "";
+  if (!podIdValue) {
+    return;
+  }
+  await ctx.scheduler.runAfter(0, internal.runs.internalTerminatePod, {
+    runId,
+    podId: podIdValue,
+    force: true,
+  });
+}
+
 async function deleteRunForUserId(
   ctx: MutationCtx,
   userId: string,
@@ -1017,6 +1033,7 @@ async function deleteRunForUserId(
   let row = await getOwnedRun(ctx, userId, runId);
   const shouldCancelActive = options?.cancelActive === true || options?.force === true;
   const shouldForceDelete = options?.force === true;
+  let forcedTerminationQueued = false;
 
   if (ACTIVE_STATUSES.has(row.status)) {
     if (!shouldCancelActive) {
@@ -1025,11 +1042,8 @@ async function deleteRunForUserId(
 
     if (shouldForceDelete) {
       if (row.podId) {
-        await ctx.scheduler.runAfter(0, internal.runs.internalTerminatePod, {
-          runId,
-          podId: row.podId,
-          force: true,
-        });
+        await scheduleForcedPodTermination(ctx, runId, row.podId);
+        forcedTerminationQueued = true;
       }
     } else {
       await cancelRunForUserId(ctx, userId, runId, false);
@@ -1038,6 +1052,10 @@ async function deleteRunForUserId(
         throw new ConvexError("cancellation requested; run is still shutting down");
       }
     }
+  }
+
+  if (row.podId && !forcedTerminationQueued) {
+    await scheduleForcedPodTermination(ctx, runId, row.podId);
   }
 
   const [events, runtimeLogs, runtimeMetrics, wandbRuns, wandbMetrics] = await Promise.all([
@@ -1714,6 +1732,7 @@ export const markFailed = internalMutation({
           }
         : undefined,
     });
+    await scheduleForcedPodTermination(ctx, args.runId, row.podId);
     return null;
   },
 });
@@ -1823,6 +1842,7 @@ export const ingestRuntimeStatus = internalMutation({
           source: "pod-runtime",
         },
       });
+      await scheduleForcedPodTermination(ctx, args.runId, row.podId);
       return { status: RUN_STATUS.FAILED };
     }
 
