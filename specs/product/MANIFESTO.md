@@ -9,7 +9,7 @@
 
 Tahuna is a training orchestration platform that eliminates the distance between writing a training script and running it on a GPU. You write Python. You type `tahuna train`. Your code runs on an H100 in minutes, with your data materialized, your dependencies installed, your metrics captured, and your artifacts persisted — all without you ever SSH-ing into a machine, writing a Dockerfile, or configuring a Kubernetes cluster.
 
-Tahuna is not a fine-tuning API. It is not an inference platform. It is not a GPU cloud. It is the **control plane** that sits between your local development environment and the cloud GPU — handling everything that isn't your training code.
+Tahuna is not a fine-tuning API. It is not a GPU cloud. It is the **control plane** that sits between your local development environment and the cloud GPU — handling everything that isn't your training code.
 
 ---
 
