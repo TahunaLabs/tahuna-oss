@@ -1,0 +1,8 @@
+{
+  "default": [
+    "torch",
+    "torchvision",
+    "torchaudio",
+    "triton"
+  ]
+}

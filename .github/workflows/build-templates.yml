@@ -8,6 +8,7 @@ on:
       - develop
     paths:
       - runtime/images/**
+      - runtime/images/prebake/**
       - web/convex/runtime-images.json
       - .github/workflows/build-templates.yml
   workflow_dispatch:
@@ -22,8 +23,9 @@ jobs:
       - uses: actions/checkout@v5
       - id: set-matrix
         run: |
-          # Convert images.json to matrix format: [{tag, base}, ...]
-          MATRIX=$(jq -c '[to_entries[] | .key as $fw | .value | to_entries[] | {tag: "\($fw)-\(.key)", base: .value}]' web/convex/runtime-images.json)
+          PREBAKED_PACKAGES=$(jq -r '.default | join(",")' runtime/images/prebake/protected-packages.json)
+          # Convert images.json to matrix format: [{framework, version, tag, base, protected_packages}, ...]
+          MATRIX=$(jq -c --arg protected "$PREBAKED_PACKAGES" '[to_entries[] | .key as $fw | .value | to_entries[] | {framework: $fw, version: .key, tag: "\($fw)-\(.key)", base: .value, protected_packages: $protected}]' web/convex/runtime-images.json)
           echo "images=$MATRIX" >> $GITHUB_OUTPUT
 
   # Second job: build each image
@@ -68,5 +70,8 @@ jobs:
           build-args: |
             BASE_IMAGE=${{ matrix.base }}
             WANDB_BASE_URL=${{ secrets.TAHUNA_WANDB_BASE_URL }}
+            PREBAKE_FRAMEWORK=${{ matrix.framework }}
+            PREBAKE_VERSION=${{ matrix.version }}
+            PREBAKE_PROTECTED_PACKAGES=${{ matrix.protected_packages }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

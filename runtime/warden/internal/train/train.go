@@ -22,7 +22,31 @@ type Hooks struct {
 	EmitMetrics func(samples []runtimeapi.MetricSample)
 }
 
-const tahunaWandbPath = "/api/monitoring/wandb"
+const (
+	tahunaWandbPath       = "/api/monitoring/wandb"
+	defaultPrebakedVenv   = "/opt/tahuna/venv"
+	protectedPackagesEnv  = "TAHUNA_PREBAKED_PROTECTED_PACKAGES"
+	prebakedVirtualEnvVar = "TAHUNA_PREBAKED_VENV"
+)
+
+var defaultProtectedPackages = []string{
+	"torch",
+	"torchvision",
+	"torchaudio",
+	"triton",
+}
+
+type commandRunner func(
+	ctx context.Context,
+	cwd string,
+	command []string,
+	hooks Hooks,
+	enableMetricExtraction bool,
+	extraEnv []string,
+) (int, error)
+
+var runCommand commandRunner = runStreamingCommandWithEnv
+var ensureUVCommand = ensureUV
 
 func splitEnvEntry(entry string) (string, string, bool) {
 	separator := strings.Index(entry, "=")
@@ -102,24 +126,185 @@ func resolveTrainEnvironment(baseEnv []string) []string {
 	return environment
 }
 
+func setEnvValue(baseEnv []string, key, value string) []string {
+	filtered := make([]string, 0, len(baseEnv)+1)
+	for _, entry := range baseEnv {
+		name, _, ok := splitEnvEntry(entry)
+		if ok && name == key {
+			continue
+		}
+		filtered = append(filtered, entry)
+	}
+	filtered = append(filtered, key+"="+value)
+	return filtered
+}
+
+func mergeEnvironment(baseEnv, overrides []string) []string {
+	merged := append([]string{}, baseEnv...)
+	for _, entry := range overrides {
+		key, value, ok := splitEnvEntry(entry)
+		if !ok {
+			continue
+		}
+		merged = setEnvValue(merged, key, value)
+	}
+	return merged
+}
+
+func resolvePrebakedVirtualEnvPath(baseEnv []string) (string, bool) {
+	venvPath, ok := lookupEnvValue(baseEnv, prebakedVirtualEnvVar)
+	if !ok {
+		venvPath = defaultPrebakedVenv
+	}
+	venvPath = strings.TrimSpace(venvPath)
+	if venvPath == "" {
+		return "", false
+	}
+	info, err := os.Stat(venvPath)
+	if err != nil || !info.IsDir() {
+		return "", false
+	}
+	return venvPath, true
+}
+
+func buildVirtualEnvEnvironment(baseEnv []string, venvPath string) []string {
+	venvBin := filepath.Join(venvPath, "bin")
+	pathValue := venvBin
+	if existingPath, ok := lookupEnvValue(baseEnv, "PATH"); ok && strings.TrimSpace(existingPath) != "" {
+		pathValue = pathValue + string(os.PathListSeparator) + existingPath
+	}
+	withVirtualEnv := setEnvValue(baseEnv, "VIRTUAL_ENV", venvPath)
+	return setEnvValue(withVirtualEnv, "PATH", pathValue)
+}
+
+func resolveProtectedPackages(baseEnv []string) []string {
+	value, ok := lookupEnvValue(baseEnv, protectedPackagesEnv)
+	if !ok || strings.TrimSpace(value) == "" {
+		return append([]string{}, defaultProtectedPackages...)
+	}
+
+	seen := map[string]struct{}{}
+	packages := make([]string, 0, len(defaultProtectedPackages))
+	for _, raw := range strings.Split(value, ",") {
+		name := strings.TrimSpace(raw)
+		if name == "" {
+			continue
+		}
+		if _, exists := seen[name]; exists {
+			continue
+		}
+		seen[name] = struct{}{}
+		packages = append(packages, name)
+	}
+	if len(packages) == 0 {
+		return append([]string{}, defaultProtectedPackages...)
+	}
+	return packages
+}
+
+func buildSyncCommand(hasLock, useActiveVirtualEnv bool) []string {
+	command := []string{"uv", "sync"}
+	if useActiveVirtualEnv {
+		command = append(command, "--active")
+	}
+	if hasLock {
+		command = append(command, "--frozen")
+	}
+	command = append(command, "--no-dev", "--inexact")
+	return command
+}
+
+func buildSelectiveSyncCommand(base []string, protectedPackages []string) []string {
+	command := append([]string{}, base...)
+	for _, pkg := range protectedPackages {
+		command = append(command, "--no-install-package", pkg)
+	}
+	return command
+}
+
 func InstallDependencies(ctx context.Context, workspaceRoot string, hooks Hooks) error {
 	pyproject := filepath.Join(workspaceRoot, "pyproject.toml")
 	if _, err := os.Stat(pyproject); err != nil {
 		return fmt.Errorf("pyproject.toml not found in workspace")
 	}
-	if err := ensureUV(ctx, workspaceRoot, hooks); err != nil {
+	if err := ensureUVCommand(ctx, workspaceRoot, hooks); err != nil {
 		return err
 	}
 
-	installCmd := []string{"uv", "sync", "--no-dev"}
+	hasLock := false
 	if _, err := os.Stat(filepath.Join(workspaceRoot, "uv.lock")); err == nil {
-		installCmd = []string{"uv", "sync", "--frozen", "--no-dev"}
+		hasLock = true
 	}
-	emitLog(hooks, "info", "bootstrap", "bootstrap: installing dependencies with "+strings.Join(installCmd, " "))
-	exitCode, err := runStreamingCommand(ctx, workspaceRoot, installCmd, hooks, false)
+
+	installEnv := os.Environ()
+	protectedPackages := []string{}
+	useActiveVirtualEnv := false
+	if venvPath, ok := resolvePrebakedVirtualEnvPath(installEnv); ok {
+		useActiveVirtualEnv = true
+		installEnv = buildVirtualEnvEnvironment(installEnv, venvPath)
+		protectedPackages = resolveProtectedPackages(installEnv)
+	}
+
+	fullSyncCommand := buildSyncCommand(hasLock, useActiveVirtualEnv)
+	selectiveSyncCommand := buildSelectiveSyncCommand(fullSyncCommand, protectedPackages)
+	selectiveInstallEnabled := len(protectedPackages) > 0
+	if selectiveInstallEnabled {
+		emitLog(
+			hooks,
+			"info",
+			"bootstrap",
+			"bootstrap: installing dependencies with "+strings.Join(selectiveSyncCommand, " "),
+		)
+	} else {
+		emitLog(
+			hooks,
+			"info",
+			"bootstrap",
+			"bootstrap: installing dependencies with "+strings.Join(fullSyncCommand, " "),
+		)
+	}
+
+	exitCode, err := runCommand(
+		ctx,
+		workspaceRoot,
+		selectiveSyncCommand,
+		hooks,
+		false,
+		installEnv,
+	)
 	if err != nil {
 		return err
 	}
+
+	if exitCode != 0 && selectiveInstallEnabled {
+		emitLog(
+			hooks,
+			"warn",
+			"bootstrap",
+			fmt.Sprintf(
+				"bootstrap: selective sync failed status=%d detail=retrying full dependency sync",
+				exitCode,
+			),
+		)
+		emitLog(
+			hooks,
+			"info",
+			"bootstrap",
+			"bootstrap: installing dependencies with "+strings.Join(fullSyncCommand, " "),
+		)
+		exitCode, err = runCommand(
+			ctx,
+			workspaceRoot,
+			fullSyncCommand,
+			hooks,
+			false,
+			installEnv,
+		)
+		if err != nil {
+			return err
+		}
+	}
+
 	if exitCode != 0 {
 		return fmt.Errorf("uv sync failed with status %d", exitCode)
 	}
@@ -153,7 +338,11 @@ func RunEntrypoint(
 	emitLog(hooks, "info", "train", "starting entrypoint")
 	cmd := exec.Command(normalized[0], normalized[1:]...) // #nosec G204
 	cmd.Dir = workspaceRoot
-	cmd.Env = resolveTrainEnvironment(os.Environ())
+	trainEnv := os.Environ()
+	if venvPath, ok := resolvePrebakedVirtualEnvPath(trainEnv); ok {
+		trainEnv = buildVirtualEnvEnvironment(trainEnv, venvPath)
+	}
+	cmd.Env = resolveTrainEnvironment(trainEnv)
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return 0, false, fmt.Errorf("create stdout pipe: %w", err)
@@ -300,11 +489,14 @@ func LoadCommandFromConfig(workspaceRoot string) ([]string, string) {
 
 func NormalizeCommand(command []string) []string {
 	if len(command) == 0 {
-		return []string{"uv", "run", "python", "-u", "train.py"}
+		return []string{"uv", "run", "--active", "--no-sync", "python", "-u", "train.py"}
 	}
 	resolved := append([]string(nil), command...)
 	first := strings.ToLower(strings.TrimSpace(resolved[0]))
 	if first == "uv" {
+		if len(resolved) > 1 && strings.EqualFold(strings.TrimSpace(resolved[1]), "run") {
+			return ensureUVRunFlags(resolved)
+		}
 		return resolved
 	}
 	if first == "python" || first == "python3" {
@@ -312,9 +504,34 @@ func NormalizeCommand(command []string) []string {
 		if len(tail) == 0 || tail[0] != "-u" {
 			tail = append([]string{"-u"}, tail...)
 		}
-		return append([]string{"uv", "run", "python"}, tail...)
+		return append([]string{"uv", "run", "--active", "--no-sync", "python"}, tail...)
 	}
 	return resolved
+}
+
+func ensureUVRunFlags(command []string) []string {
+	if len(command) < 2 {
+		return command
+	}
+	hasActive := false
+	hasNoSync := false
+	for _, token := range command[2:] {
+		switch strings.TrimSpace(token) {
+		case "--active":
+			hasActive = true
+		case "--no-sync":
+			hasNoSync = true
+		}
+	}
+
+	normalized := []string{command[0], command[1]}
+	if !hasActive {
+		normalized = append(normalized, "--active")
+	}
+	if !hasNoSync {
+		normalized = append(normalized, "--no-sync")
+	}
+	return append(normalized, command[2:]...)
 }
 
 func ensureUV(ctx context.Context, workspaceRoot string, hooks Hooks) error {
@@ -324,12 +541,13 @@ func ensureUV(ctx context.Context, workspaceRoot string, hooks Hooks) error {
 		return nil
 	}
 	emitLog(hooks, "info", "bootstrap", "bootstrap: installing uv package manager")
-	exitCode, err := runStreamingCommand(
+	exitCode, err := runCommand(
 		ctx,
 		workspaceRoot,
 		[]string{"python3", "-m", "pip", "install", "uv"},
 		hooks,
 		false,
+		nil,
 	)
 	if err != nil {
 		return err
@@ -340,18 +558,22 @@ func ensureUV(ctx context.Context, workspaceRoot string, hooks Hooks) error {
 	return nil
 }
 
-func runStreamingCommand(
+func runStreamingCommandWithEnv(
 	ctx context.Context,
 	cwd string,
 	command []string,
 	hooks Hooks,
 	enableMetricExtraction bool,
+	extraEnv []string,
 ) (int, error) {
 	if len(command) == 0 {
 		return 0, fmt.Errorf("command is required")
 	}
 	cmd := exec.CommandContext(ctx, command[0], command[1:]...) // #nosec G204
 	cmd.Dir = cwd
+	if len(extraEnv) > 0 {
+		cmd.Env = mergeEnvironment(os.Environ(), extraEnv)
+	}
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return 0, fmt.Errorf("create stdout pipe: %w", err)
