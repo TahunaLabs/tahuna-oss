@@ -90,5 +90,5 @@ jobs:
             PREBAKE_VERSION=${{ matrix.version }}
             PREBAKE_PYTHON_VERSION=${{ matrix.python_version }}
             PREBAKE_PROTECTED_PACKAGES=${{ matrix.protected_packages }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=registry,ref=${{ secrets.DOCKER_USERNAME }}/tahuna:cache-${{ matrix.tag }}
+          cache-to: type=registry,ref=${{ secrets.DOCKER_USERNAME }}/tahuna:cache-${{ matrix.tag }},mode=max
