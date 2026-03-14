@@ -111,9 +111,9 @@ func InstallDependencies(ctx context.Context, workspaceRoot string, hooks Hooks)
 		return err
 	}
 
-	installCmd := []string{"uv", "sync", "--no-dev"}
+	installCmd := []string{"uv", "sync", "--no-dev", "--link-mode=copy"}
 	if _, err := os.Stat(filepath.Join(workspaceRoot, "uv.lock")); err == nil {
-		installCmd = []string{"uv", "sync", "--frozen", "--no-dev"}
+		installCmd = []string{"uv", "sync", "--frozen", "--no-dev", "--link-mode=copy"}
 	}
 	emitLog(hooks, "info", "bootstrap", "bootstrap: installing dependencies with "+strings.Join(installCmd, " "))
 	exitCode, err := runStreamingCommand(ctx, workspaceRoot, installCmd, hooks, false)
