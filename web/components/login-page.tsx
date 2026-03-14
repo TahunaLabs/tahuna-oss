@@ -5,9 +5,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { authClient } from "@/lib/auth-client"
-import { useConvexAuth } from "convex/react"
 import { useRouter, useSearchParams } from "next/navigation"
-import { useEffect, useState, type FormEvent } from "react"
+import { useState, type FormEvent } from "react"
 
 function resolveRedirectPath(rawRedirect: string | null) {
   if (!rawRedirect) return "/dashboard"
@@ -19,7 +18,6 @@ function resolveRedirectPath(rawRedirect: string | null) {
 export function LoginPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const { isAuthenticated } = useConvexAuth()
   const redirectPath = resolveRedirectPath(searchParams.get("redirect"))
 
   const [email, setEmail] = useState("")
@@ -28,12 +26,6 @@ export function LoginPageContent() {
   const [verifyingCode, setVerifyingCode] = useState(false)
   const [error, setError] = useState("")
   const [needsVerification, setNeedsVerification] = useState(false)
-
-  useEffect(() => {
-    if (isAuthenticated) {
-      router.replace(redirectPath)
-    }
-  }, [isAuthenticated, redirectPath, router])
 
   async function onRequestCode(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
