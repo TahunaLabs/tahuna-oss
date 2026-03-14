@@ -1,7 +1,7 @@
 "use client"
 
-import { useState } from "react"
-import { Play, Plus, Filter, Settings2, LayoutGrid, Trash2, X } from "lucide-react"
+import { useEffect, useState } from "react"
+import { ChevronDown, ChevronUp, Play, Plus, Filter, Settings2, LayoutGrid, Trash2, X } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import {
@@ -81,6 +81,7 @@ export function RunsView({
   onCancelRun,
 }: RunsViewProps) {
   const [activeTab, setActiveTab] = useState<RunTab>("all")
+  const [showRunContext, setShowRunContext] = useState(false)
 
   const filteredRuns = runs.filter((run) => {
     if (activeTab === "active") return ACTIVE_STATUSES.has(run.status)
@@ -93,6 +94,10 @@ export function RunsView({
   const series = metricSeries(runLogs)
   const primarySeries = series.filter((metric) => metric.category !== "system")
   const systemSeries = series.filter((metric) => metric.category === "system")
+
+  useEffect(() => {
+    setShowRunContext(false)
+  }, [selectedRunId])
 
   return (
     <main className="flex-1 flex flex-col h-full">
@@ -295,80 +300,99 @@ export function RunsView({
                   </div>
                 )}
 
-                {/* Diagnostics + Paths */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 px-6 py-4">
-                  <div className="rounded-lg border border-border p-4">
-                    <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Diagnostics</h3>
-                    <dl className="space-y-2 text-sm">
-                      <div className="flex justify-between gap-3">
-                        <dt className="text-muted-foreground">Environment</dt>
-                        <dd className="font-mono text-xs text-foreground truncate">{runDetail.environment_id}</dd>
-                      </div>
-                      <div className="flex justify-between gap-3">
-                        <dt className="text-muted-foreground">Pod ID</dt>
-                        <dd className="font-mono text-xs text-foreground">{runDetail.pod_id || "—"}</dd>
-                      </div>
-                      <div className="flex justify-between gap-3">
-                        <dt className="text-muted-foreground">Infra</dt>
-                        <dd className="text-xs text-foreground">
-                          {runDetail.effective_gpu_type || "-"} x{runDetail.effective_gpu_count || "-"} · {runDetail.effective_volume_gb || "-"}GB
-                        </dd>
-                      </div>
-                      <div className="flex justify-between gap-3">
-                        <dt className="text-muted-foreground">Cancel requested</dt>
-                        <dd className="text-foreground">{runDetail.cancellation_requested ? "Yes" : "No"}</dd>
-                      </div>
-                      <div className="flex justify-between gap-3">
-                        <dt className="text-muted-foreground">Artifacts</dt>
-                        <dd className="text-foreground">{runDetail.artifact_keys.length}</dd>
-                      </div>
-                    </dl>
-                  </div>
-
-                  <div className="rounded-lg border border-border p-4">
-                    <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Paths</h3>
-                    <dl className="space-y-2 text-sm">
-                      <div>
-                        <dt className="text-muted-foreground text-xs">Input</dt>
-                        <dd className="font-mono text-xs text-foreground break-all">{runDetail.input || "—"}</dd>
-                      </div>
-                      <div>
-                        <dt className="text-muted-foreground text-xs">Output</dt>
-                        <dd className="font-mono text-xs text-foreground break-all">{runDetail.output || "—"}</dd>
-                      </div>
-                      <div>
-                        <dt className="text-muted-foreground text-xs">Logs</dt>
-                        <dd className="font-mono text-xs text-foreground break-all">{runDetail.logs || "—"}</dd>
-                      </div>
-                    </dl>
-                  </div>
+                <div className="px-6 py-4">
+                  <button
+                    type="button"
+                    onClick={() => setShowRunContext((current) => !current)}
+                    className="flex w-full items-center justify-between rounded-lg border border-border bg-background/60 px-4 py-3 text-left hover:bg-secondary/30"
+                  >
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Run context</p>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        Diagnostics, paths, and live logs stay here so the metrics can lead the page.
+                      </p>
+                    </div>
+                    <span className="flex items-center gap-2 text-xs text-muted-foreground">
+                      {showRunContext ? "Hide" : "Show"}
+                      {showRunContext ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                    </span>
+                  </button>
                 </div>
 
-                {/* Live logs + metrics */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 px-6 pb-6">
-                  {/* Live logs */}
-                  <div className="rounded-lg border border-border p-4">
-                    <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">Live logs</h3>
-                    {runLogs && (
-                      <p className="text-xs text-muted-foreground mb-3">{runLogs.note}</p>
-                    )}
-                    <div className="max-h-[320px] space-y-1 overflow-y-auto rounded border border-border bg-background/50 p-2 font-mono text-xs">
-                      {!runLogs || runLogs.recent_logs.length === 0 ? (
-                        <p className="text-muted-foreground">No runtime logs yet.</p>
-                      ) : (
-                        runLogs.recent_logs.map((line, index) => (
-                          <p key={`${line.timestamp}-${index}`} className="break-words">
-                            <span className="text-muted-foreground">[{new Date(line.timestamp).toLocaleTimeString()}]</span>{" "}
-                            <span className="text-muted-foreground">{line.level || "info"}</span>{" "}
-                            <span className="text-muted-foreground">{line.source || "runtime"}</span>{" "}
-                            {line.message}
-                          </p>
-                        ))
+                {showRunContext && (
+                  <div className="space-y-3 px-6 pb-4">
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                      <div className="rounded-lg border border-border p-4">
+                        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Diagnostics</h3>
+                        <dl className="space-y-2 text-sm">
+                          <div className="flex justify-between gap-3">
+                            <dt className="text-muted-foreground">Environment</dt>
+                            <dd className="font-mono text-xs text-foreground truncate">{runDetail.environment_id}</dd>
+                          </div>
+                          <div className="flex justify-between gap-3">
+                            <dt className="text-muted-foreground">Pod ID</dt>
+                            <dd className="font-mono text-xs text-foreground">{runDetail.pod_id || "—"}</dd>
+                          </div>
+                          <div className="flex justify-between gap-3">
+                            <dt className="text-muted-foreground">Infra</dt>
+                            <dd className="text-xs text-foreground">
+                              {runDetail.effective_gpu_type || "-"} x{runDetail.effective_gpu_count || "-"} · {runDetail.effective_volume_gb || "-"}GB
+                            </dd>
+                          </div>
+                          <div className="flex justify-between gap-3">
+                            <dt className="text-muted-foreground">Cancel requested</dt>
+                            <dd className="text-foreground">{runDetail.cancellation_requested ? "Yes" : "No"}</dd>
+                          </div>
+                          <div className="flex justify-between gap-3">
+                            <dt className="text-muted-foreground">Artifacts</dt>
+                            <dd className="text-foreground">{runDetail.artifact_keys.length}</dd>
+                          </div>
+                        </dl>
+                      </div>
+
+                      <div className="rounded-lg border border-border p-4">
+                        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Paths</h3>
+                        <dl className="space-y-2 text-sm">
+                          <div>
+                            <dt className="text-muted-foreground text-xs">Input</dt>
+                            <dd className="font-mono text-xs text-foreground break-all">{runDetail.input || "—"}</dd>
+                          </div>
+                          <div>
+                            <dt className="text-muted-foreground text-xs">Output</dt>
+                            <dd className="font-mono text-xs text-foreground break-all">{runDetail.output || "—"}</dd>
+                          </div>
+                          <div>
+                            <dt className="text-muted-foreground text-xs">Logs</dt>
+                            <dd className="font-mono text-xs text-foreground break-all">{runDetail.logs || "—"}</dd>
+                          </div>
+                        </dl>
+                      </div>
+                    </div>
+
+                    <div className="rounded-lg border border-border p-4">
+                      <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">Live logs</h3>
+                      {runLogs && (
+                        <p className="text-xs text-muted-foreground mb-3">{runLogs.note}</p>
                       )}
+                      <div className="max-h-[320px] space-y-1 overflow-y-auto rounded border border-border bg-background/50 p-2 font-mono text-xs">
+                        {!runLogs || runLogs.recent_logs.length === 0 ? (
+                          <p className="text-muted-foreground">No runtime logs yet.</p>
+                        ) : (
+                          runLogs.recent_logs.map((line, index) => (
+                            <p key={`${line.timestamp}-${index}`} className="break-words">
+                              <span className="text-muted-foreground">[{new Date(line.timestamp).toLocaleTimeString()}]</span>{" "}
+                              <span className="text-muted-foreground">{line.level || "info"}</span>{" "}
+                              <span className="text-muted-foreground">{line.source || "runtime"}</span>{" "}
+                              {line.message}
+                            </p>
+                          ))
+                        )}
+                      </div>
                     </div>
                   </div>
+                )}
 
-                  {/* Live metrics */}
+                <div className="px-6 pb-6">
                   <div className="rounded-lg border border-border p-4">
                     <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Live metrics</h3>
                     {series.length === 0 ? (
@@ -423,7 +447,7 @@ function MetricSection({
       {metrics.length === 0 ? (
         <p className="text-sm text-muted-foreground">{emptyMessage}</p>
       ) : (
-        <div className="space-y-4">
+        <div className="grid grid-cols-1 2xl:grid-cols-2 gap-4">
           {metrics.map((metric) => (
             <MetricChart key={`${metric.source}:${metric.name}`} metric={metric} />
           ))}
