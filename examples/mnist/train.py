@@ -4,7 +4,7 @@ from pathlib import Path
 import torch
 import torch.nn.functional as F
 from torch import nn
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, Subset
 from torchvision import datasets, transforms
 from transformers import Trainer, TrainingArguments
 import yaml
@@ -60,6 +60,13 @@ class SimpleCNN(nn.Module):
         return {"loss": F.cross_entropy(logits, labels), "logits": logits}
 
 
+def maybe_subset(dataset: Dataset, limit: int | None) -> Dataset:
+    if limit is None or limit <= 0:
+        return dataset
+    bounded_limit = min(limit, len(dataset))
+    return Subset(dataset, list(range(bounded_limit)))
+
+
 def main() -> None:
     config = yaml.safe_load(CONFIG_PATH.read_text(encoding="utf-8")) or {}
     train_config = config.get("train", {})
@@ -68,11 +75,16 @@ def main() -> None:
     epochs = float(train_config.get("epochs", 1))
     batch_size = int(train_config.get("batch_size", 64))
     learning_rate = float(train_config.get("learning_rate", 1e-3))
+    train_subset_size = int(train_config.get("train_subset_size", 0))
+    eval_subset_size = int(train_config.get("eval_subset_size", 0))
+    logging_steps = max(1, int(train_config.get("logging_steps", 1)))
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
     train_dataset = ImageFolderDataset(data_dir / "train")
     test_dataset = ImageFolderDataset(data_dir / "test")
+    train_dataset = maybe_subset(train_dataset, train_subset_size)
+    test_dataset = maybe_subset(test_dataset, eval_subset_size)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = SimpleCNN().to(device)
@@ -87,7 +99,7 @@ def main() -> None:
         eval_strategy="epoch",
         save_strategy="no",
         logging_strategy="steps",
-        logging_steps=25,
+        logging_steps=logging_steps,
         report_to="wandb",
     )
 
@@ -99,6 +111,7 @@ def main() -> None:
     )
 
     print(f"device={device}")
+    print(f"train_samples={len(train_dataset)} eval_samples={len(test_dataset)} logging_steps={logging_steps}")
     trainer.train()
     print(trainer.evaluate())
 

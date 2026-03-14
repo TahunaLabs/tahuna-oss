@@ -4,9 +4,12 @@ command:
   - python
   - train.py
 train:
-  epochs: 2
+  epochs: 3
   batch_size: 64
   learning_rate: 0.001
+  train_subset_size: 1024
+  eval_subset_size: 256
+  logging_steps: 1
   data_dir: data/mnist
   output_dir: outputs
 data:
