@@ -7,37 +7,30 @@ const MANAGED_RUNTIME_IMAGE_REPO = (
   "docker.io/pazuzzu/tahuna"
 ).replace(/\/+$/, "");
 
-const managedImageTags: Record<string, Record<string, string>> = Object.fromEntries(
-  Object.entries(runtimeImageBases as Record<string, Record<string, string>>).map(
-    ([framework, versions]) => [
-      framework,
-      Object.fromEntries(
-        Object.keys(versions).map((version) => [version, `${framework}-${version}`]),
-      ),
-    ],
-  ),
-);
+type RuntimeVersionEntry = { base: string; python: string[] };
+type RuntimeImageSpec = Record<string, Record<string, RuntimeVersionEntry>>;
 
-function buildManagedImages(repo: string, tags: Record<string, Record<string, string>>) {
-  const out: Record<string, Record<string, string>> = {};
-  for (const [framework, versions] of Object.entries(tags)) {
+// images[framework][version][pythonVersion] = full image URL
+export const images: Record<string, Record<string, Record<string, string>>> = (() => {
+  const spec = runtimeImageBases as RuntimeImageSpec;
+  const out: Record<string, Record<string, Record<string, string>>> = {};
+  for (const [framework, versions] of Object.entries(spec)) {
     out[framework] = {};
-    for (const [version, tag] of Object.entries(versions)) {
-      out[framework][version] = `${repo}:${tag}`;
+    for (const [version, entry] of Object.entries(versions)) {
+      out[framework][version] = {};
+      for (const python of entry.python) {
+        const tag = `${framework}-${version}-py${python}`;
+        out[framework][version][python] = `${MANAGED_RUNTIME_IMAGE_REPO}:${tag}`;
+      }
     }
   }
   return out;
-}
-
-export const images: Record<string, Record<string, string>> = buildManagedImages(
-  MANAGED_RUNTIME_IMAGE_REPO,
-  managedImageTags,
-);
+})();
 
 export const getCatalog = query({
   args: {},
   returns: v.object({
-    images: v.record(v.string(), v.record(v.string(), v.string())),
+    images: v.record(v.string(), v.record(v.string(), v.record(v.string(), v.string()))),
   }),
   handler: async () => ({ images }),
 });

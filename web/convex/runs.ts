@@ -16,7 +16,7 @@ import { requireUser } from "@convex/auth";
 import { R2 } from "@convex-dev/r2";
 import { HeadObjectCommand } from "@aws-sdk/client-s3";
 import { images } from "@convex/catalog";
-import { RUN_CONFIG, SYNC_CONFIG } from "@convex/appConfig";
+import { PYTHON_CONFIG, RUN_CONFIG, SYNC_CONFIG } from "@convex/appConfig";
 import {
   parseManifest,
   sha256Hex,
@@ -122,6 +122,7 @@ const runProvisionSpecValidator = v.object({
   effective_volume_gb: v.number(),
   framework: v.string(),
   version: v.string(),
+  python_version: v.string(),
 });
 const runtimeTokenRunLookupValidator = v.union(
   v.null(),
@@ -539,14 +540,18 @@ async function resolveManifestDownloadEntries(
   return entries;
 }
 
-function resolveImageName(framework: string, version: string) {
+function resolveImageName(framework: string, version: string, pythonVersion: string) {
   const frameworkImages = images[framework];
   if (!frameworkImages) {
     throw new Error(`unsupported framework for provisioning: ${framework}`);
   }
-  const imageName = frameworkImages[version];
-  if (!imageName) {
+  const versionImages = frameworkImages[version];
+  if (!versionImages) {
     throw new Error(`unsupported framework version for provisioning: ${framework}:${version}`);
+  }
+  const imageName = versionImages[pythonVersion];
+  if (!imageName) {
+    throw new Error(`unsupported python version for provisioning: ${framework}:${version}:${pythonVersion}`);
   }
   return imageName;
 }
@@ -1434,6 +1439,7 @@ export const internalGetRunProvisionSpec = internalQuery({
       effective_volume_gb: row.effectiveVolumeGb || env.volumeGb,
       framework: env.framework,
       version: env.version,
+      python_version: env.pythonVersion || PYTHON_CONFIG.defaultVersion,
     };
   },
 });
@@ -1578,7 +1584,7 @@ export const provisionRun = internalAction({
       if (await ctx.runQuery(internal.runs.internalShouldAbortProvisioning, { runId: args.runId })) {
         return null;
       }
-      const imageName = resolveImageName(runSpec.framework, runSpec.version);
+      const imageName = resolveImageName(runSpec.framework, runSpec.version, runSpec.python_version);
       const provisionResult = await createRunpodPod({
         runId: String(args.runId),
         imageName,

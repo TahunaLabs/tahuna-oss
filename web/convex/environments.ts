@@ -291,6 +291,7 @@ function validateEnvironmentPayload(args: {
   volume_gb: number;
   framework: string;
   version: string;
+  python_version: string;
 }) {
   if (args.gpu_count < 1 || args.volume_gb < 1) {
     throw new ConvexError("invalid environment payload");
@@ -300,8 +301,12 @@ function validateEnvironmentPayload(args: {
   if (!versions) {
     throw new ConvexError(`unsupported framework: ${args.framework}`);
   }
-  if (!versions[args.version]) {
+  const pythonVersions = versions[args.version];
+  if (!pythonVersions) {
     throw new ConvexError(`unsupported version for framework ${args.framework}: ${args.version}`);
+  }
+  if (!pythonVersions[args.python_version]) {
+    throw new ConvexError(`unsupported python version ${args.python_version} for ${args.framework} ${args.version}`);
   }
 }
 

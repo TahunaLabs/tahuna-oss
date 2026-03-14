@@ -37,6 +37,7 @@ export const SYNC_CONFIG = {
 
 export const PYTHON_CONFIG = {
   defaultVersion: "3.11",
+  supportedVersions: ["3.11", "3.12", "3.13", "3.14"],
 } as const;
 
 export const UPLOAD_LIMITS_BYTES = {

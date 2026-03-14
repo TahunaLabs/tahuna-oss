@@ -70,14 +70,15 @@ func initProject(target string) error {
 		return fmt.Errorf("failed to create output directory: %w", err)
 	}
 
+	envID, selectedPythonVersion, err := guidedSetup(envName, frameworkKey, projectCfg.PythonVersion)
+	if err != nil {
+		return err
+	}
+	projectCfg.PythonVersion = selectedPythonVersion
 	if err := saveProjectConfig(projectCfg); err != nil {
 		return fmt.Errorf("failed to save project config: %w", err)
 	}
 
-	envID, err := guidedSetup(envName, frameworkKey, projectCfg.PythonVersion)
-	if err != nil {
-		return err
-	}
 	if saveErr := saveLinkedEnvironmentID(envID); saveErr != nil {
 		_, cleanupErr := doJSON(http.MethodDelete, "/environments/"+envID, nil)
 		if cleanupErr != nil {
@@ -120,10 +121,10 @@ func prepareProjectPath(target string) (string, bool, error) {
 	return projectPath, true, nil
 }
 
-func guidedSetup(environmentName, frameworkHint, pythonVersion string) (string, error) {
-	gpus, versionsByFramework, err := fetchCatalog()
+func guidedSetup(environmentName, frameworkHint, pythonVersionHint string) (string, string, error) {
+	gpus, versionsByFramework, pythonsByFrameworkVersion, err := fetchCatalog()
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 
 	frameworks := sortedKeys(versionsByFramework)
@@ -133,11 +134,23 @@ func guidedSetup(environmentName, frameworkHint, pythonVersion string) (string, 
 	}
 	versions := versionsByFramework[framework]
 	version := promptChoice("Framework version", versions, 0)
+
+	pythons := pythonsByFrameworkVersion[framework][version]
+	hint := strings.TrimSpace(pythonVersionHint)
+	defaultPythonIdx := 0
+	for i, py := range pythons {
+		if py == hint {
+			defaultPythonIdx = i
+			break
+		}
+	}
+	pythonVersion := promptChoice("Python version", pythons, defaultPythonIdx)
+
 	gpuType := promptChoice("GPU type", gpus, 0)
 	gpuCount := promptInt("GPU count", 1)
 	volumeGB := promptInt("Volume (GB)", 80)
 	if err := validateGPUSelection(gpuType, gpuCount); err != nil {
-		return "", err
+		return "", "", err
 	}
 
 	envPayload := map[string]any{
@@ -145,18 +158,18 @@ func guidedSetup(environmentName, frameworkHint, pythonVersion string) (string, 
 		"gpu_type":       gpuType,
 		"gpu_count":      gpuCount,
 		"volume_gb":      volumeGB,
-		"python_version": strings.TrimSpace(pythonVersion),
+		"python_version": pythonVersion,
 		"framework":      framework,
 		"version":        version,
 	}
 	env, err := doJSON(http.MethodPost, "/environments", envPayload)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 
 	envID := asString(env["environment_id"])
 	fmt.Printf("\n%sEnvironment created%s\n", cAmpWord, cReset)
-	return envID, nil
+	return envID, pythonVersion, nil
 }
 
 func handleEnvironment(args []string) {
@@ -701,7 +714,7 @@ func environmentUpdate(args []string) {
 			currentVolume = 1
 		}
 
-		gpus, _, err := fetchCatalog()
+		gpus, _, _, err := fetchCatalog()
 		must(err)
 		defaultGPUIndex := 0
 		if currentGPU != "" {
@@ -936,7 +949,7 @@ func createRunWithCapacityPrompt(path string, payload map[string]any) (map[strin
 		return resp, err
 	}
 
-	gpus, _, catalogErr := fetchCatalog()
+	gpus, _, _, catalogErr := fetchCatalog()
 	if catalogErr != nil || len(gpus) == 0 {
 		return nil, err
 	}

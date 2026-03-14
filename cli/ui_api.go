@@ -334,14 +334,14 @@ func parseCatalogGPUs(resp map[string]any) []catalogGPU {
 	return gpus
 }
 
-func fetchCatalog() ([]string, map[string][]string, error) {
+func fetchCatalog() ([]string, map[string][]string, map[string]map[string][]string, error) {
 	resp, err := doJSON(http.MethodGet, "/catalog", nil)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	parsedGpus := parseCatalogGPUs(resp)
 	if len(parsedGpus) == 0 {
-		return nil, nil, errors.New("invalid catalog response: gpus missing")
+		return nil, nil, nil, errors.New("invalid catalog response: gpus missing")
 	}
 	gpus := make([]string, 0, len(parsedGpus))
 	for _, gpu := range parsedGpus {
@@ -350,23 +350,35 @@ func fetchCatalog() ([]string, map[string][]string, error) {
 
 	imagesRaw, ok := resp["images"].(map[string]any)
 	if !ok {
-		return nil, nil, errors.New("invalid catalog response: images missing")
+		return nil, nil, nil, errors.New("invalid catalog response: images missing")
 	}
 
 	versionsByFramework := map[string][]string{}
+	pythonsByFrameworkVersion := map[string]map[string][]string{}
 	for framework, versionsAny := range imagesRaw {
 		versionsMap, ok := versionsAny.(map[string]any)
 		if !ok {
 			continue
 		}
 		versions := make([]string, 0, len(versionsMap))
-		for v := range versionsMap {
-			versions = append(versions, v)
+		pythonsByFrameworkVersion[framework] = map[string][]string{}
+		for version, pythonsAny := range versionsMap {
+			versions = append(versions, version)
+			pythonsMap, ok := pythonsAny.(map[string]any)
+			if !ok {
+				continue
+			}
+			pythons := make([]string, 0, len(pythonsMap))
+			for py := range pythonsMap {
+				pythons = append(pythons, py)
+			}
+			sort.Strings(pythons)
+			pythonsByFrameworkVersion[framework][version] = pythons
 		}
 		sort.Strings(versions)
 		versionsByFramework[framework] = versions
 	}
-	return gpus, versionsByFramework, nil
+	return gpus, versionsByFramework, pythonsByFrameworkVersion, nil
 }
 
 func fetchCatalogGPUByID() (map[string]catalogGPU, error) {

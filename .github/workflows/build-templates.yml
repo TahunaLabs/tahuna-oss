@@ -24,8 +24,24 @@ jobs:
       - id: set-matrix
         run: |
           PREBAKED_PACKAGES=$(jq -r '.default | join(",")' runtime/images/prebake/protected-packages.json)
-          # Convert images.json to matrix format: [{framework, version, tag, base, protected_packages}, ...]
-          MATRIX=$(jq -c --arg protected "$PREBAKED_PACKAGES" '[to_entries[] | .key as $fw | .value | to_entries[] | {framework: $fw, version: .key, tag: "\($fw)-\(.key)", base: .value, protected_packages: $protected}]' web/convex/runtime-images.json)
+          # Cross-product framework × version × python_version into matrix entries
+          MATRIX=$(jq -c --arg protected "$PREBAKED_PACKAGES" '
+            [
+              to_entries[] | .key as $fw |
+              .value | to_entries[] |
+              .key as $ver |
+              .value.base as $base |
+              .value.python[] as $py |
+              {
+                framework: $fw,
+                version: $ver,
+                python_version: $py,
+                tag: "\($fw)-\($ver)-py\($py)",
+                base: $base,
+                protected_packages: $protected
+              }
+            ]
+          ' web/convex/runtime-images.json)
           echo "images=$MATRIX" >> $GITHUB_OUTPUT
 
   # Second job: build each image
@@ -38,10 +54,10 @@ jobs:
       max-parallel: 1
       matrix:
         include: ${{ fromJson(needs.matrix.outputs.images) }}
-        
+
     steps:
       - uses: actions/checkout@v5
-      
+
       - name: Free disk space
         run: |
           sudo rm -rf /usr/share/dotnet
@@ -49,16 +65,16 @@ jobs:
           sudo rm -rf /opt/ghc
           sudo rm -rf /opt/hostedtoolcache/CodeQL
           sudo docker system prune -af
-      
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
-        
+
       - name: Login to Docker Hub
         uses: docker/login-action@v4
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_TOKEN }}
-          
+
       - name: Build and push
         uses: docker/build-push-action@v7
         with:
@@ -72,6 +88,7 @@ jobs:
             WANDB_BASE_URL=${{ secrets.TAHUNA_WANDB_BASE_URL }}
             PREBAKE_FRAMEWORK=${{ matrix.framework }}
             PREBAKE_VERSION=${{ matrix.version }}
+            PREBAKE_PYTHON_VERSION=${{ matrix.python_version }}
             PREBAKE_PROTECTED_PACKAGES=${{ matrix.protected_packages }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

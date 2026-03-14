@@ -466,6 +466,8 @@ func validateRequiredProjectConfigValues(path string, values map[string]string) 
 	return nil
 }
 
+var allowedPythonVersions = []string{"3.11", "3.12", "3.13", "3.14"}
+
 func validateProjectConfigRuntimeValues(path string, cfg projectConfig) error {
 	framework := strings.ToLower(strings.TrimSpace(cfg.Framework))
 	switch framework {
@@ -478,7 +480,12 @@ func validateProjectConfigRuntimeValues(path string, cfg projectConfig) error {
 	if !isSimplePythonVersion(version) {
 		return fmt.Errorf("invalid python_version %q in %s: expected major.minor (for example 3.11)", cfg.PythonVersion, path)
 	}
-	return nil
+	for _, allowed := range allowedPythonVersions {
+		if version == allowed {
+			return nil
+		}
+	}
+	return fmt.Errorf("unsupported python_version %q in %s: supported versions are %s", cfg.PythonVersion, path, strings.Join(allowedPythonVersions, ", "))
 }
 
 func validateProjectConfigPathBinding(field, value string, wantDir bool) error {
