@@ -40,16 +40,43 @@ func monitorRunWithOptions(runID string, interval int, streamLogs bool) error {
 	if streamLogs {
 		dynamic = false
 	}
+	const maxConsecutivePollErrors = 12
 	anchored := false
 	headerPrinted := false
 	lastStatus := ""
+	consecutivePollErrors := 0
 	seenLogLines := map[string]struct{}{}
 	logFetchWarned := false
 
 	for {
 		resp, err := doJSON(http.MethodGet, "/runs/"+runID, nil)
 		if err != nil {
+			if isRetryableRunPollError(err) {
+				consecutivePollErrors++
+				fmt.Printf(
+					"%swarning:%s unable to poll run status (%v); retrying in %ds (%d/%d)\n",
+					cAmpGold,
+					cReset,
+					err,
+					interval,
+					consecutivePollErrors,
+					maxConsecutivePollErrors,
+				)
+				if consecutivePollErrors >= maxConsecutivePollErrors {
+					return fmt.Errorf(
+						"run status polling failed %d times in a row: %w",
+						consecutivePollErrors,
+						err,
+					)
+				}
+				time.Sleep(time.Duration(interval) * time.Second)
+				continue
+			}
 			return err
+		}
+		if consecutivePollErrors > 0 {
+			fmt.Printf("%sinfo:%s recovered run status polling\n", cAmpMuted, cReset)
+			consecutivePollErrors = 0
 		}
 		status := asString(resp["status"])
 		if status == "" {
@@ -123,6 +150,22 @@ func monitorRunWithOptions(runID string, interval int, streamLogs bool) error {
 		time.Sleep(time.Duration(interval) * time.Second)
 	}
 	return nil
+}
+
+func isRetryableRunPollError(err error) bool {
+	if err == nil {
+		return false
+	}
+	var netErr net.Error
+	if errors.As(err, &netErr) {
+		return true
+	}
+	var apiErr *apiRequestError
+	if errors.As(err, &apiErr) {
+		return apiErr.status >= 500 || apiErr.status == http.StatusTooManyRequests
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "api response was not json")
 }
 
 func printRunPanel(runID, status, errMsg string) {

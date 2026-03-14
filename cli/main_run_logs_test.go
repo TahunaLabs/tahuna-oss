@@ -234,3 +234,109 @@ func TestRunLogs_FollowStreamsUntilTerminal(t *testing.T) {
 		t.Fatalf("expected at least three log polls, got %d", logCalls)
 	}
 }
+
+func TestRunLogs_FollowRetriesTransientStatusPollError(t *testing.T) {
+	var mu sync.Mutex
+	statusCalls := 0
+	logCalls := 0
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/runs":
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"runs": []map[string]any{
+					{"run_id": "run-retry", "name": "run-retry"},
+				},
+			})
+			return
+		case r.Method == http.MethodGet && r.URL.Path == "/api/runs/run-retry":
+			mu.Lock()
+			statusCalls++
+			call := statusCalls
+			mu.Unlock()
+			if call == 1 {
+				w.Header().Set("Content-Type", "text/html")
+				w.WriteHeader(http.StatusNotFound)
+				_, _ = w.Write([]byte("<!DOCTYPE html><html><body>temporary route miss</body></html>"))
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			status := "running"
+			if call >= 3 {
+				status = "completed"
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"run_id": "run-retry", "status": status})
+			return
+		case r.Method == http.MethodGet && r.URL.Path == "/api/runs/run-retry/logs":
+			w.Header().Set("Content-Type", "application/json")
+			mu.Lock()
+			logCalls++
+			call := logCalls
+			mu.Unlock()
+
+			logs := []map[string]any{
+				{
+					"timestamp": 1773159359016,
+					"level":     "info",
+					"source":    "train",
+					"message":   "starting entrypoint",
+				},
+			}
+			if call >= 2 {
+				logs = append(logs, map[string]any{
+					"timestamp": 1773159748712,
+					"level":     "info",
+					"source":    "train",
+					"message":   "Training complete.",
+				})
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"run_id":         "run-retry",
+				"logs_path":      "runs/env-follow/1/logs",
+				"log_file":       "runs/env-follow/1/logs/run.log",
+				"note":           "Runtime logs/metrics are streamed by the pod and persisted in Convex.",
+				"recent_logs":    logs,
+				"recent_metrics": []map[string]any{},
+			})
+			return
+		default:
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusNotFound)
+			_ = json.NewEncoder(w).Encode(map[string]any{"detail": "not found"})
+			return
+		}
+	}))
+	defer server.Close()
+
+	t.Setenv("TAHUNA_API_URL", server.URL)
+
+	prevSleep := runLogsFollowSleep
+	runLogsFollowSleep = func(_ time.Duration) {}
+	t.Cleanup(func() {
+		runLogsFollowSleep = prevSleep
+	})
+
+	output := captureStdout(t, func() {
+		runLogs([]string{"--follow", "--interval", "1", "run-retry"})
+	})
+
+	if !strings.Contains(output, "warning:") || !strings.Contains(output, "unable to poll run status") {
+		t.Fatalf("expected transient poll warning, got: %s", output)
+	}
+	if !strings.Contains(output, "recovered run log polling") {
+		t.Fatalf("expected polling recovery message, got: %s", output)
+	}
+	if !strings.Contains(output, "Training complete.") {
+		t.Fatalf("expected follow output to recover and complete, got: %s", output)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if statusCalls < 3 {
+		t.Fatalf("expected retry status polls, got %d", statusCalls)
+	}
+	if logCalls < 2 {
+		t.Fatalf("expected log polling after recovery, got %d", logCalls)
+	}
+}

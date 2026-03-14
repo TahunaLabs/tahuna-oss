@@ -258,3 +258,98 @@ func TestCreateRunWithCapacityPrompt_NonInteractiveNoCapacityError(t *testing.T)
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
+
+func TestMonitorRunWithLogs_RetriesTransientStatusPollError(t *testing.T) {
+	var mu sync.Mutex
+	statusCalls := 0
+	logCalls := 0
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/runs/run-monitor":
+			mu.Lock()
+			statusCalls++
+			call := statusCalls
+			mu.Unlock()
+			if call == 1 {
+				w.Header().Set("Content-Type", "text/html")
+				w.WriteHeader(http.StatusNotFound)
+				_, _ = w.Write([]byte("<!DOCTYPE html><html><body>temporary route miss</body></html>"))
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			status := "running"
+			if call >= 3 {
+				status = "completed"
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"run_id": "run-monitor", "status": status})
+			return
+		case r.Method == http.MethodGet && r.URL.Path == "/api/runs/run-monitor/logs":
+			w.Header().Set("Content-Type", "application/json")
+			mu.Lock()
+			logCalls++
+			call := logCalls
+			mu.Unlock()
+
+			logs := []map[string]any{
+				{
+					"timestamp": 1773159359016,
+					"level":     "info",
+					"source":    "train",
+					"message":   "starting entrypoint",
+				},
+			}
+			if call >= 2 {
+				logs = append(logs, map[string]any{
+					"timestamp": 1773159748712,
+					"level":     "info",
+					"source":    "train",
+					"message":   "Training complete.",
+				})
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"run_id":         "run-monitor",
+				"logs_path":      "runs/env-monitor/1/logs",
+				"log_file":       "runs/env-monitor/1/logs/run.log",
+				"note":           "Runtime logs/metrics are streamed by the pod and persisted in Convex.",
+				"recent_logs":    logs,
+				"recent_metrics": []map[string]any{},
+			})
+			return
+		default:
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusNotFound)
+			_ = json.NewEncoder(w).Encode(map[string]any{"detail": "not found"})
+			return
+		}
+	}))
+	defer server.Close()
+
+	t.Setenv("TAHUNA_API_URL", server.URL)
+	t.Setenv("TAHUNA_BROWSER_URL", server.URL)
+
+	output := captureStdout(t, func() {
+		if err := monitorRunWithLogs("run-monitor", 0); err != nil {
+			t.Fatalf("monitorRunWithLogs returned error: %v", err)
+		}
+	})
+
+	if !strings.Contains(output, "warning:") || !strings.Contains(output, "unable to poll run status") {
+		t.Fatalf("expected transient poll warning, got: %s", output)
+	}
+	if !strings.Contains(output, "recovered run status polling") {
+		t.Fatalf("expected polling recovery message, got: %s", output)
+	}
+	if !strings.Contains(output, "Training complete.") {
+		t.Fatalf("expected recovered log stream, got: %s", output)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if statusCalls < 3 {
+		t.Fatalf("expected retried status polls, got %d", statusCalls)
+	}
+	if logCalls < 2 {
+		t.Fatalf("expected log polling after retry, got %d", logCalls)
+	}
+}

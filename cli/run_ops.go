@@ -330,9 +330,11 @@ func isTerminalRunStatus(status string) bool {
 }
 
 func followRunLogs(runID string, initialResp map[string]any, interval int) error {
+	const maxConsecutivePollErrors = 12
 	fmt.Printf("%sFollowing logs for run %s (Ctrl+C to stop)%s\n", cAmpMuted, runID, cReset)
 
 	seen := map[string]struct{}{}
+	consecutivePollErrors := 0
 	for _, line := range parseRecentRunLogs(initialResp) {
 		key := runtimeLogLineKey(line)
 		seen[key] = struct{}{}
@@ -341,6 +343,27 @@ func followRunLogs(runID string, initialResp map[string]any, interval int) error
 	for {
 		statusResp, err := doJSON(http.MethodGet, "/runs/"+runID, nil)
 		if err != nil {
+			if isRetryableRunPollError(err) {
+				consecutivePollErrors++
+				fmt.Printf(
+					"%swarning:%s unable to poll run status (%v); retrying in %ds (%d/%d)\n",
+					cAmpGold,
+					cReset,
+					err,
+					interval,
+					consecutivePollErrors,
+					maxConsecutivePollErrors,
+				)
+				if consecutivePollErrors >= maxConsecutivePollErrors {
+					return fmt.Errorf(
+						"run status polling failed %d times in a row: %w",
+						consecutivePollErrors,
+						err,
+					)
+				}
+				runLogsFollowSleep(time.Duration(interval) * time.Second)
+				continue
+			}
 			return err
 		}
 		status := asString(statusResp["status"])
@@ -350,7 +373,32 @@ func followRunLogs(runID string, initialResp map[string]any, interval int) error
 
 		logResp, err := doJSON(http.MethodGet, "/runs/"+runID+"/logs", nil)
 		if err != nil {
+			if isRetryableRunPollError(err) {
+				consecutivePollErrors++
+				fmt.Printf(
+					"%swarning:%s unable to poll run logs (%v); retrying in %ds (%d/%d)\n",
+					cAmpGold,
+					cReset,
+					err,
+					interval,
+					consecutivePollErrors,
+					maxConsecutivePollErrors,
+				)
+				if consecutivePollErrors >= maxConsecutivePollErrors {
+					return fmt.Errorf(
+						"run log polling failed %d times in a row: %w",
+						consecutivePollErrors,
+						err,
+					)
+				}
+				runLogsFollowSleep(time.Duration(interval) * time.Second)
+				continue
+			}
 			return err
+		}
+		if consecutivePollErrors > 0 {
+			fmt.Printf("%sinfo:%s recovered run log polling\n", cAmpMuted, cReset)
+			consecutivePollErrors = 0
 		}
 		for _, line := range parseRecentRunLogs(logResp) {
 			key := runtimeLogLineKey(line)
