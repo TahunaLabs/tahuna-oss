@@ -9,5 +9,6 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o
 
 FROM ${BASE_IMAGE}
 ENV WANDB_BASE_URL=${WANDB_BASE_URL}
+ENV UV_CACHE_DIR=/workspace/.uv-cache
 COPY --from=warden-builder /out/warden /usr/local/bin/warden
 RUN chmod +x /usr/local/bin/warden

@@ -111,23 +111,12 @@ func InstallDependencies(ctx context.Context, workspaceRoot string, hooks Hooks)
 		return err
 	}
 
-	uvCacheDir := filepath.Join(workspaceRoot, ".uv-cache")
-	if err := os.MkdirAll(uvCacheDir, 0o755); err != nil {
-		return fmt.Errorf("prepare uv cache dir: %w", err)
-	}
-	installEnv := []string{"UV_CACHE_DIR=" + uvCacheDir}
-
 	installCmd := []string{"uv", "sync", "--no-dev"}
 	if _, err := os.Stat(filepath.Join(workspaceRoot, "uv.lock")); err == nil {
 		installCmd = []string{"uv", "sync", "--frozen", "--no-dev"}
 	}
-	emitLog(
-		hooks,
-		"info",
-		"bootstrap",
-		"bootstrap: installing dependencies with "+strings.Join(installCmd, " ")+" (UV_CACHE_DIR="+uvCacheDir+")",
-	)
-	exitCode, err := runStreamingCommandWithEnv(ctx, workspaceRoot, installCmd, installEnv, hooks, false)
+	emitLog(hooks, "info", "bootstrap", "bootstrap: installing dependencies with "+strings.Join(installCmd, " "))
+	exitCode, err := runStreamingCommand(ctx, workspaceRoot, installCmd, hooks, false)
 	if err != nil {
 		return err
 	}
@@ -341,25 +330,11 @@ func runStreamingCommand(
 	hooks Hooks,
 	enableMetricExtraction bool,
 ) (int, error) {
-	return runStreamingCommandWithEnv(ctx, cwd, command, nil, hooks, enableMetricExtraction)
-}
-
-func runStreamingCommandWithEnv(
-	ctx context.Context,
-	cwd string,
-	command []string,
-	env []string,
-	hooks Hooks,
-	enableMetricExtraction bool,
-) (int, error) {
 	if len(command) == 0 {
 		return 0, fmt.Errorf("command is required")
 	}
 	cmd := exec.CommandContext(ctx, command[0], command[1:]...) // #nosec G204
 	cmd.Dir = cwd
-	if len(env) > 0 {
-		cmd.Env = append(os.Environ(), env...)
-	}
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return 0, fmt.Errorf("create stdout pipe: %w", err)

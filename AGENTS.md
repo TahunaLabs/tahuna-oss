@@ -46,6 +46,7 @@
 
 - Search whole repo before removing or renaming any runtime contract references.
 - Validate every commit with `make validate-warden` (`gofmt`, `go vet`, `golangci-lint`, `go test`).
+- Runtime dependency install convention: set `UV_CACHE_DIR=/workspace/.uv-cache` in `runtime/images/Dockerfile`; keep uv default link behavior (Linux hardlink with fallback). Do not force `--link-mode=copy` unless explicitly requested.
 - Runtime contract client, workspace materialization, dependency install, training execution, metrics extraction, and artifact sync each live in dedicated packages. Keep `cmd/warden` as thin orchestration only.
 - One canonical startup path only. No embedded script fallback or duplicate runtime implementations.
 - Explicit contexts/timeouts/retry budgets for all networked calls. Keep retry constants centralized and sourced from shared config/env (no hardcoded magic numbers in flow logic).
