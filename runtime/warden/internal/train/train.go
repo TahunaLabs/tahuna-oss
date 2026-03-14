@@ -4,7 +4,9 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net/url"
 	"os"
 	"os/exec"
@@ -581,7 +583,7 @@ func RunEntrypoint(
 			for buffered := range lineCh {
 				step = emitTrainOutputLine(hooks, metricPattern, buffered, step)
 			}
-			if scanErr := <-scanErrCh; scanErr != nil {
+			if scanErr := <-scanErrCh; scanErr != nil && !isBenignStreamReadError(scanErr) {
 				return 0, cancelled, fmt.Errorf("stream entrypoint output: %w", scanErr)
 			}
 			if waitErr == nil {
@@ -619,6 +621,17 @@ func RunEntrypoint(
 			}
 		}
 	}
+}
+
+func isBenignStreamReadError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, os.ErrClosed) || errors.Is(err, io.ErrClosedPipe) {
+		return true
+	}
+	normalized := strings.ToLower(err.Error())
+	return strings.Contains(normalized, "file already closed")
 }
 
 func emitTrainOutputLine(
