@@ -5,7 +5,6 @@ import {
   ChevronDown,
   MoreHorizontal,
   Search,
-  SquarePen,
   Users,
   UserPlus,
   Settings,
@@ -38,18 +37,11 @@ export function Sidebar({ activeView, onViewChange, userInitial, isDark, onTheme
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-2.5">
         <button className="flex items-center gap-2 hover:bg-sidebar-accent rounded px-1.5 py-1 -ml-1.5">
-          <div className="w-6 h-6 rounded bg-emerald-600 flex items-center justify-center text-xs font-medium text-primary-foreground">
-            TA
-          </div>
-          <span className="text-sm font-medium text-sidebar-foreground">tahuna</span>
-          <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
+          <span className="text-sm font-medium text-sidebar-foreground">Tahuna</span>
         </button>
         <div className="flex items-center gap-0.5">
           <button className="p-1.5 hover:bg-sidebar-accent rounded text-muted-foreground hover:text-sidebar-foreground">
             <Search className="w-4 h-4" />
-          </button>
-          <button className="p-1.5 hover:bg-sidebar-accent rounded text-muted-foreground hover:text-sidebar-foreground">
-            <SquarePen className="w-4 h-4" />
           </button>
         </div>
       </div>
