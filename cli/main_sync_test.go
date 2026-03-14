@@ -182,10 +182,22 @@ func setupTestProject(t *testing.T, withData bool) string {
 	if err := os.WriteFile(filepath.Join(dir, "train.py"), []byte("print('hello')\n"), 0o644); err != nil {
 		t.Fatalf("failed to write train.py: %v", err)
 	}
+	if err := os.WriteFile(filepath.Join(dir, "config.yaml"), []byte("project: test\nentrypoint: train.py\n"), 0o644); err != nil {
+		t.Fatalf("failed to write config.yaml: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "pyproject.toml"), []byte("[project]\nname = \"test\"\nversion = \"0.1.0\"\nrequires-python = \">=3.11\"\n"), 0o644); err != nil {
+		t.Fatalf("failed to write pyproject.toml: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "uv.lock"), []byte("version = 1\nrequires-python = \">=3.11\"\n"), 0o644); err != nil {
+		t.Fatalf("failed to write uv.lock: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "data"), 0o755); err != nil {
+		t.Fatalf("failed to create data dir: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "outputs"), 0o755); err != nil {
+		t.Fatalf("failed to create outputs dir: %v", err)
+	}
 	if withData {
-		if err := os.MkdirAll(filepath.Join(dir, "data"), 0o755); err != nil {
-			t.Fatalf("failed to create data dir: %v", err)
-		}
 		if err := os.WriteFile(filepath.Join(dir, "data", "sample.txt"), []byte("sample\n"), 0o644); err != nil {
 			t.Fatalf("failed to write data file: %v", err)
 		}
@@ -196,6 +208,18 @@ func setupTestProject(t *testing.T, withData bool) string {
 	}
 	if err := os.Chdir(dir); err != nil {
 		t.Fatalf("failed to chdir: %v", err)
+	}
+	if err := saveProjectConfig(projectConfig{
+		DataDir:           "data",
+		OutputDir:         "outputs",
+		ConfigYAMLPath:    "config.yaml",
+		TrainEntrypoint:   "train.py",
+		PythonProjectFile: "pyproject.toml",
+		UVLockFile:        "uv.lock",
+		Framework:         "pt",
+		PythonVersion:     "3.11",
+	}); err != nil {
+		t.Fatalf("failed to save project config: %v", err)
 	}
 	t.Cleanup(func() {
 		_ = os.Chdir(cwd)
@@ -346,6 +370,48 @@ func TestPreRunSync_SyncsCodeAndData(t *testing.T) {
 	}
 	if asString(lastCommit["data_manifest_hash"]) == "" {
 		t.Fatalf("expected data_manifest_hash in preRunSync commit payload")
+	}
+}
+
+func TestPreRunSync_ConfigValidationDetectsMissingBindingAfterSync(t *testing.T) {
+	mock := newSyncBackendMock()
+	installSyncStubs(t, mock)
+	setupTestProject(t, true)
+
+	if err := os.WriteFile(projectConfigFilePath(), []byte("data_dir: \"data\"\n"), 0o600); err != nil {
+		t.Fatalf("failed to write broken project config: %v", err)
+	}
+
+	err := preRunSync("env-test")
+	if err == nil {
+		t.Fatal("expected preRunSync to fail on broken project bindings")
+	}
+	if !strings.Contains(err.Error(), "missing required binding keys") {
+		t.Fatalf("expected missing binding validation error, got: %v", err)
+	}
+
+	mock.mu.Lock()
+	defer mock.mu.Unlock()
+	if mock.commitCount == 0 {
+		t.Fatalf("expected sync commit to complete before config validation failure")
+	}
+}
+
+func TestPreRunSync_ConfigValidationDetectsMissingEntrypointPath(t *testing.T) {
+	mock := newSyncBackendMock()
+	installSyncStubs(t, mock)
+	setupTestProject(t, true)
+
+	if err := os.Remove("train.py"); err != nil {
+		t.Fatalf("failed to remove train.py: %v", err)
+	}
+
+	err := preRunSync("env-test")
+	if err == nil {
+		t.Fatal("expected preRunSync to fail when entrypoint binding path is missing")
+	}
+	if !strings.Contains(err.Error(), "entrypoint binding points to missing path") {
+		t.Fatalf("expected missing entrypoint binding error, got: %v", err)
 	}
 }
 

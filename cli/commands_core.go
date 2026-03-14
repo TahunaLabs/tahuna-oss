@@ -1036,5 +1036,11 @@ func inferEnvironmentGPU(path string) (string, error) {
 }
 
 func preRunSync(environmentID string) error {
-	return runSyncWithStatus(environmentID, syncScope{code: true, data: true})
+	if err := runSyncWithStatus(environmentID, syncScope{code: true, data: true}); err != nil {
+		return err
+	}
+	if err := validateProjectConfigBindings(); err != nil {
+		return fmt.Errorf("project preflight validation failed: %w", err)
+	}
+	return nil
 }

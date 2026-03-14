@@ -49,6 +49,22 @@ type projectConfig struct {
 	PythonVersion     string
 }
 
+type projectConfigKeySpec struct {
+	name    string
+	aliases []string
+}
+
+var requiredProjectConfigKeys = []projectConfigKeySpec{
+	{name: "entrypoint", aliases: []string{"entrypoint", "train_entrypoint"}},
+	{name: "data_dir", aliases: []string{"data_dir"}},
+	{name: "output_dir", aliases: []string{"output_dir"}},
+	{name: "config_file", aliases: []string{"config_file", "config_yaml"}},
+	{name: "python_project_file", aliases: []string{"python_project_file"}},
+	{name: "uv_lock_file", aliases: []string{"uv_lock_file"}},
+	{name: "framework", aliases: []string{"framework"}},
+	{name: "python_version", aliases: []string{"python_version"}},
+}
+
 func collectProjectInitConfig() (projectConfig, string, error) {
 	cfg := projectConfig{
 		DataDir:           "data",
@@ -348,6 +364,163 @@ func loadProjectConfig() (projectConfig, error) {
 	}
 
 	return cfg, nil
+}
+
+func validateProjectConfigBindings() error {
+	cfg, err := loadProjectConfig()
+	if err != nil {
+		return err
+	}
+	path := projectConfigFilePath()
+	values, err := loadRawProjectConfigValues(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("missing %s; run `tahuna init .` to restore project bindings", path)
+		}
+		return err
+	}
+	if err := validateRequiredProjectConfigValues(path, values); err != nil {
+		return err
+	}
+	if err := validateProjectConfigRuntimeValues(path, cfg); err != nil {
+		return err
+	}
+	if err := validateProjectConfigPathBinding("entrypoint", cfg.TrainEntrypoint, false); err != nil {
+		return err
+	}
+	if err := validateProjectConfigPathBinding("data_dir", cfg.DataDir, true); err != nil {
+		return err
+	}
+	if err := validateProjectConfigPathBinding("output_dir", cfg.OutputDir, true); err != nil {
+		return err
+	}
+	if err := validateProjectConfigPathBinding("config_file", cfg.ConfigYAMLPath, false); err != nil {
+		return err
+	}
+	if err := validateProjectConfigPathBinding("python_project_file", cfg.PythonProjectFile, false); err != nil {
+		return err
+	}
+	if filepath.Base(cfg.PythonProjectFile) != "pyproject.toml" {
+		return fmt.Errorf("invalid python_project_file in %s: expected pyproject.toml filename", path)
+	}
+	if err := validateProjectConfigPathBinding("uv_lock_file", cfg.UVLockFile, false); err != nil {
+		return err
+	}
+	return nil
+}
+
+func loadRawProjectConfigValues(path string) (map[string]string, error) {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	values := map[string]string{}
+	for _, line := range strings.Split(string(raw), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		parts := strings.SplitN(trimmed, ":", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		key := strings.TrimSpace(parts[0])
+		value := strings.TrimSpace(parts[1])
+		value = strings.Trim(value, "\"")
+		values[key] = strings.TrimSpace(value)
+	}
+	return values, nil
+}
+
+func validateRequiredProjectConfigValues(path string, values map[string]string) error {
+	missing := make([]string, 0, len(requiredProjectConfigKeys))
+	empty := make([]string, 0, len(requiredProjectConfigKeys))
+	for _, field := range requiredProjectConfigKeys {
+		hasAlias := false
+		hasValue := false
+		for _, alias := range field.aliases {
+			value, ok := values[alias]
+			if !ok {
+				continue
+			}
+			hasAlias = true
+			if strings.TrimSpace(value) != "" {
+				hasValue = true
+				break
+			}
+		}
+		if !hasAlias {
+			missing = append(missing, field.name)
+			continue
+		}
+		if !hasValue {
+			empty = append(empty, field.name)
+		}
+	}
+	if len(missing) > 0 {
+		return fmt.Errorf("%s is missing required binding keys: %s; run `tahuna init .` to restore project bindings", path, strings.Join(missing, ", "))
+	}
+	if len(empty) > 0 {
+		return fmt.Errorf("%s has empty required binding values: %s; run `tahuna init .` to restore project bindings", path, strings.Join(empty, ", "))
+	}
+	return nil
+}
+
+func validateProjectConfigRuntimeValues(path string, cfg projectConfig) error {
+	framework := strings.ToLower(strings.TrimSpace(cfg.Framework))
+	switch framework {
+	case "pt", "tf":
+	default:
+		return fmt.Errorf("invalid framework in %s: expected pt or tf", path)
+	}
+
+	version := strings.TrimSpace(cfg.PythonVersion)
+	if !isSimplePythonVersion(version) {
+		return fmt.Errorf("invalid python_version %q in %s: expected major.minor (for example 3.11)", cfg.PythonVersion, path)
+	}
+	return nil
+}
+
+func validateProjectConfigPathBinding(field, value string, wantDir bool) error {
+	cleaned := strings.TrimSpace(value)
+	if cleaned == "" {
+		return fmt.Errorf("missing %s binding in %s", field, projectConfigFilePath())
+	}
+	info, err := os.Stat(cleaned)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("%s binding points to missing path %q", field, cleaned)
+		}
+		return fmt.Errorf("failed to read %s binding path %q: %w", field, cleaned, err)
+	}
+	if wantDir {
+		if !info.IsDir() {
+			return fmt.Errorf("%s binding must point to a directory: %q", field, cleaned)
+		}
+		return nil
+	}
+	if info.IsDir() {
+		return fmt.Errorf("%s binding must point to a file: %q", field, cleaned)
+	}
+	return nil
+}
+
+func isSimplePythonVersion(value string) bool {
+	parts := strings.Split(value, ".")
+	if len(parts) != 2 {
+		return false
+	}
+	for _, part := range parts {
+		if part == "" {
+			return false
+		}
+		for _, r := range part {
+			if r < '0' || r > '9' {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 func ensureProjectFile(path, content string) error {
