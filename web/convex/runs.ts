@@ -584,6 +584,10 @@ function resolveRuntimeApiBase() {
   throw new Error("TAHUNA_SITE_URL (or SITE_URL) is required for pod runtime callbacks");
 }
 
+function resolveWandbBaseURL(runtimeApiBase: string) {
+  return `${runtimeApiBase}/api/monitoring/wandb`;
+}
+
 function generateRuntimeToken() {
   const bytes = new Uint8Array(32);
   crypto.getRandomValues(bytes);
@@ -613,6 +617,7 @@ async function createRunpodPod(args: {
   const allowedCloudType = cloudType === "COMMUNITY" ? "COMMUNITY" : "SECURE";
   const gpuTypeId = await resolveRunpodGpuTypeId(apiKey, args.gpuType);
   const runtimeApiBase = resolveRuntimeApiBase();
+  const wandbBaseURL = resolveWandbBaseURL(runtimeApiBase);
   const runtimeRequestTimeoutSeconds = process.env.TAHUNA_RUNTIME_REQUEST_TIMEOUT_SECONDS?.trim() || "120";
 
   const response = await fetch("https://rest.runpod.io/v1/pods", {
@@ -647,6 +652,7 @@ async function createRunpodPod(args: {
         TAHUNA_WORKSPACE_ROOT: "/workspace",
         TAHUNA_RUNTIME_REQUEST_TIMEOUT_SECONDS: runtimeRequestTimeoutSeconds,
         TAHUNA_CANCELLATION_GRACE_SECONDS: String(RUN_CONFIG.cancellationGraceSeconds),
+        WANDB_BASE_URL: wandbBaseURL,
       },
       dockerEntrypoint: [runtimeEntrypoint()],
       ports: ["22/tcp", "8888/http"],

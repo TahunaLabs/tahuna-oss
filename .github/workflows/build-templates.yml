@@ -85,7 +85,6 @@ jobs:
           tags: ${{ secrets.DOCKER_USERNAME }}/tahuna:${{ matrix.tag }}
           build-args: |
             BASE_IMAGE=${{ matrix.base }}
-            WANDB_BASE_URL=${{ secrets.TAHUNA_WANDB_BASE_URL }}
             PREBAKE_FRAMEWORK=${{ matrix.framework }}
             PREBAKE_VERSION=${{ matrix.version }}
             PREBAKE_PYTHON_VERSION=${{ matrix.python_version }}
