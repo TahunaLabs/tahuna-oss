@@ -32,23 +32,8 @@ RUN python3 -m pip install --no-cache-dir uv \
        "${TAHUNA_PREBAKED_VENV}/bin/python" -m uv pip install \
          --index-url "https://download.pytorch.org/whl/${CUDA_TAG}" \
          "torch==${FW_VER}" torchvision torchaudio triton \
-    && "${TAHUNA_PREBAKED_VENV}/bin/python" - <<'PY'
-import importlib.metadata as metadata
-import json
-import os
-
-packages = [pkg.strip() for pkg in os.environ.get("TAHUNA_PREBAKED_PROTECTED_PACKAGES", "").split(",") if pkg.strip()]
-versions = {}
-for pkg in packages:
-    try:
-        versions[pkg.lower()] = metadata.version(pkg)
-    except metadata.PackageNotFoundError:
-        continue
-
-target = os.environ.get("TAHUNA_PREBAKED_PROTECTED_VERSIONS_FILE", "/opt/tahuna/protected-package-versions.json")
-with open(target, "w", encoding="utf-8") as handle:
-    json.dump(versions, handle, sort_keys=True)
-PY
-RUN rm -rf /opt/tahuna/.uv-cache
+    && rm -rf /opt/tahuna/.uv-cache
+COPY runtime/images/prebake/detect-versions.py /tmp/detect-versions.py
+RUN "${TAHUNA_PREBAKED_VENV}/bin/python" /tmp/detect-versions.py && rm /tmp/detect-versions.py
 COPY --from=warden-builder /out/warden /usr/local/bin/warden
 RUN chmod +x /usr/local/bin/warden
