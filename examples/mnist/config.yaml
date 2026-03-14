@@ -3,12 +3,12 @@ entrypoint: train.py
 command:
   - python
   - train.py
-  - --epochs
-  - "3"
-  - --data-dir
-  - data/mnist
-  - --output-dir
-  - outputs
+train:
+  epochs: 1
+  batch_size: 64
+  learning_rate: 0.001
+  data_dir: data/mnist
+  output_dir: outputs
 data:
   path: data
 resources:
