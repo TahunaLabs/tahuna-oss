@@ -165,6 +165,8 @@ func ExtractDataBundle(rootDir string) (files int, totalBytes int64, archiveByte
 	}
 	defer gzReader.Close()
 	tarReader := tar.NewReader(gzReader)
+	createdParents := map[string]struct{}{}
+	copyBuffer := make([]byte, 128*1024)
 
 	for {
 		header, nextErr := tarReader.Next()
@@ -188,25 +190,52 @@ func ExtractDataBundle(rootDir string) (files int, totalBytes int64, archiveByte
 		target := filepath.Join(rootDir, rel)
 		parent := filepath.Dir(target)
 		if parent != "" {
-			if err := os.MkdirAll(parent, 0o755); err != nil {
-				return 0, 0, archiveBytes, fmt.Errorf("create data parent dir: %w", err)
+			if _, exists := createdParents[parent]; !exists {
+				if err := os.MkdirAll(parent, 0o755); err != nil {
+					return 0, 0, archiveBytes, fmt.Errorf("create data parent dir: %w", err)
+				}
+				createdParents[parent] = struct{}{}
 			}
 		}
 
-		blob, err := io.ReadAll(tarReader)
+		outFile, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
 		if err != nil {
-			return 0, 0, archiveBytes, fmt.Errorf("read data entry bytes: %w", err)
+			return 0, 0, archiveBytes, fmt.Errorf("open data entry %s: %w", rel, err)
 		}
-		if err := os.WriteFile(target, blob, 0o644); err != nil {
-			return 0, 0, archiveBytes, fmt.Errorf("write data entry %s: %w", rel, err)
+
+		written, err := io.CopyBuffer(outFile, tarReader, copyBuffer)
+		closeErr := outFile.Close()
+		if closeErr != nil {
+			return 0, 0, archiveBytes, fmt.Errorf("close data entry %s: %w", rel, closeErr)
 		}
+		if written != header.Size {
+			if err != nil {
+				return 0, 0, archiveBytes, fmt.Errorf(
+					"data entry size mismatch detail=path=%s expected=%d actual=%d copy_error=%v",
+					rel,
+					header.Size,
+					written,
+					err,
+				)
+			}
+			return 0, 0, archiveBytes, fmt.Errorf(
+				"data entry size mismatch detail=path=%s expected=%d actual=%d",
+				rel,
+				header.Size,
+				written,
+			)
+		}
+		if err != nil {
+			return 0, 0, archiveBytes, fmt.Errorf("stream data entry %s: %w", rel, err)
+		}
+
 		mode := header.FileInfo().Mode().Perm()
-		if mode > 0 {
+		if mode > 0 && mode != 0o644 {
 			_ = os.Chmod(target, mode)
 		}
 
 		files += 1
-		totalBytes += int64(len(blob))
+		totalBytes += written
 	}
 
 	_ = os.Remove(archivePath)

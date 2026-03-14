@@ -124,18 +124,51 @@ func (r *Runner) Run(ctx context.Context) error {
 		return r.failWithError(ctx, err)
 	}
 
+	bundleExtractStartedAt := time.Now()
 	bundleFiles, bundleBytes, bundleArchiveBytes, err := materialize.ExtractDataBundle(dataRoot)
+	bundleExtractDuration := time.Since(bundleExtractStartedAt)
 	if err != nil {
 		return r.failWithError(ctx, err)
 	}
 	if bundleFiles > 0 {
 		dataStats.FileCount = maxInt(0, dataStats.FileCount-1) + bundleFiles
 		dataStats.TotalBytes = maxInt64(0, dataStats.TotalBytes-bundleArchiveBytes) + bundleBytes
+		filesPerSec := perSecond(float64(bundleFiles), bundleExtractDuration)
+		bytesPerSec := perSecond(float64(bundleBytes), bundleExtractDuration)
 		_, _ = r.api.EmitLogs(ctx, []runtimeapi.LogLine{
 			{
-				Message: fmt.Sprintf("bootstrap: extracted data bundle files=%d", bundleFiles),
-				Level:   "info",
-				Source:  "bootstrap",
+				Message: fmt.Sprintf(
+					"bootstrap: extracted data bundle files=%d bytes=%s duration=%s throughput=%0.1f files/s %s/s",
+					bundleFiles,
+					formatBytes(bundleBytes),
+					bundleExtractDuration.Round(10*time.Millisecond).String(),
+					filesPerSec,
+					formatBytes(int64(bytesPerSec)),
+				),
+				Level:  "info",
+				Source: "bootstrap",
+			},
+		})
+		_, _ = r.api.EmitMetrics(ctx, []runtimeapi.MetricSample{
+			{
+				Name:   "bootstrap_data_extract_seconds",
+				Value:  bundleExtractDuration.Seconds(),
+				Source: "bootstrap",
+			},
+			{
+				Name:   "bootstrap_data_extract_files",
+				Value:  float64(bundleFiles),
+				Source: "bootstrap",
+			},
+			{
+				Name:   "bootstrap_data_extract_bytes",
+				Value:  float64(bundleBytes),
+				Source: "bootstrap",
+			},
+			{
+				Name:   "bootstrap_data_extract_files_per_sec",
+				Value:  filesPerSec,
+				Source: "bootstrap",
 			},
 		})
 	}
@@ -346,6 +379,14 @@ func formatBytes(bytes int64) string {
 		}
 	}
 	return fmt.Sprintf("%.1f%s", value, unit)
+}
+
+func perSecond(total float64, duration time.Duration) float64 {
+	seconds := duration.Seconds()
+	if seconds <= 0 {
+		return total
+	}
+	return total / seconds
 }
 
 func maxInt(a, b int) int {
