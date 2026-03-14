@@ -8,7 +8,7 @@
     "convex:codegen": "convex codegen",
     "convex:deploy": "convex deploy",
     "convex:dev": "convex dev",
-    "dev": "next dev",
+    "dev": "bun --bun next dev",
     "lint": "eslint . --max-warnings=0 && bunx tsc --noEmit --noUnusedLocals --noUnusedParameters",
     "start": "next start"
   },
