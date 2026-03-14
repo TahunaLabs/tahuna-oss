@@ -49,6 +49,6 @@ target = os.environ.get("TAHUNA_PREBAKED_PROTECTED_VERSIONS_FILE", "/opt/tahuna/
 with open(target, "w", encoding="utf-8") as handle:
     json.dump(versions, handle, sort_keys=True)
 PY
-    && rm -rf /opt/tahuna/.uv-cache
+RUN rm -rf /opt/tahuna/.uv-cache
 COPY --from=warden-builder /out/warden /usr/local/bin/warden
 RUN chmod +x /usr/local/bin/warden
