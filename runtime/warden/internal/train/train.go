@@ -3,12 +3,14 @@ package train
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"syscall"
@@ -23,10 +25,12 @@ type Hooks struct {
 }
 
 const (
-	tahunaWandbPath       = "/api/monitoring/wandb"
-	defaultPrebakedVenv   = "/opt/tahuna/venv"
-	protectedPackagesEnv  = "TAHUNA_PREBAKED_PROTECTED_PACKAGES"
-	prebakedVirtualEnvVar = "TAHUNA_PREBAKED_VENV"
+	tahunaWandbPath                  = "/api/monitoring/wandb"
+	defaultPrebakedVenv              = "/opt/tahuna/venv"
+	protectedPackagesEnv             = "TAHUNA_PREBAKED_PROTECTED_PACKAGES"
+	prebakedVirtualEnvVar            = "TAHUNA_PREBAKED_VENV"
+	prebakedProtectedVersionsFileEnv = "TAHUNA_PREBAKED_PROTECTED_VERSIONS_FILE"
+	defaultProtectedVersionsFilePath = "/opt/tahuna/protected-package-versions.json"
 )
 
 var defaultProtectedPackages = []string{
@@ -186,7 +190,7 @@ func resolveProtectedPackages(baseEnv []string) []string {
 	seen := map[string]struct{}{}
 	packages := make([]string, 0, len(defaultProtectedPackages))
 	for _, raw := range strings.Split(value, ",") {
-		name := strings.TrimSpace(raw)
+		name := strings.ToLower(strings.TrimSpace(raw))
 		if name == "" {
 			continue
 		}
@@ -200,6 +204,178 @@ func resolveProtectedPackages(baseEnv []string) []string {
 		return append([]string{}, defaultProtectedPackages...)
 	}
 	return packages
+}
+
+func parseTOMLQuotedValue(line, prefix string) (string, bool) {
+	trimmed := strings.TrimSpace(line)
+	if !strings.HasPrefix(trimmed, prefix) {
+		return "", false
+	}
+	raw := strings.TrimSpace(strings.TrimPrefix(trimmed, prefix))
+	if len(raw) < 2 || raw[0] != '"' {
+		return "", false
+	}
+	for i := 1; i < len(raw); i++ {
+		if raw[i] == '"' && raw[i-1] != '\\' {
+			return raw[1:i], true
+		}
+	}
+	return "", false
+}
+
+func readLockedPackageVersions(lockPath string, packageNames []string) (map[string]string, error) {
+	blob, err := os.ReadFile(lockPath)
+	if err != nil {
+		return nil, fmt.Errorf("read uv.lock: %w", err)
+	}
+
+	targets := map[string]struct{}{}
+	for _, pkg := range packageNames {
+		name := strings.ToLower(strings.TrimSpace(pkg))
+		if name == "" {
+			continue
+		}
+		targets[name] = struct{}{}
+	}
+
+	versions := map[string]string{}
+	currentName := ""
+	currentVersion := ""
+	inPackage := false
+
+	flush := func() {
+		if currentName == "" || currentVersion == "" {
+			return
+		}
+		if _, ok := targets[currentName]; ok {
+			versions[currentName] = currentVersion
+		}
+	}
+
+	for _, line := range strings.Split(string(blob), "\n") {
+		trimmed := strings.TrimSpace(line)
+		switch {
+		case trimmed == "[[package]]":
+			if inPackage {
+				flush()
+			}
+			inPackage = true
+			currentName = ""
+			currentVersion = ""
+		case strings.HasPrefix(trimmed, "[["):
+			if inPackage {
+				flush()
+			}
+			inPackage = false
+			currentName = ""
+			currentVersion = ""
+		case !inPackage:
+			continue
+		default:
+			if name, ok := parseTOMLQuotedValue(trimmed, "name = "); ok {
+				currentName = strings.ToLower(strings.TrimSpace(name))
+				continue
+			}
+			if version, ok := parseTOMLQuotedValue(trimmed, "version = "); ok {
+				currentVersion = strings.TrimSpace(version)
+				continue
+			}
+		}
+	}
+	if inPackage {
+		flush()
+	}
+
+	return versions, nil
+}
+
+func resolvePrebakedProtectedVersionsFilePath(baseEnv []string) string {
+	value, ok := lookupEnvValue(baseEnv, prebakedProtectedVersionsFileEnv)
+	if !ok {
+		return defaultProtectedVersionsFilePath
+	}
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return defaultProtectedVersionsFilePath
+	}
+	return trimmed
+}
+
+func readPrebakedProtectedVersions(path string) (map[string]string, error) {
+	blob, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read prebaked protected versions: %w", err)
+	}
+
+	decoded := map[string]string{}
+	if err := json.Unmarshal(blob, &decoded); err != nil {
+		return nil, fmt.Errorf("parse prebaked protected versions: %w", err)
+	}
+
+	versions := map[string]string{}
+	for name, version := range decoded {
+		pkg := strings.ToLower(strings.TrimSpace(name))
+		val := strings.TrimSpace(version)
+		if pkg == "" || val == "" {
+			continue
+		}
+		versions[pkg] = val
+	}
+	return versions, nil
+}
+
+func evaluateProtectedPackagesForLock(baseEnv []string, lockPath string, protectedPackages []string) ([]string, string) {
+	lockVersions, err := readLockedPackageVersions(lockPath, protectedPackages)
+	if err != nil {
+		return nil, fmt.Sprintf(
+			"bootstrap: disabling protected package skip detail=failed to parse uv.lock error=%v",
+			err,
+		)
+	}
+	if len(lockVersions) == 0 {
+		return protectedPackages, ""
+	}
+
+	versionsPath := resolvePrebakedProtectedVersionsFilePath(baseEnv)
+	prebakedVersions, err := readPrebakedProtectedVersions(versionsPath)
+	if err != nil {
+		return nil, fmt.Sprintf(
+			"bootstrap: disabling protected package skip detail=failed to read prebaked versions file=%s error=%v",
+			versionsPath,
+			err,
+		)
+	}
+
+	mismatches := make([]string, 0, len(protectedPackages))
+	for _, pkg := range protectedPackages {
+		requestedVersion, requested := lockVersions[pkg]
+		if !requested {
+			continue
+		}
+		prebakedVersion, prebaked := prebakedVersions[pkg]
+		if !prebaked {
+			mismatches = append(
+				mismatches,
+				fmt.Sprintf("%s lock=%s prebaked=missing", pkg, requestedVersion),
+			)
+			continue
+		}
+		if requestedVersion != prebakedVersion {
+			mismatches = append(
+				mismatches,
+				fmt.Sprintf("%s lock=%s prebaked=%s", pkg, requestedVersion, prebakedVersion),
+			)
+		}
+	}
+	if len(mismatches) == 0 {
+		return protectedPackages, ""
+	}
+
+	sort.Strings(mismatches)
+	return nil, fmt.Sprintf(
+		"bootstrap: disabling protected package skip detail=version mismatch %s",
+		strings.Join(mismatches, "; "),
+	)
 }
 
 func buildSyncCommand(hasLock, useActiveVirtualEnv bool) []string {
@@ -243,6 +419,18 @@ func InstallDependencies(ctx context.Context, workspaceRoot string, hooks Hooks)
 		useActiveVirtualEnv = true
 		installEnv = buildVirtualEnvEnvironment(installEnv, venvPath)
 		protectedPackages = resolveProtectedPackages(installEnv)
+		if hasLock && len(protectedPackages) > 0 {
+			lockPath := filepath.Join(workspaceRoot, "uv.lock")
+			selectedPackages, detail := evaluateProtectedPackagesForLock(
+				installEnv,
+				lockPath,
+				protectedPackages,
+			)
+			protectedPackages = selectedPackages
+			if detail != "" {
+				emitLog(hooks, "info", "bootstrap", detail)
+			}
+		}
 	}
 
 	fullSyncCommand := buildSyncCommand(hasLock, useActiveVirtualEnv)

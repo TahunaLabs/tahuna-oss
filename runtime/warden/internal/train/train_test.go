@@ -220,6 +220,139 @@ func TestInstallDependenciesSelectiveSyncSuccess(t *testing.T) {
 	}
 }
 
+func TestInstallDependenciesKeepsProtectionWhenLockedVersionsMatchPrebaked(t *testing.T) {
+	root := t.TempDir()
+	lockContent := `version = 1
+
+[[package]]
+name = "torch"
+version = "2.4.0"
+
+[[package]]
+name = "torchvision"
+version = "0.19.0"
+
+[[package]]
+name = "torchaudio"
+version = "2.4.0"
+
+[[package]]
+name = "triton"
+version = "3.0.0"
+`
+	if err := os.WriteFile(filepath.Join(root, "pyproject.toml"), []byte("[project]\nname='x'\nversion='0.1.0'\n"), 0o644); err != nil {
+		t.Fatalf("write pyproject: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "uv.lock"), []byte(lockContent), 0o644); err != nil {
+		t.Fatalf("write uv.lock: %v", err)
+	}
+
+	versionsPath := filepath.Join(root, "prebaked_versions.json")
+	versionsJSON := `{"torch":"2.4.0","torchvision":"0.19.0","torchaudio":"2.4.0","triton":"3.0.0"}`
+	if err := os.WriteFile(versionsPath, []byte(versionsJSON), 0o644); err != nil {
+		t.Fatalf("write prebaked versions: %v", err)
+	}
+
+	venvPath := filepath.Join(root, "venv")
+	if err := os.MkdirAll(venvPath, 0o755); err != nil {
+		t.Fatalf("mkdir venv: %v", err)
+	}
+	t.Setenv(prebakedVirtualEnvVar, venvPath)
+	t.Setenv(protectedPackagesEnv, "torch,torchvision,torchaudio,triton")
+	t.Setenv(prebakedProtectedVersionsFileEnv, versionsPath)
+
+	previousEnsure := ensureUVCommand
+	previousRunner := runCommand
+	defer func() {
+		ensureUVCommand = previousEnsure
+		runCommand = previousRunner
+	}()
+
+	ensureUVCommand = func(context.Context, string, Hooks) error { return nil }
+
+	var command []string
+	runCommand = func(
+		_ context.Context,
+		_ string,
+		cmd []string,
+		_ Hooks,
+		_ bool,
+		_ []string,
+	) (int, error) {
+		command = append([]string{}, cmd...)
+		return 0, nil
+	}
+
+	if err := InstallDependencies(context.Background(), root, Hooks{}); err != nil {
+		t.Fatalf("InstallDependencies returned error: %v", err)
+	}
+
+	joined := strings.Join(command, " ")
+	if !strings.Contains(joined, "--no-install-package torch") {
+		t.Fatalf("expected selective sync for matching lock versions, got %q", joined)
+	}
+}
+
+func TestInstallDependenciesDisablesProtectionWhenLockedVersionsDiffer(t *testing.T) {
+	root := t.TempDir()
+	lockContent := `version = 1
+
+[[package]]
+name = "torch"
+version = "2.5.0"
+`
+	if err := os.WriteFile(filepath.Join(root, "pyproject.toml"), []byte("[project]\nname='x'\nversion='0.1.0'\n"), 0o644); err != nil {
+		t.Fatalf("write pyproject: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "uv.lock"), []byte(lockContent), 0o644); err != nil {
+		t.Fatalf("write uv.lock: %v", err)
+	}
+
+	versionsPath := filepath.Join(root, "prebaked_versions.json")
+	if err := os.WriteFile(versionsPath, []byte(`{"torch":"2.4.0","torchvision":"0.19.0"}`), 0o644); err != nil {
+		t.Fatalf("write prebaked versions: %v", err)
+	}
+
+	venvPath := filepath.Join(root, "venv")
+	if err := os.MkdirAll(venvPath, 0o755); err != nil {
+		t.Fatalf("mkdir venv: %v", err)
+	}
+	t.Setenv(prebakedVirtualEnvVar, venvPath)
+	t.Setenv(protectedPackagesEnv, "torch,torchvision,torchaudio,triton")
+	t.Setenv(prebakedProtectedVersionsFileEnv, versionsPath)
+
+	previousEnsure := ensureUVCommand
+	previousRunner := runCommand
+	defer func() {
+		ensureUVCommand = previousEnsure
+		runCommand = previousRunner
+	}()
+
+	ensureUVCommand = func(context.Context, string, Hooks) error { return nil }
+
+	var command []string
+	runCommand = func(
+		_ context.Context,
+		_ string,
+		cmd []string,
+		_ Hooks,
+		_ bool,
+		_ []string,
+	) (int, error) {
+		command = append([]string{}, cmd...)
+		return 0, nil
+	}
+
+	if err := InstallDependencies(context.Background(), root, Hooks{}); err != nil {
+		t.Fatalf("InstallDependencies returned error: %v", err)
+	}
+
+	joined := strings.Join(command, " ")
+	if strings.Contains(joined, "--no-install-package") {
+		t.Fatalf("expected full sync without protected skip on version mismatch, got %q", joined)
+	}
+}
+
 func TestInstallDependenciesFallsBackToFullSync(t *testing.T) {
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, "pyproject.toml"), []byte("[project]\nname='x'\nversion='0.1.0'\n"), 0o644); err != nil {

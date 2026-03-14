@@ -21,9 +21,27 @@ ENV TAHUNA_PREBAKE_FRAMEWORK=${PREBAKE_FRAMEWORK}
 ENV TAHUNA_PREBAKE_VERSION=${PREBAKE_VERSION}
 ENV TAHUNA_PREBAKED_VENV=/opt/tahuna/venv
 ENV TAHUNA_PREBAKED_PROTECTED_PACKAGES=${PREBAKE_PROTECTED_PACKAGES}
+ENV TAHUNA_PREBAKED_PROTECTED_VERSIONS_FILE=/opt/tahuna/protected-package-versions.json
 RUN python3 -m pip install --no-cache-dir uv \
     && mkdir -p /opt/tahuna \
     && uv venv --system-site-packages "${TAHUNA_PREBAKED_VENV}" \
-    && printf '%s\n' "${TAHUNA_PREBAKED_PROTECTED_PACKAGES}" > /opt/tahuna/protected-packages.csv
+    && printf '%s\n' "${TAHUNA_PREBAKED_PROTECTED_PACKAGES}" > /opt/tahuna/protected-packages.csv \
+    && "${TAHUNA_PREBAKED_VENV}/bin/python" - <<'PY'
+import importlib.metadata as metadata
+import json
+import os
+
+packages = [pkg.strip() for pkg in os.environ.get("TAHUNA_PREBAKED_PROTECTED_PACKAGES", "").split(",") if pkg.strip()]
+versions = {}
+for pkg in packages:
+    try:
+        versions[pkg.lower()] = metadata.version(pkg)
+    except metadata.PackageNotFoundError:
+        continue
+
+target = os.environ.get("TAHUNA_PREBAKED_PROTECTED_VERSIONS_FILE", "/opt/tahuna/protected-package-versions.json")
+with open(target, "w", encoding="utf-8") as handle:
+    json.dump(versions, handle, sort_keys=True)
+PY
 COPY --from=warden-builder /out/warden /usr/local/bin/warden
 RUN chmod +x /usr/local/bin/warden
