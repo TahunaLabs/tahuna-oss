@@ -6,6 +6,10 @@ on:
     # TODO: switch this back to `main` once MVP is complete.
     branches:
       - develop
+    paths:
+      - runtime/images/**
+      - web/convex/runtime-images.json
+      - .github/workflows/build-templates.yml
   workflow_dispatch:
 
 jobs:
