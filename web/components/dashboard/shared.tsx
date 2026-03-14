@@ -128,7 +128,8 @@ export type MetricChartSeries = {
   category: "model" | "runtime" | "system"
   latestValue: number
   pointCount: number
-  points: Array<{ x: number; label: string; value: number }>
+  xAxis: "step" | "time"
+  points: Array<{ x: number; label: string; value: number; step: number | null }>
 }
 
 const SYSTEM_METRIC_PREFIXES = ["bootstrap_", "artifacts_"]
@@ -164,7 +165,8 @@ export function metricSeries(logs: RunLogsDetail | undefined) {
       category: MetricChartSeries["category"]
       latestValue: number
       latestTimestamp: number
-      points: Array<{ x: number; label: string; value: number }>
+      stepCount: number
+      points: Array<{ x: number; label: string; value: number; step: number | null; timestamp: number }>
     }
   >()
   for (const sample of logs.recent_metrics) {
@@ -175,12 +177,18 @@ export function metricSeries(logs: RunLogsDetail | undefined) {
       category: metricCategory(sample.name, sample.source),
       latestValue: sample.value,
       latestTimestamp: sample.timestamp,
+      stepCount: 0,
       points: [],
     }
+    if (sample.step !== null) {
+      current.stepCount += 1
+    }
     current.points.push({
-      x: sample.timestamp,
-      label: new Date(sample.timestamp).toLocaleTimeString(),
+      x: sample.step ?? sample.timestamp,
+      label: sample.step !== null ? `Step ${sample.step}` : new Date(sample.timestamp).toLocaleTimeString(),
       value: sample.value,
+      step: sample.step,
+      timestamp: sample.timestamp,
     })
     if (sample.timestamp >= current.latestTimestamp) {
       current.latestTimestamp = sample.timestamp
@@ -195,8 +203,16 @@ export function metricSeries(logs: RunLogsDetail | undefined) {
       category: entry.category,
       latestValue: entry.latestValue,
       pointCount: entry.points.length,
+      xAxis: entry.stepCount > 0 ? "step" : "time",
       latestTimestamp: entry.latestTimestamp,
-      points: entry.points.sort((a, b) => a.x - b.x),
+      points: entry.points
+        .sort((a, b) => {
+          if (entry.stepCount > 0) {
+            return a.x - b.x || a.timestamp - b.timestamp
+          }
+          return a.timestamp - b.timestamp
+        })
+        .map(({ timestamp: _timestamp, ...point }) => point),
     }))
     .sort((a, b) => {
       const categoryOrder = metricCategoryPriority(a.category) - metricCategoryPriority(b.category)
