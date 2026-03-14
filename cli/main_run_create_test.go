@@ -24,6 +24,9 @@ func TestRunCreateDetached_WithNamePayload(t *testing.T) {
 	var runCreatePayload map[string]any
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if serveCatalogAndEnvironment(w, r) {
+			return
+		}
 		w.Header().Set("Content-Type", "application/json")
 
 		switch {

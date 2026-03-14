@@ -70,21 +70,22 @@ func initProject(target string) error {
 		return fmt.Errorf("failed to create output directory: %w", err)
 	}
 
-	envID, selectedPythonVersion, err := guidedSetup(envName, frameworkKey, projectCfg.PythonVersion)
+	setup, err := guidedSetup(envName, frameworkKey, projectCfg.PythonVersion)
 	if err != nil {
 		return err
 	}
-	projectCfg.PythonVersion = selectedPythonVersion
+	projectCfg.PythonVersion = setup.pythonVersion
+	projectCfg.FrameworkVersion = setup.frameworkVersion
 	if err := saveProjectConfig(projectCfg); err != nil {
 		return fmt.Errorf("failed to save project config: %w", err)
 	}
 
-	if saveErr := saveLinkedEnvironmentID(envID); saveErr != nil {
-		_, cleanupErr := doJSON(http.MethodDelete, "/environments/"+envID, nil)
+	if saveErr := saveLinkedEnvironmentID(setup.environmentID); saveErr != nil {
+		_, cleanupErr := doJSON(http.MethodDelete, "/environments/"+setup.environmentID, nil)
 		if cleanupErr != nil {
-			return fmt.Errorf("failed to save environment link: %w (also failed to roll back environment %s: %v)", saveErr, envID, cleanupErr)
+			return fmt.Errorf("failed to save environment link: %w (also failed to roll back environment %s: %v)", saveErr, setup.environmentID, cleanupErr)
 		}
-		return fmt.Errorf("failed to save environment link: %w (rolled back environment %s)", saveErr, envID)
+		return fmt.Errorf("failed to save environment link: %w (rolled back environment %s)", saveErr, setup.environmentID)
 	}
 	return nil
 }
@@ -121,10 +122,16 @@ func prepareProjectPath(target string) (string, bool, error) {
 	return projectPath, true, nil
 }
 
-func guidedSetup(environmentName, frameworkHint, pythonVersionHint string) (string, string, error) {
+type guidedSetupResult struct {
+	environmentID    string
+	frameworkVersion string
+	pythonVersion    string
+}
+
+func guidedSetup(environmentName, frameworkHint, pythonVersionHint string) (guidedSetupResult, error) {
 	gpus, versionsByFramework, pythonsByFrameworkVersion, err := fetchCatalog()
 	if err != nil {
-		return "", "", err
+		return guidedSetupResult{}, err
 	}
 
 	frameworks := sortedKeys(versionsByFramework)
@@ -150,7 +157,7 @@ func guidedSetup(environmentName, frameworkHint, pythonVersionHint string) (stri
 	gpuCount := promptInt("GPU count", 1)
 	volumeGB := promptInt("Volume (GB)", 80)
 	if err := validateGPUSelection(gpuType, gpuCount); err != nil {
-		return "", "", err
+		return guidedSetupResult{}, err
 	}
 
 	envPayload := map[string]any{
@@ -164,12 +171,16 @@ func guidedSetup(environmentName, frameworkHint, pythonVersionHint string) (stri
 	}
 	env, err := doJSON(http.MethodPost, "/environments", envPayload)
 	if err != nil {
-		return "", "", err
+		return guidedSetupResult{}, err
 	}
 
 	envID := asString(env["environment_id"])
 	fmt.Printf("\n%sEnvironment created%s\n", cAmpWord, cReset)
-	return envID, pythonVersion, nil
+	return guidedSetupResult{
+		environmentID:    envID,
+		frameworkVersion: version,
+		pythonVersion:    pythonVersion,
+	}, nil
 }
 
 func handleEnvironment(args []string) {
@@ -1052,7 +1063,7 @@ func preRunSync(environmentID string) error {
 	if err := runSyncWithStatus(environmentID, syncScope{code: true, data: true}); err != nil {
 		return err
 	}
-	if err := validateProjectConfigBindings(); err != nil {
+	if _, err := validateProjectConfigBindings(environmentID); err != nil {
 		return fmt.Errorf("project preflight validation failed: %w", err)
 	}
 	return nil

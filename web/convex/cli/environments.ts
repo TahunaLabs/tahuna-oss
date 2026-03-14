@@ -189,9 +189,16 @@ export const updateEnvironmentSpecs = httpAction(async (ctx, request) => {
   const gpuType = typeof body?.gpu_type === "string" ? body.gpu_type.trim() : undefined;
   const gpuCount = typeof body?.gpu_count === "number" ? body.gpu_count : undefined;
   const volumeGb = typeof body?.volume_gb === "number" ? body.volume_gb : undefined;
-  if (typeof gpuType === "undefined" && typeof gpuCount === "undefined" && typeof volumeGb === "undefined") {
+  const pythonVersion = typeof body?.python_version === "string" ? body.python_version.trim() : undefined;
+  const framework = typeof body?.framework === "string" ? body.framework.trim() : undefined;
+  const frameworkVersion = typeof body?.framework_version === "string" ? body.framework_version.trim() : undefined;
+
+  const hasHardwareUpdate = typeof gpuType !== "undefined" || typeof gpuCount !== "undefined" || typeof volumeGb !== "undefined";
+  const hasRuntimeUpdate = typeof pythonVersion !== "undefined" || typeof framework !== "undefined" || typeof frameworkVersion !== "undefined";
+
+  if (!hasHardwareUpdate && !hasRuntimeUpdate) {
     return new Response(
-      JSON.stringify({ detail: "at least one of gpu_type, gpu_count, or volume_gb is required" }),
+      JSON.stringify({ detail: "at least one update field is required" }),
       {
         status: 400,
         headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
@@ -217,6 +224,9 @@ export const updateEnvironmentSpecs = httpAction(async (ctx, request) => {
       gpu_type: gpuType,
       gpu_count: gpuCount,
       volume_gb: volumeGb,
+      python_version: pythonVersion,
+      framework: framework,
+      version: frameworkVersion,
     });
     return new Response(JSON.stringify(data), {
       status: 200,

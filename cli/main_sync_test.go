@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -10,6 +11,44 @@ import (
 	"sync"
 	"testing"
 )
+
+// serveCatalogAndEnvironment handles /api/catalog and /api/environments/env-test
+// requests used by runtime validation. Returns true if the request was handled.
+func serveCatalogAndEnvironment(w http.ResponseWriter, r *http.Request) bool {
+	if r.Method == http.MethodGet && r.URL.Path == "/api/catalog" {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"gpus": []map[string]any{
+				{"id": "NVIDIA A100 80GB", "display_name": "NVIDIA A100 80GB", "max_gpu_count": 8, "memory_gb": 80},
+				{"id": "nvidia-a100", "display_name": "nvidia-a100", "max_gpu_count": 8, "memory_gb": 80},
+			},
+			"images": map[string]any{
+				"pt": map[string]any{
+					"2.8.0-cu128": map[string]any{
+						"3.11": "docker.io/test/tahuna:pt-2.8.0-cu128-py3.11",
+						"3.12": "docker.io/test/tahuna:pt-2.8.0-cu128-py3.12",
+					},
+				},
+			},
+		})
+		return true
+	}
+	if r.Method == http.MethodGet && r.URL.Path == "/api/environments/env-test" {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"environment_id": "env-test",
+			"name":           "test",
+			"gpu_type":       "NVIDIA A100 80GB",
+			"gpu_count":      1,
+			"volume_gb":      80,
+			"framework":      "pt",
+			"version":        "2.8.0-cu128",
+			"python_version": "3.11",
+		})
+		return true
+	}
+	return false
+}
 
 type syncBackendMock struct {
 	mu sync.Mutex
@@ -217,6 +256,7 @@ func setupTestProject(t *testing.T, withData bool) string {
 		PythonProjectFile: "pyproject.toml",
 		UVLockFile:        "uv.lock",
 		Framework:         "pt",
+		FrameworkVersion:  "2.8.0-cu128",
 		PythonVersion:     "3.11",
 	}); err != nil {
 		t.Fatalf("failed to save project config: %v", err)

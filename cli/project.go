@@ -46,6 +46,7 @@ type projectConfig struct {
 	PythonProjectFile string
 	UVLockFile        string
 	Framework         string
+	FrameworkVersion  string
 	PythonVersion     string
 }
 
@@ -237,21 +238,27 @@ func extractPythonVersionFromText(text string) string {
 			continue
 		}
 		value := strings.TrimSpace(strings.Trim(line[idx+1:], `"'`))
-		for i := 0; i+3 <= len(value); i++ {
+		for i := 0; i < len(value); i++ {
 			ch := value[i]
 			if ch < '0' || ch > '9' {
 				continue
 			}
+			// Try to match major.minor where minor can be multi-digit (e.g. 3.11).
 			segment := value[i:]
-			if len(segment) < 3 {
+			dotIdx := strings.Index(segment, ".")
+			if dotIdx < 1 {
 				continue
 			}
-			if segment[1] == '.' && segment[0] >= '0' && segment[0] <= '9' && segment[2] >= '0' && segment[2] <= '9' {
-				return segment[:3]
+			major := segment[:dotIdx]
+			rest := segment[dotIdx+1:]
+			minorLen := 0
+			for minorLen < len(rest) && rest[minorLen] >= '0' && rest[minorLen] <= '9' {
+				minorLen++
 			}
-			if len(segment) >= 4 && segment[1] >= '0' && segment[1] <= '9' && segment[2] == '.' && segment[3] >= '0' && segment[3] <= '9' {
-				return segment[:4]
+			if minorLen == 0 {
+				continue
 			}
+			return major + "." + rest[:minorLen]
 		}
 	}
 	return ""
@@ -276,7 +283,7 @@ func saveProjectConfig(cfg projectConfig) error {
 		return err
 	}
 	body := fmt.Sprintf(
-		"entrypoint: %q\ndata_dir: %q\noutput_dir: %q\nconfig_file: %q\npython_project_file: %q\nuv_lock_file: %q\nframework: %q\npython_version: %q\n",
+		"entrypoint: %q\ndata_dir: %q\noutput_dir: %q\nconfig_file: %q\npython_project_file: %q\nuv_lock_file: %q\nframework: %q\nframework_version: %q\npython_version: %q\n",
 		cfg.TrainEntrypoint,
 		cfg.DataDir,
 		cfg.OutputDir,
@@ -284,6 +291,7 @@ func saveProjectConfig(cfg projectConfig) error {
 		cfg.PythonProjectFile,
 		cfg.UVLockFile,
 		cfg.Framework,
+		cfg.FrameworkVersion,
 		cfg.PythonVersion,
 	)
 	return os.WriteFile(projectConfigFilePath(), []byte(body), 0o600)
@@ -354,6 +362,10 @@ func loadProjectConfig() (projectConfig, error) {
 			if value != "" {
 				cfg.Framework = value
 			}
+		case "framework_version":
+			if value != "" {
+				cfg.FrameworkVersion = value
+			}
 		case "python_version":
 			if value != "" {
 				cfg.PythonVersion = value
@@ -366,47 +378,72 @@ func loadProjectConfig() (projectConfig, error) {
 	return cfg, nil
 }
 
-func validateProjectConfigBindings() error {
+func validateProjectConfigBindings(environmentID string) (projectConfig, error) {
 	cfg, err := loadProjectConfig()
 	if err != nil {
-		return err
+		return cfg, err
 	}
 	path := projectConfigFilePath()
 	values, err := loadRawProjectConfigValues(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return fmt.Errorf("missing %s; run `tahuna init .` to restore project bindings", path)
+			return cfg, fmt.Errorf("missing %s; run `tahuna init .` to restore project bindings", path)
 		}
-		return err
+		return cfg, err
 	}
 	if err := validateRequiredProjectConfigValues(path, values); err != nil {
-		return err
+		return cfg, err
 	}
 	if err := validateProjectConfigRuntimeValues(path, cfg); err != nil {
-		return err
+		return cfg, err
 	}
 	if err := validateProjectConfigPathBinding("entrypoint", cfg.TrainEntrypoint, false); err != nil {
-		return err
+		return cfg, err
 	}
 	if err := validateProjectConfigPathBinding("data_dir", cfg.DataDir, true); err != nil {
-		return err
+		return cfg, err
 	}
 	if err := validateProjectConfigPathBinding("output_dir", cfg.OutputDir, true); err != nil {
-		return err
+		return cfg, err
 	}
 	if err := validateProjectConfigPathBinding("config_file", cfg.ConfigYAMLPath, false); err != nil {
-		return err
+		return cfg, err
 	}
 	if err := validateProjectConfigPathBinding("python_project_file", cfg.PythonProjectFile, false); err != nil {
-		return err
+		return cfg, err
 	}
 	if filepath.Base(cfg.PythonProjectFile) != "pyproject.toml" {
-		return fmt.Errorf("invalid python_project_file in %s: expected pyproject.toml filename", path)
+		return cfg, fmt.Errorf("invalid python_project_file in %s: expected pyproject.toml filename", path)
 	}
 	if err := validateProjectConfigPathBinding("uv_lock_file", cfg.UVLockFile, false); err != nil {
-		return err
+		return cfg, err
 	}
-	return nil
+
+	// Validate framework+version+python combo against the catalog.
+	resolved, err := validateAndResolveRuntimeConfig(cfg, environmentID)
+	if err != nil {
+		return cfg, err
+	}
+
+	// If the user changed any runtime values, persist and update the environment.
+	if resolved.Framework != cfg.Framework || resolved.FrameworkVersion != cfg.FrameworkVersion || resolved.PythonVersion != cfg.PythonVersion {
+		if saveErr := saveProjectConfig(resolved); saveErr != nil {
+			return resolved, fmt.Errorf("failed to save updated project config: %w", saveErr)
+		}
+		if environmentID != "" {
+			payload := map[string]any{
+				"python_version":    resolved.PythonVersion,
+				"framework":         resolved.Framework,
+				"framework_version": resolved.FrameworkVersion,
+			}
+			if _, updateErr := doJSON(http.MethodPatch, "/environments/"+environmentID, payload); updateErr != nil {
+				return resolved, fmt.Errorf("failed to update environment runtime config: %w", updateErr)
+			}
+			fmt.Printf("%s✓%s Environment updated: %s %s, Python %s\n", cAmpGreen, cReset, resolved.Framework, resolved.FrameworkVersion, resolved.PythonVersion)
+		}
+	}
+
+	return resolved, nil
 }
 
 func loadRawProjectConfigValues(path string) (map[string]string, error) {
@@ -466,8 +503,6 @@ func validateRequiredProjectConfigValues(path string, values map[string]string) 
 	return nil
 }
 
-var allowedPythonVersions = []string{"3.11", "3.12", "3.13", "3.14"}
-
 func validateProjectConfigRuntimeValues(path string, cfg projectConfig) error {
 	framework := strings.ToLower(strings.TrimSpace(cfg.Framework))
 	switch framework {
@@ -480,12 +515,92 @@ func validateProjectConfigRuntimeValues(path string, cfg projectConfig) error {
 	if !isSimplePythonVersion(version) {
 		return fmt.Errorf("invalid python_version %q in %s: expected major.minor (for example 3.11)", cfg.PythonVersion, path)
 	}
-	for _, allowed := range allowedPythonVersions {
-		if version == allowed {
-			return nil
+	return nil
+}
+
+// validateAndResolveRuntimeConfig checks whether the project's framework, framework
+// version, and python version form a supported combination. When the combination is
+// invalid and the session is interactive, the user is prompted to pick a valid one.
+// Returns the (possibly updated) project config.
+func validateAndResolveRuntimeConfig(cfg projectConfig, environmentID string) (projectConfig, error) {
+	_, versionsByFramework, pythonsByFrameworkVersion, err := fetchCatalog()
+	if err != nil {
+		// If the catalog is unreachable, skip combo validation. The backend will
+		// still reject unsupported combinations at environment/run creation time.
+		return cfg, nil
+	}
+
+	framework := strings.TrimSpace(cfg.Framework)
+	frameworkVersion := strings.TrimSpace(cfg.FrameworkVersion)
+	pythonVersion := strings.TrimSpace(cfg.PythonVersion)
+
+	// If framework_version is missing locally (older project), fetch from environment.
+	if frameworkVersion == "" && environmentID != "" {
+		env, envErr := doJSON(http.MethodGet, "/environments/"+environmentID, nil)
+		if envErr == nil {
+			frameworkVersion = strings.TrimSpace(asString(env["version"]))
+			cfg.FrameworkVersion = frameworkVersion
 		}
 	}
-	return fmt.Errorf("unsupported python_version %q in %s: supported versions are %s", cfg.PythonVersion, path, strings.Join(allowedPythonVersions, ", "))
+
+	// Validate framework exists in catalog.
+	versions, frameworkOK := versionsByFramework[framework]
+	if !frameworkOK {
+		if !supportsInteractivePrompts() {
+			return cfg, fmt.Errorf("unsupported framework %q; supported: %s", framework, strings.Join(sortedKeys(versionsByFramework), ", "))
+		}
+		fmt.Printf("\n%sUnsupported framework %q.%s\n", cAmpGold, framework, cReset)
+		framework = promptChoice("Select framework", sortedKeys(versionsByFramework), 0)
+		cfg.Framework = framework
+		versions = versionsByFramework[framework]
+		frameworkVersion = ""
+		pythonVersion = ""
+	}
+
+	// Validate framework version exists in catalog.
+	pythons := pythonsByFrameworkVersion[framework][frameworkVersion]
+	if len(pythons) == 0 {
+		if !supportsInteractivePrompts() {
+			return cfg, fmt.Errorf("unsupported framework version %q for %s; supported: %s", frameworkVersion, framework, strings.Join(versions, ", "))
+		}
+		if frameworkVersion != "" {
+			fmt.Printf("\n%sFramework version %q is not available for %s.%s\n", cAmpGold, frameworkVersion, framework, cReset)
+		} else {
+			fmt.Printf("\n%sNo framework version configured for %s.%s\n", cAmpGold, framework, cReset)
+		}
+		frameworkVersion = promptChoice("Select framework version", versions, 0)
+		cfg.FrameworkVersion = frameworkVersion
+		pythons = pythonsByFrameworkVersion[framework][frameworkVersion]
+		pythonVersion = ""
+	}
+
+	// Validate python version is supported for this framework+version combo.
+	if pythonVersion != "" {
+		found := false
+		for _, py := range pythons {
+			if py == pythonVersion {
+				found = true
+				break
+			}
+		}
+		if !found {
+			if !supportsInteractivePrompts() {
+				return cfg, fmt.Errorf("unsupported python version %q for %s %s; supported: %s", pythonVersion, framework, frameworkVersion, strings.Join(pythons, ", "))
+			}
+			fmt.Printf("\n%sPython %s is not supported for %s %s.%s\n", cAmpGold, pythonVersion, framework, frameworkVersion, cReset)
+			fmt.Printf("Supported Python versions: %s\n", strings.Join(pythons, ", "))
+			pythonVersion = promptChoice("Select Python version", pythons, 0)
+			cfg.PythonVersion = pythonVersion
+		}
+	} else {
+		if !supportsInteractivePrompts() {
+			return cfg, fmt.Errorf("python version is required; supported for %s %s: %s", framework, frameworkVersion, strings.Join(pythons, ", "))
+		}
+		pythonVersion = promptChoice("Select Python version", pythons, 0)
+		cfg.PythonVersion = pythonVersion
+	}
+
+	return cfg, nil
 }
 
 func validateProjectConfigPathBinding(field, value string, wantDir bool) error {

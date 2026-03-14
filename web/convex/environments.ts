@@ -510,21 +510,45 @@ async function updateEnvironmentSpecsForUserId(
     gpu_type?: string;
     gpu_count?: number;
     volume_gb?: number;
+    python_version?: string;
+    framework?: string;
+    version?: string;
   },
 ) {
   const env = await getOwnedEnvironment(ctx, args.userId, args.environmentId);
   const nextGpuType = typeof args.gpu_type === "string" && args.gpu_type.trim() !== "" ? args.gpu_type.trim() : env.gpuType;
   const nextGpuCount = typeof args.gpu_count === "number" ? args.gpu_count : env.gpuCount;
   const nextVolumeGb = typeof args.volume_gb === "number" ? args.volume_gb : env.volumeGb;
+  const nextPythonVersion = typeof args.python_version === "string" && args.python_version.trim() !== "" ? args.python_version.trim() : (env.pythonVersion || PYTHON_CONFIG.defaultVersion);
+  const nextFramework = typeof args.framework === "string" && args.framework.trim() !== "" ? args.framework.trim() : env.framework;
+  const nextVersion = typeof args.version === "string" && args.version.trim() !== "" ? args.version.trim() : env.version;
 
   if (nextGpuCount < 1 || nextVolumeGb < 1) {
     throw new ConvexError("invalid environment payload");
+  }
+
+  // If any runtime field changed, validate the full combination against the image catalog.
+  const runtimeChanged =
+    nextFramework !== env.framework ||
+    nextVersion !== env.version ||
+    nextPythonVersion !== (env.pythonVersion || PYTHON_CONFIG.defaultVersion);
+  if (runtimeChanged) {
+    validateEnvironmentPayload({
+      gpu_count: nextGpuCount,
+      volume_gb: nextVolumeGb,
+      framework: nextFramework,
+      version: nextVersion,
+      python_version: nextPythonVersion,
+    });
   }
 
   await ctx.db.patch("environments", args.environmentId, {
     gpuType: nextGpuType,
     gpuCount: nextGpuCount,
     volumeGb: nextVolumeGb,
+    framework: nextFramework,
+    version: nextVersion,
+    pythonVersion: nextPythonVersion,
   });
 
   const updated = await ctx.db.get("environments", args.environmentId);
@@ -841,11 +865,21 @@ export const internalUpdateSpecs = internalMutation({
     gpu_type: v.optional(v.string()),
     gpu_count: v.optional(v.number()),
     volume_gb: v.optional(v.number()),
+    python_version: v.optional(v.string()),
+    framework: v.optional(v.string()),
+    version: v.optional(v.string()),
   },
   returns: environmentResponseValidator,
   handler: async (ctx, args) => {
-    if (typeof args.gpu_type === "undefined" && typeof args.gpu_count === "undefined" && typeof args.volume_gb === "undefined") {
-      throw new ConvexError("at least one of gpu_type, gpu_count, or volume_gb is required");
+    const hasUpdate =
+      typeof args.gpu_type !== "undefined" ||
+      typeof args.gpu_count !== "undefined" ||
+      typeof args.volume_gb !== "undefined" ||
+      typeof args.python_version !== "undefined" ||
+      typeof args.framework !== "undefined" ||
+      typeof args.version !== "undefined";
+    if (!hasUpdate) {
+      throw new ConvexError("at least one update field is required");
     }
     return updateEnvironmentSpecsForUserId(ctx, args);
   },
