@@ -1,7 +1,7 @@
 "use client"
 
-import { Server, Plus, Filter, Settings2, LayoutGrid, Play, Trash2, ExternalLink, Copy, Check } from "lucide-react"
-import { useState } from "react"
+import { Server, Plus, Filter, Settings2, LayoutGrid, Play, Trash2, ExternalLink, Copy, Check, FileCode2 } from "lucide-react"
+import { Fragment, useState } from "react"
 import Link from "next/link"
 import {
   type DataBlobRow,
@@ -18,6 +18,9 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
+import { Button } from "@/components/ui/button"
+import { Notice } from "@/components/ui/notice"
+import { Textarea } from "@/components/ui/textarea"
 
 type EnvironmentsViewProps = {
   environments: EnvironmentRow[]
@@ -25,10 +28,22 @@ type EnvironmentsViewProps = {
   dataBlobsById: ReadonlyMap<string, DataBlobRow>
   bindSelectionByEnvironment: Record<string, string>
   busy: boolean
+  configEditorEnvironmentId: string | null
+  configName: string
+  configDraft: string
+  configSourceText: string
+  configError: string
+  configLoading: boolean
+  configSaving: boolean
   onBindSelectionChange: (environmentId: string, value: string) => void
   onBindSelectedData: (environment: EnvironmentRow) => void
   onUnbindData: (environmentId: EnvironmentRow["environment_id"], dataId: string) => void
   onLaunchRun: (environmentId: EnvironmentRow["environment_id"]) => void
+  onOpenConfigEditor: (environment: EnvironmentRow) => void
+  onCloseConfigEditor: () => void
+  onConfigDraftChange: (value: string) => void
+  onCancelConfigEdit: () => void
+  onSaveConfig: (environmentId: EnvironmentRow["environment_id"]) => void
   onDeleteEnvironment: (environmentId: EnvironmentRow["environment_id"]) => void
 }
 
@@ -38,10 +53,22 @@ export function EnvironmentsView({
   dataBlobsById,
   bindSelectionByEnvironment,
   busy,
+  configEditorEnvironmentId,
+  configName,
+  configDraft,
+  configSourceText,
+  configError,
+  configLoading,
+  configSaving,
   onBindSelectionChange,
   onBindSelectedData,
   onUnbindData,
   onLaunchRun,
+  onOpenConfigEditor,
+  onCloseConfigEditor,
+  onConfigDraftChange,
+  onCancelConfigEdit,
+  onSaveConfig,
   onDeleteEnvironment,
 }: EnvironmentsViewProps) {
   const hasData = environments.length > 0
@@ -134,121 +161,200 @@ export function EnvironmentsView({
                 const availableDataBlobs = uniqueDataBlobs.filter(
                   (blob) => !env.bound_data_ids.includes(blob.blob_id),
                 )
+                const configOpen = configEditorEnvironmentId === env.environment_id
+                const configDirty = configDraft !== configSourceText
 
                 return (
-                  <tr
-                    key={env.environment_id}
-                    className="border-b border-border hover:bg-secondary/50 group align-top"
-                  >
-                    <td className="px-6 py-2.5 font-mono text-xs text-foreground">
-                      {env.environment_id}
-                    </td>
-                    <td className="px-3 py-2.5 text-sm text-foreground">
-                      {env.name}
-                    </td>
-                    <td className="px-3 py-2.5 text-sm text-muted-foreground">
-                      <div className="space-y-0.5">
-                        <p>{env.framework}:{env.version}</p>
-                        <p>{env.gpu_type} x{env.gpu_count} | {env.volume_gb}GB</p>
-                      </div>
-                    </td>
-                    <td className="px-3 py-2.5">
-                      <div className="space-y-2">
-                        {/* Bound datasets */}
-                        <div className="flex flex-wrap items-center gap-1">
-                          {env.bound_data_ids.length === 0 ? (
-                            <span className="text-xs text-muted-foreground">No bound datasets</span>
-                          ) : (
-                            env.bound_data_ids.map((dataId) => {
-                              const blob = dataBlobsById.get(dataId)
-                              return (
-                                <div key={`${env.environment_id}-${dataId}`} className="flex items-center gap-1">
-                                  <span className="inline-flex px-2 py-0.5 rounded text-xs bg-secondary text-foreground">
-                                    {blob ? blob.filename : dataId}
-                                  </span>
-                                  <button
-                                    onClick={() => onUnbindData(env.environment_id, dataId)}
-                                    disabled={busy}
-                                    className="px-1.5 py-0.5 text-xs rounded border border-border hover:bg-secondary text-muted-foreground hover:text-foreground disabled:opacity-50"
-                                  >
-                                    Unbind
-                                  </button>
-                                </div>
-                              )
-                            })
-                          )}
+                  <Fragment key={env.environment_id}>
+                    <tr className="border-b border-border hover:bg-secondary/50 group align-top">
+                      <td className="px-6 py-2.5 font-mono text-xs text-foreground">
+                        {env.environment_id}
+                      </td>
+                      <td className="px-3 py-2.5 text-sm text-foreground">
+                        <div className="space-y-0.5">
+                          <p>{env.name}</p>
+                          <p className="text-xs text-muted-foreground">Python {env.python_version}</p>
                         </div>
-                        {/* Bind selector */}
-                        <div className="flex items-center gap-1.5">
-                          <select
-                            value={bindSelectionByEnvironment[env.environment_id] || ""}
-                            onChange={(e) => onBindSelectionChange(env.environment_id, e.target.value)}
-                            disabled={busy || availableDataBlobs.length === 0}
-                            className="h-7 rounded border border-border bg-secondary/50 px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
-                          >
-                            <option value="">
-                              {availableDataBlobs.length === 0 ? "No datasets available" : "Select dataset"}
-                            </option>
-                            {availableDataBlobs.map((blob) => (
-                              <option key={`${env.environment_id}-opt-${blob.blob_id}`} value={blob.blob_id}>
-                                {blob.filename} ({blob.blob_id})
-                              </option>
-                            ))}
-                          </select>
-                          <button
-                            onClick={() => onBindSelectedData(env)}
-                            disabled={
-                              busy ||
-                              availableDataBlobs.length === 0 ||
-                              !(bindSelectionByEnvironment[env.environment_id] || "").trim()
-                            }
-                            className="px-2 py-1 text-xs rounded border border-border hover:bg-secondary disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            Bind
-                          </button>
+                      </td>
+                      <td className="px-3 py-2.5 text-sm text-muted-foreground">
+                        <div className="space-y-0.5">
+                          <p>{env.framework}:{env.version}</p>
+                          <p>{env.gpu_type} x{env.gpu_count} | {env.volume_gb}GB</p>
                         </div>
-                      </div>
-                    </td>
-                    <td className="px-3 py-2.5">
-                      <div className="flex items-center gap-1.5">
-                        <button
-                          onClick={() => onLaunchRun(env.environment_id)}
-                          disabled={busy}
-                          className="flex items-center gap-1 px-2 py-1 text-xs rounded border border-border hover:bg-secondary disabled:opacity-50"
-                        >
-                          <Play className="w-3 h-3" />
-                          Run
-                        </button>
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <button
-                              disabled={busy}
-                              className="p-1 rounded hover:bg-secondary text-muted-foreground hover:text-destructive-foreground disabled:opacity-50"
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <div className="space-y-2">
+                          <div className="flex flex-wrap items-center gap-1">
+                            {env.bound_data_ids.length === 0 ? (
+                              <span className="text-xs text-muted-foreground">No bound datasets</span>
+                            ) : (
+                              env.bound_data_ids.map((dataId) => {
+                                const blob = dataBlobsById.get(dataId)
+                                return (
+                                  <div key={`${env.environment_id}-${dataId}`} className="flex items-center gap-1">
+                                    <span className="inline-flex px-2 py-0.5 rounded text-xs bg-secondary text-foreground">
+                                      {blob ? blob.filename : dataId}
+                                    </span>
+                                    <button
+                                      onClick={() => onUnbindData(env.environment_id, dataId)}
+                                      disabled={busy}
+                                      className="px-1.5 py-0.5 text-xs rounded border border-border hover:bg-secondary text-muted-foreground hover:text-foreground disabled:opacity-50"
+                                    >
+                                      Unbind
+                                    </button>
+                                  </div>
+                                )
+                              })
+                            )}
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <select
+                              value={bindSelectionByEnvironment[env.environment_id] || ""}
+                              onChange={(e) => onBindSelectionChange(env.environment_id, e.target.value)}
+                              disabled={busy || availableDataBlobs.length === 0}
+                              className="h-7 rounded border border-border bg-secondary/50 px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
                             >
-                              <Trash2 className="w-3.5 h-3.5" />
+                              <option value="">
+                                {availableDataBlobs.length === 0 ? "No datasets available" : "Select dataset"}
+                              </option>
+                              {availableDataBlobs.map((blob) => (
+                                <option key={`${env.environment_id}-opt-${blob.blob_id}`} value={blob.blob_id}>
+                                  {blob.filename} ({blob.blob_id})
+                                </option>
+                              ))}
+                            </select>
+                            <button
+                              onClick={() => onBindSelectedData(env)}
+                              disabled={
+                                busy ||
+                                availableDataBlobs.length === 0 ||
+                                !(bindSelectionByEnvironment[env.environment_id] || "").trim()
+                              }
+                              className="px-2 py-1 text-xs rounded border border-border hover:bg-secondary disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              Bind
                             </button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>Delete environment?</AlertDialogTitle>
-                              <AlertDialogDescription>
-                                This will permanently delete environment <code>{env.environment_id}</code>, its runs, and associated runtime logs, metrics, and artifacts.
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel>Keep environment</AlertDialogCancel>
-                              <AlertDialogAction
-                                onClick={() => onDeleteEnvironment(env.environment_id)}
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <div className="flex items-center gap-1.5">
+                          <Button
+                            variant={configOpen ? "dashboard-primary" : "dashboard-outline"}
+                            size="sm"
+                            onClick={() => {
+                              if (configOpen) {
+                                onCloseConfigEditor()
+                                return
+                              }
+                              onOpenConfigEditor(env)
+                            }}
+                            disabled={configSaving}
+                          >
+                            <FileCode2 className="w-3 h-3" />
+                            Config
+                          </Button>
+                          <button
+                            onClick={() => onLaunchRun(env.environment_id)}
+                            disabled={busy}
+                            className="flex items-center gap-1 px-2 py-1 text-xs rounded border border-border hover:bg-secondary disabled:opacity-50"
+                          >
+                            <Play className="w-3 h-3" />
+                            Run
+                          </button>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <button
                                 disabled={busy}
+                                className="p-1 rounded hover:bg-secondary text-muted-foreground hover:text-destructive-foreground disabled:opacity-50"
                               >
-                                Delete environment
-                              </AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
-                      </div>
-                    </td>
-                  </tr>
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Delete environment?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  This will permanently delete environment <code>{env.environment_id}</code>, its runs, and associated runtime logs, metrics, and artifacts.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Keep environment</AlertDialogCancel>
+                                <AlertDialogAction
+                                  onClick={() => onDeleteEnvironment(env.environment_id)}
+                                  disabled={busy}
+                                >
+                                  Delete environment
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </div>
+                      </td>
+                    </tr>
+                    {configOpen ? (
+                      <tr className="border-b border-border bg-secondary/20">
+                        <td colSpan={5} className="px-6 pb-4 pt-1">
+                          <div className="rounded-xl border border-border bg-background/80 p-4">
+                            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                              <div>
+                                <h3 className="text-sm font-medium text-foreground">Environment config</h3>
+                                <p className="mt-1 text-xs text-muted-foreground">
+                                  <span className="font-mono text-foreground">{configName}</span> is generated from the stored environment record. Saving changes updates future runs for this environment.
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                {configDirty ? (
+                                  <span className="text-xs text-amber-500">Unsaved changes</span>
+                                ) : (
+                                  <span className="text-xs text-muted-foreground">Saved</span>
+                                )}
+                                <Button variant="dashboard-outline" size="sm" onClick={onCloseConfigEditor} disabled={configSaving}>
+                                  Close
+                                </Button>
+                              </div>
+                            </div>
+                            <div className="mt-4 space-y-3">
+                              {configError ? <Notice variant="error">{configError}</Notice> : null}
+                              {configLoading ? (
+                                <p className="text-xs text-muted-foreground">Loading current config…</p>
+                              ) : null}
+                              <Textarea
+                                value={configDraft}
+                                onChange={(event) => onConfigDraftChange(event.target.value)}
+                                disabled={configSaving}
+                                rows={11}
+                                spellCheck={false}
+                              />
+                              <div className="flex items-center justify-between gap-3">
+                                <p className="text-xs text-muted-foreground">
+                                  Supported keys: <code>name</code>, <code>framework</code>, <code>version</code>, <code>python_version</code>, <code>gpu_type</code>, <code>gpu_count</code>, <code>volume_gb</code>.
+                                </p>
+                                <div className="flex items-center gap-2">
+                                  <Button
+                                    variant="dashboard-outline"
+                                    size="sm"
+                                    onClick={onCancelConfigEdit}
+                                    disabled={configSaving || !configDirty}
+                                  >
+                                    Cancel
+                                  </Button>
+                                  <Button
+                                    variant="dashboard-primary"
+                                    size="sm"
+                                    onClick={() => onSaveConfig(env.environment_id)}
+                                    disabled={configSaving || !configDirty}
+                                  >
+                                    {configSaving ? "Saving…" : "Save config"}
+                                  </Button>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    ) : null}
+                  </Fragment>
                 )
               })}
             </tbody>

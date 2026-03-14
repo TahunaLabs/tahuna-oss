@@ -16,6 +16,7 @@ import { images } from "@convex/catalog";
 import { shortId } from "@convex/ids";
 import { R2 } from "@convex-dev/r2";
 import { PYTHON_CONFIG } from "@convex/appConfig";
+import { ENVIRONMENT_CONFIG_FILE_NAME, parseEnvironmentConfig, renderEnvironmentConfig } from "@/lib/environment-config";
 
 const environmentResponseValidator = v.object({
   environment_id: v.string(),
@@ -34,6 +35,11 @@ const environmentResponseValidator = v.object({
 
 const listEnvironmentsResponseValidator = v.object({
   environments: v.array(environmentResponseValidator),
+});
+const environmentConfigResponseValidator = v.object({
+  environment: environmentResponseValidator,
+  config_name: v.string(),
+  config_text: v.string(),
 });
 const commitSyncPointersResponseValidator = v.object({
   ok: v.boolean(),
@@ -328,6 +334,22 @@ function toEnvironmentResponse(row: Doc<"environments">) {
   };
 }
 
+function toEnvironmentConfigResponse(row: Doc<"environments">) {
+  return {
+    environment: toEnvironmentResponse(row),
+    config_name: ENVIRONMENT_CONFIG_FILE_NAME,
+    config_text: renderEnvironmentConfig({
+      name: row.name,
+      framework: row.framework,
+      version: row.version,
+      python_version: row.pythonVersion || PYTHON_CONFIG.defaultVersion,
+      gpu_type: row.gpuType,
+      gpu_count: row.gpuCount,
+      volume_gb: row.volumeGb,
+    }),
+  };
+}
+
 async function listByUserId(ctx: QueryCtx, userId: string) {
   const rows = await ctx.db
     .query("environments")
@@ -512,6 +534,44 @@ async function updateEnvironmentSpecsForUserId(
   return toEnvironmentResponse(updated);
 }
 
+async function updateEnvironmentConfigForUserId(
+  ctx: MutationCtx,
+  args: {
+    userId: string;
+    environmentId: Id<"environments">;
+    config_text: string;
+  },
+) {
+  await getOwnedEnvironment(ctx, args.userId, args.environmentId);
+
+  let next;
+  try {
+    next = parseEnvironmentConfig(args.config_text);
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : "invalid environment config";
+    throw new ConvexError(`invalid environment config: ${detail}`);
+  }
+
+  validateEnvironmentPayload(next);
+
+  await ctx.db.patch("environments", args.environmentId, {
+    name: next.name.trim(),
+    framework: next.framework.trim(),
+    version: next.version.trim(),
+    pythonVersion: next.python_version.trim(),
+    gpuType: next.gpu_type.trim(),
+    gpuCount: next.gpu_count,
+    volumeGb: next.volume_gb,
+  });
+
+  const updated = await ctx.db.get("environments", args.environmentId);
+  if (!updated) {
+    throw new ConvexError("failed to update environment config");
+  }
+
+  return toEnvironmentConfigResponse(updated);
+}
+
 async function removeEnvironmentForUserId(ctx: MutationCtx, userId: string, environmentId: Id<"environments">) {
   const env = await getOwnedEnvironment(ctx, userId, environmentId);
   const artifactKeys = new Set<string>();
@@ -602,6 +662,32 @@ export const list = query({
   handler: async (ctx) => {
     const user = await requireUser(ctx);
     return listByUserId(ctx, String(user._id));
+  },
+});
+
+export const getConfig = query({
+  args: { environmentId: v.id("environments") },
+  returns: environmentConfigResponseValidator,
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    const row = await getOwnedEnvironment(ctx, String(user._id), args.environmentId);
+    return toEnvironmentConfigResponse(row);
+  },
+});
+
+export const updateConfig = mutation({
+  args: {
+    environmentId: v.id("environments"),
+    config_text: v.string(),
+  },
+  returns: environmentConfigResponseValidator,
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    return updateEnvironmentConfigForUserId(ctx, {
+      userId: String(user._id),
+      environmentId: args.environmentId,
+      config_text: args.config_text,
+    });
   },
 });
 

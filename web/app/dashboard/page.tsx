@@ -11,6 +11,7 @@ import {
   STORAGE_PAGE_LIMIT,
   validateArtifactRenameName,
   type DataBlobRow,
+  type EnvironmentConfigDetail,
   type EnvironmentRow,
   type RunRow,
   type RunDetail,
@@ -20,6 +21,7 @@ import {
   type StorageItem,
   type StorageSourceFilter,
 } from "@/components/dashboard/shared"
+import { ENVIRONMENT_CONFIG_FILE_NAME, renderEnvironmentConfig } from "@/lib/environment-config"
 import { api } from "@convex/_generated/api"
 import type { Id } from "@convex/_generated/dataModel"
 import { authClient } from "@/lib/auth-client"
@@ -56,6 +58,11 @@ export default function DashboardPage() {
   const [artifactRenameBusyId, setArtifactRenameBusyId] = useState<string | null>(null)
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null)
   const [bindSelectionByEnvironment, setBindSelectionByEnvironment] = useState<Record<string, string>>({})
+  const [configEditorEnvironmentId, setConfigEditorEnvironmentId] = useState<string | null>(null)
+  const [configDraft, setConfigDraft] = useState("")
+  const [configSourceText, setConfigSourceText] = useState("")
+  const [configError, setConfigError] = useState("")
+  const [configSaving, setConfigSaving] = useState(false)
   const shouldLoadQueries = !authLoading && isAuthenticated && !loggingOut
 
   const currentUser = useQuery(api.auth.getCurrentUser, shouldLoadQueries ? {} : "skip")
@@ -78,6 +85,11 @@ export default function DashboardPage() {
     api.runs.getLogs,
     shouldLoadRunDetail ? { runId: selectedRunId as Id<"runs"> } : "skip"
   ) as RunLogsDetail | undefined
+  const shouldLoadEnvironmentConfig = shouldLoadQueries && configEditorEnvironmentId !== null
+  const environmentConfig = useQuery(
+    api.environments.getConfig,
+    shouldLoadEnvironmentConfig ? { environmentId: configEditorEnvironmentId as Id<"environments"> } : "skip"
+  ) as EnvironmentConfigDetail | undefined
 
   const environments: EnvironmentRow[] = envResult?.environments ?? []
   const dataBlobs: DataBlobRow[] = dataResult?.blobs ?? []
@@ -85,6 +97,7 @@ export default function DashboardPage() {
 
   const generateDataUploadUrlMutation = useMutation(api.data.generateUploadUrl)
   const removeEnvMutation = useMutation(api.environments.remove)
+  const updateEnvironmentConfigMutation = useMutation(api.environments.updateConfig)
   const createRunMutation = useMutation(api.runs.create)
   const cancelRunMutation = useMutation(api.runs.cancel)
   const syncDataMetadataMutation = useMutation(api.data.syncMetadata)
@@ -113,6 +126,30 @@ export default function DashboardPage() {
   const dataBlobsById = useMemo(() => {
     return new Map(uniqueDataBlobs.map((blob) => [blob.blob_id, blob]))
   }, [uniqueDataBlobs])
+
+  useEffect(() => {
+    if (!configEditorEnvironmentId) {
+      return
+    }
+    if (environments.some((environment) => environment.environment_id === configEditorEnvironmentId)) {
+      return
+    }
+    setConfigEditorEnvironmentId(null)
+    setConfigDraft("")
+    setConfigSourceText("")
+    setConfigError("")
+  }, [configEditorEnvironmentId, environments])
+
+  useEffect(() => {
+    if (!environmentConfig || environmentConfig.environment.environment_id !== configEditorEnvironmentId) {
+      return
+    }
+    if (configDraft && configDraft !== configSourceText) {
+      return
+    }
+    setConfigSourceText(environmentConfig.config_text)
+    setConfigDraft(environmentConfig.config_text)
+  }, [configDraft, configEditorEnvironmentId, configSourceText, environmentConfig])
 
   useEffect(() => {
     const timeout = setTimeout(() => {
@@ -298,6 +335,57 @@ export default function DashboardPage() {
     })
   }
 
+  function openEnvironmentConfigEditor(environment: EnvironmentRow) {
+    const nextConfig = renderEnvironmentConfig({
+      name: environment.name,
+      framework: environment.framework,
+      version: environment.version,
+      python_version: environment.python_version,
+      gpu_type: environment.gpu_type,
+      gpu_count: environment.gpu_count,
+      volume_gb: environment.volume_gb,
+    })
+    setError("")
+    setMessage("")
+    setConfigError("")
+    setConfigEditorEnvironmentId(environment.environment_id)
+    setConfigSourceText(nextConfig)
+    setConfigDraft(nextConfig)
+  }
+
+  function closeEnvironmentConfigEditor() {
+    if (configSaving) return
+    setConfigEditorEnvironmentId(null)
+    setConfigDraft("")
+    setConfigSourceText("")
+    setConfigError("")
+  }
+
+  function cancelEnvironmentConfigEdit() {
+    setConfigDraft(configSourceText)
+    setConfigError("")
+  }
+
+  async function saveEnvironmentConfig(environmentId: Id<"environments">) {
+    setConfigSaving(true)
+    setConfigError("")
+    setError("")
+    setMessage("")
+    try {
+      const saved = await updateEnvironmentConfigMutation({
+        environmentId,
+        config_text: configDraft,
+      })
+      setConfigSourceText(saved.config_text)
+      setConfigDraft(saved.config_text)
+      setMessage(`Saved config for environment ${environmentId}.`)
+    } catch (saveError) {
+      setConfigError(saveError instanceof Error ? saveError.message : "failed to save environment config")
+    } finally {
+      setConfigSaving(false)
+    }
+  }
+
   function startRenameArtifact(item: StorageItem) {
     if (item.source !== "run_artifact") return
     setError("")
@@ -414,6 +502,13 @@ export default function DashboardPage() {
             dataBlobsById={dataBlobsById}
             bindSelectionByEnvironment={bindSelectionByEnvironment}
             busy={busy}
+            configEditorEnvironmentId={configEditorEnvironmentId}
+            configName={environmentConfig?.config_name || ENVIRONMENT_CONFIG_FILE_NAME}
+            configDraft={configDraft}
+            configSourceText={configSourceText}
+            configError={configError}
+            configLoading={shouldLoadEnvironmentConfig && !environmentConfig}
+            configSaving={configSaving}
             onBindSelectionChange={(environmentId, value) =>
               setBindSelectionByEnvironment((current) => ({
                 ...current,
@@ -428,6 +523,15 @@ export default function DashboardPage() {
             }}
             onLaunchRun={(environmentId) => {
               void launchRun(environmentId)
+            }}
+            onOpenConfigEditor={(environment) => {
+              openEnvironmentConfigEditor(environment)
+            }}
+            onCloseConfigEditor={closeEnvironmentConfigEditor}
+            onConfigDraftChange={setConfigDraft}
+            onCancelConfigEdit={cancelEnvironmentConfigEdit}
+            onSaveConfig={(environmentId) => {
+              void saveEnvironmentConfig(environmentId)
             }}
             onDeleteEnvironment={(environmentId) => {
               void deleteEnvironment(environmentId)

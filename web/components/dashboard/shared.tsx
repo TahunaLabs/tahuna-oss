@@ -48,8 +48,15 @@ export type EnvironmentRow = {
   gpu_type: string
   gpu_count: number
   volume_gb: number
+  python_version: string
   framework: string
   version: string
+}
+
+export type EnvironmentConfigDetail = {
+  environment: EnvironmentRow
+  config_name: string
+  config_text: string
 }
 
 export type DataBlobRow = {
