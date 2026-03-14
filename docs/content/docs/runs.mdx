@@ -43,11 +43,11 @@ Tahuna streams stdout and stderr from your run in real-time. View logs from the 
 tahuna logs <run-id>
 ```
 
-Or from the dashboard by selecting a run in the Runs view. The detail panel shows live logs with timestamps, log levels, and source labels.
+Or from the CLI via the run ID.
 
 ### Live metrics
 
-If your training code emits metrics (loss, accuracy, learning rate, etc.), they are captured and displayed as real-time charts in the dashboard's run detail panel.
+If your training code emits metrics (loss, accuracy, learning rate, etc.), they are captured and can be viewed via the CLI.
 
 ## Cancelling a run
 
@@ -57,12 +57,9 @@ Cancel a running or queued run:
 tahuna run cancel <run-id>
 ```
 
-Or use the cancel button in the dashboard's run detail panel.
+Or use the CLI.
 
 ## Artifacts
 
-When a run writes files to its output directory, they are automatically collected as artifacts and stored in cloud storage. View and download artifacts from the Storage view in the dashboard.
+When a run writes files to its output directory, they are automatically collected as artifacts and stored in cloud storage. View and download artifacts from the CLI.
 
-## Dashboard
-
-The Runs view uses a list-detail layout. The left panel shows all runs with status indicators. Click a run to see its full detail on the right — diagnostics, paths, live logs, and live metric charts.

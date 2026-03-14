@@ -44,7 +44,7 @@ volume_gb = 50
 
 Environments can have data bound to them. Bound data is automatically mounted when a run starts.
 
-You can bind data from the dashboard's Environments view, or via the CLI:
+You can bind data via the CLI:
 
 ```bash
 tahuna data bind <environment-id> <data-id>
@@ -64,6 +64,3 @@ tahuna env delete <environment-id>
 
 This permanently removes the environment, all its runs, and associated logs, metrics, and artifacts.
 
-## Dashboard
-
-The Environments view in the dashboard shows all your environments with their specs, bound data, and quick actions (launch run, delete).
