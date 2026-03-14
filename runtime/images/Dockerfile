@@ -28,12 +28,11 @@ RUN python3 -m pip install --no-cache-dir uv \
     && printf '%s\n' "${TAHUNA_PREBAKED_PROTECTED_PACKAGES}" > /opt/tahuna/protected-packages.csv \
     && FW_VER="${PREBAKE_VERSION%%-*}" \
     && CUDA_TAG="${PREBAKE_VERSION##*-}" \
-    && UV_CACHE_DIR=/opt/tahuna/.uv-cache \
-       uv pip install \
+    && uv pip install \
+         --no-cache \
          --python "${TAHUNA_PREBAKED_VENV}/bin/python" \
          --extra-index-url "https://download.pytorch.org/whl/${CUDA_TAG}" \
-         "torch==${FW_VER}" torchvision torchaudio triton \
-    && rm -rf /opt/tahuna/.uv-cache
+         "torch==${FW_VER}" torchvision torchaudio triton
 COPY runtime/images/prebake/detect-versions.py /tmp/detect-versions.py
 RUN "${TAHUNA_PREBAKED_VENV}/bin/python" /tmp/detect-versions.py && rm /tmp/detect-versions.py
 COPY --from=warden-builder /out/warden /usr/local/bin/warden
