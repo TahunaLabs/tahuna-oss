@@ -51,7 +51,7 @@ jobs:
     environment: dev
     strategy:
       fail-fast: false
-      max-parallel: 1
+      max-parallel: 2
       matrix:
         include: ${{ fromJson(needs.matrix.outputs.images) }}
 
