@@ -4,7 +4,7 @@
 
 - Execute tasks in agreed order. One logical unit per commit.
 - For every change: log to Linear (issue, recommendation, commit hash, validation commands) using the Linear tool.
-- For any Linear issue the agent creates or updates, set `delegate` to `Codex` and include a short signature line (`Agent: Codex`) in the issue body or update comment.
+- For any Linear issue the agent creates or updates, set `delegate` to the agent's own name and include a short signature line (`Agent: <agent-name>`) in the issue body or update comment.
 - Validate before commit: `bun run lint` (ESLint + TypeScript unused checks).
 - For Go CLI changes, validate with `make validate-cli` before commit.
 - Runtime image CI guardrail: keep `.github/workflows/build-templates.yml` push trigger on `develop` during MVP; switch back to `main` when MVP is closed (and keep an inline TODO reminder in the workflow file).
