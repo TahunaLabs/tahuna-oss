@@ -12,7 +12,9 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"warden/internal/runtimeapi"
@@ -139,6 +141,13 @@ func WriteManifestEntries(
 	return stats, nil
 }
 
+type dataEntry struct {
+	rel     string
+	content []byte
+	mode    os.FileMode
+	target  string
+}
+
 func ExtractDataBundle(rootDir string) (files int, totalBytes int64, archiveBytes int64, err error) {
 	archivePath := filepath.Join(rootDir, "__tahuna__", "data_bundle.tar.gz")
 	info, statErr := os.Stat(archivePath)
@@ -165,8 +174,12 @@ func ExtractDataBundle(rootDir string) (files int, totalBytes int64, archiveByte
 	}
 	defer gzReader.Close()
 	tarReader := tar.NewReader(gzReader)
-	createdParents := map[string]struct{}{}
-	copyBuffer := make([]byte, 128*1024)
+
+	// Phase 1: Read all entries into memory, validate headers and sizes.
+	// The tar stream must be read sequentially, but 70K files × 257 bytes
+	// average = ~18MB — trivial for a GPU pod.
+	var entries []dataEntry
+	dirs := map[string]struct{}{}
 
 	for {
 		header, nextErr := tarReader.Next()
@@ -183,59 +196,86 @@ func ExtractDataBundle(rootDir string) (files int, totalBytes int64, archiveByte
 			return 0, 0, archiveBytes, fmt.Errorf("unsupported data archive entry type: %s", header.Name)
 		}
 
-		rel, err := SafeRelativePath(header.Name)
-		if err != nil {
-			return 0, 0, archiveBytes, fmt.Errorf("invalid data archive path: %w", err)
-		}
-		target := filepath.Join(rootDir, rel)
-		parent := filepath.Dir(target)
-		if parent != "" {
-			if _, exists := createdParents[parent]; !exists {
-				if err := os.MkdirAll(parent, 0o755); err != nil {
-					return 0, 0, archiveBytes, fmt.Errorf("create data parent dir: %w", err)
-				}
-				createdParents[parent] = struct{}{}
-			}
+		rel, relErr := SafeRelativePath(header.Name)
+		if relErr != nil {
+			return 0, 0, archiveBytes, fmt.Errorf("invalid data archive path: %w", relErr)
 		}
 
-		outFile, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
-		if err != nil {
-			return 0, 0, archiveBytes, fmt.Errorf("open data entry %s: %w", rel, err)
-		}
-
-		written, err := io.CopyBuffer(outFile, tarReader, copyBuffer)
-		closeErr := outFile.Close()
-		if closeErr != nil {
-			return 0, 0, archiveBytes, fmt.Errorf("close data entry %s: %w", rel, closeErr)
-		}
-		if written != header.Size {
-			if err != nil {
-				return 0, 0, archiveBytes, fmt.Errorf(
-					"data entry size mismatch detail=path=%s expected=%d actual=%d copy_error=%v",
-					rel,
-					header.Size,
-					written,
-					err,
-				)
-			}
+		content := make([]byte, header.Size)
+		n, readErr := io.ReadFull(tarReader, content)
+		if readErr != nil || int64(n) != header.Size {
 			return 0, 0, archiveBytes, fmt.Errorf(
 				"data entry size mismatch detail=path=%s expected=%d actual=%d",
-				rel,
-				header.Size,
-				written,
+				rel, header.Size, int64(n),
 			)
 		}
-		if err != nil {
-			return 0, 0, archiveBytes, fmt.Errorf("stream data entry %s: %w", rel, err)
-		}
 
-		mode := header.FileInfo().Mode().Perm()
-		if mode > 0 && mode != 0o644 {
-			_ = os.Chmod(target, mode)
-		}
+		target := filepath.Join(rootDir, rel)
+		parent := filepath.Dir(target)
+		dirs[parent] = struct{}{}
 
-		files += 1
-		totalBytes += written
+		entries = append(entries, dataEntry{
+			rel:     rel,
+			content: content,
+			mode:    header.FileInfo().Mode().Perm(),
+			target:  target,
+		})
+		totalBytes += int64(len(content))
+	}
+	files = len(entries)
+
+	// Phase 2: Create all parent directories (few unique dirs, fast).
+	for dir := range dirs {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return 0, 0, archiveBytes, fmt.Errorf("create data parent dir: %w", err)
+		}
+	}
+
+	// Phase 3: Write all files in parallel.
+	// Sequential file creates on volume storage take ~6ms each (metadata
+	// round-trip). Parallel writes saturate the storage IOPS pipeline.
+	workers := runtime.NumCPU()
+	if workers > 32 {
+		workers = 32
+	}
+	if workers < 4 {
+		workers = 4
+	}
+
+	var writeErr error
+	var errOnce sync.Once
+	var wg sync.WaitGroup
+	ch := make(chan dataEntry, workers*2)
+
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for entry := range ch {
+				if err := os.WriteFile(entry.target, entry.content, 0o644); err != nil {
+					errOnce.Do(func() {
+						writeErr = fmt.Errorf("write data entry %s: %w", entry.rel, err)
+					})
+					return
+				}
+				if entry.mode > 0 && entry.mode != 0o644 {
+					_ = os.Chmod(entry.target, entry.mode)
+				}
+			}
+		}()
+	}
+
+	for _, entry := range entries {
+		if writeErr != nil {
+			break
+		}
+		ch <- entry
+	}
+	close(ch)
+	wg.Wait()
+
+	if writeErr != nil {
+		return 0, 0, archiveBytes, writeErr
 	}
 
 	_ = os.Remove(archivePath)
