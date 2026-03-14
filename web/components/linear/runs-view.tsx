@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { Play, Plus, Filter, Settings2, LayoutGrid, Trash2, X } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import {
   CANCELLABLE_STATUSES,
@@ -90,6 +91,8 @@ export function RunsView({
   const hasData = filteredRuns.length > 0
   const noEnvironments = environments.length === 0
   const series = metricSeries(runLogs)
+  const primarySeries = series.filter((metric) => metric.category !== "system")
+  const systemSeries = series.filter((metric) => metric.category === "system")
 
   return (
     <main className="flex-1 flex flex-col h-full">
@@ -371,30 +374,19 @@ export function RunsView({
                     {series.length === 0 ? (
                       <p className="text-sm text-muted-foreground">No runtime metrics yet.</p>
                     ) : (
-                      <div className="space-y-4">
-                        {series.map((metric) => (
-                          <div key={metric.name} className="rounded border border-border p-2">
-                            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{metric.name}</p>
-                            <div className="h-36 w-full">
-                              <ResponsiveContainer width="100%" height="100%">
-                                <LineChart data={metric.points}>
-                                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                                  <XAxis dataKey="label" minTickGap={24} tick={{ fontSize: 10 }} />
-                                  <YAxis width={48} tick={{ fontSize: 10 }} />
-                                  <Tooltip
-                                    contentStyle={{
-                                      backgroundColor: "hsl(var(--popover))",
-                                      border: "1px solid hsl(var(--border))",
-                                      borderRadius: "6px",
-                                      fontSize: "12px",
-                                    }}
-                                  />
-                                  <Line type="monotone" dataKey="value" stroke="hsl(var(--accent))" strokeWidth={2} dot={false} />
-                                </LineChart>
-                              </ResponsiveContainer>
-                            </div>
-                          </div>
-                        ))}
+                      <div className="space-y-5">
+                        <MetricSection
+                          title="Model metrics"
+                          description="Training and evaluation signals from the run itself."
+                          metrics={primarySeries}
+                          emptyMessage="No model metrics yet."
+                        />
+                        <MetricSection
+                          title="System metrics"
+                          description="Bootstrap, artifact, and runtime system activity."
+                          metrics={systemSeries}
+                          emptyMessage="No system metrics yet."
+                        />
                       </div>
                     )}
                   </div>
@@ -406,6 +398,103 @@ export function RunsView({
       )}
     </main>
   )
+}
+
+function MetricSection({
+  title,
+  description,
+  metrics,
+  emptyMessage,
+}: {
+  title: string
+  description: string
+  metrics: ReturnType<typeof metricSeries>
+  emptyMessage: string
+}) {
+  return (
+    <section className="space-y-3">
+      <div>
+        <div className="flex items-center justify-between gap-3">
+          <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{title}</h4>
+          <span className="text-[11px] text-muted-foreground">{metrics.length} charts</span>
+        </div>
+        <p className="mt-1 text-xs text-muted-foreground">{description}</p>
+      </div>
+      {metrics.length === 0 ? (
+        <p className="text-sm text-muted-foreground">{emptyMessage}</p>
+      ) : (
+        <div className="space-y-4">
+          {metrics.map((metric) => (
+            <MetricChart key={`${metric.source}:${metric.name}`} metric={metric} />
+          ))}
+        </div>
+      )}
+    </section>
+  )
+}
+
+function MetricChart({
+  metric,
+}: {
+  metric: ReturnType<typeof metricSeries>[number]
+}) {
+  const sourceVariant =
+    metric.category === "model"
+      ? "status-success"
+      : metric.category === "runtime"
+        ? "status-info"
+        : "status-warning"
+
+  return (
+    <div className="rounded border border-border p-3">
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="truncate text-sm font-medium text-foreground">{metric.name}</p>
+          <div className="mt-1 flex flex-wrap items-center gap-2">
+            <Badge variant={sourceVariant}>{metric.source}</Badge>
+            <span className="text-[11px] text-muted-foreground">{metric.pointCount} point{metric.pointCount === 1 ? "" : "s"}</span>
+          </div>
+        </div>
+        <div className="text-right">
+          <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Latest</p>
+          <p className="font-mono text-sm text-foreground">{formatMetricValue(metric.latestValue)}</p>
+        </div>
+      </div>
+      <div className="h-36 w-full">
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={metric.points}>
+            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+            <XAxis dataKey="label" minTickGap={24} tick={{ fontSize: 10 }} />
+            <YAxis width={56} tick={{ fontSize: 10 }} />
+            <Tooltip
+              formatter={(value: number) => formatMetricValue(value)}
+              contentStyle={{
+                backgroundColor: "hsl(var(--popover))",
+                border: "1px solid hsl(var(--border))",
+                borderRadius: "6px",
+                fontSize: "12px",
+              }}
+            />
+            <Line type="monotone" dataKey="value" stroke="hsl(var(--accent))" strokeWidth={2} dot={metric.pointCount <= 4} />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  )
+}
+
+function formatMetricValue(value: number) {
+  if (!Number.isFinite(value)) {
+    return "—"
+  }
+  const absolute = Math.abs(value)
+  if (absolute >= 1000 || absolute === 0) {
+    return value.toLocaleString(undefined, { maximumFractionDigits: 2 })
+  }
+  if (absolute >= 1) {
+    return value.toFixed(3)
+  }
+  return value.toPrecision(3)
 }
 
 function TabButton({

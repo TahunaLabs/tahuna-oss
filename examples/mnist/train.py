@@ -86,7 +86,8 @@ def main() -> None:
         remove_unused_columns=False,
         eval_strategy="epoch",
         save_strategy="no",
-        logging_strategy="epoch",
+        logging_strategy="steps",
+        logging_steps=25,
         report_to="wandb",
     )
 

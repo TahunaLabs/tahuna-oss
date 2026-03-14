@@ -122,22 +122,90 @@ export type RunLogsDetail = {
   }>
 }
 
+export type MetricChartSeries = {
+  name: string
+  source: string
+  category: "model" | "runtime" | "system"
+  latestValue: number
+  pointCount: number
+  points: Array<{ x: number; label: string; value: number }>
+}
+
+const SYSTEM_METRIC_PREFIXES = ["bootstrap_", "artifacts_"]
+
+function metricCategory(name: string, source: string): MetricChartSeries["category"] {
+  const normalizedName = name.trim().toLowerCase()
+  const normalizedSource = source.trim().toLowerCase()
+  if (normalizedSource === "wandb") {
+    return "model"
+  }
+  if (
+    normalizedSource === "bootstrap" ||
+    SYSTEM_METRIC_PREFIXES.some((prefix) => normalizedName.startsWith(prefix))
+  ) {
+    return "system"
+  }
+  return "runtime"
+}
+
+function metricCategoryPriority(category: MetricChartSeries["category"]) {
+  if (category === "model") return 0
+  if (category === "runtime") return 1
+  return 2
+}
+
 export function metricSeries(logs: RunLogsDetail | undefined) {
-  if (!logs) return []
-  const grouped = new Map<string, Array<{ x: number; label: string; value: number }>>()
+  if (!logs) return [] satisfies MetricChartSeries[]
+  const grouped = new Map<
+    string,
+    {
+      name: string
+      source: string
+      category: MetricChartSeries["category"]
+      latestValue: number
+      latestTimestamp: number
+      points: Array<{ x: number; label: string; value: number }>
+    }
+  >()
   for (const sample of logs.recent_metrics) {
-    const points = grouped.get(sample.name) || []
-    points.push({
+    const groupKey = `${sample.source}:${sample.name}`
+    const current = grouped.get(groupKey) || {
+      name: sample.name,
+      source: sample.source,
+      category: metricCategory(sample.name, sample.source),
+      latestValue: sample.value,
+      latestTimestamp: sample.timestamp,
+      points: [],
+    }
+    current.points.push({
       x: sample.timestamp,
       label: new Date(sample.timestamp).toLocaleTimeString(),
       value: sample.value,
     })
-    grouped.set(sample.name, points)
+    if (sample.timestamp >= current.latestTimestamp) {
+      current.latestTimestamp = sample.timestamp
+      current.latestValue = sample.value
+    }
+    grouped.set(groupKey, current)
   }
-  return Array.from(grouped.entries()).map(([name, points]) => ({
-    name,
-    points: points.sort((a, b) => a.x - b.x),
-  }))
+  return Array.from(grouped.values())
+    .map((entry) => ({
+      name: entry.name,
+      source: entry.source,
+      category: entry.category,
+      latestValue: entry.latestValue,
+      pointCount: entry.points.length,
+      latestTimestamp: entry.latestTimestamp,
+      points: entry.points.sort((a, b) => a.x - b.x),
+    }))
+    .sort((a, b) => {
+      const categoryOrder = metricCategoryPriority(a.category) - metricCategoryPriority(b.category)
+      if (categoryOrder !== 0) return categoryOrder
+      if (b.pointCount !== a.pointCount) return b.pointCount - a.pointCount
+      if (b.latestTimestamp !== a.latestTimestamp) return b.latestTimestamp - a.latestTimestamp
+      return a.name.localeCompare(b.name)
+    })
+    .map(({ latestTimestamp: _latestTimestamp, ...entry }) => entry)
 }
 
 export function relativeTime(timestamp: number) {
