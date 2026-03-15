@@ -415,11 +415,6 @@ func InstallDependencies(ctx context.Context, workspaceRoot string, hooks Hooks)
 	}
 
 	installEnv := os.Environ()
-	// Set UV_LINK_MODE=copy to avoid hardlink failures when the cache and
-	// venv are on different filesystems (e.g. /workspace volume vs /opt).
-	if _, hasLinkMode := lookupEnvValue(installEnv, "UV_LINK_MODE"); !hasLinkMode {
-		installEnv = setEnvValue(installEnv, "UV_LINK_MODE", "copy")
-	}
 	protectedPackages := []string{}
 	useActiveVirtualEnv := false
 	if venvPath, ok := resolvePrebakedVirtualEnvPath(installEnv); ok {
