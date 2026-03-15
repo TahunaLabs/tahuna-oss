@@ -362,7 +362,11 @@ func evaluateProtectedPackagesForLock(baseEnv []string, lockPath string, protect
 			)
 			continue
 		}
-		if requestedVersion != prebakedVersion {
+		// Strip PEP 440 local version segment (e.g. +cu128) for comparison:
+		// lock has "2.8.0", prebaked has "2.8.0+cu128" — these are the same release.
+		reqBase, _, _ := strings.Cut(requestedVersion, "+")
+		preBase, _, _ := strings.Cut(prebakedVersion, "+")
+		if reqBase != preBase {
 			mismatches = append(
 				mismatches,
 				fmt.Sprintf("%s lock=%s prebaked=%s", pkg, requestedVersion, prebakedVersion),

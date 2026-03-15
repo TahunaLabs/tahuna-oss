@@ -445,9 +445,9 @@ func validateProjectConfigBindings(environmentID string) (projectConfig, error) 
 		}
 		if needsUpdate {
 			payload := map[string]any{
-				"python_version":    resolved.PythonVersion,
-				"framework":         resolved.Framework,
-				"framework_version": resolved.FrameworkVersion,
+				"python_version": resolved.PythonVersion,
+				"framework":      resolved.Framework,
+				"version":        resolved.FrameworkVersion,
 			}
 			if _, updateErr := doJSON(http.MethodPatch, "/environments/"+environmentID, payload); updateErr != nil {
 				return resolved, fmt.Errorf("failed to update environment runtime config: %w", updateErr)

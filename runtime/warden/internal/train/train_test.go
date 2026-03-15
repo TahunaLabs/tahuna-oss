@@ -273,7 +273,7 @@ version = "3.0.0"
 	}
 
 	versionsPath := filepath.Join(root, "prebaked_versions.json")
-	versionsJSON := `{"torch":"2.4.0","torchvision":"0.19.0","torchaudio":"2.4.0","triton":"3.0.0"}`
+	versionsJSON := `{"torch":"2.4.0+cu124","torchvision":"0.19.0+cu124","torchaudio":"2.4.0+cu124","triton":"3.0.0"}`
 	if err := os.WriteFile(versionsPath, []byte(versionsJSON), 0o644); err != nil {
 		t.Fatalf("write prebaked versions: %v", err)
 	}
