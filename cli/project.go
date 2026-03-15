@@ -425,12 +425,25 @@ func validateProjectConfigBindings(environmentID string) (projectConfig, error) 
 		return cfg, err
 	}
 
-	// If the user changed any runtime values, persist and update the environment.
+	// If resolution changed the local config, save it.
 	if resolved.Framework != cfg.Framework || resolved.FrameworkVersion != cfg.FrameworkVersion || resolved.PythonVersion != cfg.PythonVersion {
 		if saveErr := saveProjectConfig(resolved); saveErr != nil {
 			return resolved, fmt.Errorf("failed to save updated project config: %w", saveErr)
 		}
-		if environmentID != "" {
+	}
+
+	// Sync runtime config to the remote environment if it differs.
+	if environmentID != "" {
+		needsUpdate := false
+		if env, envErr := doJSON(http.MethodGet, "/environments/"+environmentID, nil); envErr == nil {
+			remoteFramework := strings.TrimSpace(asString(env["framework"]))
+			remoteVersion := strings.TrimSpace(asString(env["version"]))
+			remotePython := strings.TrimSpace(asString(env["python_version"]))
+			needsUpdate = remoteFramework != resolved.Framework ||
+				remoteVersion != resolved.FrameworkVersion ||
+				remotePython != resolved.PythonVersion
+		}
+		if needsUpdate {
 			payload := map[string]any{
 				"python_version":    resolved.PythonVersion,
 				"framework":         resolved.Framework,

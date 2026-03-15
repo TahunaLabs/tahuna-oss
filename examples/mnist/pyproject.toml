@@ -5,7 +5,7 @@ requires-python = ">=3.11"
 dependencies = [
   "accelerate",
   "pyyaml",
-  "torch",
+  "torch==2.8.0",
   "torchvision",
   "transformers",
   "wandb",
