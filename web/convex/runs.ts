@@ -41,6 +41,11 @@ const ACTIVE_STATUSES: Set<string> = new Set([
   RUN_STATUS.RUNNING,
   RUN_STATUS.CANCELLING,
 ]);
+// Max records to query+delete per table per batch when deleting a run.
+// Each table read counts as 1 + N (index scan + rows returned), and each delete
+// is 1 read. With 5 tables: 5 × (1 + 300) queries + 5 × 300 deletes = ~3005,
+// safely under Convex's 4096 read limit per transaction.
+const RUN_DELETE_BATCH_SIZE = 300;
 const TERMINAL_STATUSES: Set<string> = new Set([
   RUN_STATUS.COMPLETED,
   RUN_STATUS.FAILED,
@@ -1133,6 +1138,30 @@ async function scheduleForcedPodTermination(
   });
 }
 
+/** Delete a batch of related records for a run. Returns true if more records remain. */
+async function deleteRunDataBatch(ctx: MutationCtx, runId: Id<"runs">): Promise<boolean> {
+  const tables = [
+    { table: "runEvents" as const, index: "by_run" as const },
+    { table: "runRuntimeLogs" as const, index: "by_run" as const },
+    { table: "runRuntimeMetrics" as const, index: "by_run" as const },
+    { table: "wandbRuns" as const, index: "by_run" as const },
+    { table: "wandbMetrics" as const, index: "by_run" as const },
+  ];
+  let hasMore = false;
+  for (const { table, index } of tables) {
+    const rows = await ctx.db
+      .query(table)
+      .withIndex(index, (q) => q.eq("runId", runId))
+      .take(RUN_DELETE_BATCH_SIZE + 1);
+    if (rows.length > RUN_DELETE_BATCH_SIZE) {
+      hasMore = true;
+    }
+    const toDelete = rows.slice(0, RUN_DELETE_BATCH_SIZE);
+    await Promise.all(toDelete.map((row) => ctx.db.delete(row._id)));
+  }
+  return hasMore;
+}
+
 async function deleteRunForUserId(
   ctx: MutationCtx,
   userId: string,
@@ -1167,35 +1196,14 @@ async function deleteRunForUserId(
     await scheduleForcedPodTermination(ctx, runId, row.podId);
   }
 
-  const [events, runtimeLogs, runtimeMetrics, wandbRuns, wandbMetrics] = await Promise.all([
-    ctx.db
-      .query("runEvents")
-      .withIndex("by_run", (q) => q.eq("runId", runId))
-      .collect(),
-    ctx.db
-      .query("runRuntimeLogs")
-      .withIndex("by_run", (q) => q.eq("runId", runId))
-      .collect(),
-    ctx.db
-      .query("runRuntimeMetrics")
-      .withIndex("by_run", (q) => q.eq("runId", runId))
-      .collect(),
-    ctx.db
-      .query("wandbRuns")
-      .withIndex("by_run", (q) => q.eq("runId", runId))
-      .collect(),
-    ctx.db
-      .query("wandbMetrics")
-      .withIndex("by_run", (q) => q.eq("runId", runId))
-      .collect(),
-  ]);
-  await Promise.all([
-    ...events.map((event) => ctx.db.delete(event._id)),
-    ...runtimeLogs.map((entry) => ctx.db.delete(entry._id)),
-    ...runtimeMetrics.map((entry) => ctx.db.delete(entry._id)),
-    ...wandbRuns.map((entry) => ctx.db.delete(entry._id)),
-    ...wandbMetrics.map((entry) => ctx.db.delete(entry._id)),
-  ]);
+  // Delete related records in batches to stay under Convex's 4096 read limit.
+  // Each pass deletes up to RUN_DELETE_BATCH_SIZE records per table and
+  // reschedules itself if there are remaining records.
+  const hasMore = await deleteRunDataBatch(ctx, runId);
+  if (hasMore) {
+    await ctx.scheduler.runAfter(0, internal.runs.internalDeleteRunData, { runId });
+    return { deleted: true, run_id: String(runId) };
+  }
   await ctx.db.delete("runs", runId);
   return { deleted: true, run_id: String(runId) };
 }
@@ -1373,6 +1381,22 @@ export const internalRemove = internalMutation({
       cancelActive: args.cancelActive === true,
       force: args.force === true,
     });
+  },
+});
+
+export const internalDeleteRunData = internalMutation({
+  args: { runId: v.id("runs") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const hasMore = await deleteRunDataBatch(ctx, args.runId);
+    if (hasMore) {
+      await ctx.scheduler.runAfter(0, internal.runs.internalDeleteRunData, {
+        runId: args.runId,
+      });
+    } else {
+      await ctx.db.delete("runs", args.runId);
+    }
+    return null;
   },
 });
 
