@@ -21,7 +21,7 @@ export const RUN_CONFIG = {
   terminationRetryMaxAttempts: 5,
   terminationRetryDelaySeconds: 10,
   runtimeLogTailLimit: 200,
-  runtimeLogStartupScanLimit: 600,
+  runtimeLogStartupScanLimit: 200,
   runtimeLogPinnedBootstrapLimit: 40,
   runtimeMetricScanLimit: 3200,
   runtimeMetricSeriesLimit: 40,
