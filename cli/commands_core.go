@@ -260,7 +260,7 @@ func handleRun(args []string) {
 		runLogs(args[1:])
 	case "cancel":
 		runCancel(args[1:])
-	case "rm", "delete":
+	case "rm":
 		runDelete(args[1:])
 	default:
 		fmt.Printf("unknown run subcommand: %s\n", args[0])

@@ -5,6 +5,7 @@
 - Execute tasks in agreed order. One logical unit per commit.
 - For every change: check if it's in linear, if it does ask user to update it if not log to Linear (issue, recommendation, commit hash, validation commands) using the Linear tool.
 - For any Linear issue the agent creates or updates, set `delegate` to the agent's own name and include a short signature line (`Agent: <agent-name>`) in the issue body or update comment.
+- No backward-compat layers unless requested.
 - Validate before commit: `bun run lint` (ESLint + TypeScript unused checks).
 - For Go CLI changes, validate with `make validate-cli` before commit.
 - Runtime image CI guardrail: keep `.github/workflows/build-templates.yml` push trigger on `develop` during MVP; switch back to `main` when MVP is closed (and keep an inline TODO reminder in the workflow file).
@@ -21,7 +22,7 @@
 ## Frontend (`web/` outside `web/convex/**`)
 
 - Search the whole monorepo before deleting or rewriting; usage may live outside `web/`.
-- Remove dead UI, duplicate helpers, and legacy flows once forward path is confirmed. No backward-compat layers unless requested.
+- Remove dead UI, duplicate helpers, and legacy flows once forward path is confirmed.
 - Keep presentation separate from data/mutation orchestration. Extract repeated view logic into focused components.
 - One canonical path per screen state (loading/empty/success/error). No duplicate client state derivable from fetched data.
 - Preserve existing naming, copy tone, and interaction patterns. Reuse shared primitives before introducing variants.

@@ -538,6 +538,7 @@ func runDelete(args []string) {
 	fs := flag.NewFlagSet("run rm", flag.ExitOnError)
 	id := fs.String("id", "", "Run ID")
 	all := fs.Bool("all", false, "Delete all runs")
+	fs.BoolVar(all, "a", false, "Delete all runs")
 	cancel := fs.Bool("cancel", false, "Cancel run first, then delete")
 	fs.BoolVar(cancel, "c", false, "Cancel run first, then delete")
 	force := fs.Bool("force", false, "Force delete active run (terminates pod immediately)")
