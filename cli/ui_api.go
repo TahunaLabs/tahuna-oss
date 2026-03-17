@@ -335,13 +335,13 @@ func parseCatalogGPUs(resp map[string]any) []catalogGPU {
 }
 
 func fetchCatalog() ([]string, map[string][]string, map[string]map[string][]string, error) {
-	resp, err := doJSON(http.MethodGet, "/catalog", nil)
+	resp, err := doJSON(http.MethodGet, "/gpus", nil)
 	if err != nil {
 		return nil, nil, nil, err
 	}
 	parsedGpus := parseCatalogGPUs(resp)
 	if len(parsedGpus) == 0 {
-		return nil, nil, nil, errors.New("invalid catalog response: gpus missing")
+		return nil, nil, nil, errors.New("invalid gpus response: gpus missing")
 	}
 	gpus := make([]string, 0, len(parsedGpus))
 	for _, gpu := range parsedGpus {
@@ -350,7 +350,7 @@ func fetchCatalog() ([]string, map[string][]string, map[string]map[string][]stri
 
 	imagesRaw, ok := resp["images"].(map[string]any)
 	if !ok {
-		return nil, nil, nil, errors.New("invalid catalog response: images missing")
+		return nil, nil, nil, errors.New("invalid gpus response: images missing")
 	}
 
 	versionsByFramework := map[string][]string{}
@@ -382,13 +382,13 @@ func fetchCatalog() ([]string, map[string][]string, map[string]map[string][]stri
 }
 
 func fetchCatalogGPUByID() (map[string]catalogGPU, error) {
-	resp, err := doJSON(http.MethodGet, "/catalog", nil)
+	resp, err := doJSON(http.MethodGet, "/gpus", nil)
 	if err != nil {
 		return nil, err
 	}
 	entries := parseCatalogGPUs(resp)
 	if len(entries) == 0 {
-		return nil, errors.New("invalid catalog response: gpus missing")
+		return nil, errors.New("invalid gpus response: gpus missing")
 	}
 	out := make(map[string]catalogGPU, len(entries))
 	for _, entry := range entries {

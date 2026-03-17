@@ -22,7 +22,7 @@ type CreateRunStrictArgs = {
   volume_gb?: number;
 };
 
-export type CatalogGpuRow = {
+export type GpuRow = {
   id: string;
   display_name: string;
   memory_gb: number;
@@ -107,7 +107,7 @@ function normalizeGpuType(value: string) {
   return value.trim().toLowerCase();
 }
 
-export async function loadDynamicGpuRows(ctx: ActionCtx): Promise<CatalogGpuRow[]> {
+export async function loadDynamicGpuRows(ctx: ActionCtx): Promise<GpuRow[]> {
   let dynamicGpus: Array<{
     id: string;
     displayName: string;

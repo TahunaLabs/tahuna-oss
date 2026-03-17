@@ -1,7 +1,7 @@
 import { api } from "@convex/_generated/api";
 import { httpAction } from "@convex/_generated/server";
 import { AUTH_CONFIG, NETWORK_CONFIG, RUN_CONFIG, SYNC_CONFIG } from "@convex/appConfig";
-import { type CatalogGpuRow, corsHeaders, loadDynamicGpuRows } from "@convex/cli/shared";
+import { type GpuRow, corsHeaders, loadDynamicGpuRows } from "@convex/cli/shared";
 
 export const optionsHandler = httpAction(async () => {
   return new Response(null, {
@@ -32,11 +32,11 @@ export const getConfig = httpAction(async () => {
   );
 });
 
-export const getCatalog = httpAction(async (ctx) => {
+export const getGpus = httpAction(async (ctx) => {
   try {
     const data = await ctx.runQuery(api.catalog.getCatalog);
     const gpus = await loadDynamicGpuRows(ctx);
-    const fallbackGpus: CatalogGpuRow[] = [
+    const fallbackGpus: GpuRow[] = [
       {
         id: "NVIDIA GeForce RTX 4090",
         display_name: "NVIDIA GeForce RTX 4090",
@@ -59,7 +59,7 @@ export const getCatalog = httpAction(async (ctx) => {
       },
     );
   } catch (err) {
-    const detail = err instanceof Error ? err.message : "failed to load catalog";
+    const detail = err instanceof Error ? err.message : "failed to load gpus";
     return new Response(JSON.stringify({ detail }), {
       status: 500,
       headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),

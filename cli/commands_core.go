@@ -342,11 +342,11 @@ func dataUsage() {
 
 func gpusList(args []string) {
 	fs := flag.NewFlagSet("gpus list", flag.ExitOnError)
-	verbose := fs.Bool("verbose", false, "Show full catalog payload")
-	fs.BoolVar(verbose, "v", false, "Show full catalog payload")
+	verbose := fs.Bool("verbose", false, "Show full GPUs payload")
+	fs.BoolVar(verbose, "v", false, "Show full GPUs payload")
 	mustParseFlags(fs, args)
 
-	resp, err := doJSON(http.MethodGet, "/catalog", nil)
+	resp, err := doJSON(http.MethodGet, "/gpus", nil)
 	must(err)
 	if *verbose {
 		printJSON(resp)

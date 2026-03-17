@@ -1,6 +1,6 @@
 import { httpRouter } from "convex/server";
 import { authComponent, createAuth } from "@convex/auth";
-import { getCatalog, getConfig, health, optionsHandler } from "@convex/cli/system";
+import { getConfig, getGpus, health, optionsHandler } from "@convex/cli/system";
 import { getDataItem, listDataItems } from "@convex/cli/data";
 import {
   commitSync,
@@ -24,9 +24,9 @@ const http = httpRouter();
 // CORS Preflight
 http.route({ pathPrefix: "/api/", method: "OPTIONS", handler: optionsHandler });
 
-// Health and Catalog
+// Health and GPUs
 http.route({ path: "/api/health", method: "GET", handler: health });
-http.route({ path: "/api/catalog", method: "GET", handler: getCatalog });
+http.route({ path: "/api/gpus", method: "GET", handler: getGpus });
 http.route({ path: "/api/config", method: "GET", handler: getConfig });
 http.route({ path: "/api/data", method: "GET", handler: listDataItems });
 http.route({ pathPrefix: "/api/data/", method: "GET", handler: getDataItem });
