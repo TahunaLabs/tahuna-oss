@@ -6,6 +6,9 @@
 - For every change: check if it's in linear, if it does ask user to update it if not log to Linear (issue, recommendation, commit hash, validation commands) using the Linear tool.
 - For any Linear issue the agent creates or updates, set `delegate` to the agent's own name and include a short signature line (`Agent: <agent-name>`) in the issue body or update comment.
 - No backward-compat layers unless requested.
+- Keep names canonical across layers: when a domain term changes, update command surface, help text, API paths, internal symbols, errors, tests, and docs in the same change.
+- No stale terminology: do not leave old names in variables/functions/comments/errors once the canonical term is changed.
+- Before commit, run a consistency grep for renamed terms and fix remaining hits in touched areas.
 - Validate before commit: `bun run lint` (ESLint + TypeScript unused checks).
 - For Go CLI changes, validate with `make validate-cli` before commit.
 - Runtime image CI guardrail: keep `.github/workflows/build-templates.yml` push trigger on `develop` during MVP; switch back to `main` when MVP is closed (and keep an inline TODO reminder in the workflow file).
