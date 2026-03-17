@@ -8,6 +8,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"gopkg.in/yaml.v3"
 )
 
 func resolveEnvironmentID() (string, error) {
@@ -48,6 +50,21 @@ type projectConfig struct {
 	Framework         string
 	FrameworkVersion  string
 	PythonVersion     string
+}
+
+type projectConfigYAML struct {
+	Entrypoint        string `yaml:"entrypoint"`
+	TrainEntrypoint   string `yaml:"train_entrypoint"`
+	DataDir           string `yaml:"data_dir"`
+	OutputDir         string `yaml:"output_dir"`
+	ConfigFile        string `yaml:"config_file"`
+	ConfigYAML        string `yaml:"config_yaml"`
+	PythonProjectFile string `yaml:"python_project_file"`
+	UVLockFile        string `yaml:"uv_lock_file"`
+	Framework         string `yaml:"framework"`
+	FrameworkVersion  string `yaml:"framework_version"`
+	PythonVersion     string `yaml:"python_version"`
+	Requirements      any    `yaml:"requirements"`
 }
 
 type projectConfigKeySpec struct {
@@ -282,19 +299,21 @@ func saveProjectConfig(cfg projectConfig) error {
 	if err := os.MkdirAll(projectStateDir, 0o755); err != nil {
 		return err
 	}
-	body := fmt.Sprintf(
-		"entrypoint: %q\ndata_dir: %q\noutput_dir: %q\nconfig_file: %q\npython_project_file: %q\nuv_lock_file: %q\nframework: %q\nframework_version: %q\npython_version: %q\n",
-		cfg.TrainEntrypoint,
-		cfg.DataDir,
-		cfg.OutputDir,
-		cfg.ConfigYAMLPath,
-		cfg.PythonProjectFile,
-		cfg.UVLockFile,
-		cfg.Framework,
-		cfg.FrameworkVersion,
-		cfg.PythonVersion,
-	)
-	return os.WriteFile(projectConfigFilePath(), []byte(body), 0o600)
+	body, err := yaml.Marshal(projectConfigYAML{
+		Entrypoint:        cfg.TrainEntrypoint,
+		DataDir:           cfg.DataDir,
+		OutputDir:         cfg.OutputDir,
+		ConfigFile:        cfg.ConfigYAMLPath,
+		PythonProjectFile: cfg.PythonProjectFile,
+		UVLockFile:        cfg.UVLockFile,
+		Framework:         cfg.Framework,
+		FrameworkVersion:  cfg.FrameworkVersion,
+		PythonVersion:     cfg.PythonVersion,
+	})
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(projectConfigFilePath(), body, 0o600)
 }
 
 func loadProjectConfig() (projectConfig, error) {
@@ -316,63 +335,41 @@ func loadProjectConfig() (projectConfig, error) {
 		return cfg, err
 	}
 
-	for _, line := range strings.Split(string(raw), "\n") {
-		trimmed := strings.TrimSpace(line)
-		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
-			continue
-		}
-		parts := strings.SplitN(trimmed, ":", 2)
-		if len(parts) != 2 {
-			continue
-		}
-		key := strings.TrimSpace(parts[0])
-		value := strings.TrimSpace(parts[1])
-		value = strings.Trim(value, "\"")
+	var parsed projectConfigYAML
+	if err := yaml.Unmarshal(raw, &parsed); err != nil {
+		return cfg, fmt.Errorf("failed to parse %s: %w", projectConfigFilePath(), err)
+	}
 
-		switch key {
-		case "entrypoint":
-			if value != "" {
-				cfg.TrainEntrypoint = filepath.Clean(value)
-			}
-		case "data_dir":
-			if value != "" {
-				cfg.DataDir = filepath.Clean(value)
-			}
-		case "output_dir":
-			if value != "" {
-				cfg.OutputDir = filepath.Clean(value)
-			}
-		case "config_yaml", "config_file":
-			if value != "" {
-				cfg.ConfigYAMLPath = filepath.Clean(value)
-			}
-		case "train_entrypoint":
-			if value != "" {
-				cfg.TrainEntrypoint = filepath.Clean(value)
-			}
-		case "python_project_file":
-			if value != "" {
-				cfg.PythonProjectFile = filepath.Clean(value)
-			}
-		case "uv_lock_file":
-			if value != "" {
-				cfg.UVLockFile = filepath.Clean(value)
-			}
-		case "framework":
-			if value != "" {
-				cfg.Framework = value
-			}
-		case "framework_version":
-			if value != "" {
-				cfg.FrameworkVersion = value
-			}
-		case "python_version":
-			if value != "" {
-				cfg.PythonVersion = value
-			}
-		case "requirements":
-			// Legacy key kept for backward compatibility with older project configs.
-		}
+	if value := strings.TrimSpace(parsed.Entrypoint); value != "" {
+		cfg.TrainEntrypoint = filepath.Clean(value)
+	} else if value := strings.TrimSpace(parsed.TrainEntrypoint); value != "" {
+		cfg.TrainEntrypoint = filepath.Clean(value)
+	}
+	if value := strings.TrimSpace(parsed.DataDir); value != "" {
+		cfg.DataDir = filepath.Clean(value)
+	}
+	if value := strings.TrimSpace(parsed.OutputDir); value != "" {
+		cfg.OutputDir = filepath.Clean(value)
+	}
+	if value := strings.TrimSpace(parsed.ConfigFile); value != "" {
+		cfg.ConfigYAMLPath = filepath.Clean(value)
+	} else if value := strings.TrimSpace(parsed.ConfigYAML); value != "" {
+		cfg.ConfigYAMLPath = filepath.Clean(value)
+	}
+	if value := strings.TrimSpace(parsed.PythonProjectFile); value != "" {
+		cfg.PythonProjectFile = filepath.Clean(value)
+	}
+	if value := strings.TrimSpace(parsed.UVLockFile); value != "" {
+		cfg.UVLockFile = filepath.Clean(value)
+	}
+	if value := strings.TrimSpace(parsed.Framework); value != "" {
+		cfg.Framework = value
+	}
+	if value := strings.TrimSpace(parsed.FrameworkVersion); value != "" {
+		cfg.FrameworkVersion = value
+	}
+	if value := strings.TrimSpace(parsed.PythonVersion); value != "" {
+		cfg.PythonVersion = value
 	}
 
 	return cfg, nil
@@ -464,20 +461,20 @@ func loadRawProjectConfigValues(path string) (map[string]string, error) {
 	if err != nil {
 		return nil, err
 	}
+	var parsed map[string]any
+	if err := yaml.Unmarshal(raw, &parsed); err != nil {
+		return nil, fmt.Errorf("failed to parse %s: %w", path, err)
+	}
 	values := map[string]string{}
-	for _, line := range strings.Split(string(raw), "\n") {
-		trimmed := strings.TrimSpace(line)
-		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
-			continue
+	for key, rawValue := range parsed {
+		switch value := rawValue.(type) {
+		case nil:
+			values[key] = ""
+		case string:
+			values[key] = strings.TrimSpace(value)
+		default:
+			values[key] = strings.TrimSpace(fmt.Sprintf("%v", value))
 		}
-		parts := strings.SplitN(trimmed, ":", 2)
-		if len(parts) != 2 {
-			continue
-		}
-		key := strings.TrimSpace(parts[0])
-		value := strings.TrimSpace(parts[1])
-		value = strings.Trim(value, "\"")
-		values[key] = strings.TrimSpace(value)
 	}
 	return values, nil
 }
