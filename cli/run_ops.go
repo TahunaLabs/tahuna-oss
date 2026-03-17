@@ -23,20 +23,27 @@ func runList(args []string) {
 	fs.BoolVar(verbose, "v", false, "Show full run payload")
 	mustParseFlags(fs, args)
 
-	resp, err := doJSON(http.MethodGet, "/runs", nil)
-	must(err)
-	runsAny, ok := resp["runs"].([]any)
-	if !ok {
-		printJSON(resp)
-		return
-	}
-	orderedRuns := reverseRunsForTailOrder(runsAny)
-	if !*all && *limit > 0 && len(orderedRuns) > *limit {
-		orderedRuns = orderedRuns[len(orderedRuns)-*limit:]
-	}
 	if *verbose {
+		resp, err := doJSON(http.MethodGet, "/runs", nil)
+		must(err)
+		runsAny, ok := resp["runs"].([]any)
+		if !ok {
+			printJSON(resp)
+			return
+		}
+		orderedRuns := reverseSlice(runsAny)
+		if !*all && *limit > 0 && len(orderedRuns) > *limit {
+			orderedRuns = orderedRuns[len(orderedRuns)-*limit:]
+		}
 		printJSON(map[string]any{"runs": orderedRuns})
 		return
+	}
+
+	resp, err := doJSONAs[runsResponse](http.MethodGet, "/runs", nil)
+	must(err)
+	orderedRuns := reverseSlice(resp.Runs)
+	if !*all && *limit > 0 && len(orderedRuns) > *limit {
+		orderedRuns = orderedRuns[len(orderedRuns)-*limit:]
 	}
 	printRunListSummary(orderedRuns)
 }
@@ -51,71 +58,58 @@ func runShow(args []string) {
 	require(runID != "", "run_id_or_name is required (usage: tahuna run show <run_id|run_name>)")
 	resolvedRunID, err := resolveRunIDByIDOrName(runID)
 	must(err)
-	resp, err := doJSON(http.MethodGet, "/runs/"+resolvedRunID, nil)
-	must(err)
 	if *verbose {
+		resp, err := doJSON(http.MethodGet, "/runs/"+resolvedRunID, nil)
+		must(err)
 		printJSON(resp)
 		return
 	}
+	resp, err := doJSONAs[runResponse](http.MethodGet, "/runs/"+resolvedRunID, nil)
+	must(err)
 	printRunSummary(resp)
 }
 
-func reverseRunsForTailOrder(runs []any) []any {
-	ordered := make([]any, len(runs))
-	for i := range runs {
-		ordered[i] = runs[len(runs)-1-i]
+func reverseSlice[T any](s []T) []T {
+	out := make([]T, len(s))
+	for i := range s {
+		out[i] = s[len(s)-1-i]
 	}
-	return ordered
+	return out
 }
 
-func printRunListSummary(runsAny []any) {
-	if len(runsAny) == 0 {
+func printRunListSummary(runs []runResponse) {
+	if len(runs) == 0 {
 		fmt.Println("No runs found.")
 		return
 	}
 
 	envNameByID := map[string]string{}
-	envResp, err := doJSON(http.MethodGet, "/environments", nil)
+	envResp, err := doJSONAs[environmentsResponse](http.MethodGet, "/environments", nil)
 	if err == nil {
-		if environmentsAny, ok := envResp["environments"].([]any); ok {
-			for _, raw := range environmentsAny {
-				row, ok := raw.(map[string]any)
-				if !ok {
-					continue
-				}
-				envID := asString(row["environment_id"])
-				envName := asString(row["name"])
-				if envID != "" && envName != "" {
-					envNameByID[envID] = envName
-				}
+		for _, env := range envResp.Environments {
+			if env.EnvironmentID != "" && env.Name != "" {
+				envNameByID[env.EnvironmentID] = env.Name
 			}
 		}
 	}
 
 	fmt.Printf("%-24s %-22s %-32s %-12s %s\n", "RUN NAME", "ENVIRONMENT", "RUN ID", "STATUS", "CREATED")
-	for _, raw := range runsAny {
-		run, ok := raw.(map[string]any)
-		if !ok {
-			continue
-		}
-		runName := strings.TrimSpace(asString(run["name"]))
+	for _, run := range runs {
+		runName := strings.TrimSpace(run.Name)
 		if runName == "" {
 			runName = "unnamed"
 		}
-		envID := strings.TrimSpace(asString(run["environment_id"]))
-		envLabel := envNameByID[envID]
+		envLabel := envNameByID[strings.TrimSpace(run.EnvironmentID)]
 		if envLabel == "" {
 			envLabel = "unknown"
 		}
-		runID := asString(run["run_id"])
-		status := asString(run["status"])
-		created := formatUnixMillis(asInt64(run["created_at"]))
+		created := formatUnixMillis(run.CreatedAt)
 		fmt.Printf(
 			"%-24s %-22s %-32s %-12s %s\n",
 			truncateRunListColumn(runName, 24),
 			truncateRunListColumn(envLabel, 22),
-			truncateRunListColumn(runID, 32),
-			truncateRunListColumn(status, 12),
+			truncateRunListColumn(run.RunID, 32),
+			truncateRunListColumn(run.Status, 12),
 			created,
 		)
 	}
@@ -158,31 +152,6 @@ func asInt64(v any) int64 {
 	}
 }
 
-func asFloat64(v any) (float64, bool) {
-	switch t := v.(type) {
-	case float64:
-		return t, true
-	case float32:
-		return float64(t), true
-	case int:
-		return float64(t), true
-	case int64:
-		return float64(t), true
-	case json.Number:
-		out, err := t.Float64()
-		return out, err == nil
-	case string:
-		trimmed := strings.TrimSpace(t)
-		if trimmed == "" {
-			return 0, false
-		}
-		out, err := strconv.ParseFloat(trimmed, 64)
-		return out, err == nil
-	default:
-		return 0, false
-	}
-}
-
 func runWatch(args []string) {
 	fs := flag.NewFlagSet("run watch", flag.ExitOnError)
 	id := fs.String("id", "", "Run ID")
@@ -215,12 +184,15 @@ func runLogs(args []string) {
 	require(*interval > 0, "--interval must be >= 1")
 	require(!(*follow && *verbose), "--follow (-f) cannot be used with --verbose (-v)")
 
-	resp, err := doJSON(http.MethodGet, "/runs/"+resolvedRunID+"/logs", nil)
-	must(err)
 	if *verbose {
+		resp, err := doJSON(http.MethodGet, "/runs/"+resolvedRunID+"/logs", nil)
+		must(err)
 		printJSON(resp)
 		return
 	}
+
+	resp, err := doJSONAs[runLogsResponse](http.MethodGet, "/runs/"+resolvedRunID+"/logs", nil)
+	must(err)
 	printRunLogsSummary(resp, *lines)
 
 	if !*follow {
@@ -229,30 +201,29 @@ func runLogs(args []string) {
 	must(followRunLogs(resolvedRunID, resp, *interval))
 }
 
-func printRunSummary(resp map[string]any) {
-	runID := strings.TrimSpace(asString(resp["run_id"]))
+func printRunSummary(run runResponse) {
+	runID := strings.TrimSpace(run.RunID)
 	if runID != "" {
 		fmt.Printf("Run ID: %s\n", runID)
 	}
-	runName := strings.TrimSpace(asString(resp["name"]))
+	runName := strings.TrimSpace(run.Name)
 	if runName != "" {
 		fmt.Printf("Name: %s\n", runName)
 	}
-	envID := strings.TrimSpace(asString(resp["environment_id"]))
+	envID := strings.TrimSpace(run.EnvironmentID)
 	if envID != "" {
 		fmt.Printf("Environment ID: %s\n", envID)
 	}
-	status := strings.TrimSpace(asString(resp["status"]))
+	status := strings.TrimSpace(run.Status)
 	if status == "" {
 		status = "unknown"
 	}
 	fmt.Printf("Status: %s\n", status)
-	createdAt := asInt64(resp["created_at"])
-	if createdAt > 0 {
-		fmt.Printf("Created: %s\n", formatUnixMillis(createdAt))
+	if run.CreatedAt > 0 {
+		fmt.Printf("Created: %s\n", formatUnixMillis(run.CreatedAt))
 	}
-	gpuType := strings.TrimSpace(asString(resp["effective_gpu_type"]))
-	gpuCount := asInt64(resp["effective_gpu_count"])
+	gpuType := strings.TrimSpace(run.EffectiveGPUType)
+	gpuCount := run.EffectiveGPUCount
 	if gpuType != "" || gpuCount > 0 {
 		if gpuCount > 0 {
 			fmt.Printf("GPU: %s x%d\n", defaultString(gpuType, "unknown"), gpuCount)
@@ -260,19 +231,18 @@ func printRunSummary(resp map[string]any) {
 			fmt.Printf("GPU: %s\n", defaultString(gpuType, "unknown"))
 		}
 	}
-	volumeGb := asInt64(resp["effective_volume_gb"])
-	if volumeGb > 0 {
-		fmt.Printf("Volume: %dGB\n", volumeGb)
+	if run.EffectiveVolumeGB > 0 {
+		fmt.Printf("Volume: %dGB\n", run.EffectiveVolumeGB)
 	}
-	codeHash := strings.TrimSpace(asString(resp["code_manifest_hash"]))
+	codeHash := strings.TrimSpace(run.CodeManifestHash)
 	if codeHash != "" {
 		fmt.Printf("Code manifest: %s\n", codeHash)
 	}
-	dataHash := strings.TrimSpace(asString(resp["data_manifest_hash"]))
+	dataHash := strings.TrimSpace(run.DataManifestHash)
 	if dataHash != "" {
 		fmt.Printf("Data manifest: %s\n", dataHash)
 	}
-	errorText := strings.TrimSpace(asString(resp["error"]))
+	errorText := strings.TrimSpace(run.Error)
 	if errorText != "" {
 		fmt.Printf("Error: %s\n", errorText)
 	}
@@ -287,32 +257,27 @@ type runtimeLogLine struct {
 	message   string
 }
 
-func parseRecentRunLogs(resp map[string]any) []runtimeLogLine {
-	recentLogs, _ := resp["recent_logs"].([]any)
-	if len(recentLogs) == 0 {
+func parseRecentRunLogs(logs []logLineResponse) []runtimeLogLine {
+	if len(logs) == 0 {
 		return nil
 	}
 
-	out := make([]runtimeLogLine, 0, len(recentLogs))
-	for _, raw := range recentLogs {
-		row, ok := raw.(map[string]any)
-		if !ok {
-			continue
-		}
-		message := strings.TrimSpace(asString(row["message"]))
+	out := make([]runtimeLogLine, 0, len(logs))
+	for _, entry := range logs {
+		message := strings.TrimSpace(entry.Message)
 		if message == "" {
 			continue
 		}
-		level := strings.ToUpper(strings.TrimSpace(asString(row["level"])))
+		level := strings.ToUpper(strings.TrimSpace(entry.Level))
 		if level == "" {
 			level = "INFO"
 		}
-		source := strings.TrimSpace(asString(row["source"]))
+		source := strings.TrimSpace(entry.Source)
 		if source == "" {
 			source = "runtime"
 		}
 		out = append(out, runtimeLogLine{
-			timestamp: asInt64(row["timestamp"]),
+			timestamp: entry.Timestamp,
 			level:     level,
 			source:    source,
 			message:   message,
@@ -333,19 +298,19 @@ func isTerminalRunStatus(status string) bool {
 	return status == "completed" || status == "failed" || status == "cancelled"
 }
 
-func followRunLogs(runID string, initialResp map[string]any, interval int) error {
+func followRunLogs(runID string, initialResp runLogsResponse, interval int) error {
 	const maxConsecutivePollErrors = 12
 	fmt.Printf("%sFollowing logs for run %s (Ctrl+C to stop)%s\n", cAmpMuted, runID, cReset)
 
 	seen := map[string]struct{}{}
 	consecutivePollErrors := 0
-	for _, line := range parseRecentRunLogs(initialResp) {
+	for _, line := range parseRecentRunLogs(initialResp.RecentLogs) {
 		key := runtimeLogLineKey(line)
 		seen[key] = struct{}{}
 	}
 
 	for {
-		statusResp, err := doJSON(http.MethodGet, "/runs/"+runID, nil)
+		statusResp, err := doJSONAs[runResponse](http.MethodGet, "/runs/"+runID, nil)
 		if err != nil {
 			if isRetryableRunPollError(err) {
 				consecutivePollErrors++
@@ -370,12 +335,12 @@ func followRunLogs(runID string, initialResp map[string]any, interval int) error
 			}
 			return err
 		}
-		status := asString(statusResp["status"])
+		status := statusResp.Status
 		if status == "" {
 			status = "queued"
 		}
 
-		logResp, err := doJSON(http.MethodGet, "/runs/"+runID+"/logs", nil)
+		logResp, err := doJSONAs[runLogsResponse](http.MethodGet, "/runs/"+runID+"/logs", nil)
 		if err != nil {
 			if isRetryableRunPollError(err) {
 				consecutivePollErrors++
@@ -404,7 +369,7 @@ func followRunLogs(runID string, initialResp map[string]any, interval int) error
 			fmt.Printf("%sinfo:%s recovered run log polling\n", cAmpMuted, cReset)
 			consecutivePollErrors = 0
 		}
-		for _, line := range parseRecentRunLogs(logResp) {
+		for _, line := range parseRecentRunLogs(logResp.RecentLogs) {
 			key := runtimeLogLineKey(line)
 			if _, exists := seen[key]; exists {
 				continue
@@ -420,27 +385,27 @@ func followRunLogs(runID string, initialResp map[string]any, interval int) error
 	}
 }
 
-func printRunLogsSummary(resp map[string]any, maxLines int) {
-	runID := strings.TrimSpace(asString(resp["run_id"]))
+func printRunLogsSummary(resp runLogsResponse, maxLines int) {
+	runID := strings.TrimSpace(resp.RunID)
 	if runID != "" {
 		fmt.Printf("Run: %s\n", runID)
 	}
-	logsPath := strings.TrimSpace(asString(resp["logs_path"]))
+	logsPath := strings.TrimSpace(resp.LogsPath)
 	if logsPath != "" {
 		fmt.Printf("Logs path: %s\n", logsPath)
 	}
-	logFile := strings.TrimSpace(asString(resp["log_file"]))
+	logFile := strings.TrimSpace(resp.LogFile)
 	if logFile != "" {
 		fmt.Printf("Log file: %s\n", logFile)
 	}
-	note := strings.TrimSpace(asString(resp["note"]))
+	note := strings.TrimSpace(resp.Note)
 	if note != "" {
 		fmt.Printf("Note: %s\n", note)
 	}
 
 	fmt.Println()
 	fmt.Println("Recent logs:")
-	recentLogs := parseRecentRunLogs(resp)
+	recentLogs := parseRecentRunLogs(resp.RecentLogs)
 	if maxLines > 0 && len(recentLogs) > maxLines {
 		recentLogs = recentLogs[len(recentLogs)-maxLines:]
 	}
@@ -452,36 +417,27 @@ func printRunLogsSummary(resp map[string]any, maxLines int) {
 		}
 	}
 
-	recentMetrics, _ := resp["recent_metrics"].([]any)
-	if len(recentMetrics) == 0 {
+	if len(resp.RecentMetrics) == 0 {
 		return
 	}
 	fmt.Println()
 	fmt.Println("Recent metrics:")
-	for _, raw := range recentMetrics {
-		row, ok := raw.(map[string]any)
-		if !ok {
-			continue
-		}
-		name := strings.TrimSpace(asString(row["name"]))
+	for _, metric := range resp.RecentMetrics {
+		name := strings.TrimSpace(metric.Name)
 		if name == "" {
 			continue
 		}
-		value, ok := asFloat64(row["value"])
-		if !ok {
-			continue
-		}
-		timestamp := formatUnixMillis(asInt64(row["timestamp"]))
-		source := strings.TrimSpace(asString(row["source"]))
+		timestamp := formatUnixMillis(metric.Timestamp)
+		source := strings.TrimSpace(metric.Source)
 		if source == "" {
 			source = "runtime"
 		}
 		stepText := "-"
-		if stepRaw, exists := row["step"]; exists && stepRaw != nil {
-			stepText = strconv.FormatInt(asInt64(stepRaw), 10)
+		if metric.Step != nil {
+			stepText = strconv.FormatInt(*metric.Step, 10)
 		}
-		unit := strings.TrimSpace(asString(row["unit"]))
-		valueText := strconv.FormatFloat(value, 'f', -1, 64)
+		unit := strings.TrimSpace(metric.Unit)
+		valueText := strconv.FormatFloat(metric.Value, 'f', -1, 64)
 		if unit != "" {
 			valueText = valueText + " " + unit
 		}
@@ -516,18 +472,18 @@ func runCancel(args []string) {
 		}
 	}
 
-	resp, err := doJSON(http.MethodPost, "/runs/"+resolvedRunID+"/cancel", map[string]any{
+	resp, err := doJSONAs[cancelRunResponse](http.MethodPost, "/runs/"+resolvedRunID+"/cancel", map[string]any{
 		"force": isForce,
 	})
 	must(err)
 
-	if cancelled, ok := resp["cancel_requested"]; ok && cancelled == true {
+	if resp.CancelRequested {
 		if isForce {
 			fmt.Printf("%sForce cancellation requested for run %s.%s\n", cAmpGold, resolvedRunID, cReset)
 		} else {
 			fmt.Printf("%sCancellation requested for run %s. Waiting for graceful shutdown...%s\n", cAmpGold, resolvedRunID, cReset)
 		}
-	} else if deleted, ok := resp["deleted"]; ok && deleted == true {
+	} else if resp.Deleted {
 		fmt.Printf("%sRun %s deleted.%s\n", cAmpGreen, resolvedRunID, cReset)
 	} else {
 		printJSON(resp)
@@ -603,28 +559,20 @@ func resolveRunDeleteTargets(targets []string, deleteAll bool) ([]string, error)
 		return nil, errors.New("run_id_or_name is required (usage: tahuna run rm <run_id|run_name|pattern> ... or --all)")
 	}
 
-	resp, err := doJSON(http.MethodGet, "/runs", nil)
+	resp, err := doJSONAs[runsResponse](http.MethodGet, "/runs", nil)
 	if err != nil {
 		return nil, err
 	}
-	runsAny, ok := resp["runs"].([]any)
-	if !ok {
-		return nil, errors.New("invalid runs response")
-	}
 
-	runs := make([]runDeleteTarget, 0, len(runsAny))
-	for _, raw := range runsAny {
-		row, ok := raw.(map[string]any)
-		if !ok {
-			continue
-		}
-		runID := strings.TrimSpace(asString(row["run_id"]))
+	runs := make([]runDeleteTarget, 0, len(resp.Runs))
+	for _, r := range resp.Runs {
+		runID := strings.TrimSpace(r.RunID)
 		if runID == "" {
 			continue
 		}
 		runs = append(runs, runDeleteTarget{
 			id:   runID,
-			name: strings.TrimSpace(asString(row["name"])),
+			name: strings.TrimSpace(r.Name),
 		})
 	}
 

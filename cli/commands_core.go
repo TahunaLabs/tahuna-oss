@@ -169,12 +169,12 @@ func guidedSetup(environmentName, frameworkHint, pythonVersionHint string) (guid
 		"framework":      framework,
 		"version":        version,
 	}
-	env, err := doJSON(http.MethodPost, "/environments", envPayload)
+	env, err := doJSONAs[createEnvironmentResponse](http.MethodPost, "/environments", envPayload)
 	if err != nil {
 		return guidedSetupResult{}, err
 	}
 
-	envID := asString(env["environment_id"])
+	envID := env.EnvironmentID
 	fmt.Printf("\n%sEnvironment created%s\n", cAmpWord, cReset)
 	return guidedSetupResult{
 		environmentID:    envID,
@@ -345,13 +345,15 @@ func gpusList(args []string) {
 	fs.BoolVar(verbose, "v", false, "Show full GPUs payload")
 	mustParseFlags(fs, args)
 
-	resp, err := doJSON(http.MethodGet, "/gpus", nil)
-	must(err)
 	if *verbose {
+		resp, err := doJSON(http.MethodGet, "/gpus", nil)
+		must(err)
 		printJSON(resp)
 		return
 	}
-	gpus := parseGpusRows(resp)
+	typedResp, err := doJSONAs[gpusResponse](http.MethodGet, "/gpus", nil)
+	must(err)
+	gpus := parseGpusRows(typedResp.GPUs)
 	if len(gpus) == 0 {
 		fmt.Println("No GPUs available.")
 		return
@@ -381,34 +383,29 @@ func dataList(args []string) {
 	fs.BoolVar(verbose, "v", false, "Show full data payload")
 	mustParseFlags(fs, args)
 
-	resp, err := doJSON(http.MethodGet, "/data", nil)
-	must(err)
 	if *verbose {
+		resp, err := doJSON(http.MethodGet, "/data", nil)
+		must(err)
 		printJSON(resp)
 		return
 	}
 
-	blobsAny, ok := resp["blobs"].([]any)
-	if !ok || len(blobsAny) == 0 {
+	resp, err := doJSONAs[dataListResponse](http.MethodGet, "/data", nil)
+	must(err)
+	if len(resp.Blobs) == 0 {
 		fmt.Println("No data items found.")
 		return
 	}
 	fmt.Printf("%-18s %-30s %-12s %s\n", "DATA ID", "FILENAME", "SIZE", "CREATED")
-	for _, raw := range blobsAny {
-		row, ok := raw.(map[string]any)
-		if !ok {
-			continue
-		}
-		blobID := strings.TrimSpace(asString(row["blob_id"]))
-		filename := strings.TrimSpace(asString(row["filename"]))
-		size := asInt64(row["size"])
-		created := formatUnixMillis(asInt64(row["created_at"]))
+	for _, blob := range resp.Blobs {
+		blobID := strings.TrimSpace(blob.BlobID)
+		filename := strings.TrimSpace(blob.Filename)
 		fmt.Printf(
 			"%-18s %-30s %-12s %s\n",
 			truncateRunListColumn(defaultString(blobID, "-"), 18),
 			truncateRunListColumn(defaultString(filename, "-"), 30),
-			humanSize(size),
-			created,
+			humanSize(blob.Size),
+			formatUnixMillis(blob.CreatedAt),
 		)
 	}
 }
@@ -422,27 +419,28 @@ func dataShow(args []string) {
 
 	dataID := resolveRunID(*id, fs.Args())
 	require(dataID != "", "data_id is required (usage: tahuna data show <data_id>)")
-	resp, err := doJSON(http.MethodGet, "/data/"+dataID, nil)
-	must(err)
 	if *verbose {
+		resp, err := doJSON(http.MethodGet, "/data/"+dataID, nil)
+		must(err)
 		printJSON(resp)
 		return
 	}
-	fmt.Printf("Data ID: %s\n", defaultString(strings.TrimSpace(asString(resp["blob_id"])), dataID))
-	fmt.Printf("Filename: %s\n", defaultString(strings.TrimSpace(asString(resp["filename"])), "-"))
-	fmt.Printf("Key: %s\n", defaultString(strings.TrimSpace(asString(resp["key"])), "-"))
-	fmt.Printf("Size: %s\n", humanSize(asInt64(resp["size"])))
-	contentType := strings.TrimSpace(asString(resp["content_type"]))
+	resp, err := doJSONAs[dataItemResponse](http.MethodGet, "/data/"+dataID, nil)
+	must(err)
+	fmt.Printf("Data ID: %s\n", defaultString(strings.TrimSpace(resp.BlobID), dataID))
+	fmt.Printf("Filename: %s\n", defaultString(strings.TrimSpace(resp.Filename), "-"))
+	fmt.Printf("Key: %s\n", defaultString(strings.TrimSpace(resp.Key), "-"))
+	fmt.Printf("Size: %s\n", humanSize(resp.Size))
+	contentType := strings.TrimSpace(resp.ContentType)
 	if contentType != "" {
 		fmt.Printf("Content-Type: %s\n", contentType)
 	}
-	downloadURL := strings.TrimSpace(asString(resp["download_url"]))
+	downloadURL := strings.TrimSpace(resp.DownloadURL)
 	if downloadURL != "" {
 		fmt.Printf("Download URL: %s\n", downloadURL)
 	}
-	created := asInt64(resp["created_at"])
-	if created > 0 {
-		fmt.Printf("Created: %s\n", formatUnixMillis(created))
+	if resp.CreatedAt > 0 {
+		fmt.Printf("Created: %s\n", formatUnixMillis(resp.CreatedAt))
 	}
 	fmt.Println()
 	fmt.Println("Use --verbose (-v) for full JSON payload.")
@@ -603,12 +601,14 @@ func environmentShow(args []string) {
 	}
 	require(environmentID != "", "environment_id is required (usage: tahuna env show <env_id> | --id <env_id>)")
 
-	resp, err := doJSON(http.MethodGet, "/environments/"+environmentID, nil)
-	must(err)
 	if *verbose {
+		resp, err := doJSON(http.MethodGet, "/environments/"+environmentID, nil)
+		must(err)
 		printJSON(resp)
 		return
 	}
+	resp, err := doJSONAs[environmentResponse](http.MethodGet, "/environments/"+environmentID, nil)
+	must(err)
 	printEnvironmentSummary(resp)
 }
 
@@ -618,58 +618,49 @@ func environmentList(args []string) {
 	fs.BoolVar(verbose, "v", false, "Show full environments payload")
 	mustParseFlags(fs, args)
 
-	resp, err := doJSON(http.MethodGet, "/environments", nil)
-	must(err)
 	if *verbose {
+		resp, err := doJSON(http.MethodGet, "/environments", nil)
+		must(err)
 		printJSON(resp)
 		return
 	}
-	environmentsAny, ok := resp["environments"].([]any)
-	if !ok {
-		printJSON(resp)
-		return
-	}
-	printEnvironmentListSummary(environmentsAny)
+	resp, err := doJSONAs[environmentsResponse](http.MethodGet, "/environments", nil)
+	must(err)
+	printEnvironmentListSummary(resp.Environments)
 }
 
-func printEnvironmentListSummary(environmentsAny []any) {
-	if len(environmentsAny) == 0 {
+func printEnvironmentListSummary(environments []environmentResponse) {
+	if len(environments) == 0 {
 		fmt.Println("No environments found.")
 		return
 	}
 
 	fmt.Printf("%-22s %-32s %-22s %-10s %-18s\n", "NAME", "ENV ID", "GPU", "VOLUME", "FRAMEWORK")
-	for _, raw := range environmentsAny {
-		row, ok := raw.(map[string]any)
-		if !ok {
-			continue
-		}
-		name := strings.TrimSpace(asString(row["name"]))
+	for _, env := range environments {
+		name := strings.TrimSpace(env.Name)
 		if name == "" {
 			name = "unknown"
 		}
-		envID := strings.TrimSpace(asString(row["environment_id"]))
+		envID := strings.TrimSpace(env.EnvironmentID)
 		if envID == "" {
 			envID = "-"
 		}
-		gpuType := strings.TrimSpace(asString(row["gpu_type"]))
-		gpuCount := asInt64(row["gpu_count"])
+		gpuType := strings.TrimSpace(env.GPUType)
 		gpuLabel := gpuType
 		if gpuLabel == "" {
 			gpuLabel = "unknown"
 		}
-		if gpuCount > 0 {
-			gpuLabel = fmt.Sprintf("%s x%d", gpuLabel, gpuCount)
+		if env.GPUCount > 0 {
+			gpuLabel = fmt.Sprintf("%s x%d", gpuLabel, env.GPUCount)
 		}
 
-		volumeGb := asInt64(row["volume_gb"])
 		volumeLabel := "-"
-		if volumeGb > 0 {
-			volumeLabel = fmt.Sprintf("%dGB", volumeGb)
+		if env.VolumeGB > 0 {
+			volumeLabel = fmt.Sprintf("%dGB", env.VolumeGB)
 		}
 
-		framework := strings.TrimSpace(asString(row["framework"]))
-		version := strings.TrimSpace(asString(row["version"]))
+		framework := strings.TrimSpace(env.Framework)
+		version := strings.TrimSpace(env.Version)
 		frameworkLabel := framework
 		if frameworkLabel == "" {
 			frameworkLabel = "unknown"
@@ -689,15 +680,10 @@ func printEnvironmentListSummary(environmentsAny []any) {
 	}
 }
 
-func printEnvironmentSummary(resp map[string]any) {
-	name := strings.TrimSpace(asString(resp["name"]))
-	envID := strings.TrimSpace(asString(resp["environment_id"]))
-	gpuType := strings.TrimSpace(asString(resp["gpu_type"]))
-	gpuCount := asInt64(resp["gpu_count"])
-	volumeGb := asInt64(resp["volume_gb"])
-	framework := strings.TrimSpace(asString(resp["framework"]))
-	version := strings.TrimSpace(asString(resp["version"]))
-	artifacts := strings.TrimSpace(asString(resp["artifacts"]))
+func printEnvironmentSummary(env environmentResponse) {
+	name := strings.TrimSpace(env.Name)
+	envID := strings.TrimSpace(env.EnvironmentID)
+	gpuType := strings.TrimSpace(env.GPUType)
 
 	if name != "" {
 		fmt.Printf("Name: %s\n", name)
@@ -705,16 +691,18 @@ func printEnvironmentSummary(resp map[string]any) {
 	if envID != "" {
 		fmt.Printf("Environment ID: %s\n", envID)
 	}
-	if gpuType != "" || gpuCount > 0 {
-		if gpuCount > 0 {
-			fmt.Printf("GPU: %s x%d\n", defaultString(gpuType, "unknown"), gpuCount)
+	if gpuType != "" || env.GPUCount > 0 {
+		if env.GPUCount > 0 {
+			fmt.Printf("GPU: %s x%d\n", defaultString(gpuType, "unknown"), env.GPUCount)
 		} else {
 			fmt.Printf("GPU: %s\n", defaultString(gpuType, "unknown"))
 		}
 	}
-	if volumeGb > 0 {
-		fmt.Printf("Volume: %dGB\n", volumeGb)
+	if env.VolumeGB > 0 {
+		fmt.Printf("Volume: %dGB\n", env.VolumeGB)
 	}
+	framework := strings.TrimSpace(env.Framework)
+	version := strings.TrimSpace(env.Version)
 	if framework != "" || version != "" {
 		stack := defaultString(framework, "unknown")
 		if version != "" {
@@ -722,11 +710,12 @@ func printEnvironmentSummary(resp map[string]any) {
 		}
 		fmt.Printf("Framework: %s\n", stack)
 	}
+	artifacts := strings.TrimSpace(env.Artifacts)
 	if artifacts != "" {
 		fmt.Printf("Artifacts: %s\n", artifacts)
 	}
-	if boundAny, ok := resp["bound_data_ids"].([]any); ok && len(boundAny) > 0 {
-		fmt.Printf("Bound data IDs: %d\n", len(boundAny))
+	if len(env.BoundDataIDs) > 0 {
+		fmt.Printf("Bound data IDs: %d\n", len(env.BoundDataIDs))
 	}
 	fmt.Println()
 	fmt.Println("Use --verbose (-v) for full JSON payload.")
@@ -754,18 +743,10 @@ func environmentDelete(args []string) {
 
 	environmentIDs := make([]string, 0, 1)
 	if *all {
-		resp, err := doJSON(http.MethodGet, "/environments", nil)
+		resp, err := doJSONAs[environmentsResponse](http.MethodGet, "/environments", nil)
 		must(err)
-		environmentsAny, ok := resp["environments"].([]any)
-		if !ok {
-			must(errors.New("invalid environments response"))
-		}
-		for _, raw := range environmentsAny {
-			row, ok := raw.(map[string]any)
-			if !ok {
-				continue
-			}
-			envID := strings.TrimSpace(asString(row["environment_id"]))
+		for _, env := range resp.Environments {
+			envID := strings.TrimSpace(env.EnvironmentID)
 			if envID != "" {
 				environmentIDs = append(environmentIDs, envID)
 			}
@@ -827,15 +808,15 @@ func environmentUpdate(args []string) {
 
 	interactive := len(payload) == 0
 	if interactive {
-		current, err := doJSON(http.MethodGet, "/environments/"+environmentID, nil)
+		current, err := doJSONAs[environmentResponse](http.MethodGet, "/environments/"+environmentID, nil)
 		must(err)
 
-		currentGPU := strings.TrimSpace(asString(current["gpu_type"]))
-		currentGPUCount := int(asInt64(current["gpu_count"]))
+		currentGPU := strings.TrimSpace(current.GPUType)
+		currentGPUCount := int(current.GPUCount)
 		if currentGPUCount < 1 {
 			currentGPUCount = 1
 		}
-		currentVolume := int(asInt64(current["volume_gb"]))
+		currentVolume := int(current.VolumeGB)
 		if currentVolume < 1 {
 			currentVolume = 1
 		}
@@ -859,9 +840,9 @@ func environmentUpdate(args []string) {
 	if gpuCountValue := int(asInt64(payload["gpu_count"])); gpuCountValue > 0 {
 		effectiveGPUType := strings.TrimSpace(asString(payload["gpu_type"]))
 		if effectiveGPUType == "" {
-			current, err := doJSON(http.MethodGet, "/environments/"+environmentID, nil)
+			current, err := doJSONAs[environmentResponse](http.MethodGet, "/environments/"+environmentID, nil)
 			must(err)
-			effectiveGPUType = strings.TrimSpace(asString(current["gpu_type"]))
+			effectiveGPUType = strings.TrimSpace(current.GPUType)
 		}
 		if err := validateGPUSelection(effectiveGPUType, gpuCountValue); err != nil {
 			must(err)
@@ -913,8 +894,8 @@ func runCreate(args []string) {
 
 	resp, err := createRunWithCapacityPrompt("/environments/"+environmentID+"/runs", payload)
 	must(err)
-	runID := asString(resp["run_id"])
-	runName := strings.TrimSpace(asString(resp["name"]))
+	runID := resp.RunID
+	runName := strings.TrimSpace(resp.Name)
 	if runName == "" {
 		runName = "unnamed"
 	}
@@ -938,37 +919,25 @@ func resolveRunIDByIDOrName(idOrName string) (string, error) {
 		return "", errors.New("run id or name is required")
 	}
 
-	resp, err := doJSON(http.MethodGet, "/runs", nil)
+	resp, err := doJSONAs[runsResponse](http.MethodGet, "/runs", nil)
 	if err != nil {
 		return "", err
 	}
-	runsAny, ok := resp["runs"].([]any)
-	if !ok {
-		return "", errors.New("invalid runs response")
-	}
 
-	for _, raw := range runsAny {
-		row, ok := raw.(map[string]any)
-		if !ok {
-			continue
-		}
-		runID := strings.TrimSpace(asString(row["run_id"]))
+	for _, run := range resp.Runs {
+		runID := strings.TrimSpace(run.RunID)
 		if runID == target {
 			return runID, nil
 		}
 	}
 
 	matches := make([]string, 0, 2)
-	for _, raw := range runsAny {
-		row, ok := raw.(map[string]any)
-		if !ok {
-			continue
-		}
-		runName := strings.TrimSpace(asString(row["name"]))
+	for _, run := range resp.Runs {
+		runName := strings.TrimSpace(run.Name)
 		if runName != target {
 			continue
 		}
-		runID := strings.TrimSpace(asString(row["run_id"]))
+		runID := strings.TrimSpace(run.RunID)
 		if runID != "" {
 			matches = append(matches, runID)
 		}
@@ -1017,12 +986,12 @@ func runRename(args []string) {
 	runID, err := resolveRunIDByIDOrName(target)
 	must(err)
 
-	resp, err := doJSON(http.MethodPatch, "/runs/"+runID, map[string]any{
+	resp, err := doJSONAs[runResponse](http.MethodPatch, "/runs/"+runID, map[string]any{
 		"name": newName,
 	})
 	must(err)
 
-	resolvedName := strings.TrimSpace(asString(resp["name"]))
+	resolvedName := strings.TrimSpace(resp.Name)
 	if resolvedName == "" {
 		resolvedName = newName
 	}
@@ -1061,7 +1030,7 @@ func train(args []string) {
 	resp, err := createRunWithCapacityPrompt("/environments/"+resolvedEnvironmentID+"/runs", payload)
 	must(err)
 
-	runID := asString(resp["run_id"])
+	runID := resp.RunID
 	fmt.Printf("%s✓%s run created: %s - %s\n", cAmpGreen, cReset, runID, runDashboardURL(runID))
 	if *detached {
 		return
@@ -1069,15 +1038,15 @@ func train(args []string) {
 	must(monitorRunWithLogs(runID, 5))
 }
 
-func createRunWithCapacityPrompt(path string, payload map[string]any) (map[string]any, error) {
-	resp, err := doJSON(http.MethodPost, path, payload)
+func createRunWithCapacityPrompt(path string, payload map[string]any) (createRunResponse, error) {
+	resp, err := doJSONAs[createRunResponse](http.MethodPost, path, payload)
 	if err == nil || !isNoGPUCapacityCreateError(err) || !supportsInteractivePrompts() {
 		return resp, err
 	}
 
 	gpus, _, _, gpusErr := fetchGpusAndImages()
 	if gpusErr != nil || len(gpus) == 0 {
-		return nil, err
+		return createRunResponse{}, err
 	}
 
 	defaultGPU := strings.TrimSpace(asString(payload["gpu_type"]))
@@ -1106,24 +1075,24 @@ func createRunWithCapacityPrompt(path string, payload map[string]any) (map[strin
 				fmt.Printf("%s%s%s\n", cAmpGold, err.Error(), cReset)
 				choice := promptChoice("Still unavailable", []string{"Try another GPU", "Cancel"}, 0)
 				if choice == "Cancel" {
-					return nil, lastErr
+					return createRunResponse{}, lastErr
 				}
 				continue
 			}
 		}
 
-		resp, err = doJSON(http.MethodPost, path, payload)
+		resp, err = doJSONAs[createRunResponse](http.MethodPost, path, payload)
 		if err == nil {
 			return resp, nil
 		}
 		lastErr = err
 		if !isNoGPUCapacityCreateError(err) {
-			return nil, err
+			return createRunResponse{}, err
 		}
 
 		choice := promptChoice("Still unavailable", []string{"Try another GPU", "Cancel"}, 0)
 		if choice == "Cancel" {
-			return nil, lastErr
+			return createRunResponse{}, lastErr
 		}
 		for i, gpu := range gpus {
 			if strings.EqualFold(strings.TrimSpace(gpu), nextGPU) {
@@ -1163,11 +1132,11 @@ func inferEnvironmentGPU(path string) (string, error) {
 	if environmentID == "" {
 		return "", errors.New("environment id is empty")
 	}
-	env, err := doJSON(http.MethodGet, "/environments/"+environmentID, nil)
+	env, err := doJSONAs[environmentResponse](http.MethodGet, "/environments/"+environmentID, nil)
 	if err != nil {
 		return "", err
 	}
-	gpu := strings.TrimSpace(asString(env["gpu_type"]))
+	gpu := strings.TrimSpace(env.GPUType)
 	if gpu == "" {
 		return "", errors.New("environment gpu_type is empty")
 	}

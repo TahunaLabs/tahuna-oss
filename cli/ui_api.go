@@ -49,7 +49,7 @@ func monitorRunWithOptions(runID string, interval int, streamLogs bool) error {
 	logFetchWarned := false
 
 	for {
-		resp, err := doJSON(http.MethodGet, "/runs/"+runID, nil)
+		resp, err := doJSONAs[runResponse](http.MethodGet, "/runs/"+runID, nil)
 		if err != nil {
 			if isRetryableRunPollError(err) {
 				consecutivePollErrors++
@@ -78,11 +78,11 @@ func monitorRunWithOptions(runID string, interval int, streamLogs bool) error {
 			fmt.Printf("%sinfo:%s recovered run status polling\n", cAmpMuted, cReset)
 			consecutivePollErrors = 0
 		}
-		status := asString(resp["status"])
+		status := resp.Status
 		if status == "" {
 			status = "queued"
 		}
-		errMsg := asString(resp["error"])
+		errMsg := resp.Error
 
 		if streamLogs {
 			if !headerPrinted {
@@ -105,14 +105,14 @@ func monitorRunWithOptions(runID string, interval int, streamLogs bool) error {
 				lastStatus = status
 			}
 
-			logResp, logErr := doJSON(http.MethodGet, "/runs/"+runID+"/logs", nil)
+			logResp, logErr := doJSONAs[runLogsResponse](http.MethodGet, "/runs/"+runID+"/logs", nil)
 			if logErr != nil {
 				if !logFetchWarned {
 					fmt.Printf("%swarning:%s unable to stream logs yet (%v)\n", cAmpGold, cReset, logErr)
 					logFetchWarned = true
 				}
 			} else {
-				for _, line := range parseRecentRunLogs(logResp) {
+				for _, line := range parseRecentRunLogs(logResp.RecentLogs) {
 					key := runtimeLogLineKey(line)
 					if _, exists := seenLogLines[key]; exists {
 						continue
@@ -286,47 +286,27 @@ type gpuRow struct {
 	PricePerHour float64
 }
 
-func parseGpusRows(resp map[string]any) []gpuRow {
-	gpuRaw, ok := resp["gpus"].([]any)
-	if !ok {
-		return nil
-	}
-	gpus := make([]gpuRow, 0, len(gpuRaw))
-	for _, raw := range gpuRaw {
-		switch row := raw.(type) {
-		case map[string]any:
-			id := strings.TrimSpace(asString(row["id"]))
-			display := strings.TrimSpace(asString(row["display_name"]))
-			if display == "" {
-				display = id
-			}
-			if id == "" {
-				id = display
-			}
-			if id == "" {
-				continue
-			}
-			price, _ := asFloat64(row["price_per_hour"])
-			gpus = append(gpus, gpuRow{
-				ID:           id,
-				DisplayName:  display,
-				MaxGPUCount:  int(asInt64(row["max_gpu_count"])),
-				MemoryGB:     int(asInt64(row["memory_gb"])),
-				PricePerHour: price,
-			})
-		default:
-			id := strings.TrimSpace(asString(raw))
-			if id == "" {
-				continue
-			}
-			gpus = append(gpus, gpuRow{
-				ID:           id,
-				DisplayName:  id,
-				MaxGPUCount:  0,
-				MemoryGB:     0,
-				PricePerHour: 0,
-			})
+func parseGpusRows(entries []gpuAPIEntry) []gpuRow {
+	gpus := make([]gpuRow, 0, len(entries))
+	for _, entry := range entries {
+		id := strings.TrimSpace(entry.ID)
+		display := strings.TrimSpace(entry.DisplayName)
+		if display == "" {
+			display = id
 		}
+		if id == "" {
+			id = display
+		}
+		if id == "" {
+			continue
+		}
+		gpus = append(gpus, gpuRow{
+			ID:           id,
+			DisplayName:  display,
+			MaxGPUCount:  entry.MaxGPUCount,
+			MemoryGB:     entry.MemoryGB,
+			PricePerHour: entry.PricePerHour,
+		})
 	}
 	sort.Slice(gpus, func(i, j int) bool {
 		return strings.ToLower(gpus[i].DisplayName) < strings.ToLower(gpus[j].DisplayName)
@@ -335,11 +315,11 @@ func parseGpusRows(resp map[string]any) []gpuRow {
 }
 
 func fetchGpusAndImages() ([]string, map[string][]string, map[string]map[string][]string, error) {
-	resp, err := doJSON(http.MethodGet, "/gpus", nil)
+	resp, err := doJSONAs[gpusResponse](http.MethodGet, "/gpus", nil)
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	parsedGpus := parseGpusRows(resp)
+	parsedGpus := parseGpusRows(resp.GPUs)
 	if len(parsedGpus) == 0 {
 		return nil, nil, nil, errors.New("invalid gpus response: gpus missing")
 	}
@@ -348,45 +328,36 @@ func fetchGpusAndImages() ([]string, map[string][]string, map[string]map[string]
 		gpus = append(gpus, gpu.ID)
 	}
 
-	imagesRaw, ok := resp["images"].(map[string]any)
-	if !ok {
+	if resp.Images == nil {
 		return nil, nil, nil, errors.New("invalid gpus response: images missing")
 	}
 
 	versionsByFramework := map[string][]string{}
 	pythonsByFrameworkVersion := map[string]map[string][]string{}
-	for framework, versionsAny := range imagesRaw {
-		versionsMap, ok := versionsAny.(map[string]any)
-		if !ok {
-			continue
-		}
-		versions := make([]string, 0, len(versionsMap))
+	for framework, versions := range resp.Images {
+		versionKeys := make([]string, 0, len(versions))
 		pythonsByFrameworkVersion[framework] = map[string][]string{}
-		for version, pythonsAny := range versionsMap {
-			versions = append(versions, version)
-			pythonsMap, ok := pythonsAny.(map[string]any)
-			if !ok {
-				continue
+		for version, pythons := range versions {
+			versionKeys = append(versionKeys, version)
+			pyKeys := make([]string, 0, len(pythons))
+			for py := range pythons {
+				pyKeys = append(pyKeys, py)
 			}
-			pythons := make([]string, 0, len(pythonsMap))
-			for py := range pythonsMap {
-				pythons = append(pythons, py)
-			}
-			sort.Strings(pythons)
-			pythonsByFrameworkVersion[framework][version] = pythons
+			sort.Strings(pyKeys)
+			pythonsByFrameworkVersion[framework][version] = pyKeys
 		}
-		sort.Strings(versions)
-		versionsByFramework[framework] = versions
+		sort.Strings(versionKeys)
+		versionsByFramework[framework] = versionKeys
 	}
 	return gpus, versionsByFramework, pythonsByFrameworkVersion, nil
 }
 
 func fetchGpusByID() (map[string]gpuRow, error) {
-	resp, err := doJSON(http.MethodGet, "/gpus", nil)
+	resp, err := doJSONAs[gpusResponse](http.MethodGet, "/gpus", nil)
 	if err != nil {
 		return nil, err
 	}
-	entries := parseGpusRows(resp)
+	entries := parseGpusRows(resp.GPUs)
 	if len(entries) == 0 {
 		return nil, errors.New("invalid gpus response: gpus missing")
 	}
@@ -423,11 +394,11 @@ func resolveEffectiveGPUTypeForEnvironment(environmentID, overrideType string) (
 	if strings.TrimSpace(overrideType) != "" {
 		return strings.TrimSpace(overrideType), nil
 	}
-	resp, err := doJSON(http.MethodGet, "/environments/"+environmentID, nil)
+	resp, err := doJSONAs[environmentResponse](http.MethodGet, "/environments/"+environmentID, nil)
 	if err != nil {
 		return "", err
 	}
-	return strings.TrimSpace(asString(resp["gpu_type"])), nil
+	return strings.TrimSpace(resp.GPUType), nil
 }
 
 func humanSize(bytes int64) string {
@@ -694,7 +665,7 @@ func friendlyError(err error) string {
 	return ""
 }
 
-func doJSON(method, path string, payload map[string]any) (map[string]any, error) {
+func doJSONRaw(method, path string, payload map[string]any) ([]byte, error) {
 	var body io.Reader
 	if payload != nil {
 		raw, err := json.Marshal(payload)
@@ -733,29 +704,29 @@ func doJSON(method, path string, payload map[string]any) (map[string]any, error)
 		return nil, err
 	}
 
-	var out map[string]any
-	if len(raw) > 0 {
-		if err := json.Unmarshal(raw, &out); err != nil {
-			snippet := strings.TrimSpace(string(raw))
-			if len(snippet) > 140 {
-				snippet = snippet[:140] + "..."
-			}
-			return nil, fmt.Errorf(
-				"api response was not JSON (%s %s -> %d). check TAHUNA_API_URL and that Tahuna web+convex are running. body starts with: %q",
-				method,
-				baseURL+requestPath,
-				resp.StatusCode,
-				snippet,
-			)
+	if len(raw) > 0 && !json.Valid(raw) {
+		snippet := strings.TrimSpace(string(raw))
+		if len(snippet) > 140 {
+			snippet = snippet[:140] + "..."
 		}
-	} else {
-		out = map[string]any{}
+		return nil, fmt.Errorf(
+			"api response was not JSON (%s %s -> %d). check TAHUNA_API_URL and that Tahuna web+convex are running. body starts with: %q",
+			method,
+			baseURL+requestPath,
+			resp.StatusCode,
+			snippet,
+		)
 	}
 
 	if resp.StatusCode >= 400 {
-		msg := asString(out["detail"])
-		if msg == "" {
-			msg = string(raw)
+		msg := string(raw)
+		if len(raw) > 0 {
+			var parsed map[string]any
+			if json.Unmarshal(raw, &parsed) == nil {
+				if detail := asString(parsed["detail"]); detail != "" {
+					msg = detail
+				}
+			}
 		}
 		return nil, &apiRequestError{
 			status: resp.StatusCode,
@@ -763,6 +734,37 @@ func doJSON(method, path string, payload map[string]any) (map[string]any, error)
 		}
 	}
 
+	return raw, nil
+}
+
+func doJSON(method, path string, payload map[string]any) (map[string]any, error) {
+	raw, err := doJSONRaw(method, path, payload)
+	if err != nil {
+		return nil, err
+	}
+	if len(raw) == 0 {
+		return map[string]any{}, nil
+	}
+	var out map[string]any
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func doJSONAs[T any](method, path string, payload map[string]any) (T, error) {
+	raw, err := doJSONRaw(method, path, payload)
+	var zero T
+	if err != nil {
+		return zero, err
+	}
+	if len(raw) == 0 {
+		return zero, nil
+	}
+	var out T
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return zero, err
+	}
 	return out, nil
 }
 

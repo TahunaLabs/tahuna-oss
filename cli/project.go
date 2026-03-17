@@ -21,16 +21,12 @@ func resolveEnvironmentID() (string, error) {
 		return linkedEnvironmentID, nil
 	}
 
-	resp, err := doJSON(http.MethodGet, "/environments", nil)
+	resp, err := doJSONAs[environmentsResponse](http.MethodGet, "/environments", nil)
 	if err != nil {
 		return "", err
 	}
 
-	raw, ok := resp["environments"].([]any)
-	if !ok {
-		return "", errors.New("invalid environments response")
-	}
-	if len(raw) == 0 {
+	if len(resp.Environments) == 0 {
 		return "", errors.New("no environments found; run `tahuna init .` first")
 	}
 	return "", errors.New("no linked environment in this project; run `tahuna init .` first")
@@ -432,10 +428,10 @@ func validateProjectConfigBindings(environmentID string) (projectConfig, error) 
 	// Sync runtime config to the remote environment if it differs.
 	if environmentID != "" {
 		needsUpdate := false
-		if env, envErr := doJSON(http.MethodGet, "/environments/"+environmentID, nil); envErr == nil {
-			remoteFramework := strings.TrimSpace(asString(env["framework"]))
-			remoteVersion := strings.TrimSpace(asString(env["version"]))
-			remotePython := strings.TrimSpace(asString(env["python_version"]))
+		if env, envErr := doJSONAs[environmentResponse](http.MethodGet, "/environments/"+environmentID, nil); envErr == nil {
+			remoteFramework := strings.TrimSpace(env.Framework)
+			remoteVersion := strings.TrimSpace(env.Version)
+			remotePython := strings.TrimSpace(env.PythonVersion)
 			needsUpdate = remoteFramework != resolved.Framework ||
 				remoteVersion != resolved.FrameworkVersion ||
 				remotePython != resolved.PythonVersion
@@ -546,9 +542,9 @@ func validateAndResolveRuntimeConfig(cfg projectConfig, environmentID string) (p
 
 	// If framework_version is missing locally (older project), fetch from environment.
 	if frameworkVersion == "" && environmentID != "" {
-		env, envErr := doJSON(http.MethodGet, "/environments/"+environmentID, nil)
+		env, envErr := doJSONAs[environmentResponse](http.MethodGet, "/environments/"+environmentID, nil)
 		if envErr == nil {
-			frameworkVersion = strings.TrimSpace(asString(env["version"]))
+			frameworkVersion = strings.TrimSpace(env.Version)
 			cfg.FrameworkVersion = frameworkVersion
 		}
 	}
