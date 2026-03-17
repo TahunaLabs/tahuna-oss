@@ -199,7 +199,7 @@ func handleEnvironment(args []string) {
 		environmentList(args[1:])
 	case "show":
 		environmentShow(args[1:])
-	case "update", "specs":
+	case "update":
 		environmentUpdate(args[1:])
 	case "rm":
 		environmentDelete(args[1:])
@@ -301,10 +301,10 @@ func runUsage() {
   tahuna run show <run_id|run_name> [--verbose|-v]
   tahuna run create [--name <name>] [--gpu-type <gpu>] [--gpu-count <n>] [--volume-gb <n>] [--detached|-d]
   tahuna run rename <run_id|run_name> --name <new_name>
-  tahuna run watch <run_id|run_name> [--interval 5]
-  tahuna run logs <run_id|run_name> [--verbose|-v] [--follow|-f]
-  tahuna run cancel <run_id|run_name> [-f]
-  tahuna run rm <run_id|run_name|pattern>... [--all] [--cancel|-c] [--force|-f]
+	tahuna run watch <run_id|run_name> [--interval 5]
+	tahuna run logs <run_id|run_name> [--verbose|-v] [--follow|-f]
+	tahuna run cancel <run_id|run_name> [-f]
+	tahuna run rm <run_id|run_name|pattern>... [--all|-a] [--cancel|-c] [--force|-f]
 
 Wildcard matching:
   - "run rm" supports shell-style glob patterns for run_id and run_name (*, ?, []).
@@ -317,16 +317,15 @@ func environmentUsage() {
 	fmt.Print(`Environment commands:
   tahuna env help
   tahuna env list [--verbose|-v]
-  tahuna env show --id <env_id> [--verbose|-v]
+  tahuna env show <env_id> | --id <env_id> [--verbose|-v]
   tahuna env update [<env_id>] [--gpu-type <gpu>] [--gpu-count <n>] [--volume-gb <n>]
-  tahuna env specs [<env_id>] [--gpu-type <gpu>] [--gpu-count <n>] [--volume-gb <n>]
   tahuna env rm <env_id> | --id <env_id> | --all|-a
   tahuna env data bind|unbind ...
 `)
 }
 
 func gpusUsage() {
-	fmt.Print(`GPUs commands:
+	fmt.Print(`GPU commands:
   tahuna gpus help
   tahuna gpus list [--verbose|-v]
 `)

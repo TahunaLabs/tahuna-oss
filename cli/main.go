@@ -103,13 +103,12 @@ Run commands:
   tahuna run watch <run_id|run_name> [--interval 5]
   tahuna run logs <run_id|run_name> [--verbose] [--follow]
   tahuna run cancel <run_id|run_name> [-f]
-  tahuna run rm <run_id|run_name|pattern>... [--all] [--cancel|-c] [--force|-f]
+  tahuna run rm <run_id|run_name|pattern>... [--all|-a] [--cancel|-c] [--force|-f]
 
 Environment:
   tahuna env list [--verbose]
-  tahuna env show --id <env_id> [--verbose]
+  tahuna env show <env_id> | --id <env_id> [--verbose]
   tahuna env update [<env_id>] [--gpu-type <gpu>] [--gpu-count <n>] [--volume-gb <n>]
-  tahuna env specs [<env_id>] [--gpu-type <gpu>] [--gpu-count <n>] [--volume-gb <n>]   Alias
   tahuna env rm <env_id> | --id <env_id> | --all|-a
 
 Auth:
