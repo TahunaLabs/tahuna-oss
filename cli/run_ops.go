@@ -45,7 +45,8 @@ func runList(args []string) {
 	if !*all && *limit > 0 && len(orderedRuns) > *limit {
 		orderedRuns = orderedRuns[len(orderedRuns)-*limit:]
 	}
-	printRunListSummary(orderedRuns)
+	envNames := fetchEnvironmentNameMap()
+	printRunListSummary(orderedRuns, envNames)
 }
 
 func runShow(args []string) {
@@ -77,20 +78,25 @@ func reverseSlice[T any](s []T) []T {
 	return out
 }
 
-func printRunListSummary(runs []runResponse) {
+// fetchEnvironmentNameMap returns a map of environment ID → name for labelling.
+func fetchEnvironmentNameMap() map[string]string {
+	out := map[string]string{}
+	resp, err := doJSONAs[environmentsResponse](http.MethodGet, "/environments", nil)
+	if err != nil {
+		return out
+	}
+	for _, env := range resp.Environments {
+		if env.EnvironmentID != "" && env.Name != "" {
+			out[env.EnvironmentID] = env.Name
+		}
+	}
+	return out
+}
+
+func printRunListSummary(runs []runResponse, envNameByID map[string]string) {
 	if len(runs) == 0 {
 		fmt.Println("No runs found.")
 		return
-	}
-
-	envNameByID := map[string]string{}
-	envResp, err := doJSONAs[environmentsResponse](http.MethodGet, "/environments", nil)
-	if err == nil {
-		for _, env := range envResp.Environments {
-			if env.EnvironmentID != "" && env.Name != "" {
-				envNameByID[env.EnvironmentID] = env.Name
-			}
-		}
 	}
 
 	fmt.Printf("%-24s %-22s %-32s %-12s %s\n", "RUN NAME", "ENVIRONMENT", "RUN ID", "STATUS", "CREATED")
