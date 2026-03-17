@@ -357,7 +357,7 @@ func gpusList(args []string) {
 		fmt.Println("No GPUs available.")
 		return
 	}
-	fmt.Printf("%-32s %-7s %-9s %s\n", "GPU TYPE", "MAX", "MEMORY", "PRICE/H")
+	fmt.Printf("%-32s %-7s %s\n", "GPU TYPE", "MAX", "MEMORY")
 	for _, gpu := range gpus {
 		maxLabel := "-"
 		if gpu.MaxGPUCount > 0 {
@@ -367,16 +367,11 @@ func gpusList(args []string) {
 		if gpu.MemoryGB > 0 {
 			memoryLabel = fmt.Sprintf("%dGB", gpu.MemoryGB)
 		}
-		priceLabel := "-"
-		if gpu.PricePerHour > 0 {
-			priceLabel = fmt.Sprintf("$%.3f", gpu.PricePerHour)
-		}
 		fmt.Printf(
-			"%-32s %-7s %-9s %s\n",
+			"%-32s %-7s %s\n",
 			truncateRunListColumn(gpu.DisplayName, 32),
 			maxLabel,
 			memoryLabel,
-			priceLabel,
 		)
 	}
 }
