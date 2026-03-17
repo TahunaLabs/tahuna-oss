@@ -278,7 +278,7 @@ func terminalColumns() int {
 	return 0
 }
 
-type catalogGPU struct {
+type gpuRow struct {
 	ID           string
 	DisplayName  string
 	MaxGPUCount  int
@@ -286,12 +286,12 @@ type catalogGPU struct {
 	PricePerHour float64
 }
 
-func parseCatalogGPUs(resp map[string]any) []catalogGPU {
+func parseGpusRows(resp map[string]any) []gpuRow {
 	gpuRaw, ok := resp["gpus"].([]any)
 	if !ok {
 		return nil
 	}
-	gpus := make([]catalogGPU, 0, len(gpuRaw))
+	gpus := make([]gpuRow, 0, len(gpuRaw))
 	for _, raw := range gpuRaw {
 		switch row := raw.(type) {
 		case map[string]any:
@@ -307,7 +307,7 @@ func parseCatalogGPUs(resp map[string]any) []catalogGPU {
 				continue
 			}
 			price, _ := asFloat64(row["price_per_hour"])
-			gpus = append(gpus, catalogGPU{
+			gpus = append(gpus, gpuRow{
 				ID:           id,
 				DisplayName:  display,
 				MaxGPUCount:  int(asInt64(row["max_gpu_count"])),
@@ -319,7 +319,7 @@ func parseCatalogGPUs(resp map[string]any) []catalogGPU {
 			if id == "" {
 				continue
 			}
-			gpus = append(gpus, catalogGPU{
+			gpus = append(gpus, gpuRow{
 				ID:           id,
 				DisplayName:  id,
 				MaxGPUCount:  0,
@@ -334,12 +334,12 @@ func parseCatalogGPUs(resp map[string]any) []catalogGPU {
 	return gpus
 }
 
-func fetchCatalog() ([]string, map[string][]string, map[string]map[string][]string, error) {
+func fetchGpusAndImages() ([]string, map[string][]string, map[string]map[string][]string, error) {
 	resp, err := doJSON(http.MethodGet, "/gpus", nil)
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	parsedGpus := parseCatalogGPUs(resp)
+	parsedGpus := parseGpusRows(resp)
 	if len(parsedGpus) == 0 {
 		return nil, nil, nil, errors.New("invalid gpus response: gpus missing")
 	}
@@ -381,16 +381,16 @@ func fetchCatalog() ([]string, map[string][]string, map[string]map[string][]stri
 	return gpus, versionsByFramework, pythonsByFrameworkVersion, nil
 }
 
-func fetchCatalogGPUByID() (map[string]catalogGPU, error) {
+func fetchGpusByID() (map[string]gpuRow, error) {
 	resp, err := doJSON(http.MethodGet, "/gpus", nil)
 	if err != nil {
 		return nil, err
 	}
-	entries := parseCatalogGPUs(resp)
+	entries := parseGpusRows(resp)
 	if len(entries) == 0 {
 		return nil, errors.New("invalid gpus response: gpus missing")
 	}
-	out := make(map[string]catalogGPU, len(entries))
+	out := make(map[string]gpuRow, len(entries))
 	for _, entry := range entries {
 		out[strings.ToLower(strings.TrimSpace(entry.ID))] = entry
 		if strings.TrimSpace(entry.DisplayName) != "" {
@@ -405,7 +405,7 @@ func validateGPUSelection(gpuType string, gpuCount int) error {
 	if trimmedType == "" || gpuCount <= 0 {
 		return nil
 	}
-	entries, err := fetchCatalogGPUByID()
+	entries, err := fetchGpusByID()
 	if err != nil {
 		return nil
 	}

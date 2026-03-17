@@ -129,7 +129,7 @@ type guidedSetupResult struct {
 }
 
 func guidedSetup(environmentName, frameworkHint, pythonVersionHint string) (guidedSetupResult, error) {
-	gpus, versionsByFramework, pythonsByFrameworkVersion, err := fetchCatalog()
+	gpus, versionsByFramework, pythonsByFrameworkVersion, err := fetchGpusAndImages()
 	if err != nil {
 		return guidedSetupResult{}, err
 	}
@@ -351,7 +351,7 @@ func gpusList(args []string) {
 		printJSON(resp)
 		return
 	}
-	gpus := parseCatalogGPUs(resp)
+	gpus := parseGpusRows(resp)
 	if len(gpus) == 0 {
 		fmt.Println("No GPUs available.")
 		return
@@ -840,7 +840,7 @@ func environmentUpdate(args []string) {
 			currentVolume = 1
 		}
 
-		gpus, _, _, err := fetchCatalog()
+		gpus, _, _, err := fetchGpusAndImages()
 		must(err)
 		defaultGPUIndex := 0
 		if currentGPU != "" {
@@ -1075,8 +1075,8 @@ func createRunWithCapacityPrompt(path string, payload map[string]any) (map[strin
 		return resp, err
 	}
 
-	gpus, _, _, catalogErr := fetchCatalog()
-	if catalogErr != nil || len(gpus) == 0 {
+	gpus, _, _, gpusErr := fetchGpusAndImages()
+	if gpusErr != nil || len(gpus) == 0 {
 		return nil, err
 	}
 

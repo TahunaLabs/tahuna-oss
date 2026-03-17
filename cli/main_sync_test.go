@@ -12,9 +12,9 @@ import (
 	"testing"
 )
 
-// serveCatalogAndEnvironment handles /api/gpus and /api/environments/env-test
+// serveGpusAndEnvironment handles /api/gpus and /api/environments/env-test
 // requests used by runtime validation. Returns true if the request was handled.
-func serveCatalogAndEnvironment(w http.ResponseWriter, r *http.Request) bool {
+func serveGpusAndEnvironment(w http.ResponseWriter, r *http.Request) bool {
 	if r.Method == http.MethodGet && r.URL.Path == "/api/gpus" {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{

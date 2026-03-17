@@ -55,7 +55,7 @@ func TestTrainDetached_EndToEndPreflightAndRunCreation(t *testing.T) {
 	var runCreatePayload map[string]any
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if serveCatalogAndEnvironment(w, r) {
+		if serveGpusAndEnvironment(w, r) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -144,7 +144,7 @@ func TestTrainAttached_MonitorsUntilCompletion(t *testing.T) {
 	runLogsCount := 0
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if serveCatalogAndEnvironment(w, r) {
+		if serveGpusAndEnvironment(w, r) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")

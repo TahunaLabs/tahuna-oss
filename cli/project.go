@@ -536,7 +536,7 @@ func validateProjectConfigRuntimeValues(path string, cfg projectConfig) error {
 // invalid and the session is interactive, the user is prompted to pick a valid one.
 // Returns the (possibly updated) project config.
 func validateAndResolveRuntimeConfig(cfg projectConfig, environmentID string) (projectConfig, error) {
-	_, versionsByFramework, pythonsByFrameworkVersion, err := fetchCatalog()
+	_, versionsByFramework, pythonsByFrameworkVersion, err := fetchGpusAndImages()
 	if err != nil {
 		// If the catalog is unreachable, skip combo validation. The backend will
 		// still reject unsupported combinations at environment/run creation time.
