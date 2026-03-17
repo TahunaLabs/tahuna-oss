@@ -23,6 +23,35 @@ import (
 	"unsafe"
 )
 
+// cliConfig holds resolved configuration values. Resolved once at startup
+// via initConfig and read thereafter — avoids re-reading env files on every
+// API call and eliminates os.Setenv for runtime state.
+type cliConfig struct {
+	apiURL     string
+	apiKey     string
+	browserURL string
+}
+
+// cfg is the process-wide resolved configuration, set once by initConfig.
+var cfg cliConfig
+
+// initConfig resolves all configuration values from environment variables and
+// config files. Call once at the start of main before any command dispatch.
+func initConfig() {
+	cfg.apiKey = lookupConfigValue("TAHUNA_API_KEY")
+	cfg.browserURL = lookupConfigValue("TAHUNA_BROWSER_URL")
+
+	if v := lookupConfigValue("TAHUNA_API_URL"); v != "" {
+		cfg.apiURL = strings.TrimRight(v, "/")
+	} else if v := lookupConfigValue("TAHUNA_SITE_URL"); v != "" {
+		cfg.apiURL = strings.TrimRight(v, "/")
+	} else if v := lookupConfigValue("TAHUNA_PUBLIC_SITE_URL"); v != "" {
+		cfg.apiURL = strings.TrimRight(v, "/")
+	} else {
+		cfg.apiURL = defaultAPIURL
+	}
+}
+
 func printSuccessLine(message string) {
 	fmt.Printf("%s✓%s %s\n", cAmpGreen, cReset, message)
 }
@@ -689,8 +718,8 @@ func doJSONRaw(method, path string, payload map[string]any) ([]byte, error) {
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	if key := lookupConfigValue("TAHUNA_API_KEY"); key != "" {
-		req.Header.Set("Authorization", "Bearer "+key)
+	if cfg.apiKey != "" {
+		req.Header.Set("Authorization", "Bearer "+cfg.apiKey)
 	}
 
 	resp, err := http.DefaultClient.Do(req)
@@ -843,8 +872,12 @@ func normalizedAPIPath(path string) string {
 }
 
 func browserBaseURL() string {
-	if v := lookupConfigValue("TAHUNA_BROWSER_URL"); v != "" {
-		base := strings.TrimRight(v, "/")
+	browserURL := cfg.browserURL
+	if browserURL == "" {
+		browserURL = lookupConfigValue("TAHUNA_BROWSER_URL")
+	}
+	if browserURL != "" {
+		base := strings.TrimRight(browserURL, "/")
 		base = strings.TrimSuffix(base, apiPrefix)
 		return base
 	}
@@ -868,8 +901,12 @@ func runDashboardURL(runID string) string {
 }
 
 func resolveLoginBrowserBaseURL() string {
-	if v := lookupConfigValue("TAHUNA_BROWSER_URL"); strings.TrimSpace(v) != "" {
-		return cleanBrowserBaseURL(v)
+	browserURL := cfg.browserURL
+	if browserURL == "" {
+		browserURL = lookupConfigValue("TAHUNA_BROWSER_URL")
+	}
+	if strings.TrimSpace(browserURL) != "" {
+		return cleanBrowserBaseURL(browserURL)
 	}
 
 	candidates := loginBrowserCandidates()

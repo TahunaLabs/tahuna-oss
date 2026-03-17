@@ -39,6 +39,8 @@ const (
 var cliVersion = "dev"
 
 func main() {
+	initConfig()
+
 	if len(os.Args) < 2 {
 		usage()
 		return
@@ -127,10 +129,11 @@ func login() error {
 	printHeader()
 
 	resolvedBrowserBase := resolveLoginBrowserBaseURL()
-	if lookupConfigValue("TAHUNA_BROWSER_URL") == "" {
+	if cfg.browserURL == "" {
 		if err := saveConfigValues(map[string]string{"TAHUNA_BROWSER_URL": resolvedBrowserBase}); err != nil {
 			return fmt.Errorf("failed to persist browser URL: %w", err)
 		}
+		cfg.browserURL = resolvedBrowserBase
 	}
 
 	state := fmt.Sprintf("st_%d", time.Now().UnixNano())
@@ -203,7 +206,7 @@ func login() error {
 
 	select {
 	case token := <-tokenCh:
-		os.Setenv("TAHUNA_API_KEY", token)
+		cfg.apiKey = token
 		if writeErr := saveTokenToEnvFile(token); writeErr != nil {
 			return fmt.Errorf("logged in, but failed to persist token: %w", writeErr)
 		}
@@ -362,6 +365,10 @@ func serverDot() string {
 }
 
 func apiURL() string {
+	if cfg.apiURL != "" {
+		return cfg.apiURL
+	}
+	// Fallback for test contexts where initConfig has not been called.
 	if v := lookupConfigValue("TAHUNA_API_URL"); v != "" {
 		return strings.TrimRight(v, "/")
 	}
