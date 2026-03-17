@@ -257,7 +257,9 @@ const provisionPool = new Workpool(components.workpool, {
 });
 const r2 = new R2(components.r2);
 const RUNTIME_LOG_TAIL_LIMIT = RUN_CONFIG.runtimeLogTailLimit;
+const RUNTIME_LOG_REACTIVE_TAIL_LIMIT = RUN_CONFIG.runtimeLogReactiveTailLimit;
 const RUNTIME_LOG_STARTUP_SCAN_LIMIT = RUN_CONFIG.runtimeLogStartupScanLimit;
+const RUNTIME_LOG_REACTIVE_STARTUP_SCAN_LIMIT = RUN_CONFIG.runtimeLogReactiveStartupScanLimit;
 const RUNTIME_LOG_PINNED_BOOTSTRAP_LIMIT = RUN_CONFIG.runtimeLogPinnedBootstrapLimit;
 const RUNTIME_METRIC_SCAN_LIMIT = RUN_CONFIG.runtimeMetricScanLimit;
 const RUNTIME_METRIC_SERIES_LIMIT = RUN_CONFIG.runtimeMetricSeriesLimit;
@@ -930,18 +932,24 @@ function pickUniqueGeneratedRunName(rows: Array<Doc<"runs">>) {
   return `run-${Date.now().toString(36)}`;
 }
 
-async function listRecentRuntimeLogs(ctx: QueryCtx, runId: Id<"runs">) {
+async function listRecentRuntimeLogs(
+  ctx: QueryCtx,
+  runId: Id<"runs">,
+  opts?: { tailLimit?: number; startupScanLimit?: number },
+) {
+  const tailLimit = opts?.tailLimit ?? RUNTIME_LOG_TAIL_LIMIT;
+  const startupScanLimit = opts?.startupScanLimit ?? RUNTIME_LOG_STARTUP_SCAN_LIMIT;
   const [tailRowsDesc, startupRowsAsc] = await Promise.all([
     ctx.db
       .query("runRuntimeLogs")
       .withIndex("by_run", (q) => q.eq("runId", runId))
       .order("desc")
-      .take(RUNTIME_LOG_TAIL_LIMIT),
+      .take(tailLimit),
     ctx.db
       .query("runRuntimeLogs")
       .withIndex("by_run", (q) => q.eq("runId", runId))
       .order("asc")
-      .take(RUNTIME_LOG_STARTUP_SCAN_LIMIT),
+      .take(startupScanLimit),
   ]);
   const pinnedBootstrapRows = startupRowsAsc
     .filter((row) => row.source === BOOTSTRAP_LOG_SOURCE)
@@ -969,8 +977,8 @@ async function listRecentRuntimeLogs(ctx: QueryCtx, runId: Id<"runs">) {
       message: row.message,
     })),
     window: {
-      tail_limit: RUNTIME_LOG_TAIL_LIMIT,
-      startup_scan_limit: RUNTIME_LOG_STARTUP_SCAN_LIMIT,
+      tail_limit: tailLimit,
+      startup_scan_limit: startupScanLimit,
       pinned_bootstrap_limit: RUNTIME_LOG_PINNED_BOOTSTRAP_LIMIT,
       scanned_tail: tailRowsDesc.length,
       scanned_startup: startupRowsAsc.length,
@@ -1055,7 +1063,10 @@ async function toRunLogsResponse(ctx: QueryCtx, row: Doc<"runs">) {
 }
 
 async function toRunLogsOnlyResponse(ctx: QueryCtx, row: Doc<"runs">) {
-  const recentLogs = await listRecentRuntimeLogs(ctx, row._id);
+  const recentLogs = await listRecentRuntimeLogs(ctx, row._id, {
+    tailLimit: RUNTIME_LOG_REACTIVE_TAIL_LIMIT,
+    startupScanLimit: RUNTIME_LOG_REACTIVE_STARTUP_SCAN_LIMIT,
+  });
   return {
     run_id: String(row._id),
     status: row.status,
