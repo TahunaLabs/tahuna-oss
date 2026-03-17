@@ -281,9 +281,10 @@ func runUsage() {
   tahuna run cancel <run_id|run_name> [-f]
   tahuna run rm <run_id|run_name|pattern>... [--all] [--cancel|-c] [--force|-f]
 
-Notes:
-  - Wildcards for "run rm" use shell-style matching on run_id and run_name (*, ?, []).
-  - Quote wildcard patterns so your shell does not expand them first, e.g. 'warm-*'.
+Wildcard matching:
+  - "run rm" supports shell-style glob patterns for run_id and run_name (*, ?, []).
+  - Always quote patterns to prevent shell expansion (for example: tahuna run rm 'warm-*').
+  - To remove all runs, prefer: tahuna run rm --all
 `)
 }
 
