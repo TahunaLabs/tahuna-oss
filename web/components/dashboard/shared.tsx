@@ -281,6 +281,7 @@ export const FEATURE_ITEMS: SidebarItem[] = [
 ]
 
 export const CANCELLABLE_STATUSES = new Set(["queued", "provisioning", "running", "cancelling"])
+export const TERMINAL_STATUSES = new Set(["completed", "failed", "cancelled"])
 export const STORAGE_PAGE_LIMIT = 25
 export const MAX_ARTIFACT_NAME_CHARS = 255
 

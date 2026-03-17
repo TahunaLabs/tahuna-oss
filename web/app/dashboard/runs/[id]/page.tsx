@@ -10,8 +10,10 @@ import type { Id } from "@convex/_generated/dataModel"
 import { useConvexAuth, useQuery } from "convex/react"
 import Link from "next/link"
 import { useParams } from "next/navigation"
+import { useEffect, useState } from "react"
 import {
   metricSeries,
+  TERMINAL_STATUSES,
   type RunDetail,
   type RunLogsOnlyDetail,
   type RunMetricsOnlyDetail,
@@ -33,13 +35,32 @@ export default function RunDetailPage() {
   const shouldLoadQueries = !isLoading && isAuthenticated && runId !== ""
 
   const run = useQuery(api.runs.get, shouldLoadQueries ? { runId: runId as Id<"runs"> } : "skip") as RunDetail | undefined
-  const logs = useQuery(api.runs.getRunLogs, shouldLoadQueries ? { runId: runId as Id<"runs"> } : "skip") as
-    | RunLogsOnlyDetail
-    | undefined
-  const metrics = useQuery(api.runs.getRunMetrics, shouldLoadQueries ? { runId: runId as Id<"runs"> } : "skip") as
-    | RunMetricsOnlyDetail
-    | undefined
+  const isTerminal = run !== undefined && TERMINAL_STATUSES.has(run.status)
+  const [logsCache, setLogsCache] = useState<RunLogsOnlyDetail | undefined>(undefined)
+  const [metricsCache, setMetricsCache] = useState<RunMetricsOnlyDetail | undefined>(undefined)
+  const logsLive = useQuery(
+    api.runs.getRunLogs,
+    shouldLoadQueries && !(isTerminal && logsCache !== undefined)
+      ? { runId: runId as Id<"runs"> }
+      : "skip"
+  ) as RunLogsOnlyDetail | undefined
+  const metricsLive = useQuery(
+    api.runs.getRunMetrics,
+    shouldLoadQueries && !(isTerminal && metricsCache !== undefined)
+      ? { runId: runId as Id<"runs"> }
+      : "skip"
+  ) as RunMetricsOnlyDetail | undefined
 
+  useEffect(() => {
+    if (isTerminal && logsLive) setLogsCache(logsLive)
+  }, [isTerminal, logsLive])
+
+  useEffect(() => {
+    if (isTerminal && metricsLive) setMetricsCache(metricsLive)
+  }, [isTerminal, metricsLive])
+
+  const logs = logsLive ?? logsCache
+  const metrics = metricsLive ?? metricsCache
   const series = metricSeries(metrics)
 
   if (isLoading || !isAuthenticated) {

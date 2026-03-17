@@ -9,6 +9,7 @@ import { Notice } from "@/components/ui/notice"
 import { PageLoader } from "@/components/ui/spinner"
 import {
   STORAGE_PAGE_LIMIT,
+  TERMINAL_STATUSES,
   validateArtifactRenameName,
   type DataBlobRow,
   type EnvironmentConfigDetail,
@@ -78,18 +79,30 @@ export default function DashboardPage() {
     | undefined
 
   const shouldLoadRunDetail = shouldLoadQueries && selectedRunId !== null
+  const selectedRunFromList = runResult?.runs.find((r) => r.run_id === selectedRunId)
+  const isSelectedRunTerminal = selectedRunFromList !== undefined && TERMINAL_STATUSES.has(selectedRunFromList.status)
+  const [terminalLogsCache, setTerminalLogsCache] = useState<{ runId: string; logs: RunLogsOnlyDetail } | null>(null)
+  const [terminalMetricsCache, setTerminalMetricsCache] = useState<{ runId: string; metrics: RunMetricsOnlyDetail } | null>(null)
+  const hasTerminalLogsCache = terminalLogsCache !== null && terminalLogsCache.runId === selectedRunId
+  const hasTerminalMetricsCache = terminalMetricsCache !== null && terminalMetricsCache.runId === selectedRunId
   const runDetail = useQuery(
     api.runs.get,
     shouldLoadRunDetail ? { runId: selectedRunId as Id<"runs"> } : "skip"
   ) as RunDetail | undefined
-  const runLogs = useQuery(
+  const runLogsLive = useQuery(
     api.runs.getRunLogs,
-    shouldLoadRunDetail ? { runId: selectedRunId as Id<"runs"> } : "skip"
+    shouldLoadRunDetail && !(isSelectedRunTerminal && hasTerminalLogsCache)
+      ? { runId: selectedRunId as Id<"runs"> }
+      : "skip"
   ) as RunLogsOnlyDetail | undefined
-  const runMetrics = useQuery(
+  const runMetricsLive = useQuery(
     api.runs.getRunMetrics,
-    shouldLoadRunDetail ? { runId: selectedRunId as Id<"runs"> } : "skip"
+    shouldLoadRunDetail && !(isSelectedRunTerminal && hasTerminalMetricsCache)
+      ? { runId: selectedRunId as Id<"runs"> }
+      : "skip"
   ) as RunMetricsOnlyDetail | undefined
+  const runLogs = runLogsLive ?? (hasTerminalLogsCache ? terminalLogsCache.logs : undefined)
+  const runMetrics = runMetricsLive ?? (hasTerminalMetricsCache ? terminalMetricsCache.metrics : undefined)
   const shouldLoadEnvironmentConfig = shouldLoadQueries && configEditorEnvironmentId !== null
   const environmentConfig = useQuery(
     api.environments.getConfig,
@@ -131,6 +144,18 @@ export default function DashboardPage() {
   const dataBlobsById = useMemo(() => {
     return new Map(uniqueDataBlobs.map((blob) => [blob.blob_id, blob]))
   }, [uniqueDataBlobs])
+
+  useEffect(() => {
+    if (isSelectedRunTerminal && runLogsLive && selectedRunId) {
+      setTerminalLogsCache({ runId: selectedRunId, logs: runLogsLive })
+    }
+  }, [isSelectedRunTerminal, runLogsLive, selectedRunId])
+
+  useEffect(() => {
+    if (isSelectedRunTerminal && runMetricsLive && selectedRunId) {
+      setTerminalMetricsCache({ runId: selectedRunId, metrics: runMetricsLive })
+    }
+  }, [isSelectedRunTerminal, runMetricsLive, selectedRunId])
 
   useEffect(() => {
     if (!configEditorEnvironmentId) {
