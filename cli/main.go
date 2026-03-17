@@ -88,11 +88,12 @@ Usage:
   tahuna env data bind|unbind ...
   tahuna catalog gpus
   tahuna data list|show ...
-  tahuna run create|rename|list|show|watch|logs|cancel|delete ...
+  tahuna run create|rename|list|show|watch|logs|cancel|rm ...
   tahuna up
   tahuna version
 
-Run list:
+Run commands:
+  tahuna run help
   tahuna run list                Show last 5 runs (tail order; newest at bottom)
   tahuna run list -l <N>         Show last N runs
   tahuna run list -a             Show all runs
@@ -102,7 +103,7 @@ Run list:
   tahuna run watch <run_id|run_name> [--interval 5]
   tahuna run logs <run_id|run_name> [--verbose] [--follow]
   tahuna run cancel <run_id|run_name> [-f]
-  tahuna run delete <run_id|run_name> [--cancel|-c] [--force|-f]
+  tahuna run rm <run_id|run_name|pattern>... [--all] [--cancel|-c] [--force|-f]
 
 Environment:
   tahuna env list [--verbose]

@@ -7,15 +7,14 @@ import (
 	"fmt"
 	"net/http"
 	neturl "net/url"
+	"path"
 	"strconv"
 	"strings"
 	"time"
 )
 
-func runShow(args []string) {
-	fs := flag.NewFlagSet("run show", flag.ExitOnError)
-	id := fs.String("id", "", "Run ID")
-	list := fs.Bool("list", false, "List all runs")
+func runList(args []string) {
+	fs := flag.NewFlagSet("run list", flag.ExitOnError)
 	limit := fs.Int("lines", 5, "Show only the last N runs (tail order)")
 	fs.IntVar(limit, "l", 5, "Show only the last N runs (tail order)")
 	all := fs.Bool("all", false, "Show all runs")
@@ -24,25 +23,30 @@ func runShow(args []string) {
 	fs.BoolVar(verbose, "v", false, "Show full run payload")
 	mustParseFlags(fs, args)
 
-	if *list {
-		resp, err := doJSON(http.MethodGet, "/runs", nil)
-		must(err)
-		runsAny, ok := resp["runs"].([]any)
-		if !ok {
-			printJSON(resp)
-			return
-		}
-		orderedRuns := reverseRunsForTailOrder(runsAny)
-		if !*all && *limit > 0 && len(orderedRuns) > *limit {
-			orderedRuns = orderedRuns[len(orderedRuns)-*limit:]
-		}
-		if *verbose {
-			printJSON(map[string]any{"runs": orderedRuns})
-			return
-		}
-		printRunListSummary(orderedRuns)
+	resp, err := doJSON(http.MethodGet, "/runs", nil)
+	must(err)
+	runsAny, ok := resp["runs"].([]any)
+	if !ok {
+		printJSON(resp)
 		return
 	}
+	orderedRuns := reverseRunsForTailOrder(runsAny)
+	if !*all && *limit > 0 && len(orderedRuns) > *limit {
+		orderedRuns = orderedRuns[len(orderedRuns)-*limit:]
+	}
+	if *verbose {
+		printJSON(map[string]any{"runs": orderedRuns})
+		return
+	}
+	printRunListSummary(orderedRuns)
+}
+
+func runShow(args []string) {
+	fs := flag.NewFlagSet("run show", flag.ExitOnError)
+	id := fs.String("id", "", "Run ID")
+	verbose := fs.Bool("verbose", false, "Show full run payload")
+	fs.BoolVar(verbose, "v", false, "Show full run payload")
+	mustParseFlags(fs, args)
 	runID := resolveRunID(*id, fs.Args())
 	require(runID != "", "run_id_or_name is required (usage: tahuna run show <run_id|run_name>)")
 	resolvedRunID, err := resolveRunIDByIDOrName(runID)
@@ -531,17 +535,26 @@ func runCancel(args []string) {
 }
 
 func runDelete(args []string) {
-	fs := flag.NewFlagSet("run delete", flag.ExitOnError)
+	fs := flag.NewFlagSet("run rm", flag.ExitOnError)
 	id := fs.String("id", "", "Run ID")
+	all := fs.Bool("all", false, "Delete all runs")
 	cancel := fs.Bool("cancel", false, "Cancel run first, then delete")
 	fs.BoolVar(cancel, "c", false, "Cancel run first, then delete")
 	force := fs.Bool("force", false, "Force delete active run (terminates pod immediately)")
 	fs.BoolVar(force, "f", false, "Force delete active run (terminates pod immediately)")
 	mustParseFlags(fs, args)
-	runID := resolveRunID(*id, fs.Args())
-	require(runID != "", "run_id_or_name is required (usage: tahuna run delete <run_id|run_name>)")
-	resolvedRunID, err := resolveRunIDByIDOrName(runID)
+	rawTargets := append([]string{}, fs.Args()...)
+	if strings.TrimSpace(*id) != "" {
+		rawTargets = append(rawTargets, *id)
+	}
+	require(!(*all && len(rawTargets) > 0), "cannot combine --all with explicit run targets")
+
+	resolvedRunIDs, err := resolveRunDeleteTargets(rawTargets, *all)
 	must(err)
+	if len(resolvedRunIDs) == 0 {
+		fmt.Println("No runs found.")
+		return
+	}
 
 	query := neturl.Values{}
 	if *cancel || *force {
@@ -550,21 +563,135 @@ func runDelete(args []string) {
 	if *force {
 		query.Set("force", "1")
 	}
-	path := "/runs/" + resolvedRunID
-	if encoded := query.Encode(); encoded != "" {
-		path += "?" + encoded
+	for _, resolvedRunID := range resolvedRunIDs {
+		path := "/runs/" + resolvedRunID
+		if encoded := query.Encode(); encoded != "" {
+			path += "?" + encoded
+		}
+
+		resp, err := doJSON(http.MethodDelete, path, nil)
+		if err != nil {
+			var apiErr *apiRequestError
+			if errors.As(err, &apiErr) && *cancel && !*force && apiErr.status == http.StatusConflict {
+				if strings.Contains(strings.ToLower(apiErr.detail), "cancellation requested") {
+					fmt.Printf("%sCancellation requested for run %s. Delete will complete after shutdown; retry `tahuna run rm %s` in a moment.%s\n", cAmpGold, resolvedRunID, resolvedRunID, cReset)
+					continue
+				}
+			}
+			must(err)
+		}
+		printJSON(resp)
+	}
+}
+
+type runDeleteTarget struct {
+	id   string
+	name string
+}
+
+func resolveRunDeleteTargets(targets []string, deleteAll bool) ([]string, error) {
+	trimmed := make([]string, 0, len(targets))
+	for _, raw := range targets {
+		target := strings.TrimSpace(raw)
+		if target == "" {
+			continue
+		}
+		trimmed = append(trimmed, target)
+	}
+	if !deleteAll && len(trimmed) == 0 {
+		return nil, errors.New("run_id_or_name is required (usage: tahuna run rm <run_id|run_name|pattern> ... or --all)")
 	}
 
-	resp, err := doJSON(http.MethodDelete, path, nil)
+	resp, err := doJSON(http.MethodGet, "/runs", nil)
 	if err != nil {
-		var apiErr *apiRequestError
-		if errors.As(err, &apiErr) && *cancel && !*force && apiErr.status == http.StatusConflict {
-			if strings.Contains(strings.ToLower(apiErr.detail), "cancellation requested") {
-				fmt.Printf("%sCancellation requested for run %s. Delete will complete after shutdown; retry `tahuna run delete %s` in a moment.%s\n", cAmpGold, resolvedRunID, resolvedRunID, cReset)
-				return
+		return nil, err
+	}
+	runsAny, ok := resp["runs"].([]any)
+	if !ok {
+		return nil, errors.New("invalid runs response")
+	}
+
+	runs := make([]runDeleteTarget, 0, len(runsAny))
+	for _, raw := range runsAny {
+		row, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		runID := strings.TrimSpace(asString(row["run_id"]))
+		if runID == "" {
+			continue
+		}
+		runs = append(runs, runDeleteTarget{
+			id:   runID,
+			name: strings.TrimSpace(asString(row["name"])),
+		})
+	}
+
+	if deleteAll {
+		out := make([]string, 0, len(runs))
+		for _, run := range runs {
+			out = append(out, run.id)
+		}
+		return out, nil
+	}
+
+	out := make([]string, 0, len(trimmed))
+	seen := make(map[string]struct{}, len(trimmed))
+	for _, target := range trimmed {
+		resolved, err := resolveRunDeleteTarget(target, runs)
+		if err != nil {
+			return nil, err
+		}
+		for _, runID := range resolved {
+			if _, exists := seen[runID]; exists {
+				continue
+			}
+			seen[runID] = struct{}{}
+			out = append(out, runID)
+		}
+	}
+	return out, nil
+}
+
+func resolveRunDeleteTarget(target string, runs []runDeleteTarget) ([]string, error) {
+	if strings.ContainsAny(target, "*?[") {
+		matches := make([]string, 0, 4)
+		for _, run := range runs {
+			matchName, err := path.Match(target, run.name)
+			if err != nil {
+				return nil, fmt.Errorf("invalid wildcard pattern %q: %w", target, err)
+			}
+			matchID, err := path.Match(target, run.id)
+			if err != nil {
+				return nil, fmt.Errorf("invalid wildcard pattern %q: %w", target, err)
+			}
+			if matchName || matchID {
+				matches = append(matches, run.id)
 			}
 		}
-		must(err)
+		if len(matches) == 0 {
+			return nil, fmt.Errorf("run pattern %q matched no runs", target)
+		}
+		return matches, nil
 	}
-	printJSON(resp)
+
+	for _, run := range runs {
+		if run.id == target {
+			return []string{run.id}, nil
+		}
+	}
+
+	matches := make([]string, 0, 2)
+	for _, run := range runs {
+		if run.name == target {
+			matches = append(matches, run.id)
+		}
+	}
+	if len(matches) == 1 {
+		return matches, nil
+	}
+	if len(matches) > 1 {
+		return nil, fmt.Errorf("multiple runs found with name %q; use run_id instead", target)
+	}
+	return nil, fmt.Errorf("run %q not found", target)
 }

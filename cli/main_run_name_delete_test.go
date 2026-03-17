@@ -251,3 +251,120 @@ func TestRunDelete_ForceFlag_ResolvesByNameAndSetsQuery(t *testing.T) {
 		t.Fatalf("expected delete JSON output, got: %s", output)
 	}
 }
+
+func TestRunDelete_MultipleTargets_ResolvesAndDeletesEach(t *testing.T) {
+	var mu sync.Mutex
+	listCalls := 0
+	deleteCalls := 0
+	deletedPaths := make([]string, 0, 2)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/runs":
+			mu.Lock()
+			listCalls++
+			mu.Unlock()
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"runs": []map[string]any{
+					{"run_id": "run-1", "name": "warm-river-fox"},
+					{"run_id": "run-2", "name": "amber-valley-panda"},
+				},
+			})
+			return
+		case r.Method == http.MethodDelete && (r.URL.Path == "/api/runs/run-1" || r.URL.Path == "/api/runs/run-2"):
+			mu.Lock()
+			deleteCalls++
+			deletedPaths = append(deletedPaths, r.URL.Path)
+			mu.Unlock()
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"deleted": true,
+			})
+			return
+		default:
+			w.WriteHeader(http.StatusNotFound)
+			_ = json.NewEncoder(w).Encode(map[string]any{"detail": "not found"})
+			return
+		}
+	}))
+	defer server.Close()
+
+	t.Setenv("TAHUNA_API_URL", server.URL)
+	output := captureStdout(t, func() {
+		runDelete([]string{"warm-river-fox", "run-2"})
+	})
+
+	mu.Lock()
+	defer mu.Unlock()
+	if listCalls != 1 {
+		t.Fatalf("expected one run list call, got %d", listCalls)
+	}
+	if deleteCalls != 2 {
+		t.Fatalf("expected two run delete calls, got %d", deleteCalls)
+	}
+	if !strings.Contains(strings.Join(deletedPaths, ","), "/api/runs/run-1") {
+		t.Fatalf("expected run-1 to be deleted, got paths: %v", deletedPaths)
+	}
+	if !strings.Contains(strings.Join(deletedPaths, ","), "/api/runs/run-2") {
+		t.Fatalf("expected run-2 to be deleted, got paths: %v", deletedPaths)
+	}
+	if strings.Count(output, "\"deleted\": true") != 2 {
+		t.Fatalf("expected two delete JSON outputs, got: %s", output)
+	}
+}
+
+func TestRunDelete_WildcardTarget_DeletesMatches(t *testing.T) {
+	var mu sync.Mutex
+	listCalls := 0
+	deleteCalls := 0
+	deletedPaths := make([]string, 0, 2)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/runs":
+			mu.Lock()
+			listCalls++
+			mu.Unlock()
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"runs": []map[string]any{
+					{"run_id": "run-1", "name": "warm-river-fox"},
+					{"run_id": "run-2", "name": "warm-harbor-eagle"},
+					{"run_id": "run-3", "name": "amber-valley-panda"},
+				},
+			})
+			return
+		case r.Method == http.MethodDelete && (r.URL.Path == "/api/runs/run-1" || r.URL.Path == "/api/runs/run-2"):
+			mu.Lock()
+			deleteCalls++
+			deletedPaths = append(deletedPaths, r.URL.Path)
+			mu.Unlock()
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"deleted": true,
+			})
+			return
+		default:
+			w.WriteHeader(http.StatusNotFound)
+			_ = json.NewEncoder(w).Encode(map[string]any{"detail": "not found"})
+			return
+		}
+	}))
+	defer server.Close()
+
+	t.Setenv("TAHUNA_API_URL", server.URL)
+	captureStdout(t, func() {
+		runDelete([]string{"warm-*"})
+	})
+
+	mu.Lock()
+	defer mu.Unlock()
+	if listCalls != 1 {
+		t.Fatalf("expected one run list call, got %d", listCalls)
+	}
+	if deleteCalls != 2 {
+		t.Fatalf("expected two run delete calls for wildcard, got %d", deleteCalls)
+	}
+	if !strings.Contains(strings.Join(deletedPaths, ","), "/api/runs/run-1") || !strings.Contains(strings.Join(deletedPaths, ","), "/api/runs/run-2") {
+		t.Fatalf("expected wildcard to delete run-1 and run-2, got paths: %v", deletedPaths)
+	}
+}

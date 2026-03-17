@@ -236,15 +236,22 @@ func handleData(args []string) {
 func handleRun(args []string) {
 	if len(args) == 0 {
 		fmt.Println("missing run subcommand")
+		runUsage()
 		os.Exit(1)
 	}
+	switch args[0] {
+	case "-h", "--help", "help":
+		runUsage()
+		return
+	}
+
 	switch args[0] {
 	case "create":
 		runCreate(args[1:])
 	case "rename":
 		runRename(args[1:])
 	case "list":
-		runShow(append(args[1:], "--list"))
+		runList(args[1:])
 	case "show":
 		runShow(args[1:])
 	case "watch", "monitor":
@@ -253,12 +260,31 @@ func handleRun(args []string) {
 		runLogs(args[1:])
 	case "cancel":
 		runCancel(args[1:])
-	case "delete":
+	case "rm", "delete":
 		runDelete(args[1:])
 	default:
 		fmt.Printf("unknown run subcommand: %s\n", args[0])
+		runUsage()
 		os.Exit(1)
 	}
+}
+
+func runUsage() {
+	fmt.Print(`Run commands:
+  tahuna run help
+  tahuna run list [-l <N>] [--all|-a] [--verbose|-v]
+  tahuna run show <run_id|run_name> [--verbose|-v]
+  tahuna run create [--name <name>] [--gpu-type <gpu>] [--gpu-count <n>] [--volume-gb <n>] [--detached|-d]
+  tahuna run rename <run_id|run_name> --name <new_name>
+  tahuna run watch <run_id|run_name> [--interval 5]
+  tahuna run logs <run_id|run_name> [--verbose|-v] [--follow|-f]
+  tahuna run cancel <run_id|run_name> [-f]
+  tahuna run rm <run_id|run_name|pattern>... [--all] [--cancel|-c] [--force|-f]
+
+Notes:
+  - Wildcards for "run rm" use shell-style matching on run_id and run_name (*, ?, []).
+  - Quote wildcard patterns so your shell does not expand them first, e.g. 'warm-*'.
+`)
 }
 
 func catalogGPUs(args []string) {
