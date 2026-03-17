@@ -186,7 +186,13 @@ func guidedSetup(environmentName, frameworkHint, pythonVersionHint string) (guid
 func handleEnvironment(args []string) {
 	if len(args) == 0 {
 		fmt.Println("missing environment subcommand")
+		environmentUsage()
 		os.Exit(1)
+	}
+	switch args[0] {
+	case "-h", "--help", "help":
+		environmentUsage()
+		return
 	}
 	switch args[0] {
 	case "list":
@@ -203,25 +209,42 @@ func handleEnvironment(args []string) {
 		must(errors.New("`tahuna env create` is removed; use `tahuna init .` or `tahuna init <project-name>`"))
 	default:
 		fmt.Printf("unknown environment subcommand: %s\n", args[0])
+		environmentUsage()
 		os.Exit(1)
 	}
 }
 
 func handleCatalog(args []string) {
 	if len(args) == 0 {
-		must(errors.New("usage: tahuna catalog gpus"))
+		fmt.Println("missing catalog subcommand")
+		catalogUsage()
+		os.Exit(1)
+	}
+	switch args[0] {
+	case "-h", "--help", "help":
+		catalogUsage()
+		return
 	}
 	switch args[0] {
 	case "gpus":
 		catalogGPUs(args[1:])
 	default:
-		must(fmt.Errorf("unknown catalog subcommand: %s", args[0]))
+		fmt.Printf("unknown catalog subcommand: %s\n", args[0])
+		catalogUsage()
+		os.Exit(1)
 	}
 }
 
 func handleData(args []string) {
 	if len(args) == 0 {
-		must(errors.New("usage: tahuna data list|show ..."))
+		fmt.Println("missing data subcommand")
+		dataUsage()
+		os.Exit(1)
+	}
+	switch args[0] {
+	case "-h", "--help", "help":
+		dataUsage()
+		return
 	}
 	switch args[0] {
 	case "list":
@@ -229,7 +252,9 @@ func handleData(args []string) {
 	case "show":
 		dataShow(args[1:])
 	default:
-		must(fmt.Errorf("unknown data subcommand: %s", args[0]))
+		fmt.Printf("unknown data subcommand: %s\n", args[0])
+		dataUsage()
+		os.Exit(1)
 	}
 }
 
@@ -285,6 +310,33 @@ Wildcard matching:
   - "run rm" supports shell-style glob patterns for run_id and run_name (*, ?, []).
   - Always quote patterns to prevent shell expansion (for example: tahuna run rm 'warm-*').
   - To remove all runs, prefer: tahuna run rm --all
+`)
+}
+
+func environmentUsage() {
+	fmt.Print(`Environment commands:
+  tahuna env help
+  tahuna env list [--verbose|-v]
+  tahuna env show --id <env_id> [--verbose|-v]
+  tahuna env update [<env_id>] [--gpu-type <gpu>] [--gpu-count <n>] [--volume-gb <n>]
+  tahuna env specs [<env_id>] [--gpu-type <gpu>] [--gpu-count <n>] [--volume-gb <n>]
+  tahuna env rm <env_id> | --id <env_id> | --all|-a
+  tahuna env data bind|unbind ...
+`)
+}
+
+func catalogUsage() {
+	fmt.Print(`Catalog commands:
+  tahuna catalog help
+  tahuna catalog gpus [--verbose|-v]
+`)
+}
+
+func dataUsage() {
+	fmt.Print(`Data commands:
+  tahuna data help
+  tahuna data list [--verbose|-v]
+  tahuna data show <data_id> | --id <data_id> [--verbose|-v]
 `)
 }
 
@@ -547,28 +599,17 @@ func handleSync(args []string) {
 func environmentShow(args []string) {
 	fs := flag.NewFlagSet("environment show", flag.ExitOnError)
 	id := fs.String("id", "", "Environment ID")
-	list := fs.Bool("list", false, "List all environments")
 	verbose := fs.Bool("verbose", false, "Show full environment payload")
 	fs.BoolVar(verbose, "v", false, "Show full environment payload")
 	mustParseFlags(fs, args)
 
-	if *list {
-		resp, err := doJSON(http.MethodGet, "/environments", nil)
-		must(err)
-		if *verbose {
-			printJSON(resp)
-			return
-		}
-		environmentsAny, ok := resp["environments"].([]any)
-		if !ok {
-			printJSON(resp)
-			return
-		}
-		printEnvironmentListSummary(environmentsAny)
-		return
+	environmentID := strings.TrimSpace(*id)
+	if environmentID == "" && len(fs.Args()) > 0 {
+		environmentID = strings.TrimSpace(fs.Args()[0])
 	}
-	require(*id != "", "--id is required when --list is not set")
-	resp, err := doJSON(http.MethodGet, "/environments/"+*id, nil)
+	require(environmentID != "", "environment_id is required (usage: tahuna env show <env_id> | --id <env_id>)")
+
+	resp, err := doJSON(http.MethodGet, "/environments/"+environmentID, nil)
 	must(err)
 	if *verbose {
 		printJSON(resp)
@@ -578,7 +619,23 @@ func environmentShow(args []string) {
 }
 
 func environmentList(args []string) {
-	environmentShow(append(args, "--list"))
+	fs := flag.NewFlagSet("environment list", flag.ExitOnError)
+	verbose := fs.Bool("verbose", false, "Show full environments payload")
+	fs.BoolVar(verbose, "v", false, "Show full environments payload")
+	mustParseFlags(fs, args)
+
+	resp, err := doJSON(http.MethodGet, "/environments", nil)
+	must(err)
+	if *verbose {
+		printJSON(resp)
+		return
+	}
+	environmentsAny, ok := resp["environments"].([]any)
+	if !ok {
+		printJSON(resp)
+		return
+	}
+	printEnvironmentListSummary(environmentsAny)
 }
 
 func printEnvironmentListSummary(environmentsAny []any) {
