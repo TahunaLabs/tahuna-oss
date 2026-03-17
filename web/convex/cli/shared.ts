@@ -155,7 +155,7 @@ export async function validateGpuCountLimit(ctx: ActionCtx, gpuType: string, gpu
   const key = normalizeGpuType(gpuType);
   const max = maxByType.get(key);
   if (typeof max === "undefined") {
-    throw new Error(`GPU type ${gpuType} is not available. Run \`tahuna catalog gpus\`.`);
+    throw new Error(`GPU type ${gpuType} is not available. Run \`tahuna catalog list\`.`);
   }
   if (gpuCount > max) {
     throw new Error(`Max GPU count for ${gpuType} is ${max}.`);

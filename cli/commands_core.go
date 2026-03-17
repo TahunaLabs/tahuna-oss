@@ -226,7 +226,7 @@ func handleCatalog(args []string) {
 		return
 	}
 	switch args[0] {
-	case "gpus":
+	case "list":
 		catalogGPUs(args[1:])
 	default:
 		fmt.Printf("unknown catalog subcommand: %s\n", args[0])
@@ -328,7 +328,7 @@ func environmentUsage() {
 func catalogUsage() {
 	fmt.Print(`Catalog commands:
   tahuna catalog help
-  tahuna catalog gpus [--verbose|-v]
+  tahuna catalog list [--verbose|-v]
 `)
 }
 
@@ -341,7 +341,7 @@ func dataUsage() {
 }
 
 func catalogGPUs(args []string) {
-	fs := flag.NewFlagSet("catalog gpus", flag.ExitOnError)
+	fs := flag.NewFlagSet("catalog list", flag.ExitOnError)
 	verbose := fs.Bool("verbose", false, "Show full catalog payload")
 	fs.BoolVar(verbose, "v", false, "Show full catalog payload")
 	mustParseFlags(fs, args)

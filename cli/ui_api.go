@@ -411,7 +411,7 @@ func validateGPUSelection(gpuType string, gpuCount int) error {
 	}
 	entry, ok := entries[strings.ToLower(trimmedType)]
 	if !ok {
-		return fmt.Errorf("GPU type %q is not available. Run `tahuna catalog gpus`.", trimmedType)
+		return fmt.Errorf("GPU type %q is not available. Run `tahuna catalog list`.", trimmedType)
 	}
 	if entry.MaxGPUCount > 0 && gpuCount > entry.MaxGPUCount {
 		return fmt.Errorf("Max GPU count for %s is %d.", trimmedType, entry.MaxGPUCount)
