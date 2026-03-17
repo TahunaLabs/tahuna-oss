@@ -49,6 +49,7 @@
 - Every command group (`run`, `env`, `data`, `gpus`, etc.) must support `-h`, `--help`, and `help`, and unknown/missing subcommands must print that group's usage.
 - Keep per-subcommand FlagSets isolated so `... <group> <subcommand> -h` only shows flags for that subcommand.
 - Explicit timeouts/contexts for all networked calls. One canonical error/output style per command family.
+- **CLI tests:** use `httptest.NewServer` mock servers (not pure unit mocks). Shared helpers live in `test_helpers_test.go` — reuse before adding new ones. Flags must come before positional args in test calls (Go `flag` stops at first non-flag). Functions using `must()`/`require()` call `os.Exit` — cannot be tested for failure via `recover()`; test the underlying function that returns an error instead. Interactive prompts (`promptChoice`, `promptInt`) need a real terminal — test non-interactive (flag-based) paths only unless prompt functions are refactored to accept injected IO.
 
 ## Go Runtime (`runtime/warden/`)
 
