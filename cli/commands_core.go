@@ -766,7 +766,7 @@ func environmentDelete(args []string) {
 		must(err)
 		if deleted, ok := resp["deleted"]; ok && deleted == true {
 			if cleanupErr := clearLinkedEnvironmentIDIfMatches(envID); cleanupErr != nil {
-				fmt.Printf("%sWarning:%s failed to clean local environment link: %v\n", cAmpGold, cReset, cleanupErr)
+				logWarn("failed to clean local environment link: %v", cleanupErr)
 			}
 		}
 		printJSON(resp)

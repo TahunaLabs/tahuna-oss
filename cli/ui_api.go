@@ -56,6 +56,16 @@ func printSuccessLine(message string) {
 	fmt.Printf("%s✓%s %s\n", cAmpGreen, cReset, message)
 }
 
+// logWarn prints a colored warning.
+func logWarn(format string, args ...any) {
+	fmt.Printf("%swarning:%s "+format+"\n", append([]any{cAmpGold, cReset}, args...)...)
+}
+
+// logInfo prints a colored info message.
+func logInfo(format string, args ...any) {
+	fmt.Printf("%sinfo:%s "+format+"\n", append([]any{cAmpMuted, cReset}, args...)...)
+}
+
 func monitorRun(runID string, interval int) error {
 	return monitorRunWithOptions(runID, interval, false)
 }
@@ -82,15 +92,8 @@ func monitorRunWithOptions(runID string, interval int, streamLogs bool) error {
 		if err != nil {
 			if isRetryableRunPollError(err) {
 				consecutivePollErrors++
-				fmt.Printf(
-					"%swarning:%s unable to poll run status (%v); retrying in %ds (%d/%d)\n",
-					cAmpGold,
-					cReset,
-					err,
-					interval,
-					consecutivePollErrors,
-					maxConsecutivePollErrors,
-				)
+				logWarn("unable to poll run status (%v); retrying in %ds (%d/%d)",
+					err, interval, consecutivePollErrors, maxConsecutivePollErrors)
 				if consecutivePollErrors >= maxConsecutivePollErrors {
 					return fmt.Errorf(
 						"run status polling failed %d times in a row: %w",
@@ -104,7 +107,7 @@ func monitorRunWithOptions(runID string, interval int, streamLogs bool) error {
 			return err
 		}
 		if consecutivePollErrors > 0 {
-			fmt.Printf("%sinfo:%s recovered run status polling\n", cAmpMuted, cReset)
+			logInfo("recovered run status polling")
 			consecutivePollErrors = 0
 		}
 		status := resp.Status
@@ -137,7 +140,7 @@ func monitorRunWithOptions(runID string, interval int, streamLogs bool) error {
 			logResp, logErr := doJSONAs[runLogsResponse](http.MethodGet, "/runs/"+runID+"/logs", nil)
 			if logErr != nil {
 				if !logFetchWarned {
-					fmt.Printf("%swarning:%s unable to stream logs yet (%v)\n", cAmpGold, cReset, logErr)
+					logWarn("unable to stream logs yet (%v)", logErr)
 					logFetchWarned = true
 				}
 			} else {

@@ -320,15 +320,8 @@ func followRunLogs(runID string, initialResp runLogsResponse, interval int) erro
 		if err != nil {
 			if isRetryableRunPollError(err) {
 				consecutivePollErrors++
-				fmt.Printf(
-					"%swarning:%s unable to poll run status (%v); retrying in %ds (%d/%d)\n",
-					cAmpGold,
-					cReset,
-					err,
-					interval,
-					consecutivePollErrors,
-					maxConsecutivePollErrors,
-				)
+				logWarn("unable to poll run status (%v); retrying in %ds (%d/%d)",
+					err, interval, consecutivePollErrors, maxConsecutivePollErrors)
 				if consecutivePollErrors >= maxConsecutivePollErrors {
 					return fmt.Errorf(
 						"run status polling failed %d times in a row: %w",
@@ -350,15 +343,8 @@ func followRunLogs(runID string, initialResp runLogsResponse, interval int) erro
 		if err != nil {
 			if isRetryableRunPollError(err) {
 				consecutivePollErrors++
-				fmt.Printf(
-					"%swarning:%s unable to poll run logs (%v); retrying in %ds (%d/%d)\n",
-					cAmpGold,
-					cReset,
-					err,
-					interval,
-					consecutivePollErrors,
-					maxConsecutivePollErrors,
-				)
+				logWarn("unable to poll run logs (%v); retrying in %ds (%d/%d)",
+					err, interval, consecutivePollErrors, maxConsecutivePollErrors)
 				if consecutivePollErrors >= maxConsecutivePollErrors {
 					return fmt.Errorf(
 						"run log polling failed %d times in a row: %w",
@@ -372,7 +358,7 @@ func followRunLogs(runID string, initialResp runLogsResponse, interval int) erro
 			return err
 		}
 		if consecutivePollErrors > 0 {
-			fmt.Printf("%sinfo:%s recovered run log polling\n", cAmpMuted, cReset)
+			logInfo("recovered run log polling")
 			consecutivePollErrors = 0
 		}
 		for _, line := range parseRecentRunLogs(logResp.RecentLogs) {
