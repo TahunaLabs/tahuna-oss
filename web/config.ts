@@ -23,7 +23,7 @@ export const RUN_CONFIG = {
   runtimeLogTailLimit: 200,
   runtimeLogStartupScanLimit: 600,
   runtimeLogPinnedBootstrapLimit: 40,
-  runtimeMetricScanLimit: 5000,
+  runtimeMetricScanLimit: 3200,
   runtimeMetricSeriesLimit: 40,
   runtimeMetricPerSeriesLimit: 80,
   workpoolMaxParallelism: 3,
