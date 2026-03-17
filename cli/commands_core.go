@@ -214,23 +214,23 @@ func handleEnvironment(args []string) {
 	}
 }
 
-func handleCatalog(args []string) {
+func handleGPUs(args []string) {
 	if len(args) == 0 {
-		fmt.Println("missing catalog subcommand")
-		catalogUsage()
+		fmt.Println("missing gpus subcommand")
+		gpusUsage()
 		os.Exit(1)
 	}
 	switch args[0] {
 	case "-h", "--help", "help":
-		catalogUsage()
+		gpusUsage()
 		return
 	}
 	switch args[0] {
 	case "list":
-		catalogGPUs(args[1:])
+		gpusList(args[1:])
 	default:
-		fmt.Printf("unknown catalog subcommand: %s\n", args[0])
-		catalogUsage()
+		fmt.Printf("unknown gpus subcommand: %s\n", args[0])
+		gpusUsage()
 		os.Exit(1)
 	}
 }
@@ -325,10 +325,10 @@ func environmentUsage() {
 `)
 }
 
-func catalogUsage() {
-	fmt.Print(`Catalog commands:
-  tahuna catalog help
-  tahuna catalog list [--verbose|-v]
+func gpusUsage() {
+	fmt.Print(`GPUs commands:
+  tahuna gpus help
+  tahuna gpus list [--verbose|-v]
 `)
 }
 
@@ -340,8 +340,8 @@ func dataUsage() {
 `)
 }
 
-func catalogGPUs(args []string) {
-	fs := flag.NewFlagSet("catalog list", flag.ExitOnError)
+func gpusList(args []string) {
+	fs := flag.NewFlagSet("gpus list", flag.ExitOnError)
 	verbose := fs.Bool("verbose", false, "Show full catalog payload")
 	fs.BoolVar(verbose, "v", false, "Show full catalog payload")
 	mustParseFlags(fs, args)

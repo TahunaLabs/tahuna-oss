@@ -47,8 +47,8 @@ func main() {
 	switch os.Args[1] {
 	case "env", "environment":
 		handleEnvironment(os.Args[2:])
-	case "catalog":
-		handleCatalog(os.Args[2:])
+	case "gpus":
+		handleGPUs(os.Args[2:])
 	case "data":
 		handleData(os.Args[2:])
 	case "run":
@@ -86,7 +86,7 @@ Usage:
   tahuna train [-d] [--gpu-type <gpu>] [--gpu-count <n>] [--volume-gb <n>]
   tahuna env list|show|update|rm ...
   tahuna env data bind|unbind ...
-  tahuna catalog list
+  tahuna gpus list
   tahuna data list|show ...
   tahuna run create|rename|list|show|watch|logs|cancel|rm ...
   tahuna up

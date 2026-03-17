@@ -43,7 +43,7 @@
 - One canonical flag spelling. Human-readable default output; JSON only under `--verbose`.
 - Use one canonical subcommand verb per action across command families (for example: `rm` for removal). Do not keep alias verbs unless explicitly requested.
 - For shared flags, expose both short and long forms consistently (for example: `-a` and `--all`) across equivalent commands.
-- Every command group (`run`, `env`, `data`, `catalog`, etc.) must support `-h`, `--help`, and `help`, and unknown/missing subcommands must print that group's usage.
+- Every command group (`run`, `env`, `data`, `gpus`, etc.) must support `-h`, `--help`, and `help`, and unknown/missing subcommands must print that group's usage.
 - Keep per-subcommand FlagSets isolated so `... <group> <subcommand> -h` only shows flags for that subcommand.
 - Explicit timeouts/contexts for all networked calls. One canonical error/output style per command family.
 
