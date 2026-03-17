@@ -119,6 +119,56 @@ const runLogsResponseValidator = v.object({
     }),
   ),
 });
+const runLogsOnlyResponseValidator = v.object({
+  run_id: v.string(),
+  status: v.string(),
+  logs_path: v.string(),
+  log_file: v.string(),
+  note: v.string(),
+  logs_window: v.object({
+    tail_limit: v.number(),
+    startup_scan_limit: v.number(),
+    pinned_bootstrap_limit: v.number(),
+    scanned_tail: v.number(),
+    scanned_startup: v.number(),
+    pinned_bootstrap_count: v.number(),
+    returned_logs: v.number(),
+    includes_pinned_bootstrap: v.boolean(),
+  }),
+  recent_logs: v.array(
+    v.object({
+      timestamp: v.number(),
+      level: v.string(),
+      source: v.string(),
+      message: v.string(),
+    }),
+  ),
+});
+const runMetricsOnlyResponseValidator = v.object({
+  run_id: v.string(),
+  status: v.string(),
+  metrics_window: v.object({
+    scan_limit: v.number(),
+    series_limit: v.number(),
+    per_series_limit: v.number(),
+    scanned_points: v.number(),
+    scanned_series: v.number(),
+    returned_series: v.number(),
+    returned_points: v.number(),
+    dropped_series_count: v.number(),
+    dropped_points_count: v.number(),
+  }),
+  recent_metrics: v.array(
+    v.object({
+      timestamp: v.number(),
+      name: v.string(),
+      value: v.number(),
+      step: v.union(v.number(), v.null()),
+      unit: v.union(v.string(), v.null()),
+      source: v.string(),
+    }),
+  ),
+});
 const provisioningPayloadValidator = v.object({
   run_id: v.string(),
   environment_id: v.string(),
@@ -1004,6 +1054,29 @@ async function toRunLogsResponse(ctx: QueryCtx, row: Doc<"runs">) {
   };
 }
 
+async function toRunLogsOnlyResponse(ctx: QueryCtx, row: Doc<"runs">) {
+  const recentLogs = await listRecentRuntimeLogs(ctx, row._id);
+  return {
+    run_id: String(row._id),
+    status: row.status,
+    logs_path: row.logs,
+    log_file: `${row.logs}/run.log`,
+    note: "Runtime logs are streamed by the pod and persisted in Convex.",
+    logs_window: recentLogs.window,
+    recent_logs: recentLogs.logs,
+  };
+}
+
+async function toRunMetricsOnlyResponse(ctx: QueryCtx, row: Doc<"runs">) {
+  const recentMetrics = await listRecentRuntimeMetrics(ctx, row._id);
+  return {
+    run_id: String(row._id),
+    status: row.status,
+    metrics_window: recentMetrics.window,
+    recent_metrics: recentMetrics.metrics,
+  };
+}
+
 async function createRunForUserId(
   ctx: MutationCtx,
   args: {
@@ -1266,6 +1339,26 @@ export const getLogs = query({
     const user = await requireUser(ctx);
     const row = await getOwnedRun(ctx, String(user._id), args.runId);
     return toRunLogsResponse(ctx, row);
+  },
+});
+
+export const getRunLogs = query({
+  args: { runId: v.id("runs") },
+  returns: runLogsOnlyResponseValidator,
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    const row = await getOwnedRun(ctx, String(user._id), args.runId);
+    return toRunLogsOnlyResponse(ctx, row);
+  },
+});
+
+export const getRunMetrics = query({
+  args: { runId: v.id("runs") },
+  returns: runMetricsOnlyResponseValidator,
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    const row = await getOwnedRun(ctx, String(user._id), args.runId);
+    return toRunMetricsOnlyResponse(ctx, row);
   },
 });
 

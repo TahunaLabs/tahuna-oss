@@ -13,7 +13,8 @@ import { useParams } from "next/navigation"
 import {
   metricSeries,
   type RunDetail,
-  type RunLogsDetail,
+  type RunLogsOnlyDetail,
+  type RunMetricsOnlyDetail,
 } from "@/components/dashboard/shared"
 import {
   CartesianGrid,
@@ -32,11 +33,14 @@ export default function RunDetailPage() {
   const shouldLoadQueries = !isLoading && isAuthenticated && runId !== ""
 
   const run = useQuery(api.runs.get, shouldLoadQueries ? { runId: runId as Id<"runs"> } : "skip") as RunDetail | undefined
-  const logs = useQuery(api.runs.getLogs, shouldLoadQueries ? { runId: runId as Id<"runs"> } : "skip") as
-    | RunLogsDetail
+  const logs = useQuery(api.runs.getRunLogs, shouldLoadQueries ? { runId: runId as Id<"runs"> } : "skip") as
+    | RunLogsOnlyDetail
+    | undefined
+  const metrics = useQuery(api.runs.getRunMetrics, shouldLoadQueries ? { runId: runId as Id<"runs"> } : "skip") as
+    | RunMetricsOnlyDetail
     | undefined
 
-  const series = metricSeries(logs)
+  const series = metricSeries(metrics)
 
   if (isLoading || !isAuthenticated) {
     return <PageLoader message="Loading run details…" />
@@ -50,7 +54,7 @@ export default function RunDetailPage() {
     )
   }
 
-  if (!run || !logs) {
+  if (!run || !logs || !metrics) {
     return <PageLoader message="Loading run details…" />
   }
 
@@ -151,10 +155,10 @@ export default function RunDetailPage() {
         <Card variant="dashboard" className="p-4">
           <h2 className="text-sm font-semibold">Live metrics</h2>
           <p className="mt-1 text-[11px] text-muted-foreground">
-            Showing {logs.metrics_window.returned_points} points across {logs.metrics_window.returned_series} series
-            (scan {logs.metrics_window.scanned_points}/{logs.metrics_window.scan_limit}).
-            {logs.metrics_window.dropped_series_count > 0
-              ? ` ${logs.metrics_window.dropped_series_count} series omitted by window limits.`
+            Showing {metrics.metrics_window.returned_points} points across {metrics.metrics_window.returned_series} series
+            (scan {metrics.metrics_window.scanned_points}/{metrics.metrics_window.scan_limit}).
+            {metrics.metrics_window.dropped_series_count > 0
+              ? ` ${metrics.metrics_window.dropped_series_count} series omitted by window limits.`
               : ""}
           </p>
           {series.length === 0 ? (

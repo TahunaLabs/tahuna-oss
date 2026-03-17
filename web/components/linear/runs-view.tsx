@@ -11,7 +11,8 @@ import {
   type EnvironmentRow,
   type RunRow,
   type RunDetail,
-  type RunLogsDetail,
+  type RunLogsOnlyDetail,
+  type RunMetricsOnlyDetail,
 } from "@/components/dashboard/shared"
 import {
   AlertDialog,
@@ -40,7 +41,8 @@ type RunsViewProps = {
   busy: boolean
   selectedRunId: string | null
   runDetail: RunDetail | undefined
-  runLogs: RunLogsDetail | undefined
+  runLogs: RunLogsOnlyDetail | undefined
+  runMetrics: RunMetricsOnlyDetail | undefined
   onSelectRun: (runId: string | null) => void
   onCancelRun: (runId: RunRow["run_id"]) => void
 }
@@ -77,6 +79,7 @@ export function RunsView({
   selectedRunId,
   runDetail,
   runLogs,
+  runMetrics,
   onSelectRun,
   onCancelRun,
 }: RunsViewProps) {
@@ -91,7 +94,7 @@ export function RunsView({
 
   const hasData = filteredRuns.length > 0
   const noEnvironments = environments.length === 0
-  const series = metricSeries(runLogs)
+  const series = metricSeries(runMetrics)
   const primarySeries = series.filter((metric) => metric.category !== "system")
   const systemSeries = series.filter((metric) => metric.category === "system")
 
@@ -403,12 +406,12 @@ export function RunsView({
                 <div className="px-6 pb-6">
                   <div className="rounded-lg border border-border p-4">
                     <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Live metrics</h3>
-                    {runLogs && (
+                    {runMetrics && (
                       <p className="mb-3 text-[11px] text-muted-foreground">
-                        Showing {runLogs.metrics_window.returned_points} points across {runLogs.metrics_window.returned_series} series
-                        (scan {runLogs.metrics_window.scanned_points}/{runLogs.metrics_window.scan_limit}).
-                        {runLogs.metrics_window.dropped_series_count > 0
-                          ? ` ${runLogs.metrics_window.dropped_series_count} series omitted by window limits.`
+                        Showing {runMetrics.metrics_window.returned_points} points across {runMetrics.metrics_window.returned_series} series
+                        (scan {runMetrics.metrics_window.scanned_points}/{runMetrics.metrics_window.scan_limit}).
+                        {runMetrics.metrics_window.dropped_series_count > 0
+                          ? ` ${runMetrics.metrics_window.dropped_series_count} series omitted by window limits.`
                           : ""}
                       </p>
                     )}

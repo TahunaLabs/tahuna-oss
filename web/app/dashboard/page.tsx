@@ -15,7 +15,8 @@ import {
   type EnvironmentRow,
   type RunRow,
   type RunDetail,
-  type RunLogsDetail,
+  type RunLogsOnlyDetail,
+  type RunMetricsOnlyDetail,
   type StorageListResult,
   type StorageSort,
   type StorageItem,
@@ -82,9 +83,13 @@ export default function DashboardPage() {
     shouldLoadRunDetail ? { runId: selectedRunId as Id<"runs"> } : "skip"
   ) as RunDetail | undefined
   const runLogs = useQuery(
-    api.runs.getLogs,
+    api.runs.getRunLogs,
     shouldLoadRunDetail ? { runId: selectedRunId as Id<"runs"> } : "skip"
-  ) as RunLogsDetail | undefined
+  ) as RunLogsOnlyDetail | undefined
+  const runMetrics = useQuery(
+    api.runs.getRunMetrics,
+    shouldLoadRunDetail ? { runId: selectedRunId as Id<"runs"> } : "skip"
+  ) as RunMetricsOnlyDetail | undefined
   const shouldLoadEnvironmentConfig = shouldLoadQueries && configEditorEnvironmentId !== null
   const environmentConfig = useQuery(
     api.environments.getConfig,
@@ -547,6 +552,7 @@ export default function DashboardPage() {
             selectedRunId={selectedRunId}
             runDetail={runDetail}
             runLogs={runLogs}
+            runMetrics={runMetrics}
             onSelectRun={setSelectedRunId}
             onCancelRun={(runId) => {
               void cancelRun(runId)

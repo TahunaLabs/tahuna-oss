@@ -100,7 +100,7 @@ export type RunDetail = {
   artifact_keys: string[]
 }
 
-export type RunLogsDetail = {
+export type RunLogsOnlyDetail = {
   run_id: string
   status: string
   logs_path: string
@@ -116,6 +116,17 @@ export type RunLogsDetail = {
     returned_logs: number
     includes_pinned_bootstrap: boolean
   }
+  recent_logs: Array<{
+    timestamp: number
+    level: string
+    source: string
+    message: string
+  }>
+}
+
+export type RunMetricsOnlyDetail = {
+  run_id: string
+  status: string
   metrics_window: {
     scan_limit: number
     series_limit: number
@@ -127,12 +138,6 @@ export type RunLogsDetail = {
     dropped_series_count: number
     dropped_points_count: number
   }
-  recent_logs: Array<{
-    timestamp: number
-    level: string
-    source: string
-    message: string
-  }>
   recent_metrics: Array<{
     timestamp: number
     name: string
@@ -176,7 +181,7 @@ function metricCategoryPriority(category: MetricChartSeries["category"]) {
   return 2
 }
 
-export function metricSeries(logs: RunLogsDetail | undefined) {
+export function metricSeries(logs: RunMetricsOnlyDetail | undefined) {
   if (!logs) return [] satisfies MetricChartSeries[]
   const grouped = new Map<
     string,
