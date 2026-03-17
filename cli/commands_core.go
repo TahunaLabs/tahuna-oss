@@ -195,7 +195,7 @@ func handleEnvironment(args []string) {
 		environmentShow(args[1:])
 	case "update", "specs":
 		environmentUpdate(args[1:])
-	case "delete":
+	case "rm":
 		environmentDelete(args[1:])
 	case "data":
 		environmentData(args[1:])
@@ -689,19 +689,56 @@ func defaultString(value, fallback string) string {
 }
 
 func environmentDelete(args []string) {
-	fs := flag.NewFlagSet("environment delete", flag.ExitOnError)
+	fs := flag.NewFlagSet("environment rm", flag.ExitOnError)
 	id := fs.String("id", "", "Environment ID")
+	all := fs.Bool("all", false, "Delete all environments")
+	fs.BoolVar(all, "a", false, "Delete all environments")
 	mustParseFlags(fs, args)
-	require(*id != "", "--id is required")
 
-	resp, err := doJSON(http.MethodDelete, "/environments/"+*id, nil)
-	must(err)
-	if deleted, ok := resp["deleted"]; ok && deleted == true {
-		if cleanupErr := clearLinkedEnvironmentIDIfMatches(strings.TrimSpace(*id)); cleanupErr != nil {
-			fmt.Printf("%sWarning:%s failed to clean local environment link: %v\n", cAmpGold, cReset, cleanupErr)
-		}
+	environmentID := strings.TrimSpace(*id)
+	if environmentID == "" && len(fs.Args()) > 0 {
+		environmentID = strings.TrimSpace(fs.Args()[0])
 	}
-	printJSON(resp)
+	require(!(*all && environmentID != ""), "cannot combine --all with --id or positional environment id")
+
+	environmentIDs := make([]string, 0, 1)
+	if *all {
+		resp, err := doJSON(http.MethodGet, "/environments", nil)
+		must(err)
+		environmentsAny, ok := resp["environments"].([]any)
+		if !ok {
+			must(errors.New("invalid environments response"))
+		}
+		for _, raw := range environmentsAny {
+			row, ok := raw.(map[string]any)
+			if !ok {
+				continue
+			}
+			envID := strings.TrimSpace(asString(row["environment_id"]))
+			if envID != "" {
+				environmentIDs = append(environmentIDs, envID)
+			}
+		}
+	} else {
+		require(environmentID != "", "environment_id is required (usage: tahuna env rm <environment_id> | --id <environment_id> | --all)")
+		environmentIDs = append(environmentIDs, environmentID)
+	}
+
+	if len(environmentIDs) == 0 {
+		fmt.Println("No environments found.")
+		return
+	}
+
+	for _, envID := range environmentIDs {
+		resp, err := doJSON(http.MethodDelete, "/environments/"+envID, nil)
+		must(err)
+		if deleted, ok := resp["deleted"]; ok && deleted == true {
+			if cleanupErr := clearLinkedEnvironmentIDIfMatches(envID); cleanupErr != nil {
+				fmt.Printf("%sWarning:%s failed to clean local environment link: %v\n", cAmpGold, cReset, cleanupErr)
+			}
+		}
+		printJSON(resp)
+	}
 }
 
 func environmentUpdate(args []string) {

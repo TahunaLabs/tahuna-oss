@@ -84,7 +84,7 @@ Usage:
   tahuna init [.]|[project-name]
   tahuna sync [code|data]
   tahuna train [-d] [--gpu-type <gpu>] [--gpu-count <n>] [--volume-gb <n>]
-  tahuna env list|show|update|delete ...
+  tahuna env list|show|update|rm ...
   tahuna env data bind|unbind ...
   tahuna catalog gpus
   tahuna data list|show ...
@@ -110,6 +110,7 @@ Environment:
   tahuna env show --id <env_id> [--verbose]
   tahuna env update [<env_id>] [--gpu-type <gpu>] [--gpu-count <n>] [--volume-gb <n>]
   tahuna env specs [<env_id>] [--gpu-type <gpu>] [--gpu-count <n>] [--volume-gb <n>]   Alias
+  tahuna env rm <env_id> | --id <env_id> | --all|-a
 
 Auth:
   TAHUNA_API_URL      API base URL (default: http://localhost:3000)

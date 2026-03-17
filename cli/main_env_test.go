@@ -129,3 +129,78 @@ func TestAPIURL_IgnoresLegacyProviderEnvVars(t *testing.T) {
 		t.Fatalf("expected default API URL when only legacy provider env vars are set, got %q", got)
 	}
 }
+
+func TestEnvironmentDelete_PositionalID(t *testing.T) {
+	deleteCalls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method == http.MethodDelete && r.URL.Path == "/api/environments/env-positional" {
+			deleteCalls++
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"deleted":        true,
+				"environment_id": "env-positional",
+			})
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+		_ = json.NewEncoder(w).Encode(map[string]any{"detail": "not found"})
+	}))
+	defer server.Close()
+
+	t.Setenv("TAHUNA_API_URL", server.URL)
+	output := captureStdout(t, func() {
+		environmentDelete([]string{"env-positional"})
+	})
+
+	if deleteCalls != 1 {
+		t.Fatalf("expected one delete call, got %d", deleteCalls)
+	}
+	if !strings.Contains(output, "\"deleted\": true") {
+		t.Fatalf("expected delete response output, got: %s", output)
+	}
+}
+
+func TestEnvironmentDelete_All(t *testing.T) {
+	deleteCalls := 0
+	deleted := map[string]bool{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/environments":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"environments": []map[string]any{
+					{"environment_id": "env-1", "name": "one"},
+					{"environment_id": "env-2", "name": "two"},
+				},
+			})
+			return
+		case r.Method == http.MethodDelete && (r.URL.Path == "/api/environments/env-1" || r.URL.Path == "/api/environments/env-2"):
+			deleteCalls++
+			deleted[r.URL.Path] = true
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"deleted": true,
+			})
+			return
+		default:
+			w.WriteHeader(http.StatusNotFound)
+			_ = json.NewEncoder(w).Encode(map[string]any{"detail": "not found"})
+			return
+		}
+	}))
+	defer server.Close()
+
+	t.Setenv("TAHUNA_API_URL", server.URL)
+	output := captureStdout(t, func() {
+		environmentDelete([]string{"--all"})
+	})
+
+	if deleteCalls != 2 {
+		t.Fatalf("expected two delete calls, got %d", deleteCalls)
+	}
+	if !deleted["/api/environments/env-1"] || !deleted["/api/environments/env-2"] {
+		t.Fatalf("expected both environments deleted, got: %#v", deleted)
+	}
+	if strings.Count(output, "\"deleted\": true") != 2 {
+		t.Fatalf("expected two delete responses, got: %s", output)
+	}
+}
