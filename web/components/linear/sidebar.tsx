@@ -3,9 +3,7 @@
 import { useState } from "react"
 import {
   ChevronDown,
-  MoreHorizontal,
   Search,
-  Settings,
   HardDrive,
   Server,
   Play,
@@ -16,7 +14,6 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
-import { ActionsMenu } from "@/components/linear/actions-menu"
 import { Button } from "@/components/ui/button"
 
 interface SidebarProps {
@@ -80,35 +77,12 @@ export function Sidebar({ activeView, onViewChange, userInitial, isDark, onTheme
                 active={activeView === "runs"}
                 onClick={() => onViewChange("runs")}
               />
-              <ActionsMenu
-                triggerLabel="Open more sidebar actions"
-                align="left"
-                triggerVariant="sidebar-item"
-                triggerClassName="w-full"
-                menuClassName="w-48"
-                triggerContent={(
-                  <>
-                    <MoreHorizontal className="w-4 h-4" />
-                    <span>More</span>
-                  </>
-                )}
-              >
-                {(close) => (
-                  <>
-                    <Button asChild type="button" variant="sidebar-menu-item" size="none">
-                      <Link href="/machines" onClick={close}>
-                        <Monitor className="w-4 h-4" />
-                        <span>Machines</span>
-                      </Link>
-                    </Button>
-                    <div className="border-t border-border my-1" />
-                    <Button type="button" variant="sidebar-menu-item" size="none" onClick={close}>
-                      <Settings className="w-4 h-4" />
-                      <span>Customize sidebar</span>
-                    </Button>
-                  </>
-                )}
-              </ActionsMenu>
+              <Button asChild type="button" variant="sidebar-item" size="none">
+                <Link href="/machines">
+                  <Monitor className="w-4 h-4" />
+                  <span>Machines</span>
+                </Link>
+              </Button>
             </div>
           )}
         </div>

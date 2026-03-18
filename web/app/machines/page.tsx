@@ -20,7 +20,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { api } from "@convex/_generated/api"
 import type { Id } from "@convex/_generated/dataModel"
 import { useConvexAuth, useMutation, useQuery } from "convex/react"
-import { ArrowLeft, Ban, CheckCircle2, Clock } from "lucide-react"
+import { ArrowLeft } from "lucide-react"
 import Link from "next/link"
 import { useState } from "react"
 
@@ -52,10 +52,6 @@ export default function MachinesPage() {
   const [revokingId, setRevokingId] = useState<Id<"apiKeys"> | null>(null)
 
   const enrichedKeys = keys ?? []
-
-  const activeCount = enrichedKeys.filter((key) => key.status === "active").length
-  const revokedCount = enrichedKeys.filter((key) => key.status === "revoked").length
-  const expiredCount = enrichedKeys.filter((key) => key.status === "expired").length
 
   async function revokeKey(id: Id<"apiKeys">, name: string) {
     setRevokingId(id)
@@ -95,30 +91,6 @@ export default function MachinesPage() {
 
         {error ? <Notice variant="error">{error}</Notice> : null}
         {message ? <Notice>{message}</Notice> : null}
-
-        <section className="grid grid-cols-1 gap-3 md:grid-cols-3">
-          <Card variant="dashboard" className="p-4">
-            <div className="flex items-center gap-2">
-              <CheckCircle2 className="h-4 w-4 text-green-500" />
-              <p className="text-sm text-muted-foreground">Active</p>
-            </div>
-            <p className="mt-1 text-2xl font-semibold">{activeCount}</p>
-          </Card>
-          <Card variant="dashboard" className="p-4">
-            <div className="flex items-center gap-2">
-              <Clock className="h-4 w-4 text-amber-500" />
-              <p className="text-sm text-muted-foreground">Expired</p>
-            </div>
-            <p className="mt-1 text-2xl font-semibold">{expiredCount}</p>
-          </Card>
-          <Card variant="dashboard" className="p-4">
-            <div className="flex items-center gap-2">
-              <Ban className="h-4 w-4 text-rose-500" />
-              <p className="text-sm text-muted-foreground">Revoked</p>
-            </div>
-            <p className="mt-1 text-2xl font-semibold">{revokedCount}</p>
-          </Card>
-        </section>
 
         {enrichedKeys.length === 0 ? (
           <Card variant="dashboard" className="p-6">
