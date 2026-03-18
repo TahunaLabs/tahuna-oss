@@ -84,31 +84,31 @@ export function EnvironmentsView({
           )}
         </div>
         <div className="flex items-center gap-2">
-          <button className="p-1.5 hover:bg-secondary rounded text-muted-foreground hover:text-foreground">
+          <Button type="button" variant="dashboard-icon-secondary" size="none">
             <Filter className="w-4 h-4" />
-          </button>
-          <button className="p-1.5 hover:bg-secondary rounded text-muted-foreground hover:text-foreground">
+          </Button>
+          <Button type="button" variant="dashboard-icon-secondary" size="none">
             <Settings2 className="w-4 h-4" />
-          </button>
-          <button className="p-1.5 hover:bg-secondary rounded text-muted-foreground hover:text-foreground">
+          </Button>
+          <Button type="button" variant="dashboard-icon-secondary" size="none">
             <LayoutGrid className="w-4 h-4" />
-          </button>
-          <button className="p-1.5 hover:bg-secondary rounded text-muted-foreground hover:text-foreground">
+          </Button>
+          <Button type="button" variant="dashboard-icon-secondary" size="none">
             <Plus className="w-4 h-4" />
-          </button>
+          </Button>
         </div>
       </header>
 
       {/* Tabs */}
       <div className="px-6 py-2 border-b border-border">
         <div className="flex items-center gap-1">
-          <button className="px-3 py-1.5 text-sm bg-secondary text-foreground rounded">
+          <Button type="button" variant="dashboard-tab-compact-active" size="none">
             All environments
-          </button>
-          <button className="px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground hover:bg-secondary rounded flex items-center gap-1">
+          </Button>
+          <Button type="button" variant="dashboard-tab-compact" size="none">
             <Plus className="w-3.5 h-3.5" />
             New view
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -202,13 +202,15 @@ export function EnvironmentsView({
                                       <span className="inline-flex px-2 py-0.5 rounded text-xs bg-secondary text-foreground">
                                         {blob ? blob.filename : dataId}
                                       </span>
-                                      <button
+                                      <Button
+                                        type="button"
+                                        variant="dashboard-outline-compact"
+                                        size="none"
                                         onClick={() => onUnbindData(env.environment_id, dataId)}
                                         disabled={busy}
-                                        className="px-1.5 py-0.5 text-xs rounded border border-border hover:bg-secondary text-muted-foreground hover:text-foreground disabled:opacity-50"
                                       >
                                         Unbind
-                                      </button>
+                                      </Button>
                                     </div>
                                   )
                                 })}
@@ -231,17 +233,19 @@ export function EnvironmentsView({
                                 </option>
                               ))}
                             </select>
-                            <button
+                            <Button
+                              type="button"
+                              variant="dashboard-outline-compact"
+                              size="none"
                               onClick={() => onBindSelectedData(env)}
                               disabled={
                                 busy ||
                                 availableDataBlobs.length === 0 ||
                                 !(bindSelectionByEnvironment[env.environment_id] || "").trim()
                               }
-                              className="px-2 py-1 text-xs rounded border border-border hover:bg-secondary disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                               Bind
-                            </button>
+                            </Button>
                           </div>
                         </div>
                       </td>
@@ -262,22 +266,26 @@ export function EnvironmentsView({
                             <FileCode2 className="w-3 h-3" />
                             Config
                           </Button>
-                          <button
+                          <Button
+                            type="button"
+                            variant="dashboard-outline-compact-gap"
+                            size="none"
                             onClick={() => onLaunchRun(env.environment_id)}
                             disabled={busy}
-                            className="flex items-center gap-1 px-2 py-1 text-xs rounded border border-border hover:bg-secondary disabled:opacity-50"
                           >
                             <Play className="w-3 h-3" />
                             Run
-                          </button>
+                          </Button>
                           <AlertDialog>
                             <AlertDialogTrigger asChild>
-                              <button
+                              <Button
+                                type="button"
+                                variant="dashboard-outline-icon-danger"
+                                size="none"
                                 disabled={busy}
-                                className="p-1 rounded hover:bg-secondary text-muted-foreground hover:text-destructive-foreground disabled:opacity-50"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
-                              </button>
+                              </Button>
                             </AlertDialogTrigger>
                             <AlertDialogContent>
                               <AlertDialogHeader>
@@ -390,12 +398,14 @@ function CliStep({ number, label, command }: { number: number; label: string; co
       </p>
       <div className="flex items-center justify-between gap-2 rounded-lg bg-secondary/70 border border-border px-4 py-2.5">
         <code className="text-sm text-foreground font-mono">{command}</code>
-        <button
+        <Button
+          type="button"
+          variant="dashboard-outline-icon-muted"
+          size="none"
           onClick={copyCommand}
-          className="p-1 rounded hover:bg-background/50 text-muted-foreground hover:text-foreground shrink-0 transition-colors"
         >
           {copied ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
-        </button>
+        </Button>
       </div>
     </div>
   )

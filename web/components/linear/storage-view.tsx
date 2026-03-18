@@ -14,7 +14,7 @@ import {
   ChevronDown,
   X,
 } from "lucide-react"
-import { cn } from "@/lib/utils"
+import { Button } from "@/components/ui/button"
 import {
   formatBytes,
   MAX_ARTIFACT_NAME_CHARS,
@@ -96,30 +96,36 @@ export function StorageView({
           )}
         </div>
         <div className="flex items-center gap-2">
-          <button
-            className={cn(
-              "p-1.5 rounded text-muted-foreground hover:text-foreground",
-              showFilters ? "bg-secondary text-foreground" : "hover:bg-secondary"
-            )}
+          <Button
+            type="button"
+            variant={showFilters ? "dashboard-icon-secondary-active" : "dashboard-icon-secondary"}
+            size="none"
             onClick={() => setShowFilters(!showFilters)}
           >
             <Filter className="w-4 h-4" />
-          </button>
-          <button className="p-1.5 hover:bg-secondary rounded text-muted-foreground hover:text-foreground">
+          </Button>
+          <Button
+            type="button"
+            variant="dashboard-icon-secondary"
+            size="none"
+          >
             <Settings2 className="w-4 h-4" />
-          </button>
-          <button className="p-1.5 hover:bg-secondary rounded text-muted-foreground hover:text-foreground">
+          </Button>
+          <Button
+            type="button"
+            variant="dashboard-icon-secondary"
+            size="none"
+          >
             <LayoutGrid className="w-4 h-4" />
-          </button>
-          <button
-            className={cn(
-              "p-1.5 rounded text-muted-foreground hover:text-foreground",
-              showUpload ? "bg-secondary text-foreground" : "hover:bg-secondary"
-            )}
+          </Button>
+          <Button
+            type="button"
+            variant={showUpload ? "dashboard-icon-secondary-active" : "dashboard-icon-secondary"}
+            size="none"
             onClick={() => setShowUpload(!showUpload)}
           >
             <Plus className="w-4 h-4" />
-          </button>
+          </Button>
         </div>
       </header>
 
@@ -169,13 +175,14 @@ export function StorageView({
                 {selectedDataFiles.length} file{selectedDataFiles.length > 1 ? "s" : ""} ({selectedDataFiles.map(f => formatBytes(f.size)).join(", ")})
               </span>
             )}
-            <button
+            <Button
               type="submit"
+              variant="dashboard-primary-compact"
+              size="none"
               disabled={selectedDataFiles.length === 0 || uploadingData}
-              className="px-3 py-1.5 bg-accent text-accent-foreground text-sm rounded hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {uploadingData ? "Uploading..." : "Upload"}
-            </button>
+            </Button>
           </form>
         </div>
       )}
@@ -183,33 +190,30 @@ export function StorageView({
       {/* Tabs */}
       <div className="px-6 py-2 border-b border-border">
         <div className="flex items-center gap-1">
-          <button
-            className={cn(
-              "px-3 py-1.5 text-sm rounded",
-              storageSourceFilter === "all" ? "bg-secondary text-foreground" : "text-muted-foreground hover:text-foreground hover:bg-secondary"
-            )}
+          <Button
+            type="button"
+            variant={storageSourceFilter === "all" ? "dashboard-tab-compact-active" : "dashboard-tab-compact"}
+            size="none"
             onClick={() => onStorageSourceFilterChange("all")}
           >
             All storage
-          </button>
-          <button
-            className={cn(
-              "px-3 py-1.5 text-sm rounded",
-              storageSourceFilter === "data" ? "bg-secondary text-foreground" : "text-muted-foreground hover:text-foreground hover:bg-secondary"
-            )}
+          </Button>
+          <Button
+            type="button"
+            variant={storageSourceFilter === "data" ? "dashboard-tab-compact-active" : "dashboard-tab-compact"}
+            size="none"
             onClick={() => onStorageSourceFilterChange("data")}
           >
             Data
-          </button>
-          <button
-            className={cn(
-              "px-3 py-1.5 text-sm rounded",
-              storageSourceFilter === "run_artifact" ? "bg-secondary text-foreground" : "text-muted-foreground hover:text-foreground hover:bg-secondary"
-            )}
+          </Button>
+          <Button
+            type="button"
+            variant={storageSourceFilter === "run_artifact" ? "dashboard-tab-compact-active" : "dashboard-tab-compact"}
+            size="none"
             onClick={() => onStorageSourceFilterChange("run_artifact")}
           >
             Artifacts
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -236,12 +240,14 @@ export function StorageView({
             </p>
             {!storageSearch.trim() && storageSourceFilter === "all" && (
               <div className="flex items-center justify-center gap-3">
-                <button
-                  className="px-4 py-2 bg-accent text-accent-foreground text-sm rounded hover:opacity-90"
+                <Button
+                  type="button"
+                  variant="dashboard-primary-compact"
+                  size="none"
                   onClick={() => setShowUpload(true)}
                 >
                   Upload data
-                </button>
+                </Button>
               </div>
             )}
           </div>
@@ -300,47 +306,46 @@ export function StorageView({
                             maxLength={MAX_ARTIFACT_NAME_CHARS}
                             className="h-7 w-32 rounded border border-border bg-secondary/50 px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
                           />
-                          <button
+                          <Button
                             type="submit"
+                            variant="dashboard-outline-compact"
+                            size="none"
                             disabled={artifactRenameBusyId === item.id}
-                            className="px-2 py-1 text-xs rounded border border-border hover:bg-secondary disabled:opacity-50"
                           >
                             {artifactRenameBusyId === item.id ? "..." : "Save"}
-                          </button>
-                          <button
+                          </Button>
+                          <Button
                             type="button"
+                            variant="dashboard-icon-secondary"
+                            size="none"
                             disabled={artifactRenameBusyId === item.id}
                             onClick={onCancelRenameArtifact}
-                            className="p-1 text-muted-foreground hover:text-foreground"
                           >
                             <X className="w-3 h-3" />
-                          </button>
+                          </Button>
                         </form>
                       ) : (
                         <div className="flex items-center gap-1">
-                          <a
-                            href={item.download_url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground"
-                          >
-                            <ExternalLink className="w-3.5 h-3.5" />
-                          </a>
-                          <a
-                            href={item.download_url}
-                            download={item.name}
-                            className="p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground"
-                          >
-                            <Download className="w-3.5 h-3.5" />
-                          </a>
+                          <Button asChild type="button" variant="dashboard-outline-icon-muted" size="none">
+                            <a href={item.download_url} target="_blank" rel="noreferrer">
+                              <ExternalLink className="w-3.5 h-3.5" />
+                            </a>
+                          </Button>
+                          <Button asChild type="button" variant="dashboard-outline-icon-muted" size="none">
+                            <a href={item.download_url} download={item.name}>
+                              <Download className="w-3.5 h-3.5" />
+                            </a>
+                          </Button>
                           {item.source === "data" && (
-                            <button
+                            <Button
+                              type="button"
+                              variant="dashboard-outline-icon-muted"
+                              size="none"
                               onClick={() => onStartRenameArtifact(item)}
                               disabled={artifactRenameBusyId !== null}
-                              className="p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground disabled:opacity-50"
                             >
                               <Pencil className="w-3.5 h-3.5" />
-                            </button>
+                            </Button>
                           )}
                         </div>
                       )}
@@ -357,20 +362,24 @@ export function StorageView({
               {storageTotal === 0 ? 0 : storageOffset + 1}–{storageOffset + storageItems.length} of {storageTotal}
             </span>
             <div className="flex items-center gap-1.5">
-              <button
+              <Button
+                type="button"
+                variant="dashboard-outline-icon-muted"
+                size="none"
                 onClick={onPreviousStoragePage}
                 disabled={storageOffset === 0}
-                className="p-1 rounded hover:bg-secondary disabled:opacity-30 disabled:cursor-not-allowed"
               >
                 <ChevronUp className="w-4 h-4 -rotate-90" />
-              </button>
-              <button
+              </Button>
+              <Button
+                type="button"
+                variant="dashboard-outline-icon-muted"
+                size="none"
                 onClick={onNextStoragePage}
                 disabled={!storageHasMore}
-                className="p-1 rounded hover:bg-secondary disabled:opacity-30 disabled:cursor-not-allowed"
               >
                 <ChevronDown className="w-4 h-4 -rotate-90" />
-              </button>
+              </Button>
             </div>
           </div>
         </div>

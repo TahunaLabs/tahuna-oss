@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import { ChevronDown, ChevronUp, Play, Plus, Filter, Settings2, LayoutGrid, Trash2, X } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import {
   CANCELLABLE_STATUSES,
@@ -113,18 +114,18 @@ export function RunsView({
           )}
         </div>
         <div className="flex items-center gap-2">
-          <button className="p-1.5 hover:bg-secondary rounded text-muted-foreground hover:text-foreground">
+          <Button type="button" variant="dashboard-icon-secondary" size="none">
             <Filter className="w-4 h-4" />
-          </button>
-          <button className="p-1.5 hover:bg-secondary rounded text-muted-foreground hover:text-foreground">
+          </Button>
+          <Button type="button" variant="dashboard-icon-secondary" size="none">
             <Settings2 className="w-4 h-4" />
-          </button>
-          <button className="p-1.5 hover:bg-secondary rounded text-muted-foreground hover:text-foreground">
+          </Button>
+          <Button type="button" variant="dashboard-icon-secondary" size="none">
             <LayoutGrid className="w-4 h-4" />
-          </button>
-          <button className="p-1.5 hover:bg-secondary rounded text-muted-foreground hover:text-foreground">
+          </Button>
+          <Button type="button" variant="dashboard-icon-secondary" size="none">
             <Plus className="w-4 h-4" />
-          </button>
+          </Button>
         </div>
       </header>
 
@@ -143,9 +144,9 @@ export function RunsView({
             active={activeTab === "completed"}
             onClick={() => setActiveTab("completed")}
           />
-          <button className="px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground hover:bg-secondary rounded flex items-center gap-1">
+          <Button type="button" variant="dashboard-tab-compact" size="none">
             <Plus className="w-3.5 h-3.5" />
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -176,12 +177,12 @@ export function RunsView({
             </p>
             {activeTab === "all" && (
               <div className="flex items-center justify-center gap-3">
-                <button className="px-4 py-2 bg-accent text-accent-foreground text-sm rounded hover:opacity-90 flex items-center gap-2">
+                <Button type="button" variant="dashboard-primary-compact" size="none">
                   Trigger run
                   <kbd className="px-1.5 py-0.5 bg-accent-foreground/20 rounded text-xs">N</kbd>
                   <span className="text-xs opacity-70">then</span>
                   <kbd className="px-1.5 py-0.5 bg-accent-foreground/20 rounded text-xs">R</kbd>
-                </button>
+                </Button>
               </div>
             )}
           </div>
@@ -192,13 +193,12 @@ export function RunsView({
           <div className="w-80 border-r border-border flex flex-col min-h-0 shrink-0">
             <div className="flex-1 overflow-y-auto">
               {filteredRuns.map((run) => (
-                <button
+                <Button
+                  type="button"
+                  variant={selectedRunId === run.run_id ? "dashboard-run-list-item-active" : "dashboard-run-list-item"}
+                  size="none"
                   key={run.run_id}
                   onClick={() => onSelectRun(selectedRunId === run.run_id ? null : run.run_id)}
-                  className={cn(
-                    "w-full text-left px-4 py-3 border-b border-border hover:bg-secondary/50 transition-colors",
-                    selectedRunId === run.run_id && "bg-secondary"
-                  )}
                 >
                   <div className="flex items-center gap-2 mb-1">
                     <span className={cn("w-2 h-2 rounded-full shrink-0", STATUS_DOT[run.status] || "bg-muted-foreground")} />
@@ -218,7 +218,7 @@ export function RunsView({
                       {relativeTime(run.created_at)}
                     </p>
                   )}
-                </button>
+                </Button>
               ))}
             </div>
           </div>
@@ -261,12 +261,14 @@ export function RunsView({
                     {CANCELLABLE_STATUSES.has(runDetail.status) && (
                       <AlertDialog>
                         <AlertDialogTrigger asChild>
-                          <button
+                          <Button
+                            type="button"
+                            variant="dashboard-outline-icon-muted"
+                            size="none"
                             disabled={busy}
-                            className="p-1.5 rounded hover:bg-secondary text-muted-foreground hover:text-foreground disabled:opacity-30"
                           >
                             <Trash2 className="w-4 h-4" />
-                          </button>
+                          </Button>
                         </AlertDialogTrigger>
                         <AlertDialogContent>
                           <AlertDialogHeader>
@@ -287,12 +289,14 @@ export function RunsView({
                         </AlertDialogContent>
                       </AlertDialog>
                     )}
-                    <button
+                    <Button
+                      type="button"
+                      variant="dashboard-outline-icon-muted"
+                      size="none"
                       onClick={() => onSelectRun(null)}
-                      className="p-1.5 rounded hover:bg-secondary text-muted-foreground hover:text-foreground"
                     >
                       <X className="w-4 h-4" />
-                    </button>
+                    </Button>
                   </div>
                 </div>
 
@@ -304,10 +308,11 @@ export function RunsView({
                 )}
 
                 <div className="px-6 py-4">
-                  <button
+                  <Button
                     type="button"
+                    variant="dashboard-context-toggle"
+                    size="none"
                     onClick={() => setShowRunContext((current) => !current)}
-                    className="flex w-full items-center justify-between rounded-lg border border-border bg-background/60 px-4 py-3 text-left hover:bg-secondary/30"
                   >
                     <div>
                       <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Run context</p>
@@ -319,7 +324,7 @@ export function RunsView({
                       {showRunContext ? "Hide" : "Show"}
                       {showRunContext ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                     </span>
-                  </button>
+                  </Button>
                 </div>
 
                 {showRunContext && (
@@ -614,13 +619,10 @@ function TabButton({
   count?: number
 }) {
   return (
-    <button
-      className={cn(
-        "px-3 py-1.5 text-sm rounded flex items-center gap-1.5",
-        active
-          ? "bg-secondary text-foreground"
-          : "text-muted-foreground hover:text-foreground hover:bg-secondary"
-      )}
+    <Button
+      type="button"
+      variant={active ? "dashboard-tab-compact-active" : "dashboard-tab-compact"}
+      size="none"
       onClick={onClick}
     >
       {label}
@@ -629,6 +631,6 @@ function TabButton({
           {count}
         </span>
       )}
-    </button>
+    </Button>
   )
 }

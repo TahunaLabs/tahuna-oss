@@ -18,6 +18,7 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
+import { Button } from "@/components/ui/button"
 
 interface SidebarProps {
   activeView: string
@@ -36,13 +37,15 @@ export function Sidebar({ activeView, onViewChange, userInitial, isDark, onTheme
     <aside className="w-56 h-screen bg-sidebar flex flex-col">
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-2.5">
-        <button className="flex items-center gap-2 hover:bg-sidebar-accent rounded px-1.5 py-1 -ml-1.5">
-          <span className="text-sm font-medium text-sidebar-foreground">Tahuna</span>
-        </button>
+        <div className="-ml-1.5">
+          <Button type="button" variant="sidebar-brand" size="none">
+            <span>Tahuna</span>
+          </Button>
+        </div>
         <div className="flex items-center gap-0.5">
-          <button className="p-1.5 hover:bg-sidebar-accent rounded text-muted-foreground hover:text-sidebar-foreground">
+          <Button type="button" variant="sidebar-icon" size="none">
             <Search className="w-4 h-4" />
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -50,13 +53,15 @@ export function Sidebar({ activeView, onViewChange, userInitial, isDark, onTheme
       <nav className="flex-1 overflow-y-auto px-2 py-1">
         {/* Workspace section */}
         <div>
-          <button
-            className="flex items-center gap-1 px-2 py-1 text-xs text-muted-foreground hover:text-sidebar-foreground w-full"
+          <Button
+            type="button"
+            variant="sidebar-workspace"
+            size="none"
             onClick={() => setWorkspaceOpen(!workspaceOpen)}
           >
-            <span className="font-medium">Workspace</span>
+            <span>Workspace</span>
             <ChevronDown className={cn("w-3 h-3 transition-transform", !workspaceOpen && "-rotate-90")} />
-          </button>
+          </Button>
           {workspaceOpen && (
             <div className="mt-1 space-y-0.5">
               <SidebarItem
@@ -92,19 +97,19 @@ export function Sidebar({ activeView, onViewChange, userInitial, isDark, onTheme
                       <Monitor className="w-4 h-4" />
                       <span>Machines</span>
                     </Link>
-                    <button className="flex items-center gap-2 px-3 py-2 text-sm text-foreground hover:bg-secondary w-full">
+                    <Button type="button" variant="sidebar-menu-item" size="none">
                       <Users className="w-4 h-4" />
                       <span>Teams</span>
-                    </button>
-                    <button className="flex items-center gap-2 px-3 py-2 text-sm text-foreground hover:bg-secondary w-full">
+                    </Button>
+                    <Button type="button" variant="sidebar-menu-item" size="none">
                       <UserPlus className="w-4 h-4" />
                       <span>Members</span>
-                    </button>
+                    </Button>
                     <div className="border-t border-border my-1" />
-                    <button className="flex items-center gap-2 px-3 py-2 text-sm text-foreground hover:bg-secondary w-full">
+                    <Button type="button" variant="sidebar-menu-item" size="none">
                       <Settings className="w-4 h-4" />
                       <span>Customize sidebar</span>
-                    </button>
+                    </Button>
                   </div>
                 )}
               </div>
@@ -119,18 +124,22 @@ export function Sidebar({ activeView, onViewChange, userInitial, isDark, onTheme
           {userInitial}
         </div>
         <div className="flex items-center gap-0.5">
-          <button
+          <Button
+            type="button"
+            variant="sidebar-icon"
+            size="none"
             onClick={onThemeToggle}
-            className="p-1.5 hover:bg-sidebar-accent rounded text-muted-foreground hover:text-sidebar-foreground"
           >
             {isDark ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
-          </button>
-          <button
+          </Button>
+          <Button
+            type="button"
+            variant="sidebar-icon"
+            size="none"
             onClick={onLogout}
-            className="p-1.5 hover:bg-sidebar-accent rounded text-muted-foreground hover:text-sidebar-foreground"
           >
             <LogOut className="w-4 h-4" />
-          </button>
+          </Button>
         </div>
       </div>
     </aside>
@@ -147,13 +156,10 @@ interface SidebarItemProps {
 
 function SidebarItem({ icon, label, badge, active, onClick }: SidebarItemProps) {
   return (
-    <button
-      className={cn(
-        "flex items-center gap-2 px-2 py-1.5 text-sm rounded w-full",
-        active
-          ? "bg-sidebar-accent text-sidebar-foreground"
-          : "text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground"
-      )}
+    <Button
+      type="button"
+      variant={active ? "sidebar-item-active" : "sidebar-item"}
+      size="none"
       onClick={onClick}
     >
       {icon}
@@ -161,6 +167,6 @@ function SidebarItem({ icon, label, badge, active, onClick }: SidebarItemProps) 
       {badge !== undefined && (
         <span className="ml-auto text-xs text-muted-foreground">{badge}</span>
       )}
-    </button>
+    </Button>
   )
 }
