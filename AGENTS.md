@@ -5,6 +5,11 @@
 - Execute tasks in agreed order. One logical unit per commit.
 - For every change: check if it's in linear, if it does ask user to update it if not log to Linear (issue, recommendation, commit hash, validation commands) using the Linear tool.
 - For any Linear issue the agent creates or updates, set `delegate` to the agent's own name and include a short signature line (`Agent: <agent-name>`) in the issue body or update comment.
+- Linear state hygiene is mandatory:
+  - Do not leave shipped work in `Backlog`/`Todo`.
+  - Before final handoff, update the issue state to `Done` (or the team's terminal state), add the pushed commit hash, and list validation commands/results in a final comment.
+  - When reporting "next tasks", use state-filtered Linear queries (`Todo`, `Backlog`, etc.), not only `updatedAt`.
+  - Do not infer active work from `gitBranchName` alone.
 - No backward-compat layers unless requested.
 - Keep names canonical across layers: when a domain term changes, update command surface, help text, API paths, internal symbols, errors, tests, and docs in the same change.
 - No stale terminology: do not leave old names in variables/functions/comments/errors once the canonical term is changed.
