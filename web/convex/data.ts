@@ -10,18 +10,78 @@ import { UPLOAD_LIMITS_BYTES } from "@convex/appConfig";
 const r2 = new R2(components.r2);
 const DEFAULT_LIST_LIMIT = 1000;
 const MAX_LIST_LIMIT = 1000;
+const CURSOR_PREFIX = "offset:";
+const DATA_KEY_PREFIX = "data/";
 
 function encodeFilename(filename: string) {
   return encodeURIComponent(filename.trim() || "file");
 }
 
+function decodeFilename(encoded: string) {
+  try {
+    return decodeURIComponent(encoded);
+  } catch {
+    return encoded;
+  }
+}
+
 function buildDataPath(blobId: string, filename: string) {
-  return `data/${blobId}__${encodeFilename(filename)}`;
+  return `${DATA_KEY_PREFIX}${blobId}__${encodeFilename(filename)}`;
+}
+
+function parseKey(key: string) {
+  const relative = key.startsWith(DATA_KEY_PREFIX) ? key.slice(DATA_KEY_PREFIX.length) : key;
+  const leaf = relative.split("/").pop() ?? relative;
+  const [blobId, ...filenameParts] = leaf.split("__");
+  const encodedFilename = filenameParts.join("__");
+  const fallback = blobId || leaf;
+  return {
+    blobId: fallback,
+    filename: encodedFilename ? decodeFilename(encodedFilename) : fallback,
+  };
+}
+
+function isTopLevelDataUploadKey(key: string) {
+  if (!key.startsWith(DATA_KEY_PREFIX)) {
+    return false;
+  }
+  const relative = key.slice(DATA_KEY_PREFIX.length);
+  return relative.includes("__") && !relative.includes("/");
+}
+
+function normalizeListLimit(value: number | undefined) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return DEFAULT_LIST_LIMIT;
+  }
+  return Math.max(1, Math.min(MAX_LIST_LIMIT, Math.floor(value)));
+}
+
+function encodeOffsetCursor(offset: number) {
+  return `${CURSOR_PREFIX}${offset}`;
+}
+
+function decodeOffsetCursor(cursor: string | undefined): number {
+  if (!cursor) {
+    return 0;
+  }
+  const value = cursor.trim();
+  if (!value.startsWith(CURSOR_PREFIX)) {
+    return 0;
+  }
+  const raw = Number(value.slice(CURSOR_PREFIX.length));
+  if (!Number.isFinite(raw)) {
+    return 0;
+  }
+  return Math.max(0, Math.floor(raw));
+}
+
+function toMillis(value: string | undefined, fallback: number) {
+  if (!value) return fallback;
+  const parsed = new Date(value).getTime();
+  return Number.isFinite(parsed) ? parsed : fallback;
 }
 
 const callbacks: R2Callbacks = {};
-
-const DATA_KEY_PREFIX = "data/";
 
 const dataBlobValidator = v.object({
   blob_id: v.string(),
@@ -49,17 +109,62 @@ type DataBlobRow = {
   created_at: number;
 };
 
-function normalizeListLimit(value: number | undefined) {
-  if (typeof value !== "number" || !Number.isFinite(value)) {
-    return DEFAULT_LIST_LIMIT;
+async function upsertDataUploadIndexRow(
+  ctx: MutationCtx,
+  args: {
+    userId: string;
+    key: string;
+    filename: string;
+    blobId: string;
+    size: number;
+    createdAt: number;
+  },
+) {
+  const existing = await ctx.db
+    .query("storageObjects")
+    .withIndex("by_user_and_key", (q) => q.eq("userId", args.userId).eq("key", args.key))
+    .first();
+  const patch = {
+    source: "data" as const,
+    objectKind: "data_upload" as const,
+    key: args.key,
+    name: args.filename,
+    size: Math.max(0, Math.floor(args.size)),
+    createdAt: Math.max(0, Math.floor(args.createdAt)),
+    dataBlobId: args.blobId,
+    runId: undefined,
+    dataId: args.blobId,
+  };
+  if (existing) {
+    await ctx.db.patch("storageObjects", existing._id, patch);
+    return;
   }
-  return Math.max(1, Math.min(MAX_LIST_LIMIT, Math.floor(value)));
+  await ctx.db.insert("storageObjects", {
+    userId: args.userId,
+    ...patch,
+  });
+}
+
+async function resolveDownloadUrl(ctx: QueryCtx | MutationCtx, key: string) {
+  try {
+    const metadata = await r2.getMetadata(ctx, key);
+    if (metadata?.url) {
+      return metadata.url;
+    }
+  } catch {
+    // Fall through to signed URL lookup.
+  }
+  try {
+    return await r2.getUrl(key);
+  } catch {
+    return "";
+  }
 }
 
 async function listBlobsForUserId(
   ctx: QueryCtx | MutationCtx,
   userId: string,
-  options?: { limit?: number },
+  options?: { cursor?: string; limit?: number },
 ): Promise<{
   blobs: DataBlobRow[];
   has_more: boolean;
@@ -67,32 +172,43 @@ async function listBlobsForUserId(
   scan_capped: boolean;
 }> {
   const limit = normalizeListLimit(options?.limit);
-  const rows = await ctx.db
-    .query("dataBlobs")
-    .withIndex("by_user", (q) => q.eq("userId", userId))
-    .collect();
+  const offset = decodeOffsetCursor(options?.cursor);
+  const byKey = new Map<string, DataBlobRow>();
 
-  const blobs: DataBlobRow[] = [];
-  for (const row of rows) {
-    const metadata = await r2.getMetadata(ctx, row.key);
-    blobs.push({
-      blob_id: row.blobId,
-      filename: row.filename,
+  const indexedRows = await ctx.db
+    .query("storageObjects")
+    .withIndex("by_user_and_source", (q) => q.eq("userId", userId).eq("source", "data"))
+    .collect();
+  for (const row of indexedRows) {
+    if (row.objectKind !== "data_upload" || !isTopLevelDataUploadKey(row.key)) {
+      continue;
+    }
+    const parsed = parseKey(row.key);
+    byKey.set(row.key, {
+      blob_id: row.dataBlobId || parsed.blobId,
+      filename: row.name || parsed.filename,
       key: row.key,
       content_type: "",
-      size: row.size,
-      download_url: metadata?.url ?? "",
-      created_at: row.createdAt,
+      size: row.size || 0,
+      download_url: "",
+      created_at: row.createdAt || 0,
     });
   }
 
-  blobs.sort((a, b) => b.created_at - a.created_at);
-  const hasMore = blobs.length > limit;
-  const trimmed = blobs.slice(0, limit);
+  const ordered = Array.from(byKey.values()).sort((a, b) => b.created_at - a.created_at);
+  const page = ordered.slice(offset, offset + limit);
+  const blobs = await Promise.all(
+    page.map(async (row) => ({
+      ...row,
+      download_url: await resolveDownloadUrl(ctx, row.key),
+    })),
+  );
+  const hasMore = offset + limit < ordered.length;
+
   return {
-    blobs: trimmed,
+    blobs,
     has_more: hasMore,
-    next_cursor: null,
+    next_cursor: hasMore ? encodeOffsetCursor(offset + limit) : null,
     scan_capped: false,
   };
 }
@@ -103,8 +219,9 @@ export const { syncMetadata } = r2.clientApi<DataModel>({
     await requireUser(ctx);
   },
   onUpload: async (ctx, _bucket, key) => {
-    await requireUser(ctx);
-    if (!key.startsWith(DATA_KEY_PREFIX)) {
+    const user = await requireUser(ctx);
+    const userId = String(user._id);
+    if (!isTopLevelDataUploadKey(key)) {
       throw new ConvexError("invalid upload key");
     }
     const metadata = await r2.getMetadata(ctx, key);
@@ -117,6 +234,18 @@ export const { syncMetadata } = r2.clientApi<DataModel>({
       }
       throw new ConvexError(`data file exceeds limit of ${UPLOAD_LIMITS_BYTES.dataBlob} bytes`);
     }
+    const parsed = parseKey(key);
+    const filename = parsed.filename.trim() || "file";
+    const blobId = parsed.blobId.trim();
+    const createdAt = toMillis(metadata?.lastModified, Date.now());
+    await upsertDataUploadIndexRow(ctx as MutationCtx, {
+      userId,
+      key,
+      filename,
+      blobId: blobId || shortId("blob"),
+      size: objectSize,
+      createdAt,
+    });
   },
 });
 
@@ -132,8 +261,7 @@ export const generateUploadUrl = mutation({
     url: v.string(),
   }),
   handler: async (ctx, args) => {
-    const user = await requireUser(ctx);
-    const userId = String(user._id);
+    await requireUser(ctx);
     if (!Number.isInteger(args.size_bytes) || args.size_bytes <= 0) {
       throw new ConvexError("size_bytes must be a positive integer");
     }
@@ -143,15 +271,6 @@ export const generateUploadUrl = mutation({
     const blobId = shortId("blob");
     const key = buildDataPath(blobId, args.filename);
     const upload = await r2.generateUploadUrl(key);
-
-    await ctx.db.insert("dataBlobs", {
-      userId,
-      blobId,
-      filename: args.filename,
-      key: upload.key,
-      size: args.size_bytes,
-      createdAt: Date.now(),
-    });
 
     return {
       blob_id: blobId,
@@ -171,6 +290,7 @@ export const list = query({
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
     return await listBlobsForUserId(ctx, String(user._id), {
+      cursor: args.cursor,
       limit: args.limit,
     });
   },
@@ -185,6 +305,7 @@ export const internalList = internalQuery({
   returns: listDataBlobsValidator,
   handler: async (ctx, args) => {
     return await listBlobsForUserId(ctx, args.userId, {
+      cursor: args.cursor,
       limit: args.limit,
     });
   },

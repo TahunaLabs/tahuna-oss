@@ -403,6 +403,81 @@ function toRunResponse(row: Doc<"runs">) {
   };
 }
 
+function storageObjectNameFromKey(key: string) {
+  const leaf = key.split("/").pop();
+  return (leaf && leaf.trim()) || key;
+}
+
+function isRunArtifactKey(outputPath: string, key: string) {
+  const base = outputPath.trim();
+  const candidate = key.trim();
+  if (!base || !candidate) {
+    return false;
+  }
+  return candidate.startsWith(`${base}/`);
+}
+
+function toObjectTimestamp(value: string | undefined, fallback: number) {
+  if (!value) {
+    return fallback;
+  }
+  const millis = new Date(value).getTime();
+  return Number.isFinite(millis) ? millis : fallback;
+}
+
+async function upsertRunArtifactIndexRow(
+  ctx: MutationCtx,
+  args: {
+    userId: string;
+    runId: Id<"runs">;
+    key: string;
+    size: number;
+    createdAt: number;
+  },
+) {
+  const existing = await ctx.db
+    .query("storageObjects")
+    .withIndex("by_user_and_key", (q) => q.eq("userId", args.userId).eq("key", args.key))
+    .first();
+  const patch = {
+    source: "run_artifact" as const,
+    objectKind: "run_artifact" as const,
+    key: args.key,
+    name: storageObjectNameFromKey(args.key),
+    size: Math.max(0, Math.floor(args.size)),
+    createdAt: Math.max(0, Math.floor(args.createdAt)),
+    runId: args.runId,
+    dataBlobId: undefined,
+    dataId: undefined,
+  };
+  if (existing) {
+    await ctx.db.patch("storageObjects", existing._id, patch);
+    return;
+  }
+  await ctx.db.insert("storageObjects", {
+    userId: args.userId,
+    ...patch,
+  });
+}
+
+async function deleteIndexedStorageKeys(ctx: MutationCtx, userId: string, keys: string[]) {
+  const seen = new Set<string>();
+  for (const raw of keys) {
+    const key = raw.trim();
+    if (!key || seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    const row = await ctx.db
+      .query("storageObjects")
+      .withIndex("by_user_and_key", (q) => q.eq("userId", userId).eq("key", key))
+      .first();
+    if (row) {
+      await ctx.db.delete("storageObjects", row._id);
+    }
+  }
+}
+
 function normalizeRuntimeLevel(level: string | undefined) {
   const trimmed = (level || "").trim().toLowerCase();
   if (trimmed === "debug" || trimmed === "warn" || trimmed === "warning" || trimmed === "error") {
@@ -1306,6 +1381,7 @@ async function deleteRunForUserId(
   if (row.podId && !forcedTerminationQueued) {
     await scheduleForcedPodTermination(ctx, runId, row.podId);
   }
+  await deleteIndexedStorageKeys(ctx, userId, row.artifactKeys || []);
 
   // Delete related records in batches to stay under Convex's 4096 read limit.
   // Each pass deletes up to RUN_DELETE_BATCH_SIZE records per table and
@@ -2144,15 +2220,47 @@ export const ingestRuntimeArtifacts = internalMutation({
     if (!row) {
       return { accepted: 0 };
     }
+    const outputPath = row.output || "";
+    const validArtifacts: Array<{ key: string; size: number; createdAt: number }> = [];
+    const inputSeen = new Set<string>();
+    for (const rawKey of args.keys) {
+      const key = rawKey.trim();
+      if (!key || inputSeen.has(key)) {
+        continue;
+      }
+      inputSeen.add(key);
+      if (!isRunArtifactKey(outputPath, key)) {
+        continue;
+      }
+      const metadata = await r2.getMetadata(ctx, key);
+      if (!metadata?.url) {
+        const existsByHead = await getSignedDownloadUrlByHead(key);
+        if (!existsByHead) {
+          continue;
+        }
+      }
+      validArtifacts.push({
+        key,
+        size: typeof metadata?.size === "number" && Number.isFinite(metadata.size) ? metadata.size : 0,
+        createdAt: toObjectTimestamp(metadata?.lastModified, Date.now()),
+      });
+    }
+
     const existing = row.artifactKeys || [];
     const seen = new Set(existing);
     const newKeys: string[] = [];
-    for (const key of args.keys) {
-      const trimmed = key.trim();
-      if (trimmed && !seen.has(trimmed)) {
-        seen.add(trimmed);
-        newKeys.push(trimmed);
+    for (const artifact of validArtifacts) {
+      if (!seen.has(artifact.key)) {
+        seen.add(artifact.key);
+        newKeys.push(artifact.key);
       }
+      await upsertRunArtifactIndexRow(ctx, {
+        userId: row.userId,
+        runId: args.runId,
+        key: artifact.key,
+        size: artifact.size,
+        createdAt: artifact.createdAt,
+      });
     }
     if (newKeys.length > 0) {
       await ctx.db.patch("runs", args.runId, {

@@ -114,6 +114,79 @@ function manifestObjectKey(ref: ManifestRef) {
   return `environments/${ref.environmentId}/manifests/code/${ref.manifestHash}.json`;
 }
 
+async function upsertDataManifestIndexRow(
+  ctx: MutationCtx,
+  args: {
+    userId: string;
+    dataId: string;
+    manifestHash: string;
+  },
+) {
+  const key = manifestObjectKey({
+    kind: "data",
+    manifestHash: args.manifestHash,
+    environmentId: "",
+    dataId: args.dataId,
+  });
+  const existing = await ctx.db
+    .query("storageObjects")
+    .withIndex("by_user_and_key", (q) => q.eq("userId", args.userId).eq("key", key))
+    .first();
+  const patch = {
+    source: "data" as const,
+    objectKind: "data_manifest" as const,
+    key,
+    name: `${args.manifestHash}.json`,
+    size: 0,
+    createdAt: Date.now(),
+    runId: undefined,
+    dataBlobId: undefined,
+    dataId: args.dataId,
+  };
+  if (existing) {
+    await ctx.db.patch("storageObjects", existing._id, patch);
+    return;
+  }
+  await ctx.db.insert("storageObjects", {
+    userId: args.userId,
+    ...patch,
+  });
+}
+
+async function deleteIndexedStorageKeys(ctx: MutationCtx, userId: string, keys: Iterable<string>) {
+  const seen = new Set<string>();
+  for (const rawKey of keys) {
+    const key = rawKey.trim();
+    if (!key || seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    const row = await ctx.db
+      .query("storageObjects")
+      .withIndex("by_user_and_key", (q) => q.eq("userId", userId).eq("key", key))
+      .first();
+    if (row) {
+      await ctx.db.delete("storageObjects", row._id);
+    }
+  }
+}
+
+async function deleteIndexedStorageByPrefix(ctx: MutationCtx, userId: string, prefixes: string[]) {
+  const filtered = prefixes.map((prefix) => prefix.trim()).filter((prefix) => prefix.length > 0);
+  if (filtered.length === 0) {
+    return;
+  }
+  const rows = await ctx.db
+    .query("storageObjects")
+    .withIndex("by_user", (q) => q.eq("userId", userId))
+    .collect();
+  for (const row of rows) {
+    if (filtered.some((prefix) => row.key.startsWith(prefix))) {
+      await ctx.db.delete("storageObjects", row._id);
+    }
+  }
+}
+
 async function loadManifestBlobHashes(ctx: ActionCtx, ref: ManifestRef): Promise<Set<string>> {
   const hashes = new Set<string>();
   const key = manifestObjectKey(ref);
@@ -683,6 +756,17 @@ async function removeEnvironmentForUserId(ctx: MutationCtx, userId: string, envi
     addManifestRef(retainRefs, "data", run.dataManifestHash, String(run.environmentId), runDataId);
   }
 
+  const indexedDeleteKeys = new Set<string>(artifactKeys);
+  for (const ref of deleteRefs) {
+    indexedDeleteKeys.add(manifestObjectKey(ref));
+  }
+  const dataStillReferenced = retainRefs.some((ref) => ref.dataId === envDataId);
+  await deleteIndexedStorageKeys(ctx, userId, indexedDeleteKeys);
+  await deleteIndexedStorageByPrefix(ctx, userId, [
+    `runs/${envIdString}/`,
+    ...(dataStillReferenced ? [] : [`data/${envDataId}/`]),
+  ]);
+
   await deleteArtifactObjects(ctx, artifactKeys);
   await ctx.scheduler.runAfter(0, internal.environments.internalCleanupDedupBlobs, {
     userId,
@@ -927,6 +1011,14 @@ export const internalCommitSyncPointers = internalMutation({
     }
 
     await ctx.db.patch("environments", args.environmentId, patch);
+    if (args.data_manifest_hash) {
+      const dataId = env.dataId || String(args.environmentId);
+      await upsertDataManifestIndexRow(ctx, {
+        userId: args.userId,
+        dataId,
+        manifestHash: args.data_manifest_hash,
+      });
+    }
 
     return {
       ok: true,
