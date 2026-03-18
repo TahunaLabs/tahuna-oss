@@ -158,7 +158,7 @@ export function StorageSection({
                 onChange={(event) => onStorageSourceFilterChange(event.target.value as StorageSourceFilter)}
               >
                 <option value="all">All</option>
-                <option value="data">Data uploads</option>
+                <option value="data">Data</option>
                 <option value="run_artifact">Run artifacts</option>
               </Select>
             </div>
@@ -389,6 +389,7 @@ export function EnvironmentsSection({
               const availableDataBlobs = uniqueDataBlobs.filter(
                 (blob) => !environment.bound_data_ids.includes(blob.blob_id),
               )
+              const hasPrimaryData = Boolean(environment.latest_data_manifest_hash)
 
               return (
                 <TableRow key={environment.environment_id} variant="dashboard">
@@ -402,26 +403,31 @@ export function EnvironmentsSection({
                   <TableCell variant="dashboard">
                     <div className="space-y-2">
                       <div className="flex flex-wrap items-center gap-1.5">
-                        {environment.bound_data_ids.length === 0 ? (
-                          <span className="text-xs text-muted-foreground">No bound datasets.</span>
+                        {!hasPrimaryData && environment.bound_data_ids.length === 0 ? (
+                          <span className="text-xs text-muted-foreground">No synced or bound datasets.</span>
                         ) : (
-                          environment.bound_data_ids.map((dataId) => {
-                            const blob = dataBlobsById.get(dataId)
-                            return (
-                              <div key={`${environment.environment_id}-${dataId}`} className="flex items-center gap-1">
-                                <Badge variant="dashboard-run-status">{blob ? blob.filename : dataId}</Badge>
-                                <Button
-                                  type="button"
-                                  variant="dashboard-outline"
-                                  size="none"
-                                  disabled={busy}
-                                  onClick={() => onUnbindData(environment.environment_id, dataId)}
-                                >
-                                  Unbind
-                                </Button>
-                              </div>
-                            )
-                          })
+                          <>
+                            {hasPrimaryData ? (
+                              <Badge variant="dashboard-run-status">Primary synced data</Badge>
+                            ) : null}
+                            {environment.bound_data_ids.map((dataId) => {
+                              const blob = dataBlobsById.get(dataId)
+                              return (
+                                <div key={`${environment.environment_id}-${dataId}`} className="flex items-center gap-1">
+                                  <Badge variant="dashboard-run-status">{blob ? blob.filename : dataId}</Badge>
+                                  <Button
+                                    type="button"
+                                    variant="dashboard-outline"
+                                    size="none"
+                                    disabled={busy}
+                                    onClick={() => onUnbindData(environment.environment_id, dataId)}
+                                  >
+                                    Unbind
+                                  </Button>
+                                </div>
+                              )
+                            })}
+                          </>
                         )}
                       </div>
                       <div className="flex items-center gap-2">

@@ -7,7 +7,7 @@ train:
   epochs: 2
   batch_size: 64
   learning_rate: 0.001
-  logging_steps: 1
+  logging_steps: 20
   data_dir: data/mnist
   output_dir: outputs
 data:

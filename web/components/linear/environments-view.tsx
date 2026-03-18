@@ -161,6 +161,7 @@ export function EnvironmentsView({
                 const availableDataBlobs = uniqueDataBlobs.filter(
                   (blob) => !env.bound_data_ids.includes(blob.blob_id),
                 )
+                const hasPrimaryData = Boolean(env.latest_data_manifest_hash)
                 const configOpen = configEditorEnvironmentId === env.environment_id
                 const configDirty = configDraft !== configSourceText
 
@@ -185,26 +186,33 @@ export function EnvironmentsView({
                       <td className="px-3 py-2.5">
                         <div className="space-y-2">
                           <div className="flex flex-wrap items-center gap-1">
-                            {env.bound_data_ids.length === 0 ? (
-                              <span className="text-xs text-muted-foreground">No bound datasets</span>
+                            {!hasPrimaryData && env.bound_data_ids.length === 0 ? (
+                              <span className="text-xs text-muted-foreground">No synced or bound datasets</span>
                             ) : (
-                              env.bound_data_ids.map((dataId) => {
-                                const blob = dataBlobsById.get(dataId)
-                                return (
-                                  <div key={`${env.environment_id}-${dataId}`} className="flex items-center gap-1">
-                                    <span className="inline-flex px-2 py-0.5 rounded text-xs bg-secondary text-foreground">
-                                      {blob ? blob.filename : dataId}
-                                    </span>
-                                    <button
-                                      onClick={() => onUnbindData(env.environment_id, dataId)}
-                                      disabled={busy}
-                                      className="px-1.5 py-0.5 text-xs rounded border border-border hover:bg-secondary text-muted-foreground hover:text-foreground disabled:opacity-50"
-                                    >
-                                      Unbind
-                                    </button>
-                                  </div>
-                                )
-                              })
+                              <>
+                                {hasPrimaryData ? (
+                                  <span className="inline-flex px-2 py-0.5 rounded text-xs bg-secondary text-foreground">
+                                    Primary synced data
+                                  </span>
+                                ) : null}
+                                {env.bound_data_ids.map((dataId) => {
+                                  const blob = dataBlobsById.get(dataId)
+                                  return (
+                                    <div key={`${env.environment_id}-${dataId}`} className="flex items-center gap-1">
+                                      <span className="inline-flex px-2 py-0.5 rounded text-xs bg-secondary text-foreground">
+                                        {blob ? blob.filename : dataId}
+                                      </span>
+                                      <button
+                                        onClick={() => onUnbindData(env.environment_id, dataId)}
+                                        disabled={busy}
+                                        className="px-1.5 py-0.5 text-xs rounded border border-border hover:bg-secondary text-muted-foreground hover:text-foreground disabled:opacity-50"
+                                      >
+                                        Unbind
+                                      </button>
+                                    </div>
+                                  )
+                                })}
+                              </>
                             )}
                           </div>
                           <div className="flex items-center gap-1.5">
