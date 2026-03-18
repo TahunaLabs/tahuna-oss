@@ -16,6 +16,7 @@ import {
   X,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { DashboardTabsHeader } from "@/components/ui/dashboard-tabs-header"
 import {
   Sheet,
   SheetContent,
@@ -210,7 +211,7 @@ export function StorageView({
       )}
 
       {/* Tabs */}
-      <div className="px-6 py-2 border-b border-border">
+      <DashboardTabsHeader>
         <div className="flex items-center gap-1">
           <Button
             type="button"
@@ -237,7 +238,7 @@ export function StorageView({
             Private
           </Button>
         </div>
-      </div>
+      </DashboardTabsHeader>
 
       {/* Content */}
       {storageResult === undefined && storageLoading ? (

@@ -5,6 +5,7 @@ import { ChevronDown, ChevronUp, Play, Plus, Filter, Settings2, LayoutGrid, Tras
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
+import { DashboardTabsHeader } from "@/components/ui/dashboard-tabs-header"
 import { cn } from "@/lib/utils"
 import type { Id } from "@convex/_generated/dataModel"
 import {
@@ -241,7 +242,7 @@ export function RunsView({
       </header>
 
       {/* Tabs */}
-      <div className="px-6 py-2 border-b border-border">
+      <DashboardTabsHeader>
         <div className="flex items-center gap-1">
           <TabButton label="All runs" active={activeTab === "all"} onClick={() => setActiveTab("all")} />
           <TabButton
@@ -259,7 +260,7 @@ export function RunsView({
             <Plus className="w-3.5 h-3.5" />
           </Button>
         </div>
-      </div>
+      </DashboardTabsHeader>
 
       {/* Content */}
       {noEnvironments ? (

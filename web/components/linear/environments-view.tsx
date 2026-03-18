@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
+import { DashboardTabsHeader } from "@/components/ui/dashboard-tabs-header"
 import { Notice } from "@/components/ui/notice"
 import { Textarea } from "@/components/ui/textarea"
 
@@ -210,7 +211,7 @@ export function EnvironmentsView({
       </header>
 
       {/* Tabs */}
-      <div className="px-6 py-2 border-b border-border">
+      <DashboardTabsHeader>
         <div className="flex items-center gap-1">
           <Button type="button" variant="dashboard-tab-compact-active" size="none">
             All environments
@@ -220,7 +221,7 @@ export function EnvironmentsView({
             New view
           </Button>
         </div>
-      </div>
+      </DashboardTabsHeader>
 
       {/* Content */}
       {!hasData ? (
