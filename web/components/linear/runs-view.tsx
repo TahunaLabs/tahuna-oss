@@ -94,6 +94,7 @@ export function RunsView({
 }: RunsViewProps) {
   const [activeTab, setActiveTab] = useState<RunTab>("all")
   const [showRunContext, setShowRunContext] = useState(false)
+  const [selectionMode, setSelectionMode] = useState(false)
   const [selectedRunIds, setSelectedRunIds] = useState<Id<"runs">[]>([])
 
   const filteredRuns = runs.filter((run) => {
@@ -110,6 +111,11 @@ export function RunsView({
   const allFilteredRunsSelected = filteredRuns.length > 0 && selectedRunIds.length === filteredRuns.length
   const selectedRunCount = selectedRunIds.length
 
+  function disableSelectionMode() {
+    setSelectionMode(false)
+    setSelectedRunIds([])
+  }
+
   useEffect(() => {
     setShowRunContext(false)
   }, [selectedRunId])
@@ -124,6 +130,12 @@ export function RunsView({
       return next
     })
   }, [filteredRuns])
+
+  useEffect(() => {
+    if (!hasData && selectionMode) {
+      disableSelectionMode()
+    }
+  }, [hasData, selectionMode])
 
   function toggleRunSelection(runId: Id<"runs">, nextChecked: boolean) {
     setSelectedRunIds((current) => {
@@ -154,18 +166,77 @@ export function RunsView({
           )}
         </div>
         <div className="flex items-center gap-2">
-          <Button type="button" variant="dashboard-icon-secondary" size="none">
-            <Filter className="w-4 h-4" />
-          </Button>
-          <Button type="button" variant="dashboard-icon-secondary" size="none">
-            <Settings2 className="w-4 h-4" />
-          </Button>
-          <Button type="button" variant="dashboard-icon-secondary" size="none">
-            <LayoutGrid className="w-4 h-4" />
-          </Button>
-          <Button type="button" variant="dashboard-icon-secondary" size="none">
-            <Plus className="w-4 h-4" />
-          </Button>
+          {selectionMode ? (
+            <>
+              <span className="text-xs text-muted-foreground">{selectedRunCount}</span>
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="dashboard-icon-secondary"
+                    size="none"
+                    aria-label="Delete selected runs"
+                    disabled={busy || selectedRunCount === 0}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Delete {selectedRunCount} run{selectedRunCount === 1 ? "" : "s"}?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Active runs will be cancelled before removal.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={() => {
+                        void onDeleteRuns(selectedRunIds).then(() => {
+                          disableSelectionMode()
+                        })
+                      }}
+                      disabled={busy || selectedRunCount === 0}
+                    >
+                      Delete
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+              <Button
+                type="button"
+                variant="dashboard-icon-secondary"
+                size="none"
+                onClick={disableSelectionMode}
+                aria-label="Done selecting runs"
+                disabled={busy}
+              >
+                <X className="w-4 h-4" />
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button type="button" variant="dashboard-icon-secondary" size="none">
+                <Filter className="w-4 h-4" />
+              </Button>
+              <Button type="button" variant="dashboard-icon-secondary" size="none">
+                <Settings2 className="w-4 h-4" />
+              </Button>
+              <Button type="button" variant="dashboard-icon-secondary" size="none">
+                <LayoutGrid className="w-4 h-4" />
+              </Button>
+              <Button
+                type="button"
+                variant="dashboard-icon-secondary"
+                size="none"
+                onClick={() => setSelectionMode(true)}
+                aria-label="Select runs"
+                disabled={busy || !hasData}
+              >
+                <Trash2 className="w-4 h-4" />
+              </Button>
+            </>
+          )}
         </div>
       </header>
 
@@ -189,57 +260,6 @@ export function RunsView({
           </Button>
         </div>
       </div>
-
-      {!noEnvironments && runs.length > 0 ? (
-        <div className="flex items-center justify-between border-b border-border px-6 py-2.5">
-          <div className="flex items-center gap-2">
-            <Checkbox
-              checked={allFilteredRunsSelected || (selectedRunCount > 0 && "indeterminate")}
-              onCheckedChange={(checked) => toggleAllRunSelections(checked === true)}
-              aria-label="Select all runs"
-              disabled={busy}
-            />
-            <span className="text-xs text-muted-foreground">
-              {selectedRunCount > 0
-                ? `${selectedRunCount} selected`
-                : "Select runs to delete"}
-            </span>
-          </div>
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button
-                type="button"
-                variant="dashboard-outline-compact-gap"
-                size="none"
-                disabled={busy || selectedRunCount === 0}
-              >
-                <Trash2 className="w-3 h-3" />
-                Delete selected
-              </Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Delete selected runs?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  This will delete {selectedRunCount} selected run{selectedRunCount === 1 ? "" : "s"}.
-                  Active runs will request cancellation before deletion.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Keep runs</AlertDialogCancel>
-                <AlertDialogAction
-                  onClick={() => {
-                    void onDeleteRuns(selectedRunIds)
-                  }}
-                  disabled={busy || selectedRunCount === 0}
-                >
-                  Delete runs
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-        </div>
-      ) : null}
 
       {/* Content */}
       {noEnvironments ? (
@@ -282,6 +302,21 @@ export function RunsView({
         <div className="flex-1 flex min-h-0">
           {/* Left panel — run list */}
           <div className="w-80 border-r border-border flex flex-col min-h-0 shrink-0">
+            <div className="h-9 border-b border-border px-3 py-2">
+              <div className="flex items-center gap-2">
+                <div className="w-4 shrink-0">
+                  <Checkbox
+                    checked={allFilteredRunsSelected || (selectedRunCount > 0 && "indeterminate")}
+                    onCheckedChange={(checked) => toggleAllRunSelections(checked === true)}
+                    className={selectionMode ? "" : "pointer-events-none invisible"}
+                    tabIndex={selectionMode ? 0 : -1}
+                    aria-label="Select all runs"
+                    disabled={!selectionMode || busy}
+                  />
+                </div>
+                <span className="text-xs text-muted-foreground">{selectionMode ? "All" : ""}</span>
+              </div>
+            </div>
             <div className="flex-1 overflow-y-auto">
               {filteredRuns.map((run) => (
                 <div
@@ -291,12 +326,14 @@ export function RunsView({
                     selectedRunId === run.run_id ? "bg-secondary" : "hover:bg-secondary/50",
                   )}
                 >
-                  <div className="flex items-start px-3 pt-3">
+                  <div className="flex w-10 items-start px-3 pt-3">
                     <Checkbox
                       checked={selectedRunIds.includes(run.run_id)}
                       onCheckedChange={(checked) => toggleRunSelection(run.run_id, checked === true)}
+                      className={selectionMode ? "" : "pointer-events-none invisible"}
+                      tabIndex={selectionMode ? 0 : -1}
                       aria-label={`Select run ${run.run_id}`}
-                      disabled={busy}
+                      disabled={!selectionMode || busy}
                     />
                   </div>
                   <Button

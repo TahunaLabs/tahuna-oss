@@ -1,6 +1,6 @@
 "use client"
 
-import { Server, Plus, Filter, Settings2, LayoutGrid, Play, Trash2, ExternalLink, Copy, Check, FileCode2, Share2, Users } from "lucide-react"
+import { Server, Plus, Filter, Settings2, LayoutGrid, Play, Trash2, ExternalLink, Copy, Check, FileCode2, Share2, Users, X } from "lucide-react"
 import { Fragment, useEffect, useState } from "react"
 import Link from "next/link"
 import {
@@ -78,6 +78,7 @@ export function EnvironmentsView({
   onShareEnvironment,
 }: EnvironmentsViewProps) {
   const hasData = environments.length > 0
+  const [selectionMode, setSelectionMode] = useState(false)
   const [selectedEnvironmentIds, setSelectedEnvironmentIds] = useState<Id<"environments">[]>([])
 
   useEffect(() => {
@@ -91,8 +92,19 @@ export function EnvironmentsView({
     })
   }, [environments])
 
+  useEffect(() => {
+    if (!hasData && selectionMode) {
+      disableSelectionMode()
+    }
+  }, [hasData, selectionMode])
+
   const allEnvironmentsSelected = environments.length > 0 && selectedEnvironmentIds.length === environments.length
   const selectedEnvironmentCount = selectedEnvironmentIds.length
+
+  function disableSelectionMode() {
+    setSelectionMode(false)
+    setSelectedEnvironmentIds([])
+  }
 
   function toggleEnvironmentSelection(environmentId: Id<"environments">, nextChecked: boolean) {
     setSelectedEnvironmentIds((current) => {
@@ -123,18 +135,77 @@ export function EnvironmentsView({
           )}
         </div>
         <div className="flex items-center gap-2">
-          <Button type="button" variant="dashboard-icon-secondary" size="none">
-            <Filter className="w-4 h-4" />
-          </Button>
-          <Button type="button" variant="dashboard-icon-secondary" size="none">
-            <Settings2 className="w-4 h-4" />
-          </Button>
-          <Button type="button" variant="dashboard-icon-secondary" size="none">
-            <LayoutGrid className="w-4 h-4" />
-          </Button>
-          <Button type="button" variant="dashboard-icon-secondary" size="none">
-            <Plus className="w-4 h-4" />
-          </Button>
+          {selectionMode ? (
+            <>
+              <span className="text-xs text-muted-foreground">{selectedEnvironmentCount}</span>
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="dashboard-icon-secondary"
+                    size="none"
+                    aria-label="Delete selected environments"
+                    disabled={busy || selectedEnvironmentCount === 0}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Delete {selectedEnvironmentCount} environment{selectedEnvironmentCount === 1 ? "" : "s"}?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This removes selected environments and their associated run data.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={() => {
+                        void onDeleteEnvironments(selectedEnvironmentIds).then(() => {
+                          disableSelectionMode()
+                        })
+                      }}
+                      disabled={busy || selectedEnvironmentCount === 0}
+                    >
+                      Delete
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+              <Button
+                type="button"
+                variant="dashboard-icon-secondary"
+                size="none"
+                onClick={disableSelectionMode}
+                aria-label="Done selecting environments"
+                disabled={busy}
+              >
+                <X className="w-4 h-4" />
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button type="button" variant="dashboard-icon-secondary" size="none">
+                <Filter className="w-4 h-4" />
+              </Button>
+              <Button type="button" variant="dashboard-icon-secondary" size="none">
+                <Settings2 className="w-4 h-4" />
+              </Button>
+              <Button type="button" variant="dashboard-icon-secondary" size="none">
+                <LayoutGrid className="w-4 h-4" />
+              </Button>
+              <Button
+                type="button"
+                variant="dashboard-icon-secondary"
+                size="none"
+                onClick={() => setSelectionMode(true)}
+                aria-label="Select environments"
+                disabled={busy || !hasData}
+              >
+                <Trash2 className="w-4 h-4" />
+              </Button>
+            </>
+          )}
         </div>
       </header>
 
@@ -150,57 +221,6 @@ export function EnvironmentsView({
           </Button>
         </div>
       </div>
-
-      {hasData ? (
-        <div className="flex items-center justify-between border-b border-border px-6 py-2.5">
-          <div className="flex items-center gap-2">
-            <Checkbox
-              checked={allEnvironmentsSelected || (selectedEnvironmentCount > 0 && "indeterminate")}
-              onCheckedChange={(checked) => toggleAllEnvironmentSelections(checked === true)}
-              aria-label="Select all environments"
-              disabled={busy}
-            />
-            <span className="text-xs text-muted-foreground">
-              {selectedEnvironmentCount > 0
-                ? `${selectedEnvironmentCount} selected`
-                : "Select environments to delete"}
-            </span>
-          </div>
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button
-                type="button"
-                variant="dashboard-outline-compact-gap"
-                size="none"
-                disabled={busy || selectedEnvironmentCount === 0}
-              >
-                <Trash2 className="w-3 h-3" />
-                Delete selected
-              </Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Delete selected environments?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  This will permanently delete {selectedEnvironmentCount} selected environment
-                  {selectedEnvironmentCount === 1 ? "" : "s"}, including associated runs, logs, metrics, and artifacts.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Keep environments</AlertDialogCancel>
-                <AlertDialogAction
-                  onClick={() => {
-                    void onDeleteEnvironments(selectedEnvironmentIds)
-                  }}
-                  disabled={busy || selectedEnvironmentCount === 0}
-                >
-                  Delete environments
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-        </div>
-      ) : null}
 
       {/* Content */}
       {!hasData ? (
@@ -239,15 +259,17 @@ export function EnvironmentsView({
           <table className="w-full">
             <thead className="sticky top-0 bg-background">
               <tr className="border-b border-border text-left">
-                <th className="px-3 py-2 text-xs font-medium text-muted-foreground">
+                <th className="w-10 px-3 py-2 text-xs font-medium text-muted-foreground">
                   <Checkbox
                     checked={allEnvironmentsSelected || (selectedEnvironmentCount > 0 && "indeterminate")}
                     onCheckedChange={(checked) => toggleAllEnvironmentSelections(checked === true)}
+                    className={selectionMode ? "" : "pointer-events-none invisible"}
+                    tabIndex={selectionMode ? 0 : -1}
                     aria-label="Select all environments"
-                    disabled={busy}
+                    disabled={!selectionMode || busy}
                   />
                 </th>
-                <th className="px-6 py-2 text-xs font-medium text-muted-foreground">ID</th>
+                <th className="px-3 py-2 text-xs font-medium text-muted-foreground">ID</th>
                 <th className="px-3 py-2 text-xs font-medium text-muted-foreground">Name</th>
                 <th className="px-3 py-2 text-xs font-medium text-muted-foreground">Spec</th>
                 <th className="px-3 py-2 text-xs font-medium text-muted-foreground">Data bindings</th>
@@ -266,17 +288,19 @@ export function EnvironmentsView({
                 return (
                   <Fragment key={env.environment_id}>
                     <tr className="border-b border-border hover:bg-secondary/50 group align-top">
-                      <td className="px-3 py-2.5">
+                      <td className="w-10 px-3 py-2.5">
                         <Checkbox
                           checked={selectedEnvironmentIds.includes(env.environment_id)}
                           onCheckedChange={(checked) =>
                             toggleEnvironmentSelection(env.environment_id, checked === true)
                           }
+                          className={selectionMode ? "" : "pointer-events-none invisible"}
+                          tabIndex={selectionMode ? 0 : -1}
                           aria-label={`Select environment ${env.environment_id}`}
-                          disabled={busy}
+                          disabled={!selectionMode || busy}
                         />
                       </td>
-                      <td className="px-6 py-2.5 font-mono text-xs text-foreground">
+                      <td className="px-3 py-2.5 font-mono text-xs text-foreground">
                         {env.environment_id}
                       </td>
                       <td className="px-3 py-2.5 text-sm text-foreground">
