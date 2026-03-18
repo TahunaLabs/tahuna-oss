@@ -21,7 +21,6 @@ import {
   applyStorageDeltaCredits,
   consumeUserCredits,
   estimateRunReservationCents,
-  grantUserCredits,
   USAGE_EVENT_TYPE,
 } from "@convex/credits";
 import {
@@ -1296,41 +1295,6 @@ async function createRunForUserId(
   return toRunResponse(row);
 }
 
-async function maybeRefundUnusedComputeReservation(
-  ctx: MutationCtx,
-  row: Doc<"runs">,
-  reason: string,
-) {
-  if (row.computeChargeStatus !== "charged") {
-    return;
-  }
-  if (typeof row.computeStartedAt === "number" && row.computeStartedAt > 0) {
-    return;
-  }
-  const reservedCents = Math.max(
-    0,
-    Math.floor(
-      (typeof row.computeChargeCents === "number" ? row.computeChargeCents : row.creditsReservedCents) || 0,
-    ),
-  );
-  if (reservedCents > 0) {
-    await grantUserCredits(ctx, {
-      userId: row.userId,
-      amountCents: reservedCents,
-      eventType: USAGE_EVENT_TYPE.RUN_COMPUTE_REFUND,
-      referenceType: "run",
-      referenceId: String(row._id),
-      metadata: {
-        reason,
-      },
-    });
-  }
-  await ctx.db.patch("runs", row._id, {
-    computeChargeStatus: "refunded",
-    computeChargeError: undefined,
-  });
-}
-
 async function cancelRunForUserId(
   ctx: MutationCtx,
   userId: string,
@@ -1353,7 +1317,6 @@ async function cancelRunForUserId(
       status: RUN_STATUS.CANCELLED,
       message: force ? "force cancellation requested before provisioning" : "run cancelled before provisioning",
     });
-    await maybeRefundUnusedComputeReservation(ctx, row, "cancelled_before_provisioning");
     return { cancel_requested: true, forced: force, run_id: String(runId) };
   }
 
@@ -1715,7 +1678,6 @@ export const markCancelledAfterTermination = internalMutation({
       status: RUN_STATUS.CANCELLED,
       message: args.force === true ? "force cancellation completed" : "cancellation completed",
     });
-    await maybeRefundUnusedComputeReservation(ctx, row, "cancelled_before_running");
     return null;
   },
 });
@@ -1742,7 +1704,6 @@ export const markCancellationTerminationFailed = internalMutation({
         error: errorText,
       },
     });
-    await maybeRefundUnusedComputeReservation(ctx, row, "cancellation_failed_before_running");
     return null;
   },
 });
@@ -2162,7 +2123,6 @@ export const markFailed = internalMutation({
           }
         : undefined,
     });
-    await maybeRefundUnusedComputeReservation(ctx, row, "provisioning_failed_before_running");
     await scheduleForcedPodTermination(ctx, args.runId, row.podId);
     return null;
   },
@@ -2273,7 +2233,6 @@ export const ingestRuntimeStatus = internalMutation({
           source: "pod-runtime",
         },
       });
-      await maybeRefundUnusedComputeReservation(ctx, row, "runtime_failed_before_running");
       await scheduleForcedPodTermination(ctx, args.runId, row.podId);
       return { status: RUN_STATUS.FAILED };
     }
@@ -2293,9 +2252,6 @@ export const ingestRuntimeStatus = internalMutation({
         source: "pod-runtime",
       },
     });
-    if (status === RUN_STATUS.CANCELLED) {
-      await maybeRefundUnusedComputeReservation(ctx, row, "runtime_cancelled_before_running");
-    }
     if (status === RUN_STATUS.COMPLETED || status === RUN_STATUS.CANCELLED) {
       await scheduleForcedPodTermination(ctx, args.runId, row.podId);
     }

@@ -56,7 +56,7 @@ export default defineSchema({
     creditsReservedCents: v.optional(v.number()),
     computeChargeCents: v.optional(v.number()),
     computeChargeStatus: v.optional(
-      v.union(v.literal("pending"), v.literal("charged"), v.literal("failed"), v.literal("refunded")),
+      v.union(v.literal("pending"), v.literal("charged"), v.literal("failed")),
     ),
     computeChargeError: v.optional(v.string()),
   })

@@ -7,7 +7,7 @@ This document describes the current ledger implementation in Tahuna.
 - Internal credit accounting only (no bank/payment-provider integration yet).
 - One credit balance per Better Auth user.
 - Append-only usage history for every debit/credit.
-- Charges currently applied for run compute reservation and storage size deltas.
+- Charges currently applied for run compute reservation and storage size growth.
 
 ## Identity Source of Truth
 
@@ -99,33 +99,27 @@ Run row stores charging markers:
 
 - `creditsReservedCents`
 - `computeChargeCents`
-- `computeChargeStatus` (`pending`/`charged`/`failed`/`refunded`)
+- `computeChargeStatus` (`pending`/`charged`/`failed`)
 - `computeStartedAt` (set when run enters `running`)
 
-### Refund for never-started compute
-
-If run fails/cancels before it reaches `running`, reserved compute is refunded:
-
-- event type: `run_compute_refund`
-- run charge status becomes `refunded`
-
-This avoids charging users for runs that never started compute.
+There is currently no automatic compute refund path.
 
 ## Storage Charging
 
-Storage charges are applied when indexed object size changes (data uploads and run artifacts).
+Storage charges are applied when indexed object size grows (data uploads and run artifacts).
 
 1. Compute size delta: `newSize - previousSize`.
-2. Convert to cents:
-   - `deltaGiB = abs(sizeDeltaBytes) / (1024^3)`
+2. If delta is positive, convert to cents:
+   - `deltaGiB = sizeDeltaBytes / (1024^3)`
    - `deltaCents = max(minimumChargeCents, ceil(deltaGiB * storageGiBDeltaRateCents))`
-   - positive size delta => debit (`storage_charge`)
-   - negative size delta => credit (`storage_refund`)
+   - apply debit (`storage_charge`)
+3. If delta is zero or negative, do nothing.
 
 Behavior:
 
 - On insufficient credits for a positive storage delta, operation fails with `insufficient credits`.
 - For data upload callback path, uploaded object cleanup is attempted (best effort) on post-upload ledger failure.
+- There is currently no automatic storage refund path.
 
 ## Invariants
 
@@ -141,5 +135,5 @@ Behavior:
 - No automatic top-up/checkout.
 - Compute settlement is reservation-based right now:
   - reserve at create
-  - refund only if compute never started
+  - no automatic refund path yet
   - no duration-based post-run overage/refund yet for started runs.

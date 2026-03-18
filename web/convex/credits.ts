@@ -8,9 +8,7 @@ const BYTES_PER_GIB = 1024 * 1024 * 1024;
 export const USAGE_EVENT_TYPE = {
   INITIAL_GRANT: "initial_grant",
   RUN_COMPUTE_RESERVED: "run_compute_reserved",
-  RUN_COMPUTE_REFUND: "run_compute_refund",
   STORAGE_CHARGE: "storage_charge",
-  STORAGE_REFUND: "storage_refund",
   MANUAL_GRANT: "manual_grant",
 } as const;
 
@@ -208,31 +206,20 @@ export async function applyStorageDeltaCredits(
   },
 ) {
   const deltaCents = estimateStorageDeltaCents(args.sizeDeltaBytes);
-  if (deltaCents === 0) {
+  if (deltaCents <= 0) {
     return 0;
   }
-  if (deltaCents > 0) {
-    const consumed = await consumeUserCredits(ctx, {
-      userId: args.userId,
-      amountCents: deltaCents,
-      eventType: USAGE_EVENT_TYPE.STORAGE_CHARGE,
-      referenceType: args.referenceType,
-      referenceId: args.referenceId,
-      metadata: args.metadata,
-    });
-    if (!consumed) {
-      throw new ConvexError("insufficient credits");
-    }
-    return deltaCents;
-  }
-  await grantUserCredits(ctx, {
+  const consumed = await consumeUserCredits(ctx, {
     userId: args.userId,
-    amountCents: Math.abs(deltaCents),
-    eventType: USAGE_EVENT_TYPE.STORAGE_REFUND,
+    amountCents: deltaCents,
+    eventType: USAGE_EVENT_TYPE.STORAGE_CHARGE,
     referenceType: args.referenceType,
     referenceId: args.referenceId,
     metadata: args.metadata,
   });
+  if (!consumed) {
+    throw new ConvexError("insufficient credits");
+  }
   return deltaCents;
 }
 
