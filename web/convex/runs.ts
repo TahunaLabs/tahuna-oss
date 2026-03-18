@@ -935,25 +935,13 @@ async function getAccessibleRun(
   ctx: QueryCtx | MutationCtx,
   userId: string,
   runId: Id<"runs">,
-  requiredPermission: "read" | "edit" = "edit",
+  _requiredPermission?: "read" | "edit",
 ) {
   const row = await ctx.db.get("runs", runId);
   if (!row) {
     throw new ConvexError("run not found");
   }
-  if (row.userId === userId) {
-    return row;
-  }
-  const shares = await ctx.db
-    .query("shares")
-    .withIndex("by_resource", (q) => q.eq("resourceType", "run").eq("resourceId", String(runId)))
-    .collect();
-  const hasAccess = shares.some((s) => {
-    if (s.grantedToUserId !== userId) return false;
-    if (requiredPermission === "read") return true;
-    return s.permission === "edit";
-  });
-  if (!hasAccess) {
+  if (row.userId !== userId) {
     throw new ConvexError("run not found");
   }
   return row;
@@ -963,25 +951,13 @@ async function getAccessibleEnvironment(
   ctx: QueryCtx | MutationCtx,
   userId: string,
   environmentId: Id<"environments">,
-  requiredPermission: "read" | "edit" = "edit",
+  _requiredPermission?: "read" | "edit",
 ) {
   const env = await ctx.db.get("environments", environmentId);
   if (!env) {
     throw new ConvexError("environment not found");
   }
-  if (env.userId === userId) {
-    return env;
-  }
-  const shares = await ctx.db
-    .query("shares")
-    .withIndex("by_resource", (q) => q.eq("resourceType", "environment").eq("resourceId", String(environmentId)))
-    .collect();
-  const hasAccess = shares.some((s) => {
-    if (s.grantedToUserId !== userId) return false;
-    if (requiredPermission === "read") return true;
-    return s.permission === "edit";
-  });
-  if (!hasAccess) {
+  if (env.userId !== userId) {
     throw new ConvexError("environment not found");
   }
   return env;

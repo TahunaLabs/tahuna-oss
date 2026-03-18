@@ -61,6 +61,7 @@ type StorageViewProps = {
   onPreviousStoragePage: () => void
   onNextStoragePage: () => void
   onShareStorageItem?: (item: StorageItem) => void
+  onSetVisibility?: (item: StorageItem, visibility: "shared" | "private") => void
 }
 
 export function StorageView({
@@ -90,6 +91,7 @@ export function StorageView({
   onPreviousStoragePage,
   onNextStoragePage,
   onShareStorageItem,
+  onSetVisibility,
 }: StorageViewProps) {
   const [showFilters, setShowFilters] = useState(false)
   const [showUploadDrawer, setShowUploadDrawer] = useState(false)
@@ -220,19 +222,19 @@ export function StorageView({
           </Button>
           <Button
             type="button"
-            variant={storageSourceFilter === "data" ? "dashboard-tab-compact-active" : "dashboard-tab-compact"}
+            variant={storageSourceFilter === "shared" ? "dashboard-tab-compact-active" : "dashboard-tab-compact"}
             size="none"
-            onClick={() => onStorageSourceFilterChange("data")}
+            onClick={() => onStorageSourceFilterChange("shared")}
           >
-            Data
+            Shared
           </Button>
           <Button
             type="button"
-            variant={storageSourceFilter === "run_artifact" ? "dashboard-tab-compact-active" : "dashboard-tab-compact"}
+            variant={storageSourceFilter === "private" ? "dashboard-tab-compact-active" : "dashboard-tab-compact"}
             size="none"
-            onClick={() => onStorageSourceFilterChange("run_artifact")}
+            onClick={() => onStorageSourceFilterChange("private")}
           >
-            Artifacts
+            Private
           </Button>
         </div>
       </div>
@@ -280,7 +282,7 @@ export function StorageView({
               <thead className="sticky top-0 bg-background">
                 <tr className="border-b border-border text-left">
                   <th className="px-6 py-2 text-xs font-medium text-muted-foreground">Name</th>
-                  <th className="px-3 py-2 text-xs font-medium text-muted-foreground">Source</th>
+                  <th className="px-3 py-2 text-xs font-medium text-muted-foreground">Visibility</th>
                   <th className="px-3 py-2 text-xs font-medium text-muted-foreground">Size</th>
                   <th className="px-3 py-2 text-xs font-medium text-muted-foreground">Created</th>
                   <th className="px-3 py-2 text-xs font-medium text-muted-foreground">Reference</th>
@@ -297,9 +299,15 @@ export function StorageView({
                       <p className="text-sm text-foreground truncate">{item.name}</p>
                     </td>
                     <td className="px-3 py-2.5">
-                      <span className="inline-flex px-2 py-0.5 rounded text-xs bg-secondary text-foreground">
-                        {item.source === "data" ? "Data" : "Artifact"}
-                      </span>
+                      <Button
+                        type="button"
+                        variant={item.visibility === "shared" ? "dashboard-outline-compact-active" : "dashboard-outline-compact"}
+                        size="none"
+                        onClick={() => onSetVisibility?.(item, item.visibility === "shared" ? "private" : "shared")}
+                        disabled={!onSetVisibility}
+                      >
+                        {item.visibility === "shared" ? "Shared" : "Private"}
+                      </Button>
                     </td>
                     <td className="px-3 py-2.5 text-sm text-muted-foreground">
                       {formatBytes(item.size)}

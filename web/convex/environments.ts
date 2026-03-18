@@ -440,25 +440,13 @@ async function getAccessibleEnvironment(
   ctx: QueryCtx | MutationCtx,
   userId: string,
   environmentId: Id<"environments">,
-  requiredPermission: "read" | "edit" = "edit",
+  _requiredPermission?: "read" | "edit",
 ) {
   const row = await ctx.db.get("environments", environmentId);
   if (!row) {
     throw new ConvexError("environment not found");
   }
-  if (row.userId === userId) {
-    return row;
-  }
-  const shares = await ctx.db
-    .query("shares")
-    .withIndex("by_resource", (q) => q.eq("resourceType", "environment").eq("resourceId", String(environmentId)))
-    .collect();
-  const hasAccess = shares.some((s) => {
-    if (s.grantedToUserId !== userId) return false;
-    if (requiredPermission === "read") return true;
-    return s.permission === "edit";
-  });
-  if (!hasAccess) {
+  if (row.userId !== userId) {
     throw new ConvexError("environment not found");
   }
   return row;

@@ -4,7 +4,6 @@ import { Sidebar } from "@/components/linear/sidebar"
 import { StorageView } from "@/components/linear/storage-view"
 import { EnvironmentsView } from "@/components/linear/environments-view"
 import { RunsView } from "@/components/linear/runs-view"
-import { SharedWithMeView } from "@/components/linear/shared-with-me-view"
 import { ShareDialog } from "@/components/linear/share-dialog"
 import { useTheme } from "@/components/theme-provider"
 import { Notice } from "@/components/ui/notice"
@@ -86,8 +85,6 @@ export default function DashboardPage() {
   const runResult = useQuery(api.runs.list, shouldLoadQueries ? {} : "skip") as
     | { runs: RunRow[] }
     | undefined
-  const sharedWithMeResult = useQuery(api.sharing.listSharedWithMe, shouldLoadQueries ? {} : "skip")
-  const sharedByMeResult = useQuery(api.sharing.listSharedByMe, shouldLoadQueries ? {} : "skip")
 
   const shouldLoadRunDetail = shouldLoadQueries && selectedRunId !== null
   const selectedRunFromList = runResult?.runs.find((r) => r.run_id === selectedRunId)
@@ -135,12 +132,13 @@ export default function DashboardPage() {
   const unbindDataMutation = useMutation(api.environments.unbindData)
   const listStorageAction = useAction(api.storage.list)
   const renameArtifactAction = useAction(api.storage.renameArtifact)
-  const createShareMutation = useMutation(api.sharing.createShare)
-  const revokeShareMutation = useMutation(api.sharing.revokeShare)
+  const setStorageVisibilityMutation = useMutation(api.storage.setVisibility)
+  const createShareLinkMutation = useMutation(api.sharing.createShareLink)
+  const revokeShareLinkMutation = useMutation(api.sharing.revokeShareLink)
 
   const shouldLoadSharesForResource = shouldLoadQueries && shareDialogOpen && shareTarget !== null
-  const sharesForResource = useQuery(
-    api.sharing.listSharesForResource,
+  const shareLinksForResource = useQuery(
+    api.sharing.listShareLinksForResource,
     shouldLoadSharesForResource
       ? { resourceType: shareTarget!.resourceType, resourceId: shareTarget!.resourceId }
       : "skip",
@@ -151,12 +149,6 @@ export default function DashboardPage() {
   const storageItems = storageResult?.items ?? []
   const storageTotal = storageResult?.total ?? 0
   const isDark = resolvedTheme === "dark"
-  const sharedWithMe = sharedWithMeResult?.shares ?? []
-  const sharedByMe = sharedByMeResult?.shares ?? []
-
-  const sharedByMeResourceIds = useMemo(() => {
-    return new Set(sharedByMe.map((s) => s.resource_id))
-  }, [sharedByMe])
 
   function openShareDialog(resourceType: "environment" | "run" | "data", resourceId: string) {
     setShareError("")
@@ -165,35 +157,34 @@ export default function DashboardPage() {
     setShareDialogOpen(true)
   }
 
-  async function handleCreateShare(grantedToUserId: string, permission: "read" | "edit") {
+  async function handleCreateLink(permission: "read" | "edit") {
     if (!shareTarget) return
     setShareBusy(true)
     setShareError("")
     setShareMessage("")
     try {
-      await createShareMutation({
+      await createShareLinkMutation({
         resourceType: shareTarget.resourceType,
         resourceId: shareTarget.resourceId,
-        grantedToUserId,
         permission,
       })
-      setShareMessage(`Shared with ${grantedToUserId} (${permission}).`)
+      setShareMessage(`Link generated (${permission}).`)
     } catch (shareError) {
-      setShareError(shareError instanceof Error ? shareError.message : "Failed to share")
+      setShareError(shareError instanceof Error ? shareError.message : "Failed to generate link")
     } finally {
       setShareBusy(false)
     }
   }
 
-  async function handleRevokeShare(shareId: string) {
+  async function handleRevokeLink(shareLinkId: string) {
     setShareBusy(true)
     setShareError("")
     setShareMessage("")
     try {
-      await revokeShareMutation({ shareId: shareId as Id<"shares"> })
-      setShareMessage("Share revoked.")
+      await revokeShareLinkMutation({ shareLinkId: shareLinkId as Id<"shareLinks"> })
+      setShareMessage("Link revoked.")
     } catch (revokeError) {
-      setShareError(revokeError instanceof Error ? revokeError.message : "Failed to revoke")
+      setShareError(revokeError instanceof Error ? revokeError.message : "Failed to revoke link")
     } finally {
       setShareBusy(false)
     }
@@ -274,7 +265,7 @@ export default function DashboardPage() {
     setStorageLoading(true)
     setStorageError("")
     void listStorageAction({
-      source: storageSourceFilter,
+      visibility: storageSourceFilter,
       sort: storageSort,
       search: storageSearchDebounced.trim() || undefined,
       offset: storageOffset,
@@ -505,6 +496,15 @@ export default function DashboardPage() {
     }
   }
 
+  async function setStorageVisibility(item: StorageItem, visibility: "shared" | "private") {
+    try {
+      await setStorageVisibilityMutation({ key: item.key, visibility })
+      setStorageReloadToken((current) => current + 1)
+    } catch (visibilityError) {
+      setError(visibilityError instanceof Error ? visibilityError.message : "failed to update visibility")
+    }
+  }
+
   function startRenameArtifact(item: StorageItem) {
     if (item.source !== "run_artifact") return
     setError("")
@@ -622,6 +622,9 @@ export default function DashboardPage() {
                 openShareDialog("data", item.data_blob_id)
               }
             }}
+            onSetVisibility={(item, visibility) => {
+              void setStorageVisibility(item, visibility)
+            }}
           />
         )
       case "environments":
@@ -639,7 +642,6 @@ export default function DashboardPage() {
             configError={configError}
             configLoading={shouldLoadEnvironmentConfig && !environmentConfig}
             configSaving={configSaving}
-            sharedByMeResourceIds={sharedByMeResourceIds}
             onBindSelectionChange={(environmentId, value) =>
               setBindSelectionByEnvironment((current) => ({
                 ...current,
@@ -678,29 +680,12 @@ export default function DashboardPage() {
             runDetail={runDetail}
             runLogs={runLogs}
             runMetrics={runMetrics}
-            sharedByMeResourceIds={sharedByMeResourceIds}
             onSelectRun={setSelectedRunId}
             onCancelRun={(runId) => {
               void cancelRun(runId)
             }}
             onDeleteRuns={deleteRuns}
             onShareRun={(runId) => openShareDialog("run", runId)}
-          />
-        )
-      case "shared":
-        return (
-          <SharedWithMeView
-            shares={sharedWithMe}
-            onNavigateToResource={(resourceType, resourceId) => {
-              if (resourceType === "environment") {
-                setActiveView("environments")
-              } else if (resourceType === "run") {
-                setActiveView("runs")
-                setSelectedRunId(resourceId)
-              } else if (resourceType === "data") {
-                setActiveView("storage")
-              }
-            }}
           />
         )
       default:
@@ -734,7 +719,7 @@ export default function DashboardPage() {
           resourceId={shareTarget.resourceId}
           isOwner={true}
           open={shareDialogOpen}
-          shares={sharesForResource?.shares ?? []}
+          shareLinks={shareLinksForResource?.shareLinks ?? []}
           busy={shareBusy}
           error={shareError}
           message={shareMessage}
@@ -742,11 +727,11 @@ export default function DashboardPage() {
             setShareDialogOpen(open)
             if (!open) setShareTarget(null)
           }}
-          onCreateShare={(userId, permission) => {
-            void handleCreateShare(userId, permission)
+          onCreateLink={(permission) => {
+            void handleCreateLink(permission)
           }}
-          onRevokeShare={(shareId) => {
-            void handleRevokeShare(shareId)
+          onRevokeLink={(shareLinkId) => {
+            void handleRevokeLink(shareLinkId)
           }}
         />
       )}

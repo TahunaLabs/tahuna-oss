@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Share2, Trash2, Users } from "lucide-react"
+import { Check, Copy, Link, Share2, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Sheet,
@@ -13,9 +13,9 @@ import {
 
 type ResourceType = "environment" | "run" | "data"
 
-type ShareItem = {
-  share_id: string
-  granted_to: string
+type ShareLinkItem = {
+  share_link_id: string
+  token: string
   permission: string
 }
 
@@ -24,13 +24,13 @@ type ShareDialogProps = {
   resourceId: string
   isOwner: boolean
   open: boolean
-  shares: ShareItem[]
+  shareLinks: ShareLinkItem[]
   busy: boolean
   error: string
   message: string
   onOpenChange: (open: boolean) => void
-  onCreateShare: (grantedToUserId: string, permission: "read" | "edit") => void
-  onRevokeShare: (shareId: string) => void
+  onCreateLink: (permission: "read" | "edit") => void
+  onRevokeLink: (shareLinkId: string) => void
 }
 
 const RESOURCE_LABELS: Record<ResourceType, string> = {
@@ -39,29 +39,49 @@ const RESOURCE_LABELS: Record<ResourceType, string> = {
   data: "data",
 }
 
+function buildShareUrl(token: string) {
+  const origin = typeof window !== "undefined" ? window.location.origin : ""
+  return `${origin}/share/${token}`
+}
+
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false)
+
+  function handleCopy() {
+    void navigator.clipboard.writeText(text).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    })
+  }
+
+  return (
+    <Button
+      type="button"
+      variant="dashboard-outline-icon-muted"
+      size="none"
+      onClick={handleCopy}
+      title="Copy link"
+    >
+      {copied ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
+    </Button>
+  )
+}
+
 export function ShareDialog({
   resourceType,
   isOwner,
   open,
-  shares,
+  shareLinks,
   busy,
   error,
   message,
   onOpenChange,
-  onCreateShare,
-  onRevokeShare,
+  onCreateLink,
+  onRevokeLink,
 }: ShareDialogProps) {
-  const [userId, setUserId] = useState("")
   const [permission, setPermission] = useState<"read" | "edit">("read")
 
   const resourceLabel = RESOURCE_LABELS[resourceType]
-
-  function handleSubmit() {
-    const trimmed = userId.trim()
-    if (!trimmed) return
-    onCreateShare(trimmed, permission)
-    setUserId("")
-  }
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -74,7 +94,7 @@ export function ShareDialog({
             </SheetTitle>
             <SheetDescription>
               {isOwner
-                ? `Manage who has access to this ${resourceLabel}.`
+                ? `Generate a shareable link for this ${resourceLabel}.`
                 : `You have shared access to this ${resourceLabel}.`}
             </SheetDescription>
           </SheetHeader>
@@ -84,22 +104,11 @@ export function ShareDialog({
           {isOwner ? (
             <>
               <div className="space-y-2">
-                <label className="text-xs font-medium text-muted-foreground">User ID</label>
-                <input
-                  type="text"
-                  value={userId}
-                  onChange={(e) => setUserId(e.target.value)}
-                  placeholder="Enter user ID"
-                  disabled={busy}
-                  className="h-8 w-full rounded border border-border bg-secondary/50 px-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
-                />
-              </div>
-              <div className="space-y-2">
                 <label className="text-xs font-medium text-muted-foreground">Permission</label>
                 <div className="flex items-center gap-2">
                   <Button
                     type="button"
-                    variant={permission === "read" ? "dashboard-primary-compact-sm" : "dashboard-outline-compact"}
+                    variant={permission === "read" ? "dashboard-outline-compact-active" : "dashboard-outline-compact"}
                     size="none"
                     onClick={() => setPermission("read")}
                     disabled={busy}
@@ -108,7 +117,7 @@ export function ShareDialog({
                   </Button>
                   <Button
                     type="button"
-                    variant={permission === "edit" ? "dashboard-primary-compact-sm" : "dashboard-outline-compact"}
+                    variant={permission === "edit" ? "dashboard-outline-compact-active" : "dashboard-outline-compact"}
                     size="none"
                     onClick={() => setPermission("edit")}
                     disabled={busy}
@@ -121,11 +130,11 @@ export function ShareDialog({
                 type="button"
                 variant="dashboard-primary-compact"
                 size="none"
-                onClick={handleSubmit}
-                disabled={busy || !userId.trim()}
+                onClick={() => onCreateLink(permission)}
+                disabled={busy}
               >
-                <Share2 className="w-3.5 h-3.5" />
-                Share
+                <Link className="w-3.5 h-3.5" />
+                Generate link
               </Button>
             </>
           ) : (
@@ -147,41 +156,51 @@ export function ShareDialog({
             </p>
           )}
 
-          {isOwner && shares.length > 0 && (
+          {isOwner && shareLinks.length > 0 && (
             <div className="space-y-2">
-              <h3 className="text-xs font-medium text-muted-foreground">Current shares</h3>
+              <h3 className="text-xs font-medium text-muted-foreground">Active links</h3>
               <div className="rounded border border-border divide-y divide-border">
-                {shares.map((share) => (
-                  <div key={share.share_id} className="flex items-center justify-between gap-2 px-3 py-2">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm text-foreground font-mono">{share.granted_to}</p>
-                      <span className={
-                        share.permission === "edit"
-                          ? "inline-flex px-1.5 py-0.5 rounded text-[11px] bg-blue-500/20 text-blue-400"
-                          : "inline-flex px-1.5 py-0.5 rounded text-[11px] bg-secondary text-muted-foreground"
-                      }>
-                        {share.permission}
-                      </span>
+                {shareLinks.map((link) => {
+                  const url = buildShareUrl(link.token)
+                  return (
+                    <div key={link.share_link_id} className="flex items-center justify-between gap-2 px-3 py-2">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5">
+                          <input
+                            readOnly
+                            value={url}
+                            className="h-6 w-full rounded border border-border bg-secondary/50 px-2 text-xs font-mono text-foreground focus:outline-none"
+                          />
+                          <CopyButton text={url} />
+                        </div>
+                        <span className={
+                          link.permission === "edit"
+                            ? "inline-flex mt-1 px-1.5 py-0.5 rounded text-[11px] bg-blue-500/20 text-blue-400"
+                            : "inline-flex mt-1 px-1.5 py-0.5 rounded text-[11px] bg-secondary text-muted-foreground"
+                        }>
+                          {link.permission}
+                        </span>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="dashboard-outline-icon-muted"
+                        size="none"
+                        onClick={() => onRevokeLink(link.share_link_id)}
+                        disabled={busy}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </Button>
                     </div>
-                    <Button
-                      type="button"
-                      variant="dashboard-outline-icon-muted"
-                      size="none"
-                      onClick={() => onRevokeShare(share.share_id)}
-                      disabled={busy}
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </Button>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             </div>
           )}
 
-          {isOwner && shares.length === 0 && (
+          {isOwner && shareLinks.length === 0 && (
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <Users className="w-4 h-4" />
-              Not shared with anyone yet.
+              <Link className="w-4 h-4" />
+              No active share links.
             </div>
           )}
         </div>

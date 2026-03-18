@@ -50,6 +50,8 @@ const buttonVariants = cva(
           'h-7 rounded-lg border border-border bg-card px-3 text-foreground shadow-none hover:bg-muted',
         'dashboard-outline-compact':
           'h-auto rounded border border-border px-2 py-1 text-xs text-foreground hover:bg-secondary',
+        'dashboard-outline-compact-active':
+          'h-auto rounded border border-accent bg-accent px-2 py-1 text-xs text-accent-foreground hover:opacity-90',
         'dashboard-outline-compact-muted':
           'h-auto rounded border border-border px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-secondary hover:text-foreground',
         'dashboard-outline-compact-gap':

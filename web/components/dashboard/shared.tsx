@@ -7,11 +7,12 @@ import type { ReactNode } from "react"
 
 export type MainSection = "data" | "environments" | "runs"
 
-export type StorageSourceFilter = "all" | "data" | "run_artifact"
+export type StorageSourceFilter = "all" | "shared" | "private"
 
 export type StorageItem = {
   id: string
   source: "data" | "run_artifact"
+  visibility: "shared" | "private"
   key: string
   name: string
   path: string

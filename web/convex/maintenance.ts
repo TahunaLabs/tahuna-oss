@@ -18,7 +18,7 @@ const CLEANUP_TABLES = [
   "runRuntimeLogs",
   "runRuntimeMetrics",
   "runs",
-  "shares",
+  "shareLinks",
   "storageObjects",
   "wandbMetrics",
   "wandbRuns",
@@ -34,7 +34,7 @@ type CleanupDocId =
   | Id<"runRuntimeLogs">
   | Id<"runRuntimeMetrics">
   | Id<"runs">
-  | Id<"shares">
+  | Id<"shareLinks">
   | Id<"storageObjects">
   | Id<"wandbMetrics">
   | Id<"wandbRuns">;
@@ -58,7 +58,7 @@ const cleanupTableValidator = v.union(
   v.literal("runRuntimeLogs"),
   v.literal("runRuntimeMetrics"),
   v.literal("runs"),
-  v.literal("shares"),
+  v.literal("shareLinks"),
   v.literal("storageObjects"),
   v.literal("wandbMetrics"),
   v.literal("wandbRuns"),
@@ -139,8 +139,8 @@ async function loadTableBatchIds(ctx: MutationCtx, table: CleanupTable, batchSiz
   if (table === "runs") {
     return (await ctx.db.query("runs").take(batchSize)).map((row) => row._id);
   }
-  if (table === "shares") {
-    return (await ctx.db.query("shares").take(batchSize)).map((row) => row._id);
+  if (table === "shareLinks") {
+    return (await ctx.db.query("shareLinks").take(batchSize)).map((row) => row._id);
   }
   if (table === "storageObjects") {
     return (await ctx.db.query("storageObjects").take(batchSize)).map((row) => row._id);
@@ -180,8 +180,8 @@ async function deleteTableIds(ctx: MutationCtx, table: CleanupTable, ids: Cleanu
     await Promise.all(ids.map((id) => ctx.db.delete("runs", id as Id<"runs">)));
     return;
   }
-  if (table === "shares") {
-    await Promise.all(ids.map((id) => ctx.db.delete("shares", id as Id<"shares">)));
+  if (table === "shareLinks") {
+    await Promise.all(ids.map((id) => ctx.db.delete("shareLinks", id as Id<"shareLinks">)));
     return;
   }
   if (table === "storageObjects") {
@@ -286,8 +286,8 @@ export const internalCountTable = internalMutation({
         next_cursor: result.isDone ? null : result.continueCursor,
       };
     }
-    if (args.table === "shares") {
-      const result = await ctx.db.query("shares").paginate({ cursor: args.cursor, numItems: batchSize });
+    if (args.table === "shareLinks") {
+      const result = await ctx.db.query("shareLinks").paginate({ cursor: args.cursor, numItems: batchSize });
       return {
         count: result.page.length,
         has_more: !result.isDone,

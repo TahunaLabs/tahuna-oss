@@ -3,7 +3,7 @@ import { ConvexError, v } from "convex/values";
 import { CopyObjectCommand } from "@aws-sdk/client-s3";
 import { components, internal } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
-import { action, internalMutation, internalQuery, type ActionCtx, type MutationCtx } from "@convex/_generated/server";
+import { action, internalMutation, internalQuery, mutation, type ActionCtx, type MutationCtx } from "@convex/_generated/server";
 import { requireUser } from "@convex/auth";
 
 const r2 = new R2(components.r2);
@@ -23,12 +23,13 @@ const sortValidator = v.union(
   v.literal("size_asc"),
 );
 
-const sourceFilterValidator = v.union(v.literal("all"), v.literal("data"), v.literal("run_artifact"));
+const visibilityFilterValidator = v.union(v.literal("all"), v.literal("shared"), v.literal("private"));
 const objectKindValidator = v.union(v.literal("data_upload"), v.literal("data_manifest"), v.literal("run_artifact"));
 
 const storageItemValidator = v.object({
   id: v.string(),
   source: v.union(v.literal("data"), v.literal("run_artifact")),
+  visibility: v.union(v.literal("shared"), v.literal("private")),
   key: v.string(),
   name: v.string(),
   path: v.string(),
@@ -48,8 +49,8 @@ const storageListValidator = v.object({
   next_offset: v.union(v.number(), v.null()),
   next_cursor: v.union(v.string(), v.null()),
   scan_capped: v.object({
-    data: v.boolean(),
-    run_artifact: v.boolean(),
+    shared: v.boolean(),
+    private: v.boolean(),
   }),
 });
 
@@ -65,6 +66,7 @@ const renameArtifactResultValidator = v.object({
 const indexedStorageRowValidator = v.object({
   id: v.string(),
   source: v.union(v.literal("data"), v.literal("run_artifact")),
+  visibility: v.union(v.literal("shared"), v.literal("private")),
   object_kind: objectKindValidator,
   key: v.string(),
   name: v.string(),
@@ -81,6 +83,7 @@ const indexedStorageListValidator = v.object({
 type StorageItem = {
   id: string;
   source: "data" | "run_artifact";
+  visibility: "shared" | "private";
   key: string;
   name: string;
   path: string;
@@ -94,6 +97,7 @@ type StorageItem = {
 type IndexedStorageRow = {
   id: string;
   source: "data" | "run_artifact";
+  visibility: "shared" | "private";
   object_kind: "data_upload" | "data_manifest" | "run_artifact";
   key: string;
   name: string;
@@ -224,15 +228,7 @@ async function getAccessibleRun(ctx: MutationCtx, userId: string, runId: Id<"run
   if (!run) {
     throw new ConvexError("run not found");
   }
-  if (run.userId === userId) {
-    return run;
-  }
-  const shares = await ctx.db
-    .query("shares")
-    .withIndex("by_resource", (q) => q.eq("resourceType", "run").eq("resourceId", String(runId)))
-    .collect();
-  const hasEditAccess = shares.some((share) => share.grantedToUserId === userId && share.permission === "edit");
-  if (!hasEditAccess) {
+  if (run.userId !== userId) {
     throw new ConvexError("run not found");
   }
   return run;
@@ -242,6 +238,7 @@ function toStorageItem(row: IndexedStorageRow): StorageItem {
   return {
     id: `storage:${row.id}`,
     source: row.source,
+    visibility: row.visibility,
     key: row.key,
     name: row.name,
     path: row.key,
@@ -290,25 +287,26 @@ async function hydrateDownloadUrls(ctx: ActionCtx, pageItems: StorageItem[]) {
 export const internalListIndexedObjects = internalQuery({
   args: {
     userId: v.string(),
-    source: v.optional(v.union(v.literal("data"), v.literal("run_artifact"))),
+    visibility: v.optional(v.union(v.literal("shared"), v.literal("private"))),
   },
   returns: indexedStorageListValidator,
   handler: async (ctx, args) => {
+    const allRows = await ctx.db
+      .query("storageObjects")
+      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .collect();
     const rows =
-      args.source === "data" || args.source === "run_artifact"
-        ? await ctx.db
-            .query("storageObjects")
-            .withIndex("by_user_and_source", (q) => q.eq("userId", args.userId).eq("source", args.source!))
-            .collect()
-        : await ctx.db
-            .query("storageObjects")
-            .withIndex("by_user", (q) => q.eq("userId", args.userId))
-            .collect();
+      args.visibility === "shared"
+        ? allRows.filter((r) => r.visibility === "shared")
+        : args.visibility === "private"
+          ? allRows.filter((r) => r.visibility !== "shared")
+          : allRows;
 
     return {
       objects: rows.map((row) => ({
         id: String(row._id),
         source: row.source,
+        visibility: row.visibility ?? "private",
         object_kind: row.objectKind,
         key: row.key,
         name: row.name || toObjectName(row.key),
@@ -522,7 +520,7 @@ export const renameArtifact = action({
 
 export const list = action({
   args: {
-    source: v.optional(sourceFilterValidator),
+    visibility: v.optional(visibilityFilterValidator),
     search: v.optional(v.string()),
     sort: v.optional(sortValidator),
     cursor: v.optional(v.string()),
@@ -534,7 +532,7 @@ export const list = action({
     const user = await requireUser(ctx);
     const userId = String(user._id);
 
-    const source = args.source ?? "all";
+    const visibility = args.visibility ?? "all";
     const sort: StorageSort = args.sort ?? "created_desc";
     const search = (args.search || "").trim().slice(0, MAX_SEARCH_CHARS).toLowerCase();
     const limit = normalizeLimit(args.limit);
@@ -546,7 +544,7 @@ export const list = action({
 
     const indexed = (await ctx.runQuery(internal.storage.internalListIndexedObjects, {
       userId,
-      source: source === "all" ? undefined : source,
+      visibility: visibility === "all" ? undefined : visibility,
     })) as { objects: IndexedStorageRow[] };
 
     const baseItems = indexed.objects.map(toStorageItem);
@@ -566,9 +564,30 @@ export const list = action({
       next_offset: hasMore ? offset + limit : null,
       next_cursor: hasMore ? encodeOffsetCursor(offset + limit) : null,
       scan_capped: {
-        data: false,
-        run_artifact: false,
+        shared: false,
+        private: false,
       },
     };
+  },
+});
+
+export const setVisibility = mutation({
+  args: {
+    key: v.string(),
+    visibility: v.union(v.literal("shared"), v.literal("private")),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    const userId = String(user._id);
+    const obj = await ctx.db
+      .query("storageObjects")
+      .withIndex("by_user_and_key", (q) => q.eq("userId", userId).eq("key", args.key))
+      .first();
+    if (!obj) {
+      throw new ConvexError("storage object not found");
+    }
+    await ctx.db.patch(obj._id, { visibility: args.visibility });
+    return null;
   },
 });

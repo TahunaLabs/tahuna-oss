@@ -68,6 +68,7 @@ export default defineSchema({
     runId: v.optional(v.id("runs")),
     dataBlobId: v.optional(v.string()),
     dataId: v.optional(v.string()),
+    visibility: v.optional(v.union(v.literal("shared"), v.literal("private"))),
   })
     .index("by_user", ["userId"])
     .index("by_user_and_source", ["userId", "source"])
@@ -129,16 +130,16 @@ export default defineSchema({
     source: v.string(),
   }).index("by_run", ["runId"]),
 
-  shares: defineTable({
+  shareLinks: defineTable({
     resourceType: v.union(v.literal("environment"), v.literal("run"), v.literal("data")),
     resourceId: v.string(),
-    grantedToUserId: v.string(),
+    token: v.string(),
     permission: v.union(v.literal("read"), v.literal("edit")),
-    grantedByUserId: v.string(),
+    createdByUserId: v.string(),
   })
     .index("by_resource", ["resourceType", "resourceId"])
-    .index("by_grantee", ["grantedToUserId"])
-    .index("by_grantor", ["grantedByUserId"]),
+    .index("by_token", ["token"])
+    .index("by_creator", ["createdByUserId"]),
 
   dataBlobs: defineTable({
     userId: v.string(),
