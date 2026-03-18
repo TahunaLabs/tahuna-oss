@@ -69,3 +69,5 @@ docs/tsconfig.tsbuildinfo
 test_ml_project/data/*
 **/data/
 */node_modules/*
+
+/out/
