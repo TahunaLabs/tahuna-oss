@@ -17,6 +17,7 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { DashboardTabsHeader } from "@/components/ui/dashboard-tabs-header"
+import { ActionsMenu } from "@/components/linear/actions-menu"
 import {
   Sheet,
   SheetContent,
@@ -279,15 +280,21 @@ export function StorageView({
         <div className="flex-1 flex flex-col min-h-0">
           {/* Table */}
           <div className="flex-1 overflow-auto">
-            <table className="w-full">
+            <table className="w-full table-fixed">
+              <colgroup>
+                <col className="w-[40%]" />
+                <col className="w-[14%]" />
+                <col className="w-[12%]" />
+                <col className="w-[14%]" />
+                <col className="w-[20%]" />
+              </colgroup>
               <thead className="sticky top-0 bg-background">
                 <tr className="border-b border-border text-left">
                   <th className="px-6 py-2 text-xs font-medium text-muted-foreground">Name</th>
                   <th className="px-3 py-2 text-xs font-medium text-muted-foreground">Visibility</th>
                   <th className="px-3 py-2 text-xs font-medium text-muted-foreground">Size</th>
                   <th className="px-3 py-2 text-xs font-medium text-muted-foreground">Created</th>
-                  <th className="px-3 py-2 text-xs font-medium text-muted-foreground">Reference</th>
-                  <th className="px-3 py-2 text-xs font-medium text-muted-foreground">Actions</th>
+                  <th className="px-3 py-2 text-xs font-medium text-muted-foreground">Source</th>
                 </tr>
               </thead>
               <tbody>
@@ -296,30 +303,7 @@ export function StorageView({
                     key={item.id}
                     className="border-b border-border hover:bg-secondary/50 group"
                   >
-                    <td className="px-6 py-2.5">
-                      <p className="text-sm text-foreground truncate">{item.name}</p>
-                    </td>
-                    <td className="px-3 py-2.5">
-                      <Button
-                        type="button"
-                        variant={item.visibility === "shared" ? "dashboard-outline-compact-active" : "dashboard-outline-compact"}
-                        size="none"
-                        onClick={() => onSetVisibility?.(item, item.visibility === "shared" ? "private" : "shared")}
-                        disabled={!onSetVisibility}
-                      >
-                        {item.visibility === "shared" ? "Shared" : "Private"}
-                      </Button>
-                    </td>
-                    <td className="px-3 py-2.5 text-sm text-muted-foreground">
-                      {formatBytes(item.size)}
-                    </td>
-                    <td className="px-3 py-2.5 text-sm text-muted-foreground">
-                      {new Date(item.created_at).toLocaleDateString()}
-                    </td>
-                    <td className="px-3 py-2.5 font-mono text-xs text-muted-foreground">
-                      {item.source === "data" ? item.data_blob_id || "—" : item.run_id || "—"}
-                    </td>
-                    <td className="px-3 py-2.5">
+                    <td className="px-6 py-2">
                       {renamingStorageId === item.id ? (
                         <form
                           className="flex items-center gap-1.5"
@@ -333,7 +317,7 @@ export function StorageView({
                             onChange={(e) => onArtifactRenameDraftChange(e.target.value)}
                             disabled={artifactRenameBusyId === item.id}
                             maxLength={MAX_ARTIFACT_NAME_CHARS}
-                            className="h-7 w-32 rounded border border-border bg-secondary/50 px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                            className="h-7 w-40 rounded border border-border bg-secondary/50 px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
                           />
                           <Button
                             type="submit"
@@ -354,42 +338,94 @@ export function StorageView({
                           </Button>
                         </form>
                       ) : (
-                        <div className="flex items-center gap-1">
-                          <Button asChild type="button" variant="dashboard-outline-icon-muted" size="none">
-                            <a href={item.download_url} target="_blank" rel="noreferrer">
-                              <ExternalLink className="w-3.5 h-3.5" />
-                            </a>
-                          </Button>
-                          <Button asChild type="button" variant="dashboard-outline-icon-muted" size="none">
-                            <a href={item.download_url} download={item.name}>
-                              <Download className="w-3.5 h-3.5" />
-                            </a>
-                          </Button>
-                          {item.source === "data" && (
-                            <>
-                              <Button
-                                type="button"
-                                variant="dashboard-outline-icon-muted"
-                                size="none"
-                                onClick={() => onStartRenameArtifact(item)}
-                                disabled={artifactRenameBusyId !== null}
-                              >
-                                <Pencil className="w-3.5 h-3.5" />
-                              </Button>
-                              {onShareStorageItem && (
-                                <Button
-                                  type="button"
-                                  variant="dashboard-outline-icon-muted"
-                                  size="none"
-                                  onClick={() => onShareStorageItem(item)}
-                                >
-                                  <Share2 className="w-3.5 h-3.5" />
-                                </Button>
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="min-w-0 truncate text-sm text-foreground">{item.name}</p>
+                          <div className="shrink-0">
+                            <ActionsMenu triggerLabel={`Open actions for ${item.name}`}>
+                              {(close) => (
+                                <>
+                                  <Button
+                                    asChild
+                                    type="button"
+                                    variant="sidebar-menu-item"
+                                    size="none"
+                                  >
+                                    <a
+                                      href={item.download_url}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      onClick={() => close()}
+                                    >
+                                      <ExternalLink className="w-3.5 h-3.5" />
+                                      Open
+                                    </a>
+                                  </Button>
+                                  <Button
+                                    asChild
+                                    type="button"
+                                    variant="sidebar-menu-item"
+                                    size="none"
+                                  >
+                                    <a href={item.download_url} download={item.name} onClick={() => close()}>
+                                      <Download className="w-3.5 h-3.5" />
+                                      Download
+                                    </a>
+                                  </Button>
+                                  {item.source === "run_artifact" && (
+                                    <Button
+                                      type="button"
+                                      variant="sidebar-menu-item"
+                                      size="none"
+                                      onClick={() => {
+                                        close()
+                                        onStartRenameArtifact(item)
+                                      }}
+                                      disabled={artifactRenameBusyId !== null}
+                                    >
+                                      <Pencil className="w-3.5 h-3.5" />
+                                      Rename
+                                    </Button>
+                                  )}
+                                  {item.source === "data" && onShareStorageItem && (
+                                    <Button
+                                      type="button"
+                                      variant="sidebar-menu-item"
+                                      size="none"
+                                      onClick={() => {
+                                        close()
+                                        onShareStorageItem(item)
+                                      }}
+                                    >
+                                      <Share2 className="w-3.5 h-3.5" />
+                                      Share
+                                    </Button>
+                                  )}
+                                </>
                               )}
-                            </>
-                          )}
+                            </ActionsMenu>
+                          </div>
                         </div>
                       )}
+                    </td>
+                    <td className="px-3 py-2">
+                      <Button
+                        type="button"
+                        variant={item.visibility === "shared" ? "dashboard-outline-compact-active" : "dashboard-outline-compact"}
+                        size="none"
+                        onClick={() => onSetVisibility?.(item, item.visibility === "shared" ? "private" : "shared")}
+                        disabled={!onSetVisibility}
+                      >
+                        {item.visibility === "shared" ? "Shared" : "Private"}
+                      </Button>
+                    </td>
+                    <td className="px-3 py-2 text-sm text-muted-foreground">
+                      {formatBytes(item.size)}
+                    </td>
+                    <td className="px-3 py-2 text-sm text-muted-foreground">
+                      {new Date(item.created_at).toLocaleDateString()}
+                    </td>
+                    <td className="px-3 py-2 text-sm text-muted-foreground">
+                      {item.source === "data" ? "Data upload" : "Run artifact"}
                     </td>
                   </tr>
                 ))}

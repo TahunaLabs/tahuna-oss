@@ -8,17 +8,7 @@ import {
   type EnvironmentRow,
 } from "@/components/dashboard/shared"
 import type { Id } from "@convex/_generated/dataModel"
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog"
+import { ActionsMenu } from "@/components/linear/actions-menu"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { DashboardTabsHeader } from "@/components/ui/dashboard-tabs-header"
@@ -99,7 +89,6 @@ export function EnvironmentsView({
     }
   }, [hasData, selectionMode])
 
-  const allEnvironmentsSelected = environments.length > 0 && selectedEnvironmentIds.length === environments.length
   const selectedEnvironmentCount = selectedEnvironmentIds.length
 
   function disableSelectionMode() {
@@ -117,14 +106,6 @@ export function EnvironmentsView({
     })
   }
 
-  function toggleAllEnvironmentSelections(nextChecked: boolean) {
-    if (nextChecked) {
-      setSelectedEnvironmentIds(environments.map((environment) => environment.environment_id))
-      return
-    }
-    setSelectedEnvironmentIds([])
-  }
-
   return (
     <main className="flex-1 flex flex-col h-full">
       {/* Header */}
@@ -139,40 +120,20 @@ export function EnvironmentsView({
           {selectionMode ? (
             <>
               <span className="text-xs text-muted-foreground">{selectedEnvironmentCount}</span>
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button
-                    type="button"
-                    variant="dashboard-icon-secondary"
-                    size="none"
-                    aria-label="Delete selected environments"
-                    disabled={busy || selectedEnvironmentCount === 0}
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Delete {selectedEnvironmentCount} environment{selectedEnvironmentCount === 1 ? "" : "s"}?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      This removes selected environments and their associated run data.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                    <AlertDialogAction
-                      onClick={() => {
-                        void onDeleteEnvironments(selectedEnvironmentIds).then(() => {
-                          disableSelectionMode()
-                        })
-                      }}
-                      disabled={busy || selectedEnvironmentCount === 0}
-                    >
-                      Delete
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
+              <Button
+                type="button"
+                variant="dashboard-icon-secondary"
+                size="none"
+                aria-label="Delete selected environments"
+                disabled={busy || selectedEnvironmentCount === 0}
+                onClick={() => {
+                  void onDeleteEnvironments(selectedEnvironmentIds).then(() => {
+                    disableSelectionMode()
+                  })
+                }}
+              >
+                <Trash2 className="w-4 h-4" />
+              </Button>
               <Button
                 type="button"
                 variant="dashboard-icon-secondary"
@@ -253,24 +214,21 @@ export function EnvironmentsView({
         </div>
       ) : (
         <div className="flex-1 overflow-auto">
-          <table className="w-full">
+          <table className="w-full table-fixed">
+            <colgroup>
+              <col className="w-[43%]" />
+              <col className="w-[13%]" />
+              <col className="w-[22%]" />
+              <col className="w-[19%]" />
+              <col className="w-[3%]" />
+            </colgroup>
             <thead className="sticky top-0 bg-background">
               <tr className="border-b border-border text-left">
-                <th className="w-10 px-3 py-2 text-xs font-medium text-muted-foreground">
-                  <Checkbox
-                    checked={allEnvironmentsSelected || (selectedEnvironmentCount > 0 && "indeterminate")}
-                    onCheckedChange={(checked) => toggleAllEnvironmentSelections(checked === true)}
-                    className={selectionMode ? "" : "pointer-events-none invisible"}
-                    tabIndex={selectionMode ? 0 : -1}
-                    aria-label="Select all environments"
-                    disabled={!selectionMode || busy}
-                  />
-                </th>
-                <th className="px-3 py-2 text-xs font-medium text-muted-foreground">ID</th>
                 <th className="px-3 py-2 text-xs font-medium text-muted-foreground">Name</th>
-                <th className="px-3 py-2 text-xs font-medium text-muted-foreground">Spec</th>
+                <th className="px-3 py-2 text-xs font-medium text-muted-foreground">Framework</th>
+                <th className="px-3 py-2 text-xs font-medium text-muted-foreground">Device</th>
                 <th className="px-3 py-2 text-xs font-medium text-muted-foreground">Data bindings</th>
-                <th className="px-3 py-2 text-xs font-medium text-muted-foreground">Actions</th>
+                <th className="px-0 py-2 text-xs font-medium text-muted-foreground" />
               </tr>
             </thead>
             <tbody>
@@ -284,86 +242,84 @@ export function EnvironmentsView({
 
                 return (
                   <Fragment key={env.environment_id}>
-                    <tr className="border-b border-border hover:bg-secondary/50 group align-top">
-                      <td className="w-10 px-3 py-2.5">
-                        <Checkbox
-                          checked={selectedEnvironmentIds.includes(env.environment_id)}
-                          onCheckedChange={(checked) =>
-                            toggleEnvironmentSelection(env.environment_id, checked === true)
-                          }
-                          className={selectionMode ? "" : "pointer-events-none invisible"}
-                          tabIndex={selectionMode ? 0 : -1}
-                          aria-label={`Select environment ${env.environment_id}`}
-                          disabled={!selectionMode || busy}
-                        />
-                      </td>
-                      <td className="px-3 py-2.5 font-mono text-xs text-foreground">
-                        {env.environment_id}
-                      </td>
-                      <td className="px-3 py-2.5 text-sm text-foreground">
-                        <div className="space-y-0.5">
-                          <div className="flex items-center gap-1.5">
-                            <p>{env.name}</p>
-                            {sharedByMeResourceIds?.has(env.environment_id) && (
-                              <Users className="w-3.5 h-3.5 text-muted-foreground" />
-                            )}
+                    <tr className="border-b border-border hover:bg-secondary/50 group align-middle">
+                      <td className="px-3 py-2 text-sm text-foreground">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <Checkbox
+                            checked={selectedEnvironmentIds.includes(env.environment_id)}
+                            onCheckedChange={(checked) =>
+                              toggleEnvironmentSelection(env.environment_id, checked === true)
+                            }
+                            className={selectionMode ? "" : "pointer-events-none invisible"}
+                            tabIndex={selectionMode ? 0 : -1}
+                            aria-label={`Select environment ${env.name}`}
+                            disabled={!selectionMode || busy}
+                          />
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <p className="truncate">{env.name}</p>
+                              {sharedByMeResourceIds?.has(env.environment_id) && (
+                                <Users className="w-3.5 h-3.5 shrink-0 text-muted-foreground" />
+                              )}
+                            </div>
+                            <p className="text-xs text-muted-foreground">Python {env.python_version}</p>
                           </div>
-                          <p className="text-xs text-muted-foreground">Python {env.python_version}</p>
                         </div>
                       </td>
-                      <td className="px-3 py-2.5 text-sm text-muted-foreground">
-                        <div className="space-y-0.5">
-                          <p>{env.framework}:{env.version}</p>
-                          <p>{env.gpu_type} x{env.gpu_count} | {env.volume_gb}GB</p>
-                        </div>
+                      <td className="px-3 py-2 text-sm text-muted-foreground">
+                        <p className="truncate" title={`${env.framework}:${env.version}`}>
+                          {env.framework}:{env.version}
+                        </p>
                       </td>
-                      <td className="px-3 py-2.5">
-                        <div className="space-y-2">
+                      <td className="px-3 py-2 text-sm text-muted-foreground">
+                        <p
+                          className="truncate"
+                          title={`${env.gpu_type} x${env.gpu_count} · ${env.volume_gb}GB`}
+                        >
+                          {env.gpu_type} x{env.gpu_count} · {env.volume_gb}GB
+                        </p>
+                      </td>
+                      <td className="pl-3 pr-1 py-2 overflow-hidden">
+                        <div className="min-w-0 space-y-1">
                           <div className="flex flex-wrap items-center gap-1">
-                            {!hasPrimaryData && env.bound_data_ids.length === 0 ? (
-                              <span className="text-xs text-muted-foreground">No synced or bound datasets</span>
-                            ) : (
-                              <>
-                                {hasPrimaryData ? (
-                                  <span className="inline-flex px-2 py-0.5 rounded text-xs bg-secondary text-foreground">
-                                    Primary synced data
+                            {hasPrimaryData ? (
+                              <span className="inline-flex max-w-full truncate px-2 py-0.5 rounded text-xs bg-secondary text-foreground">
+                                Primary synced data
+                              </span>
+                            ) : null}
+                            {env.bound_data_ids.map((dataId) => {
+                              const blob = dataBlobsById.get(dataId)
+                              return (
+                                <div key={`${env.environment_id}-${dataId}`} className="flex max-w-full items-center gap-1">
+                                  <span className="inline-flex max-w-40 truncate px-2 py-0.5 rounded text-xs bg-secondary text-foreground">
+                                    {blob?.filename || "Unnamed dataset"}
                                   </span>
-                                ) : null}
-                                {env.bound_data_ids.map((dataId) => {
-                                  const blob = dataBlobsById.get(dataId)
-                                  return (
-                                    <div key={`${env.environment_id}-${dataId}`} className="flex items-center gap-1">
-                                      <span className="inline-flex px-2 py-0.5 rounded text-xs bg-secondary text-foreground">
-                                        {blob ? blob.filename : dataId}
-                                      </span>
-                                      <Button
-                                        type="button"
-                                        variant="dashboard-outline-compact-muted"
-                                        size="none"
-                                        onClick={() => onUnbindData(env.environment_id, dataId)}
-                                        disabled={busy}
-                                      >
-                                        Unbind
-                                      </Button>
-                                    </div>
-                                  )
-                                })}
-                              </>
-                            )}
+                                  <Button
+                                    type="button"
+                                    variant="dashboard-outline-compact-muted"
+                                    size="none"
+                                    onClick={() => onUnbindData(env.environment_id, dataId)}
+                                    disabled={busy}
+                                  >
+                                    Unbind
+                                  </Button>
+                                </div>
+                              )
+                            })}
                           </div>
-                          <div className="flex items-center gap-1.5">
+                          <div className="flex min-w-0 items-center gap-1.5">
                             <select
                               value={bindSelectionByEnvironment[env.environment_id] || ""}
                               onChange={(e) => onBindSelectionChange(env.environment_id, e.target.value)}
                               disabled={busy || availableDataBlobs.length === 0}
-                              className="h-7 rounded border border-border bg-secondary/50 px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
+                              className="h-6 min-w-0 flex-1 rounded border border-border bg-secondary/50 px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
                             >
                               <option value="">
                                 {availableDataBlobs.length === 0 ? "No datasets available" : "Select dataset"}
                               </option>
                               {availableDataBlobs.map((blob) => (
                                 <option key={`${env.environment_id}-opt-${blob.blob_id}`} value={blob.blob_id}>
-                                  {blob.filename} ({blob.blob_id})
+                                  {blob.filename}
                                 </option>
                               ))}
                             </select>
@@ -371,6 +327,7 @@ export function EnvironmentsView({
                               type="button"
                               variant="dashboard-outline-compact"
                               size="none"
+                              className="shrink-0"
                               onClick={() => onBindSelectedData(env)}
                               disabled={
                                 busy ||
@@ -383,49 +340,81 @@ export function EnvironmentsView({
                           </div>
                         </div>
                       </td>
-                      <td className="px-3 py-2.5">
-                        <div className="flex items-center gap-1.5">
-                          <Button
-                            variant={configOpen ? "dashboard-primary" : "dashboard-outline"}
-                            size="sm"
-                            onClick={() => {
-                              if (configOpen) {
-                                onCloseConfigEditor()
-                                return
-                              }
-                              onOpenConfigEditor(env)
-                            }}
-                            disabled={configSaving}
-                          >
-                            <FileCode2 className="w-3 h-3" />
-                            Config
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="dashboard-outline-compact-gap"
-                            size="none"
-                            onClick={() => onLaunchRun(env.environment_id)}
-                            disabled={busy}
-                          >
-                            <Play className="w-3 h-3" />
-                            Run
-                          </Button>
-                          {onShareEnvironment && (
-                            <Button
-                              type="button"
-                              variant="dashboard-outline-icon-muted"
-                              size="none"
-                              onClick={() => onShareEnvironment(env.environment_id)}
-                            >
-                              <Share2 className="w-3.5 h-3.5" />
-                            </Button>
-                          )}
+                      <td className="px-0 py-2 align-middle">
+                        <div className="flex items-center justify-center">
+                          <ActionsMenu triggerLabel={`Open actions for ${env.name}`}>
+                            {(close) => (
+                              <>
+                                <Button
+                                  type="button"
+                                  variant="sidebar-menu-item"
+                                  size="none"
+                                  onClick={() => {
+                                    close()
+                                    if (configOpen) {
+                                      onCloseConfigEditor()
+                                      return
+                                    }
+                                    onOpenConfigEditor(env)
+                                  }}
+                                  disabled={configSaving}
+                                >
+                                  <FileCode2 className="w-3.5 h-3.5" />
+                                  Config
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="sidebar-menu-item"
+                                  size="none"
+                                  onClick={() => {
+                                    close()
+                                    onLaunchRun(env.environment_id)
+                                  }}
+                                  disabled={busy}
+                                >
+                                  <Play className="w-3.5 h-3.5" />
+                                  Run
+                                </Button>
+                                {onShareEnvironment && (
+                                  <Button
+                                    type="button"
+                                    variant="sidebar-menu-item"
+                                    size="none"
+                                    onClick={() => {
+                                      close()
+                                      onShareEnvironment(env.environment_id)
+                                    }}
+                                  >
+                                    <Share2 className="w-3.5 h-3.5" />
+                                    Share
+                                  </Button>
+                                )}
+                                <Button
+                                  type="button"
+                                  variant="sidebar-menu-item"
+                                  size="none"
+                                  onClick={() => {
+                                    close()
+                                    void onDeleteEnvironments([env.environment_id]).then(() => {
+                                      if (configOpen) {
+                                        onCloseConfigEditor()
+                                      }
+                                    })
+                                  }}
+                                  disabled={busy}
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                  Delete
+                                </Button>
+                              </>
+                            )}
+                          </ActionsMenu>
                         </div>
                       </td>
                     </tr>
                     {configOpen ? (
                       <tr className="border-b border-border bg-secondary/20">
-                        <td colSpan={6} className="px-6 pb-4 pt-1">
+                        <td colSpan={5} className="px-6 pb-4 pt-1">
                           <div className="rounded-xl border border-border bg-background/80 p-4">
                             <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                               <div>
