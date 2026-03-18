@@ -464,6 +464,7 @@ func promptString(label, defaultValue string) string {
 		Validate: validate,
 		Templates: &promptui.PromptTemplates{
 			Prompt:  "{{ . }} ",
+			Valid:   "✓ {{ . }} ",
 			Success: "✓ {{ . }} ",
 		},
 	}
