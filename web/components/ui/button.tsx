@@ -29,7 +29,7 @@ const buttonVariants = cva(
         'sidebar-brand':
           'h-auto justify-start gap-2 rounded px-1.5 py-1 text-sm font-medium text-sidebar-foreground hover:bg-sidebar-accent',
         'sidebar-icon':
-          'h-7 w-7 rounded-lg p-0 text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground',
+          'rounded p-1.5 text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground',
         'sidebar-workspace':
           'h-auto w-full justify-start gap-1 px-2 py-1 text-xs font-medium text-muted-foreground hover:bg-transparent hover:text-sidebar-foreground',
         'sidebar-item':
@@ -49,37 +49,41 @@ const buttonVariants = cva(
         'dashboard-icon':
           'h-7 w-7 p-0 text-muted-foreground hover:bg-muted hover:text-foreground rounded-lg',
         'dashboard-icon-secondary':
-          'h-7 w-7 p-0 text-muted-foreground hover:bg-secondary hover:text-foreground rounded-lg',
+          'rounded p-1.5 text-muted-foreground hover:bg-secondary hover:text-foreground',
         'dashboard-icon-secondary-active':
-          'h-7 w-7 p-0 bg-secondary text-foreground hover:bg-secondary/80 rounded-lg',
+          'rounded bg-secondary p-1.5 text-foreground hover:bg-secondary/80',
         'dashboard-primary':
           'h-8 rounded-lg bg-primary px-3 text-primary-foreground hover:bg-primary/90',
         'dashboard-primary-compact':
-          'h-auto rounded-lg bg-primary px-4 py-2 text-sm text-primary-foreground hover:bg-primary/90',
+          'h-auto rounded bg-accent px-4 py-2 text-sm text-accent-foreground hover:opacity-90',
+        'dashboard-primary-compact-sm':
+          'h-auto rounded bg-accent px-3 py-1.5 text-sm text-accent-foreground hover:opacity-90',
         'dashboard-outline':
           'h-7 rounded-lg border border-border bg-card px-3 text-foreground shadow-none hover:bg-muted',
         'dashboard-outline-compact':
-          'h-auto rounded-lg border border-border bg-card px-2 py-1 text-xs text-foreground shadow-none hover:bg-muted',
+          'h-auto rounded border border-border px-2 py-1 text-xs text-foreground hover:bg-secondary',
+        'dashboard-outline-compact-muted':
+          'h-auto rounded border border-border px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-secondary hover:text-foreground',
         'dashboard-outline-compact-gap':
-          'h-auto gap-1 rounded-lg border border-border bg-card px-2 py-1 text-xs text-foreground shadow-none hover:bg-muted',
+          'h-auto gap-1 rounded border border-border px-2 py-1 text-xs text-foreground hover:bg-secondary',
         'dashboard-outline-icon':
           'h-7 rounded-lg border border-border bg-card px-2 text-foreground shadow-none hover:bg-muted',
         'dashboard-outline-icon-muted':
-          'h-7 rounded-lg border border-border bg-card px-2 text-muted-foreground shadow-none hover:bg-muted hover:text-foreground',
+          'h-6 w-6 rounded p-0 text-muted-foreground hover:bg-secondary hover:text-foreground',
         'dashboard-outline-icon-danger':
-          'h-7 rounded-lg border border-border bg-card px-2 text-muted-foreground shadow-none hover:bg-muted hover:text-destructive-foreground',
+          'h-6 w-6 rounded p-0 text-muted-foreground hover:bg-secondary hover:text-destructive-foreground',
         'dashboard-tab':
           'h-8 rounded-lg border border-border bg-card text-[11px] tracking-[0.08em] text-muted-foreground shadow-none hover:bg-muted disabled:opacity-45',
         'dashboard-tab-active':
           'h-8 rounded-lg border border-border bg-secondary text-[11px] tracking-[0.08em] text-foreground shadow-none hover:bg-secondary/80 disabled:opacity-45',
         'dashboard-tab-compact':
-          'h-auto rounded-lg border border-border bg-card px-3 py-1.5 text-sm font-normal tracking-normal text-muted-foreground shadow-none hover:bg-muted hover:text-foreground',
+          'h-auto rounded px-3 py-1.5 text-sm font-normal tracking-normal text-muted-foreground hover:bg-secondary hover:text-foreground',
         'dashboard-tab-compact-active':
-          'h-auto rounded-lg border border-border bg-secondary px-3 py-1.5 text-sm font-medium tracking-normal text-foreground shadow-none hover:bg-secondary/80',
+          'h-auto rounded bg-secondary px-3 py-1.5 text-sm font-medium tracking-normal text-foreground',
         'dashboard-run-list-item':
-          'h-auto w-full flex-col items-start justify-start gap-0 whitespace-normal rounded-none border-b border-border px-4 py-3 text-left hover:bg-secondary/50',
+          'h-auto w-full flex-col items-start justify-start gap-0 whitespace-normal rounded-none border-b border-border px-4 py-3 text-left transition-colors hover:bg-secondary/50',
         'dashboard-run-list-item-active':
-          'h-auto w-full flex-col items-start justify-start gap-0 whitespace-normal rounded-none border-b border-border bg-secondary px-4 py-3 text-left hover:bg-secondary/50',
+          'h-auto w-full flex-col items-start justify-start gap-0 whitespace-normal rounded-none border-b border-border bg-secondary px-4 py-3 text-left transition-colors hover:bg-secondary/50',
         'dashboard-context-toggle':
           'h-auto w-full items-center justify-between rounded-lg border border-border bg-background/60 px-4 py-3 text-left font-normal hover:bg-secondary/30',
         'dashboard-machine-trigger':

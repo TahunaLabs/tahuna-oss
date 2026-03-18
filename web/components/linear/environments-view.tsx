@@ -202,12 +202,12 @@ export function EnvironmentsView({
                                       <span className="inline-flex px-2 py-0.5 rounded text-xs bg-secondary text-foreground">
                                         {blob ? blob.filename : dataId}
                                       </span>
-                                      <Button
-                                        type="button"
-                                        variant="dashboard-outline-compact"
-                                        size="none"
-                                        onClick={() => onUnbindData(env.environment_id, dataId)}
-                                        disabled={busy}
+                                    <Button
+                                      type="button"
+                                      variant="dashboard-outline-compact-muted"
+                                      size="none"
+                                      onClick={() => onUnbindData(env.environment_id, dataId)}
+                                      disabled={busy}
                                       >
                                         Unbind
                                       </Button>

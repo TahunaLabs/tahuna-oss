@@ -177,7 +177,7 @@ export function StorageView({
             )}
             <Button
               type="submit"
-              variant="dashboard-primary-compact"
+              variant="dashboard-primary-compact-sm"
               size="none"
               disabled={selectedDataFiles.length === 0 || uploadingData}
             >
@@ -316,7 +316,7 @@ export function StorageView({
                           </Button>
                           <Button
                             type="button"
-                            variant="dashboard-icon-secondary"
+                            variant="dashboard-outline-icon-muted"
                             size="none"
                             disabled={artifactRenameBusyId === item.id}
                             onClick={onCancelRenameArtifact}

@@ -263,7 +263,7 @@ export function RunsView({
                         <AlertDialogTrigger asChild>
                           <Button
                             type="button"
-                            variant="dashboard-outline-icon-muted"
+                            variant="dashboard-icon-secondary"
                             size="none"
                             disabled={busy}
                           >
@@ -291,7 +291,7 @@ export function RunsView({
                     )}
                     <Button
                       type="button"
-                      variant="dashboard-outline-icon-muted"
+                      variant="dashboard-icon-secondary"
                       size="none"
                       onClick={() => onSelectRun(null)}
                     >
