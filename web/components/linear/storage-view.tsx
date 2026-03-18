@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useRef, useState } from "react"
 import {
   HardDrive,
   Plus,
@@ -16,6 +16,14 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet"
+import {
   formatBytes,
   MAX_ARTIFACT_NAME_CHARS,
   type StorageItem,
@@ -28,6 +36,8 @@ import type { FormEvent } from "react"
 type StorageViewProps = {
   selectedDataFiles: File[]
   uploadingData: boolean
+  uploadError: string
+  uploadMessage: string
   dataFileInputKey: number
   storageSearch: string
   storageSourceFilter: StorageSourceFilter
@@ -54,6 +64,8 @@ type StorageViewProps = {
 export function StorageView({
   selectedDataFiles,
   uploadingData,
+  uploadError,
+  uploadMessage,
   dataFileInputKey,
   storageSearch,
   storageSourceFilter,
@@ -77,16 +89,39 @@ export function StorageView({
   onNextStoragePage,
 }: StorageViewProps) {
   const [showFilters, setShowFilters] = useState(false)
-  const [showUpload, setShowUpload] = useState(false)
+  const [showUploadDrawer, setShowUploadDrawer] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const storageItems = storageResult?.items ?? []
   const storageTotal = storageResult?.total ?? 0
   const storageOffset = storageResult?.offset ?? 0
   const storageHasMore = storageResult?.has_more ?? false
   const hasData = storageItems.length > 0
+  const selectedFileCount = selectedDataFiles.length
+  const selectedTotalBytes = selectedDataFiles.reduce((total, file) => total + file.size, 0)
+
+  function openUploadPicker() {
+    if (uploadingData) return
+    const input = fileInputRef.current
+    if (!input) return
+    input.value = ""
+    input.click()
+  }
+
+  function openUploadDrawer(openPicker = false) {
+    setShowUploadDrawer(true)
+    if (openPicker) {
+      openUploadPicker()
+    }
+  }
+
+  function setUploadDrawerOpen(open: boolean) {
+    if (!open && uploadingData) return
+    setShowUploadDrawer(open)
+  }
 
   return (
-    <main className="flex-1 flex flex-col h-full">
+    <main className="relative flex-1 flex flex-col h-full">
       {/* Header */}
       <header className="flex items-center justify-between px-6 py-3 border-b border-border">
         <div className="flex items-center gap-2">
@@ -120,14 +155,25 @@ export function StorageView({
           </Button>
           <Button
             type="button"
-            variant={showUpload ? "dashboard-icon-secondary-active" : "dashboard-icon-secondary"}
+            variant={showUploadDrawer ? "dashboard-icon-secondary-active" : "dashboard-icon-secondary"}
             size="none"
-            onClick={() => setShowUpload(!showUpload)}
+            onClick={() => openUploadDrawer(true)}
+            disabled={uploadingData}
           >
             <Plus className="w-4 h-4" />
           </Button>
         </div>
       </header>
+
+      <input
+        key={dataFileInputKey}
+        ref={fileInputRef}
+        type="file"
+        multiple
+        disabled={uploadingData}
+        onChange={(e) => onSelectDataFiles(Array.from(e.target.files ?? []))}
+        className="hidden"
+      />
 
       {/* Filter bar */}
       {showFilters && (
@@ -155,35 +201,6 @@ export function StorageView({
               </select>
             </div>
           </div>
-        </div>
-      )}
-
-      {/* Upload panel */}
-      {showUpload && (
-        <div className="px-6 py-3 border-b border-border">
-          <form onSubmit={onUploadData} className="flex items-center gap-3">
-            <input
-              key={dataFileInputKey}
-              type="file"
-              multiple
-              disabled={uploadingData}
-              onChange={(e) => onSelectDataFiles(Array.from(e.target.files ?? []))}
-              className="text-sm text-muted-foreground file:mr-3 file:rounded file:border-0 file:bg-secondary file:px-3 file:py-1.5 file:text-sm file:text-foreground hover:file:bg-secondary/80"
-            />
-            {selectedDataFiles.length > 0 && (
-              <span className="text-xs text-muted-foreground">
-                {selectedDataFiles.length} file{selectedDataFiles.length > 1 ? "s" : ""} ({selectedDataFiles.map(f => formatBytes(f.size)).join(", ")})
-              </span>
-            )}
-            <Button
-              type="submit"
-              variant="dashboard-primary-compact-sm"
-              size="none"
-              disabled={selectedDataFiles.length === 0 || uploadingData}
-            >
-              {uploadingData ? "Uploading..." : "Upload"}
-            </Button>
-          </form>
         </div>
       )}
 
@@ -244,7 +261,7 @@ export function StorageView({
                   type="button"
                   variant="dashboard-primary-compact"
                   size="none"
-                  onClick={() => setShowUpload(true)}
+                  onClick={() => openUploadDrawer(true)}
                 >
                   Upload data
                 </Button>
@@ -384,6 +401,90 @@ export function StorageView({
           </div>
         </div>
       )}
+
+      <Sheet open={showUploadDrawer} onOpenChange={setUploadDrawerOpen}>
+        <SheetContent side="right" className="w-full max-w-sm p-0">
+          <form onSubmit={onUploadData} className="flex h-full flex-col">
+            <div className="border-b border-border px-4 py-3">
+              <SheetHeader>
+                <SheetTitle>Upload files</SheetTitle>
+                <SheetDescription>Data uploads for storage</SheetDescription>
+              </SheetHeader>
+            </div>
+
+            <div className="flex min-h-0 flex-1 flex-col px-4 py-3">
+              <p className="text-sm text-foreground">
+                {selectedFileCount > 0
+                  ? `${selectedFileCount} file${selectedFileCount > 1 ? "s" : ""} selected (${formatBytes(selectedTotalBytes)})`
+                  : "No files selected"}
+              </p>
+
+              {uploadError ? (
+                <p className="mt-2 rounded border border-red-400/40 bg-red-500/10 px-2.5 py-2 text-xs text-red-400">
+                  {uploadError}
+                </p>
+              ) : null}
+              {!uploadError && uploadMessage ? (
+                <p className="mt-2 rounded border border-border bg-secondary/40 px-2.5 py-2 text-xs text-muted-foreground">
+                  {uploadMessage}
+                </p>
+              ) : null}
+
+              {selectedFileCount > 0 ? (
+                <div className="mt-3 min-h-0 flex-1 rounded border border-border">
+                  <ul className="h-full divide-y divide-border overflow-y-auto">
+                    {selectedDataFiles.map((file) => (
+                      <li
+                        key={`${file.name}-${file.size}-${file.lastModified}`}
+                        className="flex items-center justify-between gap-3 px-2.5 py-2 text-xs"
+                      >
+                        <span className="min-w-0 truncate text-foreground">{file.name}</span>
+                        <span className="shrink-0 text-muted-foreground">{formatBytes(file.size)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : (
+                <p className="mt-3 text-xs text-muted-foreground">
+                  Choose files to start an upload. Errors will stay in this drawer for quick retry.
+                </p>
+              )}
+            </div>
+
+            <SheetFooter className="justify-between gap-2 border-t border-border px-4 py-3">
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="dashboard-outline-compact"
+                  size="none"
+                  onClick={openUploadPicker}
+                  disabled={uploadingData}
+                >
+                  Choose files
+                </Button>
+                <Button
+                  type="button"
+                  variant="dashboard-outline-icon-muted"
+                  size="none"
+                  onClick={() => onSelectDataFiles([])}
+                  disabled={uploadingData || selectedFileCount === 0}
+                >
+                  <X className="w-3 h-3" />
+                </Button>
+              </div>
+              <Button
+                type="submit"
+                variant="dashboard-primary-compact-sm"
+                size="none"
+                className="min-w-20"
+                disabled={selectedFileCount === 0 || uploadingData}
+              >
+                {uploadingData ? "Uploading..." : "Upload"}
+              </Button>
+            </SheetFooter>
+          </form>
+        </SheetContent>
+      </Sheet>
     </main>
   )
 }

@@ -45,6 +45,8 @@ export default function DashboardPage() {
 
   const [selectedDataFiles, setSelectedDataFiles] = useState<File[]>([])
   const [uploadingData, setUploadingData] = useState(false)
+  const [uploadError, setUploadError] = useState("")
+  const [uploadMessage, setUploadMessage] = useState("")
   const [dataFileInputKey, setDataFileInputKey] = useState(0)
   const [storageSourceFilter, setStorageSourceFilter] = useState<StorageSourceFilter>("all")
   const [storageSort, setStorageSort] = useState<StorageSort>("created_desc")
@@ -279,6 +281,8 @@ export default function DashboardPage() {
     if (selectedDataFiles.length === 0) return
 
     setUploadingData(true)
+    setUploadError("")
+    setUploadMessage("")
     setError("")
     setMessage("")
 
@@ -302,10 +306,10 @@ export default function DashboardPage() {
       setSelectedDataFiles([])
       setDataFileInputKey((current) => current + 1)
       setStorageReloadToken((current) => current + 1)
-      setMessage(uploadedCount === 1 ? "Uploaded 1 file." : `Uploaded ${uploadedCount} files.`)
+      setUploadMessage(uploadedCount === 1 ? "Uploaded 1 file." : `Uploaded ${uploadedCount} files.`)
     } catch (uploadError) {
       const uploadMessage = uploadError instanceof Error ? uploadError.message : "unexpected error"
-      setError(
+      setUploadError(
         uploadMessage === "Failed to fetch"
           ? "Upload failed. Check the R2 bucket CORS policy for PUT requests from this app origin."
           : uploadMessage,
@@ -502,11 +506,17 @@ export default function DashboardPage() {
             storageResult={storageResult}
             storageLoading={storageLoading}
             storageError={storageError}
+            uploadError={uploadError}
+            uploadMessage={uploadMessage}
             renamingStorageId={renamingStorageId}
             artifactRenameDraft={artifactRenameDraft}
             artifactRenameBusyId={artifactRenameBusyId}
             onUploadData={uploadData}
-            onSelectDataFiles={setSelectedDataFiles}
+            onSelectDataFiles={(files) => {
+              setUploadError("")
+              setUploadMessage("")
+              setSelectedDataFiles(files)
+            }}
             onStorageSearchChange={setStorageSearch}
             onStorageSourceFilterChange={setStorageSourceFilter}
             onStorageSortChange={setStorageSort}
