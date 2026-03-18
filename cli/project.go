@@ -782,7 +782,7 @@ func clearLinkedEnvironmentIDIfMatches(environmentID string) error {
 	if linkedID == "" || linkedID != environmentID {
 		return nil
 	}
-	if err := os.Remove(projectEnvironmentFilePath()); err != nil && !errors.Is(err, os.ErrNotExist) {
+	if err := os.RemoveAll(projectStateDir); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
 	return nil
