@@ -16,6 +16,7 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
+import { ActionsMenu } from "@/components/linear/actions-menu"
 import { Button } from "@/components/ui/button"
 
 interface SidebarProps {
@@ -29,7 +30,6 @@ interface SidebarProps {
 
 export function Sidebar({ activeView, onViewChange, userInitial, isDark, onThemeToggle, onLogout }: SidebarProps) {
   const [workspaceOpen, setWorkspaceOpen] = useState(true)
-  const [moreOpen, setMoreOpen] = useState(false)
 
   return (
     <aside className="w-56 h-screen bg-sidebar flex flex-col">
@@ -80,29 +80,35 @@ export function Sidebar({ activeView, onViewChange, userInitial, isDark, onTheme
                 active={activeView === "runs"}
                 onClick={() => onViewChange("runs")}
               />
-              <div className="relative">
-                <SidebarItem
-                  icon={<MoreHorizontal className="w-4 h-4" />}
-                  label="More"
-                  onClick={() => setMoreOpen(!moreOpen)}
-                />
-                {moreOpen && (
-                  <div className="absolute left-0 top-full mt-1 w-48 bg-popover border border-border rounded-lg shadow-lg py-1 z-50">
-                    <Link
-                      href="/machines"
-                      className="flex items-center gap-2 px-3 py-2 text-sm text-foreground hover:bg-secondary w-full"
-                    >
-                      <Monitor className="w-4 h-4" />
-                      <span>Machines</span>
-                    </Link>
+              <ActionsMenu
+                triggerLabel="Open more sidebar actions"
+                align="left"
+                triggerVariant="sidebar-item"
+                triggerClassName="w-full"
+                menuClassName="w-48"
+                triggerContent={(
+                  <>
+                    <MoreHorizontal className="w-4 h-4" />
+                    <span>More</span>
+                  </>
+                )}
+              >
+                {(close) => (
+                  <>
+                    <Button asChild type="button" variant="sidebar-menu-item" size="none">
+                      <Link href="/machines" onClick={close}>
+                        <Monitor className="w-4 h-4" />
+                        <span>Machines</span>
+                      </Link>
+                    </Button>
                     <div className="border-t border-border my-1" />
-                    <Button type="button" variant="sidebar-menu-item" size="none">
+                    <Button type="button" variant="sidebar-menu-item" size="none" onClick={close}>
                       <Settings className="w-4 h-4" />
                       <span>Customize sidebar</span>
                     </Button>
-                  </div>
+                  </>
                 )}
-              </div>
+              </ActionsMenu>
             </div>
           )}
         </div>

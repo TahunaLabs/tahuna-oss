@@ -1,8 +1,13 @@
 "use client"
 
 import { MoreHorizontal } from "lucide-react"
-import { useEffect, useRef, useState, type ComponentProps, type ReactNode } from "react"
+import { useState, type ComponentProps, type ReactNode } from "react"
 import { Button } from "@/components/ui/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
 
 type ActionsMenuProps = {
@@ -10,6 +15,8 @@ type ActionsMenuProps = {
   align?: "left" | "right"
   menuClassName?: string
   triggerVariant?: ComponentProps<typeof Button>["variant"]
+  triggerClassName?: string
+  triggerContent?: ReactNode
   children: (close: () => void) => ReactNode
 }
 
@@ -18,58 +25,33 @@ export function ActionsMenu({
   align = "right",
   menuClassName,
   triggerVariant = "dashboard-outline-icon-muted",
+  triggerClassName,
+  triggerContent,
   children,
 }: ActionsMenuProps) {
   const [open, setOpen] = useState(false)
-  const containerRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    if (!open) return
-
-    const onPointerDown = (event: PointerEvent) => {
-      const target = event.target as Node | null
-      if (!containerRef.current || !target) return
-      if (!containerRef.current.contains(target)) {
-        setOpen(false)
-      }
-    }
-
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setOpen(false)
-      }
-    }
-
-    document.addEventListener("pointerdown", onPointerDown)
-    document.addEventListener("keydown", onKeyDown)
-    return () => {
-      document.removeEventListener("pointerdown", onPointerDown)
-      document.removeEventListener("keydown", onKeyDown)
-    }
-  }, [open])
+  const contentAlign = align === "left" ? "start" : "end"
 
   return (
-    <div className="relative" ref={containerRef}>
-      <Button
-        type="button"
-        variant={triggerVariant}
-        size="none"
-        onClick={() => setOpen((current) => !current)}
-        aria-label={triggerLabel}
-      >
-        <MoreHorizontal className="w-4 h-4" />
-      </Button>
-      {open && (
-        <div
-          className={cn(
-            "absolute top-full mt-1 z-50 min-w-40 rounded-lg border border-border bg-popover py-1 shadow-lg",
-            align === "right" ? "right-0" : "left-0",
-            menuClassName,
-          )}
+    <DropdownMenu open={open} onOpenChange={setOpen}>
+      <DropdownMenuTrigger asChild>
+        <Button
+          type="button"
+          variant={triggerVariant}
+          size="none"
+          className={triggerClassName}
+          aria-label={triggerLabel}
         >
-          {children(() => setOpen(false))}
-        </div>
-      )}
-    </div>
+          {triggerContent ?? <MoreHorizontal className="w-4 h-4" />}
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        align={contentAlign}
+        sideOffset={4}
+        className={cn("min-w-40", menuClassName)}
+      >
+        {children(() => setOpen(false))}
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }
