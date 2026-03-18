@@ -83,8 +83,6 @@ export function StorageView({
   const storageTotal = storageResult?.total ?? 0
   const storageOffset = storageResult?.offset ?? 0
   const storageHasMore = storageResult?.has_more ?? false
-  const storageScanCapped = storageResult?.scan_capped ?? { data: false, run_artifact: false }
-  const hasScanCapWarning = storageScanCapped.data || storageScanCapped.run_artifact
   const hasData = storageItems.length > 0
 
   return (
@@ -216,17 +214,6 @@ export function StorageView({
       </div>
 
       {/* Content */}
-      {hasScanCapWarning && (
-        <div className="mx-6 mt-3 rounded border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
-          Showing partial storage results because the scan limit was reached
-          {storageScanCapped.data && storageScanCapped.run_artifact
-            ? " for data and artifacts."
-            : storageScanCapped.data
-              ? " for data."
-              : " for artifacts."}{" "}
-          Narrow your filters to inspect specific files.
-        </div>
-      )}
       {storageResult === undefined && storageLoading ? (
         <div className="flex-1 flex items-center justify-center">
           <p className="text-sm text-muted-foreground">Loading storage...</p>
@@ -281,10 +268,7 @@ export function StorageView({
                     className="border-b border-border hover:bg-secondary/50 group"
                   >
                     <td className="px-6 py-2.5">
-                      <div className="min-w-0">
-                        <p className="text-sm text-foreground truncate">{item.name}</p>
-                        <p className="mt-0.5 truncate font-mono text-[11px] text-muted-foreground">{item.path}</p>
-                      </div>
+                      <p className="text-sm text-foreground truncate">{item.name}</p>
                     </td>
                     <td className="px-3 py-2.5">
                       <span className="inline-flex px-2 py-0.5 rounded text-xs bg-secondary text-foreground">
@@ -295,7 +279,7 @@ export function StorageView({
                       {formatBytes(item.size)}
                     </td>
                     <td className="px-3 py-2.5 text-sm text-muted-foreground">
-                      {new Date(item.created_at).toLocaleString()}
+                      {new Date(item.created_at).toLocaleDateString()}
                     </td>
                     <td className="px-3 py-2.5 font-mono text-xs text-muted-foreground">
                       {item.source === "data" ? item.data_blob_id || "—" : item.run_id || "—"}
@@ -349,7 +333,7 @@ export function StorageView({
                           >
                             <Download className="w-3.5 h-3.5" />
                           </a>
-                          {item.source === "run_artifact" && (
+                          {item.source === "data" && (
                             <button
                               onClick={() => onStartRenameArtifact(item)}
                               disabled={artifactRenameBusyId !== null}
