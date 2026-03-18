@@ -1,6 +1,6 @@
 "use client"
 
-import { Server, Plus, Filter, Settings2, LayoutGrid, Play, Trash2, ExternalLink, Copy, Check, FileCode2, Share2, Users, X } from "lucide-react"
+import { Server, Filter, Settings2, LayoutGrid, Play, Trash2, ExternalLink, Copy, Check, FileCode2, Share2, Users, X } from "lucide-react"
 import { Fragment, useEffect, useState } from "react"
 import Link from "next/link"
 import {
@@ -215,10 +215,6 @@ export function EnvironmentsView({
         <div className="flex items-center gap-1">
           <Button type="button" variant="dashboard-tab-compact-active" size="none">
             All environments
-          </Button>
-          <Button type="button" variant="dashboard-tab-compact" size="none">
-            <Plus className="w-3.5 h-3.5" />
-            New view
           </Button>
         </div>
       </DashboardTabsHeader>
