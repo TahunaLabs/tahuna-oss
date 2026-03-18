@@ -2,158 +2,186 @@
 
 Audit date: 2026-03-18
 
-This document describes how Tahuna currently structures Cloudflare R2 object keys and how data/artifacts are written and read.
+This document describes how Tahuna currently structures Cloudflare R2 object keys and how storage read/write paths work after the storage index refactor.
 
 ## Scope
 
 - Source of truth is current implementation in `web/convex/*` and runtime callback contracts.
-- "Raw data" in this doc means user/project input data (direct uploads plus sync-managed data manifests/blobs).
+- "Raw data" in this doc means direct uploads plus sync-managed manifests/blobs.
 - "Artifacts" means run outputs uploaded by runtime callbacks.
 
-## Single Bucket, Prefix-Based Separation
+## Single Bucket + Indexed Metadata
 
-Tahuna currently uses one R2 bucket via `@convex-dev/r2`. Separation is logical (prefix-based), not per-bucket.
+Tahuna uses one R2 bucket via `@convex-dev/r2`. Separation remains prefix-based in object keys.
+
+Tahuna now uses a canonical Convex index table (`storageObjects`) for storage listing and ownership scoping:
+
+- `source`: `data | run_artifact`
+- `objectKind`: `data_upload | data_manifest | run_artifact`
+- `key`, `name`, `size`, `createdAt`, optional `runId`, optional `dataBlobId`, optional `dataId`
+
+`storageObjects` is authoritative for storage list surfaces; R2 is authoritative for object bytes.
+
+## Canonical R2 Key Patterns
 
 | Object class | Canonical key pattern | Primary writers | Primary readers |
 |---|---|---|---|
 | Sync blobs (dedup) | `<userId>/blobs/<sha256>` | CLI sync (`/api/sync/blobs/upload-url`) | Runtime bootstrap materialization |
 | Code manifests | `<userId>/environment/<environmentId>/manifests/code/<manifestHash>.json` | CLI sync (`/api/sync/manifests/upload-url`) | Runtime bootstrap planner |
-| Data manifests | `<userId>/data/<dataId>/manifests/<manifestHash>.json` | CLI sync (`/api/sync/manifests/upload-url`) | Runtime bootstrap planner, dashboard Storage data surface |
-| Direct uploaded data file | `<userId>/data/<blobId>__<urlEncodedFilename>` | Dashboard data upload (`api.data.generateUploadUrl`) | Dashboard data list, CLI `/api/data`, dashboard Storage data surface |
-| Run artifact | `runs/<environmentId>/<runCreatedAtMs>/output/<sanitizedName>` | Runtime callback (`/api/runs/{runId}/runtime/artifacts/upload-url`) | Dashboard Storage artifact surface, run detail |
+| Data manifests | `<userId>/data/<dataId>/manifests/<manifestHash>.json` | CLI sync (`/api/sync/manifests/upload-url`) + sync commit index upsert | Runtime bootstrap planner, storage data surface |
+| Direct uploaded data file | `<userId>/data/<blobId>__<urlEncodedFilename>` | Dashboard data upload (`api.data.generateUploadUrl`) | Dashboard data list, CLI `/api/data`, storage data surface |
+| Run artifact | `runs/<environmentId>/<runCreatedAtMs>/output/<sanitizedName>` | Runtime callback (`/api/runs/{runId}/runtime/artifacts/upload-url`) | Storage artifact surface, run detail |
 
-### Legacy/compat fields
+### Legacy field
 
-- `environments.artifacts` exists in schema and is set to `<userId>/environment/<environmentId>`, but runtime output artifacts are written under `runs/<environmentId>/<timestamp>/output/...`.
-- Treat `environments.artifacts` as a legacy environment prefix marker, not the canonical runtime artifact key root.
+- `environments.artifacts` still exists and is populated (`<userId>/environment/<environmentId>`), but runtime artifacts are written under `runs/<environmentId>/<timestamp>/output/...`.
 
 ## Write Flows
 
 ### 1) Direct data upload (dashboard)
 
 1. Client requests `api.data.generateUploadUrl(filename, size_bytes)`.
-2. Backend allocates `blobId` and writes key:
+2. Backend allocates `blobId` and key:
    - `<userId>/data/<blobId>__<urlEncodedFilename>`
-3. Client uploads directly to signed R2 URL.
-4. `onUpload` validates:
-   - key starts with `<userId>/data/`
-   - object size <= `UPLOAD_LIMITS_BYTES.dataBlob`
-5. Dashboard UI then calls `api.data.syncMetadata({ key })` after each successful PUT so new objects appear in metadata-backed lists faster.
+3. Client uploads to signed R2 URL.
+4. `onUpload` validates key shape and max size (`UPLOAD_LIMITS_BYTES.dataBlob`).
+5. `onUpload` upserts `storageObjects` row (`source=data`, `objectKind=data_upload`).
+6. Dashboard calls `api.data.syncMetadata({ key })` after PUT.
 
-Notes:
-- This is file-style upload, not manifest/dedup sync.
+### 2) CLI sync (code + data)
 
-### 2) CLI sync (code + project data/raw data)
-
-1. CLI computes file hashes and asks `/api/sync/blobs/missing`.
-2. Missing hashes get upload URLs from `/api/sync/blobs/upload-url`.
-3. Blob objects are uploaded to:
+1. CLI computes hashes, calls `/api/sync/blobs/missing`.
+2. Missing blobs uploaded to:
    - `<userId>/blobs/<sha256>`
-4. CLI builds and uploads manifests through `/api/sync/manifests/upload-url`:
-   - code manifest key: `<userId>/environment/<environmentId>/manifests/code/<manifestHash>.json`
-   - data manifest key: `<userId>/data/<dataId>/manifests/<manifestHash>.json`
-5. CLI finalizes with `/api/sync/commit` (hash-based), which updates environment sync pointers (`latestCodeManifestHash`, `latestDataManifestHash`).
-
-Notes:
-- Data manifests and blobs are the canonical project data snapshot model used by runtime bootstrap.
+3. CLI uploads manifests via `/api/sync/manifests/upload-url`.
+4. CLI finalizes with `/api/sync/commit` (`code_manifest_hash` / `data_manifest_hash`).
+5. Environment sync pointers are updated.
+6. If `data_manifest_hash` is committed, backend upserts `storageObjects` row for:
+   - `<userId>/data/<dataId>/manifests/<manifestHash>.json`
 
 ### 3) Runtime artifact upload
 
-1. Runtime posts artifact candidates to:
+1. Runtime requests upload URLs:
    - `POST /api/runs/{runId}/runtime/artifacts/upload-url`
-2. Backend reads run output prefix (`runs/<envId>/<timestamp>/output`) from the run row.
-3. Each artifact name is sanitized (`\` -> `/`, strip leading slash, replace `..` with `_`) and mapped to:
-   - `<outputPath>/<safeName>`
-4. Runtime uploads files to signed R2 URLs.
-5. Runtime commits keys via:
+2. Backend uses run output prefix `runs/<envId>/<timestamp>/output`.
+3. Runtime uploads artifacts to signed R2 URLs.
+4. Runtime commits keys:
    - `POST /api/runs/{runId}/runtime/artifacts/commit`
-6. Backend appends committed keys to `run.artifactKeys` (deduplicated by key).
+5. Backend commit logic:
+   - accepts only keys under run output prefix
+   - verifies object existence (metadata or HEAD fallback)
+   - deduplicates and appends to `run.artifactKeys`
+   - upserts `storageObjects` rows (`source=run_artifact`, `objectKind=run_artifact`)
 
-### 4) Artifact rename (dashboard Storage)
+### 4) Artifact rename (dashboard storage)
 
-1. `api.storage.renameArtifact` validates ownership and conflicts.
-2. Backend performs R2 copy from old key to new sibling key.
-3. Run record `artifactKeys` is patched (old -> new).
-4. Old object is deleted best-effort.
+1. `api.storage.renameArtifact` prepares/validates ownership and conflicts.
+2. Backend copies R2 object (`CopyObject`) from old key to new sibling key.
+3. Finalize step updates:
+   - `run.artifactKeys` old->new
+   - matching `storageObjects` row old key->new key
+4. Old object delete is best-effort (`cleanup_warning` on failure).
 
 ## Read Flows
 
-### 1) Runtime bootstrap read path
+### 1) Runtime bootstrap
 
-1. Runtime requests `GET /api/runs/{runId}/runtime/bootstrap`.
-2. Backend loads pinned manifest hashes + keys from run payload.
-3. Code/data manifest JSON is fetched from R2 and hash-verified.
-4. Manifest entries are resolved to blob keys (`<userId>/blobs/<sha256>`), then signed download URLs are generated.
-5. Runtime receives explicit entry list with path/mode/size/hash/url and materializes workspace/data.
+1. Runtime requests:
+   - `GET /api/runs/{runId}/runtime/bootstrap`
+2. Backend loads pinned manifest hashes/keys from run payload.
+3. Code/data manifests are fetched from R2 and hash-verified.
+4. Blob keys (`<userId>/blobs/<sha256>`) are resolved to signed download URLs.
+5. Runtime materializes workspace/data from explicit entries.
 
-### 2) Dashboard Storage read path (`api.storage.list`)
+### 2) Storage list (`api.storage.list`)
 
-Storage data source currently merges:
+Storage list is now index-backed:
 
-- Direct upload data rows from `internal.data.internalList`:
-  - keys shaped as `<userId>/data/<blobId>__<filename>`
-- Environment-referenced data manifests:
-  - derived from `latest_data_manifest_hash` and `bound_data_manifest_hashes`
-  - keys shaped as `<userId>/data/<dataId>/manifests/<hash>.json`
-  - metadata lookup first; falls back to signed URL lookup
-- Run artifact rows from `run.artifactKeys`
+1. Query `storageObjects` for user (optionally filtered by `source`).
+2. Apply search + sort + pagination in Convex.
+3. Hydrate visible page rows with R2 metadata/URLs (`getMetadata`/`getUrl`).
 
-Then `storage.list` applies:
-- source filter (`all`, `data`, `run_artifact`)
-- search
-- sort
-- pagination
+Important:
 
-Important scope note:
-- The data-manifest branch is environment-reference based; it includes manifests pointed to by environment fields (`latest_data_manifest_hash`, `bound_data_manifest_hashes`), not every manifest object that may exist in R2.
+- `storageObjects` is the canonical list surface.
+- No R2-wide scan/merge of environment/run tables during list.
 
 ### 3) CLI `/api/data` read path
 
-`/api/data` and `/api/data/{id}` currently use `internal.data.internalList`, which only includes top-level direct upload keys shaped as:
-- `<userId>/data/<blobId>__<filename>`
+`/api/data` and `/api/data/{id}` use `internal.data.internalList`, which now reads indexed `data_upload` rows from `storageObjects` and resolves download URLs from R2.
 
-It does not enumerate sync data manifests or dedup blobs directly.
+It does not list dedup blobs directly.
 
-## Cleanup and Deletion Behavior
-
-### Environment delete
-
-Environment delete performs storage cleanup by:
-
-- deleting collected run artifact keys
-- deleting unreferenced dedup blobs `<userId>/blobs/<sha256>` (manifest-reference aware)
-- deleting environment prefix `<userId>/environment/<environmentId>/...`
-- deleting data prefix `<userId>/data/<dataId>/...` when no longer referenced
-- deleting `runs/<environmentId>/...` prefix
-
-Timing note:
-- Part of dedup/blob/prefix cleanup runs through a scheduled internal action (`internalCleanupDedupBlobs`) after the environment delete mutation queues it.
+## Cleanup and Deletion
 
 ### Run delete
 
-Run delete removes run/telemetry rows and handles pod termination, but does not independently perform full R2 artifact-prefix garbage collection. Environment deletion remains the broad cleanup path.
+Run delete:
 
-## Current Operational Caveats
+- removes indexed artifact rows for that run keys from `storageObjects`
+- removes run DB rows/events/logs/metrics
+- does not perform full R2 prefix garbage collection by itself
 
-- Metadata indexing is not strictly immediate; some list paths rely on metadata and may lag object writes.
-- Data listing uses scan windows in `internal.data.internalList` (`MAX_LIST_SCAN_PAGES`, bounded page size), so very large buckets can return `scan_capped`.
-- Artifact listing is capped by `MAX_ARTIFACTS_SCANNED` in `storage.list`.
-- Prefix cleanup helper (`deleteObjectsByPrefix`) is bounded (100 pages x 100 keys); cleanup is best-effort and may require follow-up passes in extreme key volumes.
+### Environment delete
 
-## Terminology Mapping (Current)
+Environment delete:
 
-- "Raw data" (user wording) maps to:
-  - direct uploaded data files (`<userId>/data/<blobId>__<filename>`)
-  - sync-managed data manifests (`<userId>/data/<dataId>/manifests/<hash>.json`)
-  - dedup blobs (`<userId>/blobs/<sha256>`) referenced by manifests
-- "Artifacts" maps to run output objects under:
-  - `runs/<environmentId>/<runCreatedAtMs>/output/...`
+- deletes collected run artifact objects (best-effort)
+- deletes indexed keys for run artifacts and manifest refs
+- deletes indexed rows by run/data prefixes for the removed environment
+- schedules dedup cleanup action (`internalCleanupDedupBlobs`) which:
+  - removes unreferenced dedup blobs
+  - deletes environment/data/run prefixes in R2 (best-effort bounded loop)
+
+## Operational Caveats
+
+- If objects were created before indexing, they are not listed until indexed/backfilled.
+- If an indexed key is missing in R2, list hydration drops that item from the returned page.
+- Cleanup helpers remain best-effort for very large key volumes.
+
+## CLI/API Commands (List and Delete)
+
+### CLI listing
+
+- `tahuna data list`
+- `tahuna data show <data_id>`
+- `tahuna run list`
+- `tahuna run show <run_id|run_name>`
+
+### CLI delete
+
+- `tahuna run rm <run_id|run_name|pattern>... [--all|-a] [--cancel|-c] [--force|-f]`
+- `tahuna env rm <env_id> | --id <env_id> | --all|-a`
+
+Notes:
+
+- There is no dedicated `tahuna data rm` command currently.
+- There is no dedicated CLI artifact delete command currently; artifact removal is tied to run/environment lifecycle.
+
+### HTTP endpoints used by CLI/runtime
+
+- `GET /api/data`
+- `GET /api/data/{data_id}`
+- `GET /api/runs`
+- `DELETE /api/runs/{run_id}`
+- `DELETE /api/environments/{environment_id}`
+- `POST /api/runs/{runId}/runtime/artifacts/upload-url`
+- `POST /api/runs/{runId}/runtime/artifacts/commit`
+
+## Terminology Mapping
+
+- "Raw data":
+  - direct uploads: `<userId>/data/<blobId>__<filename>`
+  - data manifests: `<userId>/data/<dataId>/manifests/<hash>.json`
+  - dedup blobs: `<userId>/blobs/<sha256>`
+- "Artifacts":
+  - run outputs: `runs/<environmentId>/<runCreatedAtMs>/output/...`
 
 ## Implementation References
 
-- Data upload/list: `web/convex/data.ts`
-- Sync key construction + upload URL routes: `web/convex/cli/shared.ts`, `web/convex/cli/sync.ts`
-- Runtime manifest/bootstrap read + run output path creation: `web/convex/runs.ts`
-- Runtime artifact upload/commit HTTP route: `web/convex/cli/runs.ts`
-- Storage aggregation/listing/rename: `web/convex/storage.ts`
-- Environment delete cleanup and prefix deletion: `web/convex/environments.ts`
+- Data upload/list and data index upsert: `web/convex/data.ts`
+- Sync key construction/routes: `web/convex/cli/shared.ts`, `web/convex/cli/sync.ts`
+- Runtime bootstrap + artifact commit/indexing: `web/convex/runs.ts`, `web/convex/cli/runs.ts`
+- Storage index-backed list + artifact rename: `web/convex/storage.ts`
+- Environment cleanup + manifest index upsert: `web/convex/environments.ts`
+- Storage index schema: `web/convex/schema.ts`
