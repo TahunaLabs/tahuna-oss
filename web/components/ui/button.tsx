@@ -20,12 +20,6 @@ const buttonVariants = cva(
           'hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50',
         link: 'text-primary underline-offset-4 hover:underline',
         pill: 'bg-card border border-border rounded-full text-foreground hover:bg-foreground/5',
-        sidebar:
-          'w-full justify-start gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-foreground/70 hover:bg-secondary/60 hover:text-foreground',
-        'sidebar-active':
-          'w-full justify-start gap-3 rounded-lg px-3 py-2.5 text-sm font-medium bg-primary/10 text-primary hover:bg-primary/10',
-        'sidebar-danger':
-          'w-full justify-start gap-3 rounded-lg px-3 py-2.5 text-sm text-rose-300/80 hover:bg-rose-900/20 hover:text-rose-200',
         'sidebar-brand':
           'h-auto justify-start gap-2 rounded px-1.5 py-1 text-sm font-medium text-sidebar-foreground hover:bg-sidebar-accent',
         'sidebar-icon':
@@ -42,12 +36,6 @@ const buttonVariants = cva(
           'h-7 w-full justify-start gap-2 px-2 text-[13px] font-normal text-muted-foreground hover:bg-muted hover:text-foreground rounded-lg',
         'dashboard-nav-active':
           'h-7 w-full justify-start gap-2 px-2 text-left text-[13px] font-medium bg-secondary text-foreground rounded-lg',
-        'dashboard-logout':
-          'h-7 w-full justify-start gap-2 px-2 text-[13px] font-normal text-muted-foreground hover:bg-muted hover:text-foreground rounded-lg',
-        'dashboard-top-link':
-          'h-auto px-0 text-[13.5px] font-normal text-muted-foreground hover:bg-transparent hover:text-foreground',
-        'dashboard-icon':
-          'h-7 w-7 p-0 text-muted-foreground hover:bg-muted hover:text-foreground rounded-lg',
         'dashboard-icon-secondary':
           'rounded p-1.5 text-muted-foreground hover:bg-secondary hover:text-foreground',
         'dashboard-icon-secondary-active':
@@ -72,10 +60,6 @@ const buttonVariants = cva(
           'h-6 w-6 rounded p-0 text-muted-foreground hover:bg-secondary hover:text-foreground',
         'dashboard-outline-icon-danger':
           'h-6 w-6 rounded p-0 text-muted-foreground hover:bg-secondary hover:text-destructive-foreground',
-        'dashboard-tab':
-          'h-8 rounded-lg border border-border bg-card text-[11px] tracking-[0.08em] text-muted-foreground shadow-none hover:bg-muted disabled:opacity-45',
-        'dashboard-tab-active':
-          'h-8 rounded-lg border border-border bg-secondary text-[11px] tracking-[0.08em] text-foreground shadow-none hover:bg-secondary/80 disabled:opacity-45',
         'dashboard-tab-compact':
           'h-auto rounded px-3 py-1.5 text-sm font-normal tracking-normal text-muted-foreground hover:bg-secondary hover:text-foreground',
         'dashboard-tab-compact-active':
@@ -86,8 +70,6 @@ const buttonVariants = cva(
           'h-auto w-full flex-col items-start justify-start gap-0 whitespace-normal rounded-none border-b border-border bg-secondary px-4 py-3 text-left transition-colors hover:bg-secondary/50',
         'dashboard-context-toggle':
           'h-auto w-full items-center justify-between rounded-lg border border-border bg-background/60 px-4 py-3 text-left font-normal hover:bg-secondary/30',
-        'dashboard-machine-trigger':
-          'h-auto w-full justify-between gap-3 rounded-lg border border-border bg-card px-3 py-2.5 text-left font-normal text-foreground shadow-none hover:bg-muted disabled:opacity-60',
       },
       size: {
         default: 'h-9 px-4 py-2 has-[>svg]:px-3',
