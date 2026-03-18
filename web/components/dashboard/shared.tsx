@@ -37,6 +37,11 @@ export type StorageListResult = {
   limit: number
   has_more: boolean
   next_offset: number | null
+  next_cursor: string | null
+  scan_capped: {
+    data: boolean
+    run_artifact: boolean
+  }
 }
 
 export type EnvironmentRow = {
