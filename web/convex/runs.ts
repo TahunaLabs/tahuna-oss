@@ -849,21 +849,57 @@ async function listByUserId(ctx: QueryCtx, userId: string) {
   };
 }
 
-async function getOwnedRun(ctx: QueryCtx | MutationCtx, userId: string, runId: Id<"runs">) {
+async function getAccessibleRun(
+  ctx: QueryCtx | MutationCtx,
+  userId: string,
+  runId: Id<"runs">,
+  requiredPermission: "read" | "edit" = "edit",
+) {
   const row = await ctx.db.get("runs", runId);
-  if (!row || row.userId !== userId) {
+  if (!row) {
+    throw new ConvexError("run not found");
+  }
+  if (row.userId === userId) {
+    return row;
+  }
+  const shares = await ctx.db
+    .query("shares")
+    .withIndex("by_resource", (q) => q.eq("resourceType", "run").eq("resourceId", String(runId)))
+    .collect();
+  const hasAccess = shares.some((s) => {
+    if (s.grantedToUserId !== userId) return false;
+    if (requiredPermission === "read") return true;
+    return s.permission === "edit";
+  });
+  if (!hasAccess) {
     throw new ConvexError("run not found");
   }
   return row;
 }
 
-async function getOwnedEnvironment(
+async function getAccessibleEnvironment(
   ctx: QueryCtx | MutationCtx,
   userId: string,
   environmentId: Id<"environments">,
+  requiredPermission: "read" | "edit" = "edit",
 ) {
   const env = await ctx.db.get("environments", environmentId);
-  if (!env || env.userId !== userId) {
+  if (!env) {
+    throw new ConvexError("environment not found");
+  }
+  if (env.userId === userId) {
+    return env;
+  }
+  const shares = await ctx.db
+    .query("shares")
+    .withIndex("by_resource", (q) => q.eq("resourceType", "environment").eq("resourceId", String(environmentId)))
+    .collect();
+  const hasAccess = shares.some((s) => {
+    if (s.grantedToUserId !== userId) return false;
+    if (requiredPermission === "read") return true;
+    return s.permission === "edit";
+  });
+  if (!hasAccess) {
     throw new ConvexError("environment not found");
   }
   return env;
@@ -1091,7 +1127,7 @@ async function createRunForUserId(
     enqueue_provisioning?: boolean;
   },
 ) {
-  const env = await getOwnedEnvironment(ctx, args.userId, args.environmentId);
+  const env = await getAccessibleEnvironment(ctx, args.userId, args.environmentId);
   const codeManifestHash = env.latestCodeManifestHash;
   const dataManifestHash = env.latestDataManifestHash;
   const dataId = env.dataId || String(env._id);
@@ -1157,7 +1193,7 @@ async function cancelRunForUserId(
   runId: Id<"runs">,
   force: boolean,
 ) {
-  const row = await getOwnedRun(ctx, userId, runId);
+  const row = await getAccessibleRun(ctx, userId, runId);
 
   if (TERMINAL_STATUSES.has(row.status)) {
     throw new ConvexError(`run is already ${row.status}`);
@@ -1243,7 +1279,7 @@ async function deleteRunForUserId(
   runId: Id<"runs">,
   options?: { cancelActive?: boolean; force?: boolean },
 ) {
-  let row = await getOwnedRun(ctx, userId, runId);
+  let row = await getAccessibleRun(ctx, userId, runId);
   const shouldCancelActive = options?.cancelActive === true || options?.force === true;
   const shouldForceDelete = options?.force === true;
   let forcedTerminationQueued = false;
@@ -1260,7 +1296,7 @@ async function deleteRunForUserId(
       }
     } else {
       await cancelRunForUserId(ctx, userId, runId, false);
-      row = await getOwnedRun(ctx, userId, runId);
+      row = await getAccessibleRun(ctx, userId, runId);
       if (ACTIVE_STATUSES.has(row.status)) {
         throw new ConvexError("cancellation requested; run is still shutting down");
       }
@@ -1284,7 +1320,7 @@ async function deleteRunForUserId(
 }
 
 async function renameRunForUserId(ctx: MutationCtx, userId: string, runId: Id<"runs">, name: string) {
-  const row = await getOwnedRun(ctx, userId, runId);
+  const row = await getAccessibleRun(ctx, userId, runId);
   const nextName = validateRunName(name);
   const currentName = getRunName(row);
   if (normalizeRunName(currentName) === nextName && row.name) {
@@ -1329,7 +1365,7 @@ export const get = query({
   returns: runResponseValidator,
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
-    const row = await getOwnedRun(ctx, String(user._id), args.runId);
+    const row = await getAccessibleRun(ctx, String(user._id), args.runId, "read");
     return toRunResponse(row);
   },
 });
@@ -1339,7 +1375,7 @@ export const getLogs = query({
   returns: runLogsResponseValidator,
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
-    const row = await getOwnedRun(ctx, String(user._id), args.runId);
+    const row = await getAccessibleRun(ctx, String(user._id), args.runId, "read");
     return toRunLogsResponse(ctx, row);
   },
 });
@@ -1349,7 +1385,7 @@ export const getRunLogs = query({
   returns: runLogsOnlyResponseValidator,
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
-    const row = await getOwnedRun(ctx, String(user._id), args.runId);
+    const row = await getAccessibleRun(ctx, String(user._id), args.runId, "read");
     return toRunLogsOnlyResponse(ctx, row);
   },
 });
@@ -1359,7 +1395,7 @@ export const getRunMetrics = query({
   returns: runMetricsOnlyResponseValidator,
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
-    const row = await getOwnedRun(ctx, String(user._id), args.runId);
+    const row = await getAccessibleRun(ctx, String(user._id), args.runId, "read");
     return toRunMetricsOnlyResponse(ctx, row);
   },
 });
@@ -1368,7 +1404,7 @@ export const internalGetLogs = internalQuery({
   args: { userId: v.string(), runId: v.id("runs") },
   returns: runLogsResponseValidator,
   handler: async (ctx, args) => {
-    const row = await getOwnedRun(ctx, args.userId, args.runId);
+    const row = await getAccessibleRun(ctx, args.userId, args.runId, "read");
     return toRunLogsResponse(ctx, row);
   },
 });
@@ -1418,7 +1454,7 @@ export const internalGet = internalQuery({
   args: { userId: v.string(), runId: v.id("runs") },
   returns: runResponseValidator,
   handler: async (ctx, args) => {
-    const row = await getOwnedRun(ctx, args.userId, args.runId);
+    const row = await getAccessibleRun(ctx, args.userId, args.runId, "read");
     return toRunResponse(row);
   },
 });

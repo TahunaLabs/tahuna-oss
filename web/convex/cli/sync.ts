@@ -12,7 +12,7 @@ import {
   parseSyncKind,
   r2,
   readJsonBody,
-  requireOwnedEnvironment,
+  requireAccessibleEnvironment,
 } from "@convex/cli/shared";
 import { internal } from "@convex/_generated/api";
 import {
@@ -84,7 +84,7 @@ export const listMissingBlobHashes = httpAction(async (ctx, request) => {
     });
   }
 
-  const ownedEnvironment = await requireOwnedEnvironment(ctx, userId, environmentId);
+  const ownedEnvironment = await requireAccessibleEnvironment(ctx, userId, environmentId);
   if (!ownedEnvironment) {
     return new Response(JSON.stringify({ detail: "environment not found" }), {
       status: 404,
@@ -170,7 +170,7 @@ export const createBlobUploadUrl = httpAction(async (ctx, request) => {
     });
   }
 
-  const ownedEnvironment = await requireOwnedEnvironment(ctx, userId, environmentId);
+  const ownedEnvironment = await requireAccessibleEnvironment(ctx, userId, environmentId);
   if (!ownedEnvironment) {
     return new Response(JSON.stringify({ detail: "environment not found" }), {
       status: 404,
@@ -250,7 +250,7 @@ export const createManifestUploadUrl = httpAction(async (ctx, request) => {
     });
   }
 
-  const ownedEnvironment = await requireOwnedEnvironment(ctx, userId, environmentId);
+  const ownedEnvironment = await requireAccessibleEnvironment(ctx, userId, environmentId);
   if (!ownedEnvironment) {
     return new Response(JSON.stringify({ detail: "environment not found" }), {
       status: 404,
@@ -361,7 +361,7 @@ export const commitSync = httpAction(async (ctx, request) => {
     );
   }
   const typedEnvironmentId = environmentId as Id<"environments">;
-  const ownedEnvironment = await requireOwnedEnvironment(ctx, userId, environmentId);
+  const ownedEnvironment = await requireAccessibleEnvironment(ctx, userId, environmentId);
   if (!ownedEnvironment) {
     return new Response(JSON.stringify({ detail: "environment not found" }), {
       status: 404,

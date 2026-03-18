@@ -363,13 +363,29 @@ async function listByUserId(ctx: QueryCtx, userId: string) {
   };
 }
 
-async function getOwnedEnvironment(
+async function getAccessibleEnvironment(
   ctx: QueryCtx | MutationCtx,
   userId: string,
   environmentId: Id<"environments">,
+  requiredPermission: "read" | "edit" = "edit",
 ) {
   const row = await ctx.db.get("environments", environmentId);
-  if (!row || row.userId !== userId) {
+  if (!row) {
+    throw new ConvexError("environment not found");
+  }
+  if (row.userId === userId) {
+    return row;
+  }
+  const shares = await ctx.db
+    .query("shares")
+    .withIndex("by_resource", (q) => q.eq("resourceType", "environment").eq("resourceId", String(environmentId)))
+    .collect();
+  const hasAccess = shares.some((s) => {
+    if (s.grantedToUserId !== userId) return false;
+    if (requiredPermission === "read") return true;
+    return s.permission === "edit";
+  });
+  if (!hasAccess) {
     throw new ConvexError("environment not found");
   }
   return row;
@@ -455,7 +471,7 @@ async function bindDataForUserId(
     data_ids: string[];
   },
 ) {
-  const env = await getOwnedEnvironment(ctx, args.userId, args.environmentId);
+  const env = await getAccessibleEnvironment(ctx, args.userId, args.environmentId);
   const requested = normalizeDataIdList(args.data_ids);
   if (requested.length === 0) {
     throw new ConvexError("at least one data id is required");
@@ -487,7 +503,7 @@ async function unbindDataForUserId(
     data_ids: string[];
   },
 ) {
-  const env = await getOwnedEnvironment(ctx, args.userId, args.environmentId);
+  const env = await getAccessibleEnvironment(ctx, args.userId, args.environmentId);
   const requested = new Set(normalizeDataIdList(args.data_ids));
   if (requested.size === 0) {
     throw new ConvexError("at least one data id is required");
@@ -517,7 +533,7 @@ async function updateEnvironmentSpecsForUserId(
     version?: string;
   },
 ) {
-  const env = await getOwnedEnvironment(ctx, args.userId, args.environmentId);
+  const env = await getAccessibleEnvironment(ctx, args.userId, args.environmentId);
   const nextGpuType = typeof args.gpu_type === "string" && args.gpu_type.trim() !== "" ? args.gpu_type.trim() : env.gpuType;
   const nextGpuCount = typeof args.gpu_count === "number" ? args.gpu_count : env.gpuCount;
   const nextVolumeGb = typeof args.volume_gb === "number" ? args.volume_gb : env.volumeGb;
@@ -568,7 +584,7 @@ async function updateEnvironmentConfigForUserId(
     config_text: string;
   },
 ) {
-  await getOwnedEnvironment(ctx, args.userId, args.environmentId);
+  await getAccessibleEnvironment(ctx, args.userId, args.environmentId);
 
   let next;
   try {
@@ -599,7 +615,7 @@ async function updateEnvironmentConfigForUserId(
 }
 
 async function removeEnvironmentForUserId(ctx: MutationCtx, userId: string, environmentId: Id<"environments">) {
-  const env = await getOwnedEnvironment(ctx, userId, environmentId);
+  const env = await getAccessibleEnvironment(ctx, userId, environmentId);
   const artifactKeys = new Set<string>();
   const siblingEnvironments = await ctx.db
     .query("environments")
@@ -696,7 +712,7 @@ export const getConfig = query({
   returns: environmentConfigResponseValidator,
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
-    const row = await getOwnedEnvironment(ctx, String(user._id), args.environmentId);
+    const row = await getAccessibleEnvironment(ctx, String(user._id), args.environmentId, "read");
     return toEnvironmentConfigResponse(row);
   },
 });
@@ -772,7 +788,7 @@ export const internalGet = internalQuery({
   args: { userId: v.string(), environmentId: v.id("environments") },
   returns: environmentResponseValidator,
   handler: async (ctx, args) => {
-    const row = await getOwnedEnvironment(ctx, args.userId, args.environmentId);
+    const row = await getAccessibleEnvironment(ctx, args.userId, args.environmentId, "read");
     return toEnvironmentResponse(row);
   },
 });
@@ -896,7 +912,7 @@ export const internalCommitSyncPointers = internalMutation({
   },
   returns: commitSyncPointersResponseValidator,
   handler: async (ctx, args) => {
-    const env = await getOwnedEnvironment(ctx, args.userId, args.environmentId);
+    const env = await getAccessibleEnvironment(ctx, args.userId, args.environmentId);
     const patch: {
       latestSyncAt: number;
       latestCodeManifestHash?: string;

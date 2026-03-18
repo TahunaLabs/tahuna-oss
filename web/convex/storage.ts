@@ -158,9 +158,20 @@ function buildRenamedKey(currentKey: string, nextName: string) {
   }
 }
 
-async function getOwnedRun(ctx: MutationCtx, userId: string, runId: Id<"runs">) {
+async function getAccessibleRun(ctx: MutationCtx, userId: string, runId: Id<"runs">) {
   const run = await ctx.db.get("runs", runId)
-  if (!run || run.userId !== userId) {
+  if (!run) {
+    throw new ConvexError("run not found")
+  }
+  if (run.userId === userId) {
+    return run
+  }
+  const shares = await ctx.db
+    .query("shares")
+    .withIndex("by_resource", (q) => q.eq("resourceType", "run").eq("resourceId", String(runId)))
+    .collect()
+  const hasAccess = shares.some((s) => s.grantedToUserId === userId && s.permission === "edit")
+  if (!hasAccess) {
     throw new ConvexError("run not found")
   }
   return run
@@ -370,7 +381,7 @@ export const internalPrepareArtifactRename = internalMutation({
     name: v.string(),
   }),
   handler: async (ctx, args) => {
-    const run = await getOwnedRun(ctx, args.userId, args.runId)
+    const run = await getAccessibleRun(ctx, args.userId, args.runId)
     const name = normalizeArtifactName(args.name)
     const { currentName, fromKey, toKey } = buildRenamedKey(args.key, name)
 
@@ -414,7 +425,7 @@ export const internalFinalizeArtifactRename = internalMutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const run = await getOwnedRun(ctx, args.userId, args.runId)
+    const run = await getAccessibleRun(ctx, args.userId, args.runId)
     const artifactKeys = run.artifactKeys || []
 
     if (!artifactKeys.includes(args.fromKey)) {

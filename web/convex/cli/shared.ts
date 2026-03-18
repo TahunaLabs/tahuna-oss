@@ -226,7 +226,7 @@ export async function objectExistsWithMetadataSync(
   return false;
 }
 
-export async function requireOwnedEnvironment(
+export async function requireAccessibleEnvironment(
   ctx: ActionCtx,
   userId: string,
   environmentId: string,
