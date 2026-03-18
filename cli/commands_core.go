@@ -25,6 +25,10 @@ func handleInit(args []string) {
 }
 
 func initProject(target string) error {
+	if cfg.apiKey == "" {
+		return errors.New("Not authenticated. Run `tahuna login` first.")
+	}
+
 	projectPath, created, err := prepareProjectPath(target)
 	if err != nil {
 		return err
