@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { ChevronDown, ChevronUp, Play, Plus, Filter, Settings2, LayoutGrid, Trash2, X, Share2, Users } from "lucide-react"
+import { ChevronDown, ChevronUp, Play, Filter, Settings2, LayoutGrid, Trash2, X, Share2, Users } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -256,9 +256,6 @@ export function RunsView({
             active={activeTab === "completed"}
             onClick={() => setActiveTab("completed")}
           />
-          <Button type="button" variant="dashboard-tab-compact" size="none">
-            <Plus className="w-3.5 h-3.5" />
-          </Button>
         </div>
       </DashboardTabsHeader>
 
