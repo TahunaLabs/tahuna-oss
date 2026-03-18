@@ -6,7 +6,10 @@ import { EnvironmentsView } from "@/components/linear/environments-view"
 import { RunsView } from "@/components/linear/runs-view"
 import { ShareDialog } from "@/components/linear/share-dialog"
 import { useTheme } from "@/components/theme-provider"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { Notice } from "@/components/ui/notice"
+import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { PageLoader } from "@/components/ui/spinner"
 import {
   STORAGE_PAGE_LIMIT,
@@ -57,6 +60,9 @@ export default function DashboardPage() {
   const [message, setMessage] = useState("")
 
   const [activeView, setActiveView] = useState("environments")
+  const [billingSheetOpen, setBillingSheetOpen] = useState(false)
+  const [billingAmount, setBillingAmount] = useState("50")
+  const [billingBusy, setBillingBusy] = useState(false)
 
   const [selectedDataFiles, setSelectedDataFiles] = useState<File[]>([])
   const [uploadingData, setUploadingData] = useState(false)
@@ -141,6 +147,7 @@ export default function DashboardPage() {
   const generateDataUploadUrlMutation = useMutation(api.data.generateUploadUrl)
   const removeEnvMutation = useMutation(api.environments.remove)
   const updateEnvironmentConfigMutation = useMutation(api.environments.updateConfig)
+  const grantMyCreditsMutation = useMutation(api.auth.grantMyCredits)
   const createRunMutation = useMutation(api.runs.create)
   const cancelRunMutation = useMutation(api.runs.cancel)
   const removeRunMutation = useMutation(api.runs.remove)
@@ -591,6 +598,39 @@ export default function DashboardPage() {
     }
   }
 
+  function openBillingTopUp() {
+    setError("")
+    setMessage("")
+    setBillingAmount("50")
+    setBillingSheetOpen(true)
+  }
+
+  async function submitBillingTopUp(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const amount = Number.parseFloat(billingAmount.trim())
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setError("Enter a positive number")
+      return
+    }
+    const amountCents = Math.round(amount * 100)
+    if (amountCents <= 0) {
+      setError("Amount is too small")
+      return
+    }
+    setBillingBusy(true)
+    setError("")
+    setMessage("")
+    try {
+      const updated = await grantMyCreditsMutation({ amount_cents: amountCents })
+      setMessage(`Credits updated: ${formatCreditsFromCents(updated.balance_cents, updated.currency)}`)
+      setBillingSheetOpen(false)
+    } catch (billingError) {
+      setError(billingError instanceof Error ? billingError.message : "Failed to add credits")
+    } finally {
+      setBillingBusy(false)
+    }
+  }
+
   if (authLoading || loggingOut || !isAuthenticated) {
     return <PageLoader message="Loading dashboard…" />
   }
@@ -720,6 +760,7 @@ export default function DashboardPage() {
         activeView={activeView}
         onViewChange={setActiveView}
         userInitial={userInitial}
+        onOpenBilling={openBillingTopUp}
         isDark={isDark}
         onThemeToggle={() => setTheme(isDark ? "light" : "dark")}
         onLogout={logout}
@@ -734,6 +775,46 @@ export default function DashboardPage() {
         )}
         {renderMainContent()}
       </main>
+      <Sheet
+        open={billingSheetOpen}
+        onOpenChange={(open) => {
+          if (!billingBusy) {
+            setBillingSheetOpen(open)
+          }
+        }}
+      >
+        <SheetContent className="p-5">
+          <SheetHeader>
+            <SheetTitle>Add credits</SheetTitle>
+            <SheetDescription>Enter an amount in EUR.</SheetDescription>
+          </SheetHeader>
+          <form onSubmit={(event) => { void submitBillingTopUp(event) }} className="mt-4 space-y-3">
+            <Input
+              type="number"
+              min="0.01"
+              step="0.01"
+              inputMode="decimal"
+              value={billingAmount}
+              onChange={(event) => setBillingAmount(event.target.value)}
+              disabled={billingBusy}
+              placeholder="50"
+            />
+            <SheetFooter className="justify-end gap-2">
+              <Button
+                type="button"
+                variant="dashboard-outline"
+                onClick={() => setBillingSheetOpen(false)}
+                disabled={billingBusy}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={billingBusy}>
+                {billingBusy ? "Adding..." : "Add credits"}
+              </Button>
+            </SheetFooter>
+          </form>
+        </SheetContent>
+      </Sheet>
       {shareTarget && (
         <ShareDialog
           resourceType={shareTarget.resourceType}

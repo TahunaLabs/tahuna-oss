@@ -25,12 +25,13 @@ interface SidebarProps {
   activeView: string
   onViewChange: (view: string) => void
   userInitial: string
+  onOpenBilling?: () => void
   isDark: boolean
   onThemeToggle: () => void
   onLogout: () => void
 }
 
-export function Sidebar({ activeView, onViewChange, userInitial, isDark, onThemeToggle, onLogout }: SidebarProps) {
+export function Sidebar({ activeView, onViewChange, userInitial, onOpenBilling, isDark, onThemeToggle, onLogout }: SidebarProps) {
   const [workspaceOpen, setWorkspaceOpen] = useState(true)
   const [accountOpen, setAccountOpen] = useState(true)
   const [moreOpen, setMoreOpen] = useState(false)
@@ -126,6 +127,7 @@ export function Sidebar({ activeView, onViewChange, userInitial, isDark, onTheme
               <SidebarItem
                 icon={<Wallet className="w-4 h-4" />}
                 label="Billing"
+                onClick={onOpenBilling}
               />
               <SidebarItem
                 icon={<BarChart3 className="w-4 h-4" />}

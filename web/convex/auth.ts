@@ -9,7 +9,7 @@ import { internalMutation, mutation, query, type ActionCtx, type MutationCtx, ty
 import authConfig from "@convex/auth.config";
 import { sha256Hex } from "@convex/crypto";
 import { shortId } from "@convex/ids";
-import { ensureUserLedger } from "@convex/credits";
+import { ensureUserLedger, grantUserCredits, USAGE_EVENT_TYPE } from "@convex/credits";
 import { sendOtpEmail } from "@convex/resend";
 import { AUTH_CONFIG, BILLING_CONFIG, NETWORK_CONFIG } from "../config";
 
@@ -173,6 +173,37 @@ export const createApiKey = mutation({
       user_id: userId,
       api_key: plaintext,
       api_key_id: String(apiKeyId),
+    };
+  },
+});
+
+export const grantMyCredits = mutation({
+  args: {
+    amount_cents: v.number(),
+  },
+  returns: v.object({
+    balance_cents: v.number(),
+    currency: v.string(),
+  }),
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    if (!Number.isInteger(args.amount_cents) || args.amount_cents <= 0) {
+      throw new ConvexError("amount_cents must be a positive integer");
+    }
+    const userId = String(user._id);
+    const granted = await grantUserCredits(ctx, {
+      userId,
+      amountCents: args.amount_cents,
+      eventType: USAGE_EVENT_TYPE.MANUAL_GRANT,
+      referenceType: "dashboard_billing",
+      referenceId: userId,
+      metadata: {
+        source: "dashboard",
+      },
+    });
+    return {
+      balance_cents: granted.balanceCents,
+      currency: BILLING_CONFIG.currency,
     };
   },
 });
