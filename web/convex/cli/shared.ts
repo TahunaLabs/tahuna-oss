@@ -63,37 +63,28 @@ export async function authenticateApiRequest(ctx: ActionCtx, request: Request): 
   return auth.userId;
 }
 
-function dataRootPrefix(userId: string) {
-  return `${userId}/data/`;
+function dataPrefix(dataId: string) {
+  return `data/${dataId}/`;
 }
 
-function dataPrefix(userId: string, dataId: string) {
-  return `${dataRootPrefix(userId)}${dataId}/`;
-}
-
-function blobPrefix(userId: string) {
-  return `${userId}/blobs/`;
-}
-
-function manifestPrefix(userId: string, environmentId: string, dataId: string, kind: SyncKind) {
+function manifestPrefix(environmentId: string, dataId: string, kind: SyncKind) {
   if (kind === "data") {
-    return `${dataPrefix(userId, dataId)}manifests/`;
+    return `${dataPrefix(dataId)}manifests/`;
   }
-  return `${userId}/environment/${environmentId}/manifests/${kind}/`;
+  return `environments/${environmentId}/manifests/${kind}/`;
 }
 
-export function buildBlobObjectKey(userId: string, sha256: string) {
-  return `${blobPrefix(userId)}${sha256}`;
+export function buildBlobObjectKey(sha256: string) {
+  return `blobs/${sha256}`;
 }
 
 export function buildManifestObjectKey(
-  userId: string,
   environmentId: string,
   dataId: string,
   kind: SyncKind,
   manifestHash: string,
 ) {
-  return `${manifestPrefix(userId, environmentId, dataId, kind)}${manifestHash}.json`;
+  return `${manifestPrefix(environmentId, dataId, kind)}${manifestHash}.json`;
 }
 
 export function parseSyncKind(value: unknown): SyncKind | null {

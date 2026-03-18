@@ -69,8 +69,8 @@ const RUN_CLEANUP_QUERY_BATCH_SIZE = 12;
 const RUN_CLEANUP_DELETE_BATCH_SIZE = 200;
 const ARTIFACT_DELETE_BATCH_SIZE = 24;
 
-function environmentPath(userId: string, environmentId: string) {
-  return `${userId}/environment/${environmentId}`;
+function environmentPath(environmentId: string) {
+  return `environments/${environmentId}`;
 }
 
 function normalizeManifestHash(value: string | undefined | null): string | null {
@@ -107,16 +107,16 @@ function manifestRefKey(ref: ManifestRef) {
   return `${ref.kind}:${ref.manifestHash}:${ref.environmentId}:${ref.dataId}`;
 }
 
-function manifestObjectKey(userId: string, ref: ManifestRef) {
+function manifestObjectKey(ref: ManifestRef) {
   if (ref.kind === "data") {
-    return `${userId}/data/${ref.dataId}/manifests/${ref.manifestHash}.json`;
+    return `data/${ref.dataId}/manifests/${ref.manifestHash}.json`;
   }
-  return `${userId}/environment/${ref.environmentId}/manifests/code/${ref.manifestHash}.json`;
+  return `environments/${ref.environmentId}/manifests/code/${ref.manifestHash}.json`;
 }
 
-async function loadManifestBlobHashes(ctx: ActionCtx, userId: string, ref: ManifestRef): Promise<Set<string>> {
+async function loadManifestBlobHashes(ctx: ActionCtx, ref: ManifestRef): Promise<Set<string>> {
   const hashes = new Set<string>();
-  const key = manifestObjectKey(userId, ref);
+  const key = manifestObjectKey(ref);
   const downloadUrl = await ctx.runQuery(internal.cli.sync.internalGetObjectDownloadUrl, { key });
   if (!downloadUrl) {
     return hashes;
@@ -326,7 +326,7 @@ function toEnvironmentResponse(row: Doc<"environments">) {
     bound_data_ids: row.boundDataIds || [],
     bound_data_manifest_hashes: row.boundDataManifestHashes || [],
     name: row.name,
-    artifacts: environmentPath(row.userId, String(row._id)),
+    artifacts: environmentPath(String(row._id)),
     gpu_type: row.gpuType,
     gpu_count: row.gpuCount,
     volume_gb: row.volumeGb,
@@ -406,7 +406,7 @@ async function createEnvironmentForUserId(
   });
 
   await ctx.db.patch("environments", envId, {
-    artifacts: environmentPath(args.userId, String(envId)),
+    artifacts: environmentPath(String(envId)),
   });
 
   const env = await ctx.db.get("environments", envId);
@@ -828,13 +828,13 @@ export const internalCleanupDedupBlobs = internalAction({
     const retainBlobHashes = new Set<string>();
 
     for (const ref of uniqueDeleteRefs.values()) {
-      const hashes = await loadManifestBlobHashes(ctx, args.userId, ref);
+      const hashes = await loadManifestBlobHashes(ctx, ref);
       for (const hash of hashes) {
         deleteBlobHashes.add(hash);
       }
     }
     for (const ref of uniqueRetainRefs.values()) {
-      const hashes = await loadManifestBlobHashes(ctx, args.userId, ref);
+      const hashes = await loadManifestBlobHashes(ctx, ref);
       for (const hash of hashes) {
         retainBlobHashes.add(hash);
       }
@@ -845,15 +845,15 @@ export const internalCleanupDedupBlobs = internalAction({
         continue;
       }
       try {
-        await r2.deleteObject(ctx, `${args.userId}/blobs/${hash}`);
+        await r2.deleteObject(ctx, `blobs/${hash}`);
       } catch {
         // best-effort cleanup
       }
     }
-    await deleteObjectsByPrefix(ctx, `${environmentPath(args.userId, args.environmentId)}/`);
+    await deleteObjectsByPrefix(ctx, `${environmentPath(args.environmentId)}/`);
     const dataStillReferenced = args.retainRefs.some((ref) => ref.dataId === args.dataId);
     if (!dataStillReferenced) {
-      await deleteObjectsByPrefix(ctx, `${args.userId}/data/${args.dataId}/`);
+      await deleteObjectsByPrefix(ctx, `data/${args.dataId}/`);
     }
     await deleteObjectsByPrefix(ctx, `runs/${args.environmentId}/`);
     return null;

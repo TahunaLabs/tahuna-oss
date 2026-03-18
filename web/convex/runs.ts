@@ -432,7 +432,6 @@ function sanitizeRuntimeMessage(message: string) {
 }
 
 function manifestKey(
-  userId: string,
   environmentId: Id<"environments">,
   dataId: string | undefined,
   kind: "code" | "data",
@@ -443,9 +442,9 @@ function manifestKey(
   }
   if (kind === "data") {
     const resolvedDataId = dataId || String(environmentId);
-    return `${userId}/data/${resolvedDataId}/manifests/${manifestHash}.json`;
+    return `data/${resolvedDataId}/manifests/${manifestHash}.json`;
   }
-  return `${userId}/environment/${environmentId}/manifests/${kind}/${manifestHash}.json`;
+  return `environments/${environmentId}/manifests/${kind}/${manifestHash}.json`;
 }
 
 function toProvisioningPayload(row: Doc<"runs">): ProvisioningPayload {
@@ -458,8 +457,8 @@ function toProvisioningPayload(row: Doc<"runs">): ProvisioningPayload {
     logs_path: row.logs,
     code_manifest_hash: row.codeManifestHash ?? null,
     data_manifest_hash: row.dataManifestHash ?? null,
-    code_manifest_key: manifestKey(row.userId, row.environmentId, row.dataId, "code", row.codeManifestHash),
-    data_manifest_key: manifestKey(row.userId, row.environmentId, row.dataId, "data", row.dataManifestHash),
+    code_manifest_key: manifestKey(row.environmentId, row.dataId, "code", row.codeManifestHash),
+    data_manifest_key: manifestKey(row.environmentId, row.dataId, "data", row.dataManifestHash),
     contract_version: "sync-incremental-0.1.0",
   };
 }
@@ -502,13 +501,10 @@ async function fetchManifest(
 }
 
 function blobKeys(
-  payload: {
-    user_id: string;
-  },
   _kind: SyncKind,
   sha256: string,
 ) {
-  return [`${payload.user_id}/blobs/${sha256}`];
+  return [`blobs/${sha256}`];
 }
 
 function summarizeManifest(manifest: SyncManifestPayload) {
@@ -574,18 +570,13 @@ async function getDownloadUrlWithMetadataSync(ctx: ActionCtx, key: string): Prom
 
 async function resolveManifestDownloadEntries(
   ctx: ActionCtx,
-  payload: {
-    user_id: string;
-    environment_id: string;
-    data_manifest_key: string | null;
-  },
   kind: SyncKind,
   manifest: SyncManifestPayload,
 ): Promise<RuntimeBootstrapEntry[]> {
   const entries: RuntimeBootstrapEntry[] = [];
   const keyUrlCache = new Map<string, string | null>();
   for (const entry of manifest.entries) {
-    const candidateKeys = blobKeys(payload, kind, entry.sha256);
+    const candidateKeys = blobKeys(kind, entry.sha256);
     let downloadUrl: string | null = null;
     for (const key of candidateKeys) {
       if (keyUrlCache.has(key)) {
@@ -1707,11 +1698,11 @@ export const internalGetRuntimeBootstrapPlan = internalAction({
     }
 
     const codeManifest = await fetchManifest(ctx, "code", codeManifestKey, codeManifestHash);
-    const codeEntries = await resolveManifestDownloadEntries(ctx, provisioningPayload, "code", codeManifest);
+    const codeEntries = await resolveManifestDownloadEntries(ctx, "code", codeManifest);
     let dataEntries: RuntimeBootstrapEntry[] = [];
     if (dataManifestHash && dataManifestKey) {
       const dataManifest = await fetchManifest(ctx, "data", dataManifestKey, dataManifestHash);
-      dataEntries = await resolveManifestDownloadEntries(ctx, provisioningPayload, "data", dataManifest);
+      dataEntries = await resolveManifestDownloadEntries(ctx, "data", dataManifest);
     }
 
     return {

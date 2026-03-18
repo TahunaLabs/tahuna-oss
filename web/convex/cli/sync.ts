@@ -136,7 +136,7 @@ export const listMissingBlobHashes = httpAction(async (ctx, request) => {
           return;
         }
         const hash = hashes[index];
-        const key = buildBlobObjectKey(userId, hash);
+        const key = buildBlobObjectKey(hash);
         const exists = await objectExistsWithMetadataSync(ctx, key, 2);
         if (!exists) {
           missingSet.add(hash);
@@ -209,7 +209,7 @@ export const createBlobUploadUrl = httpAction(async (ctx, request) => {
   }
 
   try {
-    const key = buildBlobObjectKey(userId, sha256);
+    const key = buildBlobObjectKey(sha256);
     const upload = await r2.generateUploadUrl(key);
     return new Response(
       JSON.stringify({
@@ -289,7 +289,7 @@ export const createManifestUploadUrl = httpAction(async (ctx, request) => {
   }
 
   try {
-    const key = buildManifestObjectKey(userId, environmentId, ownedEnvironment.dataId, kind, manifestHash);
+    const key = buildManifestObjectKey(environmentId, ownedEnvironment.dataId, kind, manifestHash);
     const upload = await r2.generateUploadUrl(key);
     return new Response(
       JSON.stringify({
@@ -371,7 +371,6 @@ export const commitSync = httpAction(async (ctx, request) => {
 
   if (codeManifestHash) {
     const codeManifestKey = buildManifestObjectKey(
-      userId,
       environmentId,
       ownedEnvironment.dataId,
       "code",
@@ -396,7 +395,6 @@ export const commitSync = httpAction(async (ctx, request) => {
   }
   if (dataManifestHash) {
     const dataManifestKey = buildManifestObjectKey(
-      userId,
       environmentId,
       ownedEnvironment.dataId,
       "data",

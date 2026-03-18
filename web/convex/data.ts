@@ -10,49 +10,18 @@ import { UPLOAD_LIMITS_BYTES } from "@convex/appConfig";
 const r2 = new R2(components.r2);
 const DEFAULT_LIST_LIMIT = 1000;
 const MAX_LIST_LIMIT = 1000;
-const MAX_LIST_SCAN_PAGES = 10;
-
-function buildDataPrefix(userId: string) {
-  return `${userId}/data/`;
-}
 
 function encodeFilename(filename: string) {
   return encodeURIComponent(filename.trim() || "file");
 }
 
-function decodeFilename(encoded: string) {
-  try {
-    return decodeURIComponent(encoded);
-  } catch {
-    return encoded;
-  }
-}
-
-function buildDataPath(userId: string, blobId: string, filename: string) {
-  return `${buildDataPrefix(userId)}${blobId}__${encodeFilename(filename)}`;
-}
-
-function parseKey(key: string) {
-  const leaf = key.split("/").pop() ?? key;
-  const [blobId, ...filenameParts] = leaf.split("__");
-  const encodedFilename = filenameParts.join("__");
-  return {
-    blobId,
-    filename: encodedFilename ? decodeFilename(encodedFilename) : blobId,
-  };
-}
-
-function isTopLevelDataUploadKey(userId: string, key: string) {
-  const prefix = buildDataPrefix(userId);
-  if (!key.startsWith(prefix)) {
-    return false;
-  }
-  const relative = key.slice(prefix.length);
-  // Keep only upload objects shaped as "<blob_id>__<filename>" at the root data prefix.
-  return relative.includes("__") && !relative.includes("/");
+function buildDataPath(blobId: string, filename: string) {
+  return `data/${blobId}__${encodeFilename(filename)}`;
 }
 
 const callbacks: R2Callbacks = {};
+
+const DATA_KEY_PREFIX = "data/";
 
 const dataBlobValidator = v.object({
   blob_id: v.string(),
@@ -90,61 +59,41 @@ function normalizeListLimit(value: number | undefined) {
 async function listBlobsForUserId(
   ctx: QueryCtx | MutationCtx,
   userId: string,
-  options?: { cursor?: string; limit?: number },
+  options?: { limit?: number },
 ): Promise<{
   blobs: DataBlobRow[];
   has_more: boolean;
   next_cursor: string | null;
   scan_capped: boolean;
 }> {
-  const prefix = buildDataPrefix(userId);
-  const blobs: DataBlobRow[] = [];
   const limit = normalizeListLimit(options?.limit);
+  const rows = await ctx.db
+    .query("dataBlobs")
+    .withIndex("by_user", (q) => q.eq("userId", userId))
+    .collect();
 
-  let cursor: string | null = options?.cursor ?? null;
-  let pages = 0;
-  let hasMore = false;
-  let nextCursor: string | null = null;
-
-  while (pages < MAX_LIST_SCAN_PAGES && blobs.length < limit) {
-    const result = await r2.listMetadata(ctx, 100, cursor);
-    pages += 1;
-    for (const item of result.page) {
-      if (!item.key.startsWith(prefix)) continue;
-      if (!isTopLevelDataUploadKey(userId, item.key)) continue;
-      const parsed = parseKey(item.key);
-      blobs.push({
-        blob_id: parsed.blobId,
-        filename: parsed.filename,
-        key: item.key,
-        content_type: item.contentType || "",
-        size: item.size || 0,
-        download_url: item.url,
-        created_at: new Date(item.lastModified).getTime(),
-      });
-      if (blobs.length >= limit) {
-        break;
-      }
-    }
-
-    if (result.isDone) {
-      hasMore = false;
-      nextCursor = null;
-      break;
-    }
-
-    hasMore = true;
-    cursor = result.continueCursor;
-    nextCursor = cursor;
+  const blobs: DataBlobRow[] = [];
+  for (const row of rows) {
+    const metadata = await r2.getMetadata(ctx, row.key);
+    blobs.push({
+      blob_id: row.blobId,
+      filename: row.filename,
+      key: row.key,
+      content_type: "",
+      size: row.size,
+      download_url: metadata?.url ?? "",
+      created_at: row.createdAt,
+    });
   }
 
   blobs.sort((a, b) => b.created_at - a.created_at);
-  const scanCapped = hasMore && pages >= MAX_LIST_SCAN_PAGES && blobs.length < limit;
+  const hasMore = blobs.length > limit;
+  const trimmed = blobs.slice(0, limit);
   return {
-    blobs,
+    blobs: trimmed,
     has_more: hasMore,
-    next_cursor: hasMore ? nextCursor : null,
-    scan_capped: scanCapped,
+    next_cursor: null,
+    scan_capped: false,
   };
 }
 
@@ -154,8 +103,8 @@ export const { syncMetadata } = r2.clientApi<DataModel>({
     await requireUser(ctx);
   },
   onUpload: async (ctx, _bucket, key) => {
-    const user = await requireUser(ctx);
-    if (!key.startsWith(buildDataPrefix(String(user._id)))) {
+    await requireUser(ctx);
+    if (!key.startsWith(DATA_KEY_PREFIX)) {
       throw new ConvexError("invalid upload key");
     }
     const metadata = await r2.getMetadata(ctx, key);
@@ -184,6 +133,7 @@ export const generateUploadUrl = mutation({
   }),
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
+    const userId = String(user._id);
     if (!Number.isInteger(args.size_bytes) || args.size_bytes <= 0) {
       throw new ConvexError("size_bytes must be a positive integer");
     }
@@ -191,8 +141,17 @@ export const generateUploadUrl = mutation({
       throw new ConvexError(`data file exceeds limit of ${UPLOAD_LIMITS_BYTES.dataBlob} bytes`);
     }
     const blobId = shortId("blob");
-    const key = buildDataPath(String(user._id), blobId, args.filename);
+    const key = buildDataPath(blobId, args.filename);
     const upload = await r2.generateUploadUrl(key);
+
+    await ctx.db.insert("dataBlobs", {
+      userId,
+      blobId,
+      filename: args.filename,
+      key: upload.key,
+      size: args.size_bytes,
+      createdAt: Date.now(),
+    });
 
     return {
       blob_id: blobId,
@@ -212,7 +171,6 @@ export const list = query({
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
     return await listBlobsForUserId(ctx, String(user._id), {
-      cursor: args.cursor,
       limit: args.limit,
     });
   },
@@ -227,7 +185,6 @@ export const internalList = internalQuery({
   returns: listDataBlobsValidator,
   handler: async (ctx, args) => {
     return await listBlobsForUserId(ctx, args.userId, {
-      cursor: args.cursor,
       limit: args.limit,
     });
   },
