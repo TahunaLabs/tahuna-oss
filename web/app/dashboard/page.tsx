@@ -20,9 +20,7 @@ import {
   type RunLogsOnlyDetail,
   type RunMetricsOnlyDetail,
   type StorageListResult,
-  type StorageSort,
   type StorageItem,
-  type StorageSourceFilter,
 } from "@/components/dashboard/shared"
 import { ENVIRONMENT_CONFIG_FILE_NAME, renderEnvironmentConfig } from "@/lib/environment-config"
 import { api } from "@convex/_generated/api"
@@ -30,7 +28,20 @@ import type { Id } from "@convex/_generated/dataModel"
 import { authClient } from "@/lib/auth-client"
 import { useAction, useConvexAuth, useMutation, useQuery } from "convex/react"
 import { useRouter } from "next/navigation"
+import { parseAsInteger, parseAsString, parseAsStringLiteral, useQueryState } from "nuqs"
 import { useEffect, useMemo, useState, type FormEvent } from "react"
+
+const DASHBOARD_VIEW_VALUES = ["storage", "environments", "runs"] as const
+const STORAGE_SOURCE_FILTER_VALUES = ["all", "shared", "private"] as const
+const STORAGE_SORT_VALUES = [
+  "created_desc",
+  "created_asc",
+  "name_asc",
+  "name_desc",
+  "size_desc",
+  "size_asc",
+] as const
+const RUN_TAB_VALUES = ["all", "active", "completed"] as const
 
 export default function DashboardPage() {
   const router = useRouter()
@@ -42,18 +53,28 @@ export default function DashboardPage() {
   const [error, setError] = useState("")
   const [message, setMessage] = useState("")
 
-  const [activeView, setActiveView] = useState("environments")
+  const [activeView, setActiveView] = useQueryState(
+    "view",
+    parseAsStringLiteral(DASHBOARD_VIEW_VALUES).withDefault("environments"),
+  )
 
   const [selectedDataFiles, setSelectedDataFiles] = useState<File[]>([])
   const [uploadingData, setUploadingData] = useState(false)
   const [uploadError, setUploadError] = useState("")
   const [uploadMessage, setUploadMessage] = useState("")
   const [dataFileInputKey, setDataFileInputKey] = useState(0)
-  const [storageSourceFilter, setStorageSourceFilter] = useState<StorageSourceFilter>("all")
-  const [storageSort, setStorageSort] = useState<StorageSort>("created_desc")
-  const [storageSearch, setStorageSearch] = useState("")
-  const [storageSearchDebounced, setStorageSearchDebounced] = useState("")
-  const [storageOffset, setStorageOffset] = useState(0)
+  const [storageSourceFilter, setStorageSourceFilter] = useQueryState(
+    "storageSource",
+    parseAsStringLiteral(STORAGE_SOURCE_FILTER_VALUES).withDefault("all"),
+  )
+  const [storageSort, setStorageSort] = useQueryState(
+    "storageSort",
+    parseAsStringLiteral(STORAGE_SORT_VALUES).withDefault("created_desc"),
+  )
+  const [storageSearch, setStorageSearch] = useQueryState("storageQ", parseAsString.withDefault(""))
+  const [storageSearchDebounced, setStorageSearchDebounced] = useState(storageSearch)
+  const [storageOffset, setStorageOffset] = useQueryState("storageOffset", parseAsInteger.withDefault(0))
+  const [runsTab, setRunsTab] = useQueryState("runTab", parseAsStringLiteral(RUN_TAB_VALUES).withDefault("all"))
   const [storageResult, setStorageResult] = useState<StorageListResult | undefined>(undefined)
   const [storageLoading, setStorageLoading] = useState(false)
   const [storageError, setStorageError] = useState("")
@@ -249,8 +270,8 @@ export default function DashboardPage() {
   }, [storageSearch])
 
   useEffect(() => {
-    setStorageOffset(0)
-  }, [storageSearchDebounced, storageSort, storageSourceFilter])
+    void setStorageOffset(0)
+  }, [setStorageOffset, storageSearchDebounced, storageSort, storageSourceFilter])
 
   useEffect(() => {
     let cancelled = false
@@ -301,16 +322,16 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!storageResult) return
     if (storageTotal === 0 && storageOffset !== 0) {
-      setStorageOffset(0)
+      void setStorageOffset(0)
       return
     }
     if (storageOffset >= storageTotal && storageTotal > 0) {
       const previousPage = Math.max(0, Math.floor((storageTotal - 1) / STORAGE_PAGE_LIMIT) * STORAGE_PAGE_LIMIT)
       if (previousPage !== storageOffset) {
-        setStorageOffset(previousPage)
+        void setStorageOffset(previousPage)
       }
     }
-  }, [storageOffset, storageResult, storageTotal])
+  }, [setStorageOffset, storageOffset, storageResult, storageTotal])
 
   useEffect(() => {
     if (!renamingStorageId) return
@@ -602,21 +623,27 @@ export default function DashboardPage() {
               setUploadMessage("")
               setSelectedDataFiles(files)
             }}
-            onStorageSearchChange={setStorageSearch}
-            onStorageSourceFilterChange={setStorageSourceFilter}
-            onStorageSortChange={setStorageSort}
+            onStorageSearchChange={(value) => {
+              void setStorageSearch(value)
+            }}
+            onStorageSourceFilterChange={(value) => {
+              void setStorageSourceFilter(value)
+            }}
+            onStorageSortChange={(value) => {
+              void setStorageSort(value)
+            }}
             onArtifactRenameDraftChange={setArtifactRenameDraft}
             onSaveRenameArtifact={(item) => {
               void saveRenameArtifact(item)
             }}
             onCancelRenameArtifact={cancelRenameArtifact}
             onStartRenameArtifact={startRenameArtifact}
-            onPreviousStoragePage={() =>
-              setStorageOffset((current) => Math.max(0, current - STORAGE_PAGE_LIMIT))
-            }
-            onNextStoragePage={() =>
-              setStorageOffset((current) => current + STORAGE_PAGE_LIMIT)
-            }
+            onPreviousStoragePage={() => {
+              void setStorageOffset(Math.max(0, storageOffset - STORAGE_PAGE_LIMIT))
+            }}
+            onNextStoragePage={() => {
+              void setStorageOffset(storageOffset + STORAGE_PAGE_LIMIT)
+            }}
             onShareStorageItem={(item) => {
               if (item.source === "data" && item.data_blob_id) {
                 openShareDialog("data", item.data_blob_id)
@@ -676,10 +703,14 @@ export default function DashboardPage() {
             environments={environments}
             runs={runs}
             busy={busy}
+            activeTab={runsTab}
             selectedRunId={selectedRunId}
             runDetail={runDetail}
             runLogs={runLogs}
             runMetrics={runMetrics}
+            onActiveTabChange={(tab) => {
+              void setRunsTab(tab)
+            }}
             onSelectRun={setSelectedRunId}
             onCancelRun={(runId) => {
               void cancelRun(runId)
@@ -697,7 +728,9 @@ export default function DashboardPage() {
     <div className="flex h-screen bg-sidebar dark">
       <Sidebar
         activeView={activeView}
-        onViewChange={setActiveView}
+        onViewChange={(view) => {
+          void setActiveView(view)
+        }}
         userInitial={userInitial}
         isDark={isDark}
         onThemeToggle={() => setTheme(isDark ? "light" : "dark")}

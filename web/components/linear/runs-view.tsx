@@ -33,10 +33,12 @@ type RunsViewProps = {
   environments: EnvironmentRow[]
   runs: RunRow[]
   busy: boolean
+  activeTab: RunTab
   selectedRunId: string | null
   runDetail: RunDetail | undefined
   runLogs: RunLogsOnlyDetail | undefined
   runMetrics: RunMetricsOnlyDetail | undefined
+  onActiveTabChange: (tab: RunTab) => void
   onSelectRun: (runId: string | null) => void
   onCancelRun: (runId: RunRow["run_id"]) => void
   onDeleteRuns: (runIds: RunRow["run_id"][]) => Promise<void>
@@ -44,7 +46,7 @@ type RunsViewProps = {
   onShareRun?: (runId: string) => void
 }
 
-type RunTab = "all" | "active" | "completed"
+export type RunTab = "all" | "active" | "completed"
 
 const ACTIVE_STATUSES = new Set(["queued", "provisioning", "running", "cancelling"])
 const COMPLETED_STATUSES = new Set(["completed", "failed", "cancelled"])
@@ -73,17 +75,18 @@ export function RunsView({
   environments,
   runs,
   busy,
+  activeTab,
   selectedRunId,
   runDetail,
   runLogs,
   runMetrics,
+  onActiveTabChange,
   onSelectRun,
   onCancelRun,
   onDeleteRuns,
   sharedByMeResourceIds,
   onShareRun,
 }: RunsViewProps) {
-  const [activeTab, setActiveTab] = useState<RunTab>("all")
   const [showRunContext, setShowRunContext] = useState(false)
   const [selectionMode, setSelectionMode] = useState(false)
   const [selectedRunIds, setSelectedRunIds] = useState<Id<"runs">[]>([])
@@ -218,17 +221,17 @@ export function RunsView({
       {/* Tabs */}
       <DashboardTabsHeader>
         <div className="flex items-center gap-1">
-          <TabButton label="All runs" active={activeTab === "all"} onClick={() => setActiveTab("all")} />
+          <TabButton label="All runs" active={activeTab === "all"} onClick={() => onActiveTabChange("all")} />
           <TabButton
             label="Active"
             active={activeTab === "active"}
-            onClick={() => setActiveTab("active")}
+            onClick={() => onActiveTabChange("active")}
             count={runs.filter((r) => ACTIVE_STATUSES.has(r.status)).length}
           />
           <TabButton
             label="Completed"
             active={activeTab === "completed"}
-            onClick={() => setActiveTab("completed")}
+            onClick={() => onActiveTabChange("completed")}
           />
         </div>
       </DashboardTabsHeader>

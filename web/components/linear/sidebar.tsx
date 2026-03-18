@@ -17,8 +17,8 @@ import Link from "next/link"
 import { Button } from "@/components/ui/button"
 
 interface SidebarProps {
-  activeView: string
-  onViewChange: (view: string) => void
+  activeView: "storage" | "environments" | "runs"
+  onViewChange: (view: "storage" | "environments" | "runs") => void
   userInitial: string
   isDark: boolean
   onThemeToggle: () => void

@@ -5,6 +5,7 @@ import { Analytics } from "@vercel/analytics/next"
 import type { Metadata } from "next"
 import { cookies } from "next/headers"
 import { Cormorant_Garamond, Geist, Geist_Mono } from "next/font/google"
+import { NuqsAdapter } from "nuqs/adapters/next/app"
 import type React from "react"
 import "./globals.css"
 
@@ -34,7 +35,9 @@ export default async function RootLayout({
     <html lang="en" className={`${geist.variable} ${geistMono.variable} ${cormorant.variable} ${initialTheme}`}>
       <body className="font-sans antialiased">
         <ThemeProvider initialTheme={initialTheme}>
-          <ConvexClientProvider initialToken={token}>{children}</ConvexClientProvider>
+          <NuqsAdapter>
+            <ConvexClientProvider initialToken={token}>{children}</ConvexClientProvider>
+          </NuqsAdapter>
         </ThemeProvider>
         <Analytics />
       </body>
