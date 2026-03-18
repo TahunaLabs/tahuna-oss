@@ -1,7 +1,6 @@
 package artifacts
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"net/http"
@@ -88,18 +87,21 @@ func Sync(
 			log(emitLog, "warn", "bootstrap", "artifacts: no upload URL for "+file.name+" (skipping)")
 			continue
 		}
-		body, readErr := os.ReadFile(file.fullPath)
-		if readErr != nil {
-			log(emitLog, "warn", "bootstrap", "artifacts: failed reading "+file.name+": "+readErr.Error())
+		f, openErr := os.Open(file.fullPath)
+		if openErr != nil {
+			log(emitLog, "warn", "bootstrap", "artifacts: failed opening "+file.name+": "+openErr.Error())
 			continue
 		}
-		req, reqErr := http.NewRequestWithContext(ctx, http.MethodPut, upload.URL, bytes.NewReader(body))
+		req, reqErr := http.NewRequestWithContext(ctx, http.MethodPut, upload.URL, f)
 		if reqErr != nil {
+			_ = f.Close()
 			log(emitLog, "warn", "bootstrap", "artifacts: upload request failed for "+file.name+": "+reqErr.Error())
 			continue
 		}
+		req.ContentLength = file.size
 		req.Header.Set("Content-Type", "application/octet-stream")
 		resp, putErr := putClient.Do(req)
+		_ = f.Close()
 		if putErr != nil {
 			log(emitLog, "warn", "bootstrap", "artifacts: upload failed for "+file.name+": "+putErr.Error())
 			continue
@@ -110,7 +112,7 @@ func Sync(
 			continue
 		}
 		uploadedKeys = append(uploadedKeys, upload.Key)
-		log(emitLog, "info", "bootstrap", fmt.Sprintf("artifacts: uploaded %s (%d bytes)", file.name, len(body)))
+		log(emitLog, "info", "bootstrap", fmt.Sprintf("artifacts: uploaded %s (%d bytes)", file.name, file.size))
 	}
 
 	if len(uploadedKeys) > 0 {

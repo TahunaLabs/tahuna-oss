@@ -49,29 +49,56 @@ func NewDownloader(timeout time.Duration) *Downloader {
 	}
 }
 
-func (d *Downloader) Fetch(ctx context.Context, url string) ([]byte, error) {
+// FetchToFile streams a download directly to disk, computing the SHA256 hash
+// and byte count during the write. It writes to a temp file in the target's
+// directory and renames on success, ensuring no partial files remain on error.
+func (d *Downloader) FetchToFile(ctx context.Context, url, dest string) (size int64, hash string, err error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		return nil, fmt.Errorf("create download request: %w", err)
+		return 0, "", fmt.Errorf("create download request: %w", err)
 	}
 	resp, err := d.http.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("download request failed: %w", err)
+		return 0, "", fmt.Errorf("download request failed: %w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
-		raw, _ := io.ReadAll(resp.Body)
+		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
 		msg := strings.TrimSpace(string(raw))
 		if msg == "" {
 			msg = resp.Status
 		}
-		return nil, fmt.Errorf("download failed: status=%d body=%s", resp.StatusCode, msg)
+		return 0, "", fmt.Errorf("download failed: status=%d body=%s", resp.StatusCode, msg)
 	}
-	body, err := io.ReadAll(resp.Body)
+
+	parent := filepath.Dir(dest)
+	tmp, tmpErr := os.CreateTemp(parent, ".blob-*")
+	if tmpErr != nil {
+		return 0, "", fmt.Errorf("create temp file: %w", tmpErr)
+	}
+	tmpPath := tmp.Name()
+	success := false
+	defer func() {
+		if !success {
+			_ = tmp.Close()
+			_ = os.Remove(tmpPath)
+		}
+	}()
+
+	hasher := sha256.New()
+	size, err = io.Copy(tmp, io.TeeReader(resp.Body, hasher))
 	if err != nil {
-		return nil, fmt.Errorf("read download response: %w", err)
+		return 0, "", fmt.Errorf("stream download to disk: %w", err)
 	}
-	return body, nil
+	if err = tmp.Close(); err != nil {
+		return 0, "", fmt.Errorf("close temp file: %w", err)
+	}
+	hash = hex.EncodeToString(hasher.Sum(nil))
+	if err = os.Rename(tmpPath, dest); err != nil {
+		return 0, "", fmt.Errorf("rename temp to target: %w", err)
+	}
+	success = true
+	return size, hash, nil
 }
 
 func WriteManifestEntries(
@@ -108,25 +135,24 @@ func WriteManifestEntries(
 			}
 		}
 
-		blob, err := downloader.Fetch(ctx, entry.DownloadURL)
-		if err != nil {
-			return Stats{}, fmt.Errorf("%s blob download failed for %s: %w", kind, rel, err)
+		size, hash, fetchErr := downloader.FetchToFile(ctx, entry.DownloadURL, target)
+		if fetchErr != nil {
+			return Stats{}, fmt.Errorf("%s blob download failed for %s: %w", kind, rel, fetchErr)
 		}
-		if int64(len(blob)) != entry.Size {
-			return Stats{}, fmt.Errorf("%s blob size mismatch for %s", kind, rel)
+		if size != entry.Size {
+			_ = os.Remove(target)
+			return Stats{}, fmt.Errorf("%s blob size mismatch for %s: expected=%d actual=%d", kind, rel, entry.Size, size)
 		}
-		if actual := sha256Hex(blob); actual != entry.SHA256 {
+		if hash != entry.SHA256 {
+			_ = os.Remove(target)
 			return Stats{}, fmt.Errorf("%s blob hash mismatch for %s", kind, rel)
-		}
-		if err := os.WriteFile(target, blob, 0o644); err != nil {
-			return Stats{}, fmt.Errorf("write file %s: %w", rel, err)
 		}
 		if entry.Mode > 0 {
 			_ = os.Chmod(target, os.FileMode(entry.Mode)&0o777)
 		}
 
 		stats.FileCount += 1
-		stats.TotalBytes += int64(len(blob))
+		stats.TotalBytes += size
 		if onProgress != nil {
 			onProgress(Progress{
 				Kind:           kind,
@@ -293,11 +319,6 @@ func SafeRelativePath(path string) (string, error) {
 		return "", fmt.Errorf("invalid path: %q", path)
 	}
 	return clean, nil
-}
-
-func sha256Hex(blob []byte) string {
-	sum := sha256.Sum256(blob)
-	return hex.EncodeToString(sum[:])
 }
 
 func CreateTarGzBundle(entries map[string][]byte) ([]byte, error) {
