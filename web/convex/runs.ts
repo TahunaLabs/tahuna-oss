@@ -381,11 +381,18 @@ function generateWordRunName() {
   return `${randomWord(RUN_NAME_FIRST)}-${randomWord(RUN_NAME_SECOND)}-${randomWord(RUN_NAME_THIRD)}`;
 }
 
+function toUnixMillis(value: number) {
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+  return Math.max(0, Math.floor(value));
+}
+
 function toRunResponse(row: Doc<"runs">) {
   return {
     run_id: String(row._id),
     name: getRunName(row),
-    created_at: row._creationTime,
+    created_at: toUnixMillis(row._creationTime),
     environment_id: String(row.environmentId),
     input: row.input,
     output: row.output,
