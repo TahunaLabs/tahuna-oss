@@ -57,6 +57,22 @@ export default defineSchema({
     .index("by_user_and_environment", ["userId", "environmentId"])
     .index("by_runtime_token_hash", ["runtimeTokenHash"]),
 
+  storageObjects: defineTable({
+    userId: v.string(),
+    source: v.union(v.literal("data"), v.literal("run_artifact")),
+    objectKind: v.union(v.literal("data_upload"), v.literal("data_manifest"), v.literal("run_artifact")),
+    key: v.string(),
+    name: v.string(),
+    size: v.number(),
+    createdAt: v.number(),
+    runId: v.optional(v.id("runs")),
+    dataBlobId: v.optional(v.string()),
+    dataId: v.optional(v.string()),
+  })
+    .index("by_user", ["userId"])
+    .index("by_user_and_source", ["userId", "source"])
+    .index("by_user_and_key", ["userId", "key"]),
+
   wandbRuns: defineTable({
     runId: v.id("runs"),
     wandbRunId: v.string(),

@@ -10,7 +10,7 @@ import { UPLOAD_LIMITS_BYTES } from "@convex/appConfig";
 const r2 = new R2(components.r2);
 const DEFAULT_LIST_LIMIT = 1000;
 const MAX_LIST_LIMIT = 1000;
-const MAX_LIST_SCAN_PAGES = 10;
+const CURSOR_PREFIX = "offset:";
 
 function buildDataPrefix(userId: string) {
   return `${userId}/data/`;
@@ -48,8 +48,39 @@ function isTopLevelDataUploadKey(userId: string, key: string) {
     return false;
   }
   const relative = key.slice(prefix.length);
-  // Keep only upload objects shaped as "<blob_id>__<filename>" at the root data prefix.
   return relative.includes("__") && !relative.includes("/");
+}
+
+function normalizeListLimit(value: number | undefined) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return DEFAULT_LIST_LIMIT;
+  }
+  return Math.max(1, Math.min(MAX_LIST_LIMIT, Math.floor(value)));
+}
+
+function encodeOffsetCursor(offset: number) {
+  return `${CURSOR_PREFIX}${offset}`;
+}
+
+function decodeOffsetCursor(cursor: string | undefined): number {
+  if (!cursor) {
+    return 0;
+  }
+  const value = cursor.trim();
+  if (!value.startsWith(CURSOR_PREFIX)) {
+    return 0;
+  }
+  const raw = Number(value.slice(CURSOR_PREFIX.length));
+  if (!Number.isFinite(raw)) {
+    return 0;
+  }
+  return Math.max(0, Math.floor(raw));
+}
+
+function toMillis(value: string | undefined, fallback: number) {
+  if (!value) return fallback;
+  const parsed = new Date(value).getTime();
+  return Number.isFinite(parsed) ? parsed : fallback;
 }
 
 const callbacks: R2Callbacks = {};
@@ -80,11 +111,40 @@ type DataBlobRow = {
   created_at: number;
 };
 
-function normalizeListLimit(value: number | undefined) {
-  if (typeof value !== "number" || !Number.isFinite(value)) {
-    return DEFAULT_LIST_LIMIT;
+async function upsertDataUploadIndexRow(
+  ctx: MutationCtx,
+  args: {
+    userId: string;
+    key: string;
+    filename: string;
+    blobId: string;
+    size: number;
+    createdAt: number;
+  },
+) {
+  const existing = await ctx.db
+    .query("storageObjects")
+    .withIndex("by_user_and_key", (q) => q.eq("userId", args.userId).eq("key", args.key))
+    .first();
+  const patch = {
+    source: "data" as const,
+    objectKind: "data_upload" as const,
+    key: args.key,
+    name: args.filename,
+    size: Math.max(0, Math.floor(args.size)),
+    createdAt: Math.max(0, Math.floor(args.createdAt)),
+    dataBlobId: args.blobId,
+    runId: undefined,
+    dataId: args.blobId,
+  };
+  if (existing) {
+    await ctx.db.patch("storageObjects", existing._id, patch);
+    return;
   }
-  return Math.max(1, Math.min(MAX_LIST_LIMIT, Math.floor(value)));
+  await ctx.db.insert("storageObjects", {
+    userId: args.userId,
+    ...patch,
+  });
 }
 
 async function listBlobsForUserId(
@@ -97,54 +157,39 @@ async function listBlobsForUserId(
   next_cursor: string | null;
   scan_capped: boolean;
 }> {
-  const prefix = buildDataPrefix(userId);
-  const blobs: DataBlobRow[] = [];
   const limit = normalizeListLimit(options?.limit);
+  const offset = decodeOffsetCursor(options?.cursor);
 
-  let cursor: string | null = options?.cursor ?? null;
-  let pages = 0;
-  let hasMore = false;
-  let nextCursor: string | null = null;
+  const rows = await ctx.db
+    .query("storageObjects")
+    .withIndex("by_user_and_source", (q) => q.eq("userId", userId).eq("source", "data"))
+    .collect();
+  const uploads = rows
+    .filter((row) => row.objectKind === "data_upload" && isTopLevelDataUploadKey(userId, row.key))
+    .sort((a, b) => b.createdAt - a.createdAt);
 
-  while (pages < MAX_LIST_SCAN_PAGES && blobs.length < limit) {
-    const result = await r2.listMetadata(ctx, 100, cursor);
-    pages += 1;
-    for (const item of result.page) {
-      if (!item.key.startsWith(prefix)) continue;
-      if (!isTopLevelDataUploadKey(userId, item.key)) continue;
-      const parsed = parseKey(item.key);
-      blobs.push({
-        blob_id: parsed.blobId,
-        filename: parsed.filename,
-        key: item.key,
-        content_type: item.contentType || "",
-        size: item.size || 0,
-        download_url: item.url,
-        created_at: new Date(item.lastModified).getTime(),
-      });
-      if (blobs.length >= limit) {
-        break;
-      }
-    }
+  const page = uploads.slice(offset, offset + limit);
+  const blobs = await Promise.all(
+    page.map(async (row) => {
+      const parsed = parseKey(row.key);
+      return {
+        blob_id: row.dataBlobId || parsed.blobId,
+        filename: row.name || parsed.filename,
+        key: row.key,
+        content_type: "",
+        size: row.size || 0,
+        download_url: await r2.getUrl(row.key),
+        created_at: row.createdAt || 0,
+      };
+    }),
+  );
 
-    if (result.isDone) {
-      hasMore = false;
-      nextCursor = null;
-      break;
-    }
-
-    hasMore = true;
-    cursor = result.continueCursor;
-    nextCursor = cursor;
-  }
-
-  blobs.sort((a, b) => b.created_at - a.created_at);
-  const scanCapped = hasMore && pages >= MAX_LIST_SCAN_PAGES && blobs.length < limit;
+  const hasMore = offset + limit < uploads.length;
   return {
     blobs,
     has_more: hasMore,
-    next_cursor: hasMore ? nextCursor : null,
-    scan_capped: scanCapped,
+    next_cursor: hasMore ? encodeOffsetCursor(offset + limit) : null,
+    scan_capped: false,
   };
 }
 
@@ -155,7 +200,8 @@ export const { syncMetadata } = r2.clientApi<DataModel>({
   },
   onUpload: async (ctx, _bucket, key) => {
     const user = await requireUser(ctx);
-    if (!key.startsWith(buildDataPrefix(String(user._id)))) {
+    const userId = String(user._id);
+    if (!isTopLevelDataUploadKey(userId, key)) {
       throw new ConvexError("invalid upload key");
     }
     const metadata = await r2.getMetadata(ctx, key);
@@ -168,6 +214,18 @@ export const { syncMetadata } = r2.clientApi<DataModel>({
       }
       throw new ConvexError(`data file exceeds limit of ${UPLOAD_LIMITS_BYTES.dataBlob} bytes`);
     }
+    const parsed = parseKey(key);
+    const filename = parsed.filename.trim() || "file";
+    const blobId = parsed.blobId.trim();
+    const createdAt = toMillis(metadata?.lastModified, Date.now());
+    await upsertDataUploadIndexRow(ctx as MutationCtx, {
+      userId,
+      key,
+      filename,
+      blobId: blobId || shortId("blob"),
+      size: objectSize,
+      createdAt,
+    });
   },
 });
 
