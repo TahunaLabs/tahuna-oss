@@ -45,7 +45,7 @@ Append-only ledger events:
 Billing constants are in `web/config.ts` (`BILLING_CONFIG`):
 
 - `currency: "EUR"`
-- `initialCreditCents: 5000` (50.00 EUR)
+- `initialCreditCents: 0` (0.00 EUR)
 - `computeReservationHours: 1`
 - `computeGpuHourlyRateCents: 120`
 - `computeVolumeGbHourlyRateCents: 2`
