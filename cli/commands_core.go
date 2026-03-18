@@ -25,12 +25,8 @@ func handleInit(args []string) {
 }
 
 func initProject(target string) error {
-	// Validate auth before any interactive prompts. The /gpus endpoint is
-	// public so it cannot detect expired tokens; /environments requires auth.
-	if _, err := doJSON(http.MethodGet, "/environments", nil); err != nil {
-		return err
-	}
-
+	// Fetch GPU catalog upfront — the /gpus endpoint requires auth, so this
+	// doubles as the early auth check before any interactive prompts.
 	gpus, versionsByFramework, pythonsByFrameworkVersion, err := fetchGpusAndImages()
 	if err != nil {
 		return err

@@ -1,7 +1,7 @@
 import { api } from "@convex/_generated/api";
 import { httpAction } from "@convex/_generated/server";
 import { AUTH_CONFIG, NETWORK_CONFIG, RUN_CONFIG, SYNC_CONFIG } from "@convex/appConfig";
-import { type GpuRow, corsHeaders, loadDynamicGpuRows } from "@convex/cli/shared";
+import { type GpuRow, authenticateApiRequest, corsHeaders, loadDynamicGpuRows } from "@convex/cli/shared";
 
 export const optionsHandler = httpAction(async () => {
   return new Response(null, {
@@ -32,7 +32,15 @@ export const getConfig = httpAction(async () => {
   );
 });
 
-export const getGpus = httpAction(async (ctx) => {
+export const getGpus = httpAction(async (ctx, request) => {
+  const userId = await authenticateApiRequest(ctx, request);
+  if (!userId) {
+    return new Response(JSON.stringify({ detail: "authentication required" }), {
+      status: 401,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
+
   try {
     const data = await ctx.runQuery(api.catalog.getCatalog);
     const gpus = await loadDynamicGpuRows(ctx);
