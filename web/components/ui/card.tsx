@@ -13,7 +13,6 @@ const cardVariants = cva("overflow-hidden", {
       default: "bg-card border border-border rounded-lg",
       elevated:
         "bg-card/80 backdrop-blur-sm border border-border rounded-xl",
-      pill: "bg-card border border-border rounded-full",
       dashboard: "rounded-lg border border-border bg-card text-foreground",
     },
   },
