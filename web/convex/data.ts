@@ -4,6 +4,7 @@ import { components } from "@convex/_generated/api";
 import type { DataModel } from "@convex/_generated/dataModel";
 import { internalQuery, mutation, query, type MutationCtx, type QueryCtx } from "@convex/_generated/server";
 import { requireUser } from "@convex/auth";
+import { applyStorageDeltaCredits } from "@convex/credits";
 import { shortId } from "@convex/ids";
 import { UPLOAD_LIMITS_BYTES } from "@convex/appConfig";
 
@@ -120,16 +121,29 @@ async function upsertDataUploadIndexRow(
     createdAt: number;
   },
 ) {
+  const normalizedSize = Math.max(0, Math.floor(args.size));
   const existing = await ctx.db
     .query("storageObjects")
     .withIndex("by_user_and_key", (q) => q.eq("userId", args.userId).eq("key", args.key))
     .first();
+  const previousSize = existing ? Math.max(0, Math.floor(existing.size || 0)) : 0;
+  await applyStorageDeltaCredits(ctx, {
+    userId: args.userId,
+    sizeDeltaBytes: normalizedSize - previousSize,
+    referenceType: "storage_object",
+    referenceId: args.key,
+    metadata: {
+      source: "data",
+      object_kind: "data_upload",
+      key: args.key,
+    },
+  });
   const patch = {
     source: "data" as const,
     objectKind: "data_upload" as const,
     key: args.key,
     name: args.filename,
-    size: Math.max(0, Math.floor(args.size)),
+    size: normalizedSize,
     createdAt: Math.max(0, Math.floor(args.createdAt)),
     dataBlobId: args.blobId,
     runId: undefined,
@@ -238,14 +252,23 @@ export const { syncMetadata } = r2.clientApi<DataModel>({
     const filename = parsed.filename.trim() || "file";
     const blobId = parsed.blobId.trim();
     const createdAt = toMillis(metadata?.lastModified, Date.now());
-    await upsertDataUploadIndexRow(ctx as MutationCtx, {
-      userId,
-      key,
-      filename,
-      blobId: blobId || shortId("blob"),
-      size: objectSize,
-      createdAt,
-    });
+    try {
+      await upsertDataUploadIndexRow(ctx as MutationCtx, {
+        userId,
+        key,
+        filename,
+        blobId: blobId || shortId("blob"),
+        size: objectSize,
+        createdAt,
+      });
+    } catch (error) {
+      try {
+        await r2.deleteObject(ctx, key);
+      } catch {
+        // best-effort cleanup when post-upload validation fails
+      }
+      throw error;
+    }
   },
 });
 

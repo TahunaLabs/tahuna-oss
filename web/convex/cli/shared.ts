@@ -47,6 +47,10 @@ export async function authenticateApiRequest(ctx: ActionCtx, request: Request): 
   if (!auth) {
     return null;
   }
+  await ctx.runMutation(internal.credits.internalEnsureUserLedger, {
+    userId: auth.userId,
+    source: "api_key",
+  });
   const now = Date.now();
   const shouldTouch = typeof auth.lastUsedAt !== "number" || now - auth.lastUsedAt >= 60_000;
   if (shouldTouch) {

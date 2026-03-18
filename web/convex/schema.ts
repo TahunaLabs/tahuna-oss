@@ -52,6 +52,13 @@ export default defineSchema({
     runtimeTokenHash: v.optional(v.string()),
     artifactKeys: v.optional(v.array(v.string())),
     cancellationRequested: v.boolean(),
+    computeStartedAt: v.optional(v.number()),
+    creditsReservedCents: v.optional(v.number()),
+    computeChargeCents: v.optional(v.number()),
+    computeChargeStatus: v.optional(
+      v.union(v.literal("pending"), v.literal("charged"), v.literal("failed"), v.literal("refunded")),
+    ),
+    computeChargeError: v.optional(v.string()),
   })
     .index("by_user", ["userId"])
     .index("by_user_and_environment", ["userId", "environmentId"])
@@ -73,6 +80,27 @@ export default defineSchema({
     .index("by_user", ["userId"])
     .index("by_user_and_source", ["userId", "source"])
     .index("by_user_and_key", ["userId", "key"]),
+
+  userCredits: defineTable({
+    userId: v.string(),
+    balanceCents: v.number(),
+    currency: v.string(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_user", ["userId"]),
+
+  usageEvents: defineTable({
+    userId: v.string(),
+    eventType: v.string(),
+    creditsDeltaCents: v.number(),
+    balanceAfterCents: v.number(),
+    referenceType: v.optional(v.string()),
+    referenceId: v.optional(v.string()),
+    metadata: v.optional(v.any()),
+    createdAt: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_user_and_created_at", ["userId", "createdAt"]),
 
   wandbRuns: defineTable({
     runId: v.id("runs"),

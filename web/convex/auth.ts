@@ -3,12 +3,13 @@ import { convex } from "@convex-dev/better-auth/plugins";
 import { betterAuth } from "better-auth/minimal";
 import { emailOTP } from "better-auth/plugins";
 import { ConvexError, v } from "convex/values";
-import { components } from "@convex/_generated/api";
+import { components, internal } from "@convex/_generated/api";
 import type { DataModel } from "@convex/_generated/dataModel";
 import { internalMutation, mutation, query, type ActionCtx, type MutationCtx, type QueryCtx } from "@convex/_generated/server";
 import authConfig from "@convex/auth.config";
 import { sha256Hex } from "@convex/crypto";
 import { shortId } from "@convex/ids";
+import { ensureUserLedger } from "@convex/credits";
 import { sendOtpEmail } from "@convex/resend";
 import { AUTH_CONFIG, NETWORK_CONFIG } from "../config";
 
@@ -57,6 +58,19 @@ export const getCurrentUser = query({
 export async function requireUser(ctx: GenericCtx<DataModel> | QueryCtx | MutationCtx | ActionCtx) {
   const user = await authComponent.getAuthUser(ctx);
   if (!user) throw new Error("Not authenticated");
+  const userId = String(user._id);
+
+  if ("runMutation" in ctx && typeof ctx.runMutation === "function") {
+    await ctx.runMutation(internal.credits.internalEnsureUserLedger, {
+      userId,
+      source: "auth_session",
+    });
+  } else if ("scheduler" in ctx) {
+    await ensureUserLedger(ctx as MutationCtx, {
+      userId,
+      source: "auth_session",
+    });
+  }
   return user;
 }
 

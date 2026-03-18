@@ -18,6 +18,13 @@ import { HeadObjectCommand } from "@aws-sdk/client-s3";
 import { images } from "@convex/catalog";
 import { PYTHON_CONFIG, RUN_CONFIG, SYNC_CONFIG } from "@convex/appConfig";
 import {
+  applyStorageDeltaCredits,
+  consumeUserCredits,
+  estimateRunReservationCents,
+  grantUserCredits,
+  USAGE_EVENT_TYPE,
+} from "@convex/credits";
+import {
   parseManifest,
   sha256Hex,
   type ManifestEntry,
@@ -442,17 +449,30 @@ async function upsertRunArtifactIndexRow(
     createdAt: number;
   },
 ) {
+  const normalizedSize = Math.max(0, Math.floor(args.size));
+  const normalizedCreatedAt = Math.max(0, Math.floor(args.createdAt));
   const existing = await ctx.db
     .query("storageObjects")
     .withIndex("by_user_and_key", (q) => q.eq("userId", args.userId).eq("key", args.key))
     .first();
+  const previousSize = existing ? Math.max(0, Math.floor(existing.size || 0)) : 0;
+  await applyStorageDeltaCredits(ctx, {
+    userId: args.userId,
+    sizeDeltaBytes: normalizedSize - previousSize,
+    referenceType: "run_artifact",
+    referenceId: args.key,
+    metadata: {
+      run_id: String(args.runId),
+      key: args.key,
+    },
+  });
   const patch = {
     source: "run_artifact" as const,
     objectKind: "run_artifact" as const,
     key: args.key,
     name: storageObjectNameFromKey(args.key),
-    size: Math.max(0, Math.floor(args.size)),
-    createdAt: Math.max(0, Math.floor(args.createdAt)),
+    size: normalizedSize,
+    createdAt: normalizedCreatedAt,
     runId: args.runId,
     dataBlobId: undefined,
     dataId: undefined,
@@ -1186,6 +1206,13 @@ async function createRunForUserId(
   },
 ) {
   const env = await getAccessibleEnvironment(ctx, args.userId, args.environmentId);
+  const effectiveGpuType = args.gpu_type ?? env.gpuType;
+  const effectiveGpuCount = args.gpu_count ?? env.gpuCount;
+  const effectiveVolumeGb = args.volume_gb ?? env.volumeGb;
+  const reservedCents = estimateRunReservationCents({
+    gpuCount: effectiveGpuCount,
+    volumeGb: effectiveVolumeGb,
+  });
   const codeManifestHash = env.latestCodeManifestHash;
   const dataManifestHash = env.latestDataManifestHash;
   const dataId = env.dataId || String(env._id);
@@ -1214,11 +1241,33 @@ async function createRunForUserId(
     logs: `runs/${args.environmentId}/${now}/logs`,
     status: RUN_STATUS.QUEUED,
     cancellationRequested: false,
-    effectiveGpuType: args.gpu_type ?? env.gpuType,
-    effectiveGpuCount: args.gpu_count ?? env.gpuCount,
-    effectiveVolumeGb: args.volume_gb ?? env.volumeGb,
+    effectiveGpuType,
+    effectiveGpuCount,
+    effectiveVolumeGb,
     codeManifestHash: codeManifestHash,
     dataManifestHash: dataManifestHash || undefined,
+    creditsReservedCents: reservedCents,
+    computeChargeStatus: "pending",
+  });
+  const reservation = await consumeUserCredits(ctx, {
+    userId: args.userId,
+    amountCents: reservedCents,
+    eventType: USAGE_EVENT_TYPE.RUN_COMPUTE_RESERVED,
+    referenceType: "run",
+    referenceId: String(runId),
+    metadata: {
+      gpu_type: effectiveGpuType,
+      gpu_count: effectiveGpuCount,
+      volume_gb: effectiveVolumeGb,
+    },
+  });
+  if (!reservation) {
+    throw new ConvexError("insufficient credits");
+  }
+  await ctx.db.patch("runs", runId, {
+    computeChargeCents: reservedCents,
+    computeChargeStatus: "charged",
+    computeChargeError: undefined,
   });
 
   await ctx.db.insert("runEvents", {
@@ -1227,11 +1276,13 @@ async function createRunForUserId(
     message: "run queued for provisioning",
     metadata: {
       name: runName,
-      gpu_type: args.gpu_type || env.gpuType,
-      gpu_count: args.gpu_count ?? env.gpuCount,
-      volume_gb: args.volume_gb ?? env.volumeGb,
+      gpu_type: effectiveGpuType,
+      gpu_count: effectiveGpuCount,
+      volume_gb: effectiveVolumeGb,
       code_manifest_hash: codeManifestHash || null,
       data_manifest_hash: dataManifestHash || null,
+      credits_reserved_cents: reservedCents,
+      balance_after_cents: reservation.balanceCents,
     },
   });
 
@@ -1243,6 +1294,41 @@ async function createRunForUserId(
     throw new ConvexError("failed to create run");
   }
   return toRunResponse(row);
+}
+
+async function maybeRefundUnusedComputeReservation(
+  ctx: MutationCtx,
+  row: Doc<"runs">,
+  reason: string,
+) {
+  if (row.computeChargeStatus !== "charged") {
+    return;
+  }
+  if (typeof row.computeStartedAt === "number" && row.computeStartedAt > 0) {
+    return;
+  }
+  const reservedCents = Math.max(
+    0,
+    Math.floor(
+      (typeof row.computeChargeCents === "number" ? row.computeChargeCents : row.creditsReservedCents) || 0,
+    ),
+  );
+  if (reservedCents > 0) {
+    await grantUserCredits(ctx, {
+      userId: row.userId,
+      amountCents: reservedCents,
+      eventType: USAGE_EVENT_TYPE.RUN_COMPUTE_REFUND,
+      referenceType: "run",
+      referenceId: String(row._id),
+      metadata: {
+        reason,
+      },
+    });
+  }
+  await ctx.db.patch("runs", row._id, {
+    computeChargeStatus: "refunded",
+    computeChargeError: undefined,
+  });
 }
 
 async function cancelRunForUserId(
@@ -1267,6 +1353,7 @@ async function cancelRunForUserId(
       status: RUN_STATUS.CANCELLED,
       message: force ? "force cancellation requested before provisioning" : "run cancelled before provisioning",
     });
+    await maybeRefundUnusedComputeReservation(ctx, row, "cancelled_before_provisioning");
     return { cancel_requested: true, forced: force, run_id: String(runId) };
   }
 
@@ -1628,6 +1715,7 @@ export const markCancelledAfterTermination = internalMutation({
       status: RUN_STATUS.CANCELLED,
       message: args.force === true ? "force cancellation completed" : "cancellation completed",
     });
+    await maybeRefundUnusedComputeReservation(ctx, row, "cancelled_before_running");
     return null;
   },
 });
@@ -1654,6 +1742,7 @@ export const markCancellationTerminationFailed = internalMutation({
         error: errorText,
       },
     });
+    await maybeRefundUnusedComputeReservation(ctx, row, "cancellation_failed_before_running");
     return null;
   },
 });
@@ -2028,6 +2117,7 @@ export const markRunning = internalMutation({
 
     await ctx.db.patch("runs", args.runId, {
       status: RUN_STATUS.RUNNING,
+      computeStartedAt: row.computeStartedAt ?? Date.now(),
     });
     await ctx.db.insert("runEvents", {
       runId: args.runId,
@@ -2072,6 +2162,7 @@ export const markFailed = internalMutation({
           }
         : undefined,
     });
+    await maybeRefundUnusedComputeReservation(ctx, row, "provisioning_failed_before_running");
     await scheduleForcedPodTermination(ctx, args.runId, row.podId);
     return null;
   },
@@ -2182,6 +2273,7 @@ export const ingestRuntimeStatus = internalMutation({
           source: "pod-runtime",
         },
       });
+      await maybeRefundUnusedComputeReservation(ctx, row, "runtime_failed_before_running");
       await scheduleForcedPodTermination(ctx, args.runId, row.podId);
       return { status: RUN_STATUS.FAILED };
     }
@@ -2201,6 +2293,9 @@ export const ingestRuntimeStatus = internalMutation({
         source: "pod-runtime",
       },
     });
+    if (status === RUN_STATUS.CANCELLED) {
+      await maybeRefundUnusedComputeReservation(ctx, row, "runtime_cancelled_before_running");
+    }
     if (status === RUN_STATUS.COMPLETED || status === RUN_STATUS.CANCELLED) {
       await scheduleForcedPodTermination(ctx, args.runId, row.podId);
     }
