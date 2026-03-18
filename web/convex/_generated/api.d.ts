@@ -25,6 +25,7 @@ import type * as ids from "../ids.js";
 import type * as monitoring_wandb from "../monitoring/wandb.js";
 import type * as resend from "../resend.js";
 import type * as runs from "../runs.js";
+import type * as sharing from "../sharing.js";
 import type * as sleep from "../sleep.js";
 import type * as storage from "../storage.js";
 import type * as syncManifest from "../syncManifest.js";
@@ -54,6 +55,7 @@ declare const fullApi: ApiFromModules<{
   "monitoring/wandb": typeof monitoring_wandb;
   resend: typeof resend;
   runs: typeof runs;
+  sharing: typeof sharing;
   sleep: typeof sleep;
   storage: typeof storage;
   syncManifest: typeof syncManifest;
