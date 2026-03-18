@@ -40,10 +40,10 @@ Content-addressed incremental sync of project code and data from local machine t
 
 | Object | Key pattern |
 |--------|-------------|
-| Code blob | `<userId>/blobs/<sha256>` |
-| Data blob | `<userId>/blobs/<sha256>` |
-| Code manifest | `<userId>/environment/<envId>/manifests/code/<manifestHash>.json` |
-| Data manifest | `<userId>/data/<dataId>/manifests/<dataManifestHash>.json` |
+| Code blob | `blobs/<sha256>` |
+| Data blob | `blobs/<sha256>` |
+| Code manifest | `environments/<envId>/manifests/code/<manifestHash>.json` |
+| Data manifest | `data/<dataId>/manifests/<dataManifestHash>.json` |
 
 ## Lifecycle
 
