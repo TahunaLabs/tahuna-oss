@@ -1,12 +1,13 @@
 "use client"
 
-import { Server, Plus, Filter, Settings2, LayoutGrid, Play, Trash2, ExternalLink, Copy, Check, FileCode2 } from "lucide-react"
-import { Fragment, useState } from "react"
+import { Server, Plus, Filter, Settings2, LayoutGrid, Play, Trash2, ExternalLink, Copy, Check, FileCode2, Share2, Users } from "lucide-react"
+import { Fragment, useEffect, useState } from "react"
 import Link from "next/link"
 import {
   type DataBlobRow,
   type EnvironmentRow,
 } from "@/components/dashboard/shared"
+import type { Id } from "@convex/_generated/dataModel"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -19,6 +20,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Notice } from "@/components/ui/notice"
 import { Textarea } from "@/components/ui/textarea"
 
@@ -44,7 +46,9 @@ type EnvironmentsViewProps = {
   onConfigDraftChange: (value: string) => void
   onCancelConfigEdit: () => void
   onSaveConfig: (environmentId: EnvironmentRow["environment_id"]) => void
-  onDeleteEnvironment: (environmentId: EnvironmentRow["environment_id"]) => void
+  onDeleteEnvironments: (environmentIds: EnvironmentRow["environment_id"][]) => Promise<void>
+  sharedByMeResourceIds?: ReadonlySet<string>
+  onShareEnvironment?: (environmentId: string) => void
 }
 
 export function EnvironmentsView({
@@ -69,9 +73,44 @@ export function EnvironmentsView({
   onConfigDraftChange,
   onCancelConfigEdit,
   onSaveConfig,
-  onDeleteEnvironment,
+  onDeleteEnvironments,
+  sharedByMeResourceIds,
+  onShareEnvironment,
 }: EnvironmentsViewProps) {
   const hasData = environments.length > 0
+  const [selectedEnvironmentIds, setSelectedEnvironmentIds] = useState<Id<"environments">[]>([])
+
+  useEffect(() => {
+    const environmentIdSet = new Set(environments.map((environment) => environment.environment_id))
+    setSelectedEnvironmentIds((current) => {
+      const next = current.filter((environmentId) => environmentIdSet.has(environmentId))
+      if (next.length === current.length && next.every((environmentId, index) => environmentId === current[index])) {
+        return current
+      }
+      return next
+    })
+  }, [environments])
+
+  const allEnvironmentsSelected = environments.length > 0 && selectedEnvironmentIds.length === environments.length
+  const selectedEnvironmentCount = selectedEnvironmentIds.length
+
+  function toggleEnvironmentSelection(environmentId: Id<"environments">, nextChecked: boolean) {
+    setSelectedEnvironmentIds((current) => {
+      if (nextChecked) {
+        if (current.includes(environmentId)) return current
+        return [...current, environmentId]
+      }
+      return current.filter((id) => id !== environmentId)
+    })
+  }
+
+  function toggleAllEnvironmentSelections(nextChecked: boolean) {
+    if (nextChecked) {
+      setSelectedEnvironmentIds(environments.map((environment) => environment.environment_id))
+      return
+    }
+    setSelectedEnvironmentIds([])
+  }
 
   return (
     <main className="flex-1 flex flex-col h-full">
@@ -112,6 +151,57 @@ export function EnvironmentsView({
         </div>
       </div>
 
+      {hasData ? (
+        <div className="flex items-center justify-between border-b border-border px-6 py-2.5">
+          <div className="flex items-center gap-2">
+            <Checkbox
+              checked={allEnvironmentsSelected || (selectedEnvironmentCount > 0 && "indeterminate")}
+              onCheckedChange={(checked) => toggleAllEnvironmentSelections(checked === true)}
+              aria-label="Select all environments"
+              disabled={busy}
+            />
+            <span className="text-xs text-muted-foreground">
+              {selectedEnvironmentCount > 0
+                ? `${selectedEnvironmentCount} selected`
+                : "Select environments to delete"}
+            </span>
+          </div>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button
+                type="button"
+                variant="dashboard-outline-compact-gap"
+                size="none"
+                disabled={busy || selectedEnvironmentCount === 0}
+              >
+                <Trash2 className="w-3 h-3" />
+                Delete selected
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete selected environments?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This will permanently delete {selectedEnvironmentCount} selected environment
+                  {selectedEnvironmentCount === 1 ? "" : "s"}, including associated runs, logs, metrics, and artifacts.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Keep environments</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={() => {
+                    void onDeleteEnvironments(selectedEnvironmentIds)
+                  }}
+                  disabled={busy || selectedEnvironmentCount === 0}
+                >
+                  Delete environments
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </div>
+      ) : null}
+
       {/* Content */}
       {!hasData ? (
         <div className="flex-1 flex items-center justify-center">
@@ -149,6 +239,14 @@ export function EnvironmentsView({
           <table className="w-full">
             <thead className="sticky top-0 bg-background">
               <tr className="border-b border-border text-left">
+                <th className="px-3 py-2 text-xs font-medium text-muted-foreground">
+                  <Checkbox
+                    checked={allEnvironmentsSelected || (selectedEnvironmentCount > 0 && "indeterminate")}
+                    onCheckedChange={(checked) => toggleAllEnvironmentSelections(checked === true)}
+                    aria-label="Select all environments"
+                    disabled={busy}
+                  />
+                </th>
                 <th className="px-6 py-2 text-xs font-medium text-muted-foreground">ID</th>
                 <th className="px-3 py-2 text-xs font-medium text-muted-foreground">Name</th>
                 <th className="px-3 py-2 text-xs font-medium text-muted-foreground">Spec</th>
@@ -168,12 +266,27 @@ export function EnvironmentsView({
                 return (
                   <Fragment key={env.environment_id}>
                     <tr className="border-b border-border hover:bg-secondary/50 group align-top">
+                      <td className="px-3 py-2.5">
+                        <Checkbox
+                          checked={selectedEnvironmentIds.includes(env.environment_id)}
+                          onCheckedChange={(checked) =>
+                            toggleEnvironmentSelection(env.environment_id, checked === true)
+                          }
+                          aria-label={`Select environment ${env.environment_id}`}
+                          disabled={busy}
+                        />
+                      </td>
                       <td className="px-6 py-2.5 font-mono text-xs text-foreground">
                         {env.environment_id}
                       </td>
                       <td className="px-3 py-2.5 text-sm text-foreground">
                         <div className="space-y-0.5">
-                          <p>{env.name}</p>
+                          <div className="flex items-center gap-1.5">
+                            <p>{env.name}</p>
+                            {sharedByMeResourceIds?.has(env.environment_id) && (
+                              <Users className="w-3.5 h-3.5 text-muted-foreground" />
+                            )}
+                          </div>
                           <p className="text-xs text-muted-foreground">Python {env.python_version}</p>
                         </div>
                       </td>
@@ -202,12 +315,12 @@ export function EnvironmentsView({
                                       <span className="inline-flex px-2 py-0.5 rounded text-xs bg-secondary text-foreground">
                                         {blob ? blob.filename : dataId}
                                       </span>
-                                    <Button
-                                      type="button"
-                                      variant="dashboard-outline-compact-muted"
-                                      size="none"
-                                      onClick={() => onUnbindData(env.environment_id, dataId)}
-                                      disabled={busy}
+                                      <Button
+                                        type="button"
+                                        variant="dashboard-outline-compact-muted"
+                                        size="none"
+                                        onClick={() => onUnbindData(env.environment_id, dataId)}
+                                        disabled={busy}
                                       >
                                         Unbind
                                       </Button>
@@ -276,41 +389,22 @@ export function EnvironmentsView({
                             <Play className="w-3 h-3" />
                             Run
                           </Button>
-                          <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                              <Button
-                                type="button"
-                                variant="dashboard-outline-icon-danger"
-                                size="none"
-                                disabled={busy}
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>Delete environment?</AlertDialogTitle>
-                                <AlertDialogDescription>
-                                  This will permanently delete environment <code>{env.environment_id}</code>, its runs, and associated runtime logs, metrics, and artifacts.
-                                </AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel>Keep environment</AlertDialogCancel>
-                                <AlertDialogAction
-                                  onClick={() => onDeleteEnvironment(env.environment_id)}
-                                  disabled={busy}
-                                >
-                                  Delete environment
-                                </AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
+                          {onShareEnvironment && (
+                            <Button
+                              type="button"
+                              variant="dashboard-outline-icon-muted"
+                              size="none"
+                              onClick={() => onShareEnvironment(env.environment_id)}
+                            >
+                              <Share2 className="w-3.5 h-3.5" />
+                            </Button>
+                          )}
                         </div>
                       </td>
                     </tr>
                     {configOpen ? (
                       <tr className="border-b border-border bg-secondary/20">
-                        <td colSpan={5} className="px-6 pb-4 pt-1">
+                        <td colSpan={6} className="px-6 pb-4 pt-1">
                           <div className="rounded-xl border border-border bg-background/80 p-4">
                             <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                               <div>

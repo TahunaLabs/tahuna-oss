@@ -83,7 +83,7 @@ function normalizeBatchSize(raw: number | undefined) {
   return normalized;
 }
 
-async function cleanupR2(ctx: ActionCtx, dryRun: boolean) {
+async function cleanupR2(_ctx: ActionCtx, dryRun: boolean) {
   let deletedCount = 0;
   let continuationToken: string | undefined = undefined;
 

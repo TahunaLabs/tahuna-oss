@@ -1,10 +1,12 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { ChevronDown, ChevronUp, Play, Plus, Filter, Settings2, LayoutGrid, Trash2, X } from "lucide-react"
+import { ChevronDown, ChevronUp, Play, Plus, Filter, Settings2, LayoutGrid, Trash2, X, Share2, Users } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import { cn } from "@/lib/utils"
+import type { Id } from "@convex/_generated/dataModel"
 import {
   CANCELLABLE_STATUSES,
   metricSeries,
@@ -46,6 +48,9 @@ type RunsViewProps = {
   runMetrics: RunMetricsOnlyDetail | undefined
   onSelectRun: (runId: string | null) => void
   onCancelRun: (runId: RunRow["run_id"]) => void
+  onDeleteRuns: (runIds: RunRow["run_id"][]) => Promise<void>
+  sharedByMeResourceIds?: ReadonlySet<string>
+  onShareRun?: (runId: string) => void
 }
 
 type RunTab = "all" | "active" | "completed"
@@ -83,9 +88,13 @@ export function RunsView({
   runMetrics,
   onSelectRun,
   onCancelRun,
+  onDeleteRuns,
+  sharedByMeResourceIds,
+  onShareRun,
 }: RunsViewProps) {
   const [activeTab, setActiveTab] = useState<RunTab>("all")
   const [showRunContext, setShowRunContext] = useState(false)
+  const [selectedRunIds, setSelectedRunIds] = useState<Id<"runs">[]>([])
 
   const filteredRuns = runs.filter((run) => {
     if (activeTab === "active") return ACTIVE_STATUSES.has(run.status)
@@ -98,10 +107,41 @@ export function RunsView({
   const series = metricSeries(runMetrics)
   const primarySeries = series.filter((metric) => metric.category !== "system")
   const systemSeries = series.filter((metric) => metric.category === "system")
+  const allFilteredRunsSelected = filteredRuns.length > 0 && selectedRunIds.length === filteredRuns.length
+  const selectedRunCount = selectedRunIds.length
 
   useEffect(() => {
     setShowRunContext(false)
   }, [selectedRunId])
+
+  useEffect(() => {
+    const runIdSet = new Set(filteredRuns.map((run) => run.run_id))
+    setSelectedRunIds((current) => {
+      const next = current.filter((runId) => runIdSet.has(runId))
+      if (next.length === current.length && next.every((runId, index) => runId === current[index])) {
+        return current
+      }
+      return next
+    })
+  }, [filteredRuns])
+
+  function toggleRunSelection(runId: Id<"runs">, nextChecked: boolean) {
+    setSelectedRunIds((current) => {
+      if (nextChecked) {
+        if (current.includes(runId)) return current
+        return [...current, runId]
+      }
+      return current.filter((id) => id !== runId)
+    })
+  }
+
+  function toggleAllRunSelections(nextChecked: boolean) {
+    if (nextChecked) {
+      setSelectedRunIds(filteredRuns.map((run) => run.run_id))
+      return
+    }
+    setSelectedRunIds([])
+  }
 
   return (
     <main className="flex-1 flex flex-col h-full">
@@ -150,6 +190,57 @@ export function RunsView({
         </div>
       </div>
 
+      {!noEnvironments && runs.length > 0 ? (
+        <div className="flex items-center justify-between border-b border-border px-6 py-2.5">
+          <div className="flex items-center gap-2">
+            <Checkbox
+              checked={allFilteredRunsSelected || (selectedRunCount > 0 && "indeterminate")}
+              onCheckedChange={(checked) => toggleAllRunSelections(checked === true)}
+              aria-label="Select all runs"
+              disabled={busy}
+            />
+            <span className="text-xs text-muted-foreground">
+              {selectedRunCount > 0
+                ? `${selectedRunCount} selected`
+                : "Select runs to delete"}
+            </span>
+          </div>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button
+                type="button"
+                variant="dashboard-outline-compact-gap"
+                size="none"
+                disabled={busy || selectedRunCount === 0}
+              >
+                <Trash2 className="w-3 h-3" />
+                Delete selected
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete selected runs?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This will delete {selectedRunCount} selected run{selectedRunCount === 1 ? "" : "s"}.
+                  Active runs will request cancellation before deletion.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Keep runs</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={() => {
+                    void onDeleteRuns(selectedRunIds)
+                  }}
+                  disabled={busy || selectedRunCount === 0}
+                >
+                  Delete runs
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </div>
+      ) : null}
+
       {/* Content */}
       {noEnvironments ? (
         <div className="flex-1 flex items-center justify-center">
@@ -193,32 +284,51 @@ export function RunsView({
           <div className="w-80 border-r border-border flex flex-col min-h-0 shrink-0">
             <div className="flex-1 overflow-y-auto">
               {filteredRuns.map((run) => (
-                <Button
-                  type="button"
-                  variant={selectedRunId === run.run_id ? "dashboard-run-list-item-active" : "dashboard-run-list-item"}
-                  size="none"
+                <div
                   key={run.run_id}
-                  onClick={() => onSelectRun(selectedRunId === run.run_id ? null : run.run_id)}
-                >
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className={cn("w-2 h-2 rounded-full shrink-0", STATUS_DOT[run.status] || "bg-muted-foreground")} />
-                    <span className="text-sm font-medium text-foreground truncate">
-                      {run.name || run.run_id}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2 ml-4">
-                    <span className="text-xs text-muted-foreground capitalize">{run.status}</span>
-                    <span className="text-xs text-muted-foreground">·</span>
-                    <span className="text-xs text-muted-foreground truncate">
-                      {run.environment_id}
-                    </span>
-                  </div>
-                  {run.created_at > 0 && (
-                    <p className="text-xs text-muted-foreground ml-4 mt-0.5">
-                      {relativeTime(run.created_at)}
-                    </p>
+                  className={cn(
+                    "flex items-stretch border-b border-border",
+                    selectedRunId === run.run_id ? "bg-secondary" : "hover:bg-secondary/50",
                   )}
-                </Button>
+                >
+                  <div className="flex items-start px-3 pt-3">
+                    <Checkbox
+                      checked={selectedRunIds.includes(run.run_id)}
+                      onCheckedChange={(checked) => toggleRunSelection(run.run_id, checked === true)}
+                      aria-label={`Select run ${run.run_id}`}
+                      disabled={busy}
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    variant="dashboard-run-list-item"
+                    size="none"
+                    className="flex-1 border-none px-3"
+                    onClick={() => onSelectRun(selectedRunId === run.run_id ? null : run.run_id)}
+                  >
+                    <div className="mb-1 flex items-center gap-2">
+                      <span className={cn("h-2 w-2 shrink-0 rounded-full", STATUS_DOT[run.status] || "bg-muted-foreground")} />
+                      <span className="truncate text-sm font-medium text-foreground">
+                        {run.name || run.run_id}
+                      </span>
+                      {sharedByMeResourceIds?.has(run.run_id) && (
+                        <Users className="w-3 h-3 shrink-0 text-muted-foreground" />
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs capitalize text-muted-foreground">{run.status}</span>
+                      <span className="text-xs text-muted-foreground">·</span>
+                      <span className="truncate text-xs text-muted-foreground">
+                        {run.environment_id}
+                      </span>
+                    </div>
+                    {run.created_at > 0 ? (
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        {relativeTime(run.created_at)}
+                      </p>
+                    ) : null}
+                  </Button>
+                </div>
               ))}
             </div>
           </div>
@@ -258,6 +368,16 @@ export function RunsView({
                     </span>
                   </div>
                   <div className="flex items-center gap-1.5 shrink-0">
+                    {onShareRun && (
+                      <Button
+                        type="button"
+                        variant="dashboard-icon-secondary"
+                        size="none"
+                        onClick={() => onShareRun(runDetail.run_id)}
+                      >
+                        <Share2 className="w-4 h-4" />
+                      </Button>
+                    )}
                     {CANCELLABLE_STATUSES.has(runDetail.status) && (
                       <AlertDialog>
                         <AlertDialogTrigger asChild>

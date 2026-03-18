@@ -6,7 +6,6 @@ import {
   MoreHorizontal,
   Search,
   Users,
-  UserPlus,
   Settings,
   HardDrive,
   Server,
@@ -97,13 +96,17 @@ export function Sidebar({ activeView, onViewChange, userInitial, isDark, onTheme
                       <Monitor className="w-4 h-4" />
                       <span>Machines</span>
                     </Link>
-                    <Button type="button" variant="sidebar-menu-item" size="none">
+                    <Button
+                      type="button"
+                      variant="sidebar-menu-item"
+                      size="none"
+                      onClick={() => {
+                        setMoreOpen(false)
+                        onViewChange("shared")
+                      }}
+                    >
                       <Users className="w-4 h-4" />
-                      <span>Teams</span>
-                    </Button>
-                    <Button type="button" variant="sidebar-menu-item" size="none">
-                      <UserPlus className="w-4 h-4" />
-                      <span>Members</span>
+                      <span>Shared with me</span>
                     </Button>
                     <div className="border-t border-border my-1" />
                     <Button type="button" variant="sidebar-menu-item" size="none">

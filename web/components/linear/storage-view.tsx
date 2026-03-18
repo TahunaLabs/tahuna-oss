@@ -10,6 +10,7 @@ import {
   ExternalLink,
   Download,
   Pencil,
+  Share2,
   ChevronUp,
   ChevronDown,
   X,
@@ -59,6 +60,7 @@ type StorageViewProps = {
   onStartRenameArtifact: (item: StorageItem) => void
   onPreviousStoragePage: () => void
   onNextStoragePage: () => void
+  onShareStorageItem?: (item: StorageItem) => void
 }
 
 export function StorageView({
@@ -87,6 +89,7 @@ export function StorageView({
   onStartRenameArtifact,
   onPreviousStoragePage,
   onNextStoragePage,
+  onShareStorageItem,
 }: StorageViewProps) {
   const [showFilters, setShowFilters] = useState(false)
   const [showUploadDrawer, setShowUploadDrawer] = useState(false)
@@ -354,15 +357,27 @@ export function StorageView({
                             </a>
                           </Button>
                           {item.source === "data" && (
-                            <Button
-                              type="button"
-                              variant="dashboard-outline-icon-muted"
-                              size="none"
-                              onClick={() => onStartRenameArtifact(item)}
-                              disabled={artifactRenameBusyId !== null}
-                            >
-                              <Pencil className="w-3.5 h-3.5" />
-                            </Button>
+                            <>
+                              <Button
+                                type="button"
+                                variant="dashboard-outline-icon-muted"
+                                size="none"
+                                onClick={() => onStartRenameArtifact(item)}
+                                disabled={artifactRenameBusyId !== null}
+                              >
+                                <Pencil className="w-3.5 h-3.5" />
+                              </Button>
+                              {onShareStorageItem && (
+                                <Button
+                                  type="button"
+                                  variant="dashboard-outline-icon-muted"
+                                  size="none"
+                                  onClick={() => onShareStorageItem(item)}
+                                >
+                                  <Share2 className="w-3.5 h-3.5" />
+                                </Button>
+                              )}
+                            </>
                           )}
                         </div>
                       )}

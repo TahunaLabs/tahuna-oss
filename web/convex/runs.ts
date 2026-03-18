@@ -1514,6 +1514,22 @@ export const create = mutation({
   },
 });
 
+export const remove = mutation({
+  args: {
+    runId: v.id("runs"),
+    cancelActive: v.optional(v.boolean()),
+    force: v.optional(v.boolean()),
+  },
+  returns: v.object({ deleted: v.boolean(), run_id: v.string() }),
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    return deleteRunForUserId(ctx, String(user._id), args.runId, {
+      cancelActive: args.cancelActive === true,
+      force: args.force === true,
+    });
+  },
+});
+
 export const cancel = mutation({
   args: { runId: v.id("runs"), force: v.optional(v.boolean()) },
   returns: v.object({ cancel_requested: v.boolean(), forced: v.boolean(), run_id: v.string() }),

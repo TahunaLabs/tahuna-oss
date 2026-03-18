@@ -4,6 +4,8 @@ import { Sidebar } from "@/components/linear/sidebar"
 import { StorageView } from "@/components/linear/storage-view"
 import { EnvironmentsView } from "@/components/linear/environments-view"
 import { RunsView } from "@/components/linear/runs-view"
+import { SharedWithMeView } from "@/components/linear/shared-with-me-view"
+import { ShareDialog } from "@/components/linear/share-dialog"
 import { useTheme } from "@/components/theme-provider"
 import { Notice } from "@/components/ui/notice"
 import { PageLoader } from "@/components/ui/spinner"
@@ -67,6 +69,11 @@ export default function DashboardPage() {
   const [configSourceText, setConfigSourceText] = useState("")
   const [configError, setConfigError] = useState("")
   const [configSaving, setConfigSaving] = useState(false)
+  const [shareDialogOpen, setShareDialogOpen] = useState(false)
+  const [shareTarget, setShareTarget] = useState<{ resourceType: "environment" | "run" | "data"; resourceId: string } | null>(null)
+  const [shareBusy, setShareBusy] = useState(false)
+  const [shareError, setShareError] = useState("")
+  const [shareMessage, setShareMessage] = useState("")
   const shouldLoadQueries = !authLoading && isAuthenticated && !loggingOut
 
   const currentUser = useQuery(api.auth.getCurrentUser, shouldLoadQueries ? {} : "skip")
@@ -79,6 +86,8 @@ export default function DashboardPage() {
   const runResult = useQuery(api.runs.list, shouldLoadQueries ? {} : "skip") as
     | { runs: RunRow[] }
     | undefined
+  const sharedWithMeResult = useQuery(api.sharing.listSharedWithMe, shouldLoadQueries ? {} : "skip")
+  const sharedByMeResult = useQuery(api.sharing.listSharedByMe, shouldLoadQueries ? {} : "skip")
 
   const shouldLoadRunDetail = shouldLoadQueries && selectedRunId !== null
   const selectedRunFromList = runResult?.runs.find((r) => r.run_id === selectedRunId)
@@ -120,17 +129,75 @@ export default function DashboardPage() {
   const updateEnvironmentConfigMutation = useMutation(api.environments.updateConfig)
   const createRunMutation = useMutation(api.runs.create)
   const cancelRunMutation = useMutation(api.runs.cancel)
+  const removeRunMutation = useMutation(api.runs.remove)
   const syncDataMetadataMutation = useMutation(api.data.syncMetadata)
   const bindDataMutation = useMutation(api.environments.bindData)
   const unbindDataMutation = useMutation(api.environments.unbindData)
   const listStorageAction = useAction(api.storage.list)
   const renameArtifactAction = useAction(api.storage.renameArtifact)
+  const createShareMutation = useMutation(api.sharing.createShare)
+  const revokeShareMutation = useMutation(api.sharing.revokeShare)
+
+  const shouldLoadSharesForResource = shouldLoadQueries && shareDialogOpen && shareTarget !== null
+  const sharesForResource = useQuery(
+    api.sharing.listSharesForResource,
+    shouldLoadSharesForResource
+      ? { resourceType: shareTarget!.resourceType, resourceId: shareTarget!.resourceId }
+      : "skip",
+  )
 
   const userEmail = currentUser?.email ?? ""
   const userInitial = userEmail.trim().charAt(0).toUpperCase() || "U"
   const storageItems = storageResult?.items ?? []
   const storageTotal = storageResult?.total ?? 0
   const isDark = resolvedTheme === "dark"
+  const sharedWithMe = sharedWithMeResult?.shares ?? []
+  const sharedByMe = sharedByMeResult?.shares ?? []
+
+  const sharedByMeResourceIds = useMemo(() => {
+    return new Set(sharedByMe.map((s) => s.resource_id))
+  }, [sharedByMe])
+
+  function openShareDialog(resourceType: "environment" | "run" | "data", resourceId: string) {
+    setShareError("")
+    setShareMessage("")
+    setShareTarget({ resourceType, resourceId })
+    setShareDialogOpen(true)
+  }
+
+  async function handleCreateShare(grantedToUserId: string, permission: "read" | "edit") {
+    if (!shareTarget) return
+    setShareBusy(true)
+    setShareError("")
+    setShareMessage("")
+    try {
+      await createShareMutation({
+        resourceType: shareTarget.resourceType,
+        resourceId: shareTarget.resourceId,
+        grantedToUserId,
+        permission,
+      })
+      setShareMessage(`Shared with ${grantedToUserId} (${permission}).`)
+    } catch (shareError) {
+      setShareError(shareError instanceof Error ? shareError.message : "Failed to share")
+    } finally {
+      setShareBusy(false)
+    }
+  }
+
+  async function handleRevokeShare(shareId: string) {
+    setShareBusy(true)
+    setShareError("")
+    setShareMessage("")
+    try {
+      await revokeShareMutation({ shareId: shareId as Id<"shares"> })
+      setShareMessage("Share revoked.")
+    } catch (revokeError) {
+      setShareError(revokeError instanceof Error ? revokeError.message : "Failed to revoke")
+    } finally {
+      setShareBusy(false)
+    }
+  }
 
   const uniqueDataBlobs = useMemo(() => {
     const byId = new Map<string, DataBlobRow>()
@@ -319,10 +386,14 @@ export default function DashboardPage() {
     }
   }
 
-  async function deleteEnvironment(environmentId: Id<"environments">) {
+  async function deleteEnvironments(environmentIds: Id<"environments">[]) {
+    if (environmentIds.length === 0) return
     await withBusy(async () => {
-      await removeEnvMutation({ environmentId })
-      setMessage(`Environment ${environmentId} deleted.`)
+      for (const environmentId of environmentIds) {
+        await removeEnvMutation({ environmentId })
+      }
+      const deletedCount = environmentIds.length
+      setMessage(deletedCount === 1 ? "Deleted 1 environment." : `Deleted ${deletedCount} environments.`)
     })
   }
 
@@ -337,6 +408,20 @@ export default function DashboardPage() {
     await withBusy(async () => {
       await cancelRunMutation({ runId, force: false })
       setMessage(`Run ${runId} cancellation requested.`)
+    })
+  }
+
+  async function deleteRuns(runIds: Id<"runs">[]) {
+    if (runIds.length === 0) return
+    await withBusy(async () => {
+      for (const runId of runIds) {
+        await removeRunMutation({ runId, cancelActive: true, force: false })
+      }
+      if (selectedRunId && runIds.includes(selectedRunId as Id<"runs">)) {
+        setSelectedRunId(null)
+      }
+      const deletedCount = runIds.length
+      setMessage(deletedCount === 1 ? "Deleted 1 run." : `Deleted ${deletedCount} runs.`)
     })
   }
 
@@ -532,6 +617,11 @@ export default function DashboardPage() {
             onNextStoragePage={() =>
               setStorageOffset((current) => current + STORAGE_PAGE_LIMIT)
             }
+            onShareStorageItem={(item) => {
+              if (item.source === "data" && item.data_blob_id) {
+                openShareDialog("data", item.data_blob_id)
+              }
+            }}
           />
         )
       case "environments":
@@ -549,6 +639,7 @@ export default function DashboardPage() {
             configError={configError}
             configLoading={shouldLoadEnvironmentConfig && !environmentConfig}
             configSaving={configSaving}
+            sharedByMeResourceIds={sharedByMeResourceIds}
             onBindSelectionChange={(environmentId, value) =>
               setBindSelectionByEnvironment((current) => ({
                 ...current,
@@ -573,9 +664,8 @@ export default function DashboardPage() {
             onSaveConfig={(environmentId) => {
               void saveEnvironmentConfig(environmentId)
             }}
-            onDeleteEnvironment={(environmentId) => {
-              void deleteEnvironment(environmentId)
-            }}
+            onDeleteEnvironments={deleteEnvironments}
+            onShareEnvironment={(environmentId) => openShareDialog("environment", environmentId)}
           />
         )
       case "runs":
@@ -588,9 +678,28 @@ export default function DashboardPage() {
             runDetail={runDetail}
             runLogs={runLogs}
             runMetrics={runMetrics}
+            sharedByMeResourceIds={sharedByMeResourceIds}
             onSelectRun={setSelectedRunId}
             onCancelRun={(runId) => {
               void cancelRun(runId)
+            }}
+            onDeleteRuns={deleteRuns}
+            onShareRun={(runId) => openShareDialog("run", runId)}
+          />
+        )
+      case "shared":
+        return (
+          <SharedWithMeView
+            shares={sharedWithMe}
+            onNavigateToResource={(resourceType, resourceId) => {
+              if (resourceType === "environment") {
+                setActiveView("environments")
+              } else if (resourceType === "run") {
+                setActiveView("runs")
+                setSelectedRunId(resourceId)
+              } else if (resourceType === "data") {
+                setActiveView("storage")
+              }
             }}
           />
         )
@@ -619,6 +728,28 @@ export default function DashboardPage() {
         )}
         {renderMainContent()}
       </main>
+      {shareTarget && (
+        <ShareDialog
+          resourceType={shareTarget.resourceType}
+          resourceId={shareTarget.resourceId}
+          isOwner={true}
+          open={shareDialogOpen}
+          shares={sharesForResource?.shares ?? []}
+          busy={shareBusy}
+          error={shareError}
+          message={shareMessage}
+          onOpenChange={(open) => {
+            setShareDialogOpen(open)
+            if (!open) setShareTarget(null)
+          }}
+          onCreateShare={(userId, permission) => {
+            void handleCreateShare(userId, permission)
+          }}
+          onRevokeShare={(shareId) => {
+            void handleRevokeShare(shareId)
+          }}
+        />
+      )}
     </div>
   )
 }

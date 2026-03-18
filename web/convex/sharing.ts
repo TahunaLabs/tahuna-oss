@@ -222,6 +222,40 @@ export const listSharedByMe = query({
   },
 });
 
+export const listSharesForResource = query({
+  args: {
+    resourceType: v.union(v.literal("environment"), v.literal("run"), v.literal("data")),
+    resourceId: v.string(),
+  },
+  returns: v.object({
+    shares: v.array(
+      v.object({
+        share_id: v.string(),
+        granted_to: v.string(),
+        permission: v.string(),
+      }),
+    ),
+  }),
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    const userId = String(user._id);
+    if (!(await isOwner(ctx, userId, args.resourceType, args.resourceId))) {
+      return { shares: [] };
+    }
+    const shares = await ctx.db
+      .query("shares")
+      .withIndex("by_resource", (q) => q.eq("resourceType", args.resourceType).eq("resourceId", args.resourceId))
+      .collect();
+    return {
+      shares: shares.map((s) => ({
+        share_id: String(s._id),
+        granted_to: s.grantedToUserId,
+        permission: s.permission,
+      })),
+    };
+  },
+});
+
 export const internalCreateShare = internalMutation({
   args: {
     userId: v.string(),
