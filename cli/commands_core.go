@@ -42,7 +42,17 @@ func initProject(target string) error {
 	if linkedEnvironmentID, err := loadLinkedEnvironmentID(); err != nil {
 		return err
 	} else if linkedEnvironmentID != "" {
-		return fmt.Errorf("project already initialized (linked environment: %s); use `tahuna train` or remove %s to reinitialize", linkedEnvironmentID, projectEnvironmentFilePath())
+		if !supportsInteractivePrompts() {
+			return fmt.Errorf("project already initialized (linked environment: %s); remove %s to reinitialize", linkedEnvironmentID, projectEnvironmentFilePath())
+		}
+		fmt.Printf("%sWarning:%s project already initialized (linked environment: %s)\n", cAmpGold, cReset, linkedEnvironmentID)
+		overwrite := promptChoice("Overwrite existing project?", []string{"No", "Yes"}, 0)
+		if overwrite != "Yes" {
+			return fmt.Errorf("init cancelled")
+		}
+		if err := os.RemoveAll(projectStateDir); err != nil {
+			return fmt.Errorf("failed to remove existing project state: %w", err)
+		}
 	}
 
 	projectCfg, frameworkKey, err := collectProjectInitConfig()
