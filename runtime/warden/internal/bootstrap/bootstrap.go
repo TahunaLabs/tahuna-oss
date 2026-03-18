@@ -19,6 +19,8 @@ import (
 
 var ErrNotImplemented = errors.New("warden runtime bootstrap is not implemented yet")
 
+const maxURLRefreshRetries = 1
+
 type State string
 
 const (
@@ -75,53 +77,82 @@ func (r *Runner) Run(ctx context.Context) error {
 
 	r.transition(StateMaterialize)
 	downloader := materialize.NewDownloader(r.cfg.RequestTimeout())
-	codeTotalBytes := sumEntryBytes(plan.Code.Entries)
-	_, _ = r.api.EmitLogs(ctx, []runtimeapi.LogLine{
-		{
-			Message: fmt.Sprintf(
-				"bootstrap: materializing code files=%d bytes=%s",
-				len(plan.Code.Entries),
-				formatBytes(codeTotalBytes),
-			),
-			Level:  "info",
-			Source: "bootstrap",
-		},
-	})
-	codeStats, err := materialize.WriteManifestEntries(
-		ctx,
-		downloader,
-		plan.Code.Entries,
-		r.cfg.WorkspaceRoot,
-		"code",
-		r.newProgressReporter(ctx, "code"),
-	)
-	if err != nil {
-		return r.failWithError(ctx, err)
+
+	// Materialize code — retry once with fresh signed URLs on 403.
+	var codeStats materialize.Stats
+	for attempt := 0; ; attempt++ {
+		codeTotalBytes := sumEntryBytes(plan.Code.Entries)
+		_, _ = r.api.EmitLogs(ctx, []runtimeapi.LogLine{
+			{
+				Message: fmt.Sprintf(
+					"bootstrap: materializing code files=%d bytes=%s",
+					len(plan.Code.Entries),
+					formatBytes(codeTotalBytes),
+				),
+				Level:  "info",
+				Source: "bootstrap",
+			},
+		})
+		codeStats, err = materialize.WriteManifestEntries(
+			ctx,
+			downloader,
+			plan.Code.Entries,
+			r.cfg.WorkspaceRoot,
+			"code",
+			r.newProgressReporter(ctx, "code"),
+		)
+		if err == nil {
+			break
+		}
+		if !errors.Is(err, materialize.ErrSignedURLExpired) || attempt >= maxURLRefreshRetries {
+			return r.failWithError(ctx, err)
+		}
+		_, _ = r.api.EmitLogs(ctx, []runtimeapi.LogLine{
+			{Message: "bootstrap: signed URLs expired, re-fetching plan", Level: "warn", Source: "bootstrap"},
+		})
+		plan, err = r.api.GetBootstrapPlan(ctx)
+		if err != nil {
+			return r.failWithError(ctx, fmt.Errorf("re-fetch bootstrap plan: %w", err))
+		}
 	}
 
+	// Materialize data — retry once with fresh signed URLs on 403.
 	dataRoot := filepath.Join(r.cfg.WorkspaceRoot, "data")
-	dataTotalBytes := sumEntryBytes(plan.Data.Entries)
-	_, _ = r.api.EmitLogs(ctx, []runtimeapi.LogLine{
-		{
-			Message: fmt.Sprintf(
-				"bootstrap: materializing data files=%d bytes=%s",
-				len(plan.Data.Entries),
-				formatBytes(dataTotalBytes),
-			),
-			Level:  "info",
-			Source: "bootstrap",
-		},
-	})
-	dataStats, err := materialize.WriteManifestEntries(
-		ctx,
-		downloader,
-		plan.Data.Entries,
-		dataRoot,
-		"data",
-		r.newProgressReporter(ctx, "data"),
-	)
-	if err != nil {
-		return r.failWithError(ctx, err)
+	var dataStats materialize.Stats
+	for attempt := 0; ; attempt++ {
+		dataTotalBytes := sumEntryBytes(plan.Data.Entries)
+		_, _ = r.api.EmitLogs(ctx, []runtimeapi.LogLine{
+			{
+				Message: fmt.Sprintf(
+					"bootstrap: materializing data files=%d bytes=%s",
+					len(plan.Data.Entries),
+					formatBytes(dataTotalBytes),
+				),
+				Level:  "info",
+				Source: "bootstrap",
+			},
+		})
+		dataStats, err = materialize.WriteManifestEntries(
+			ctx,
+			downloader,
+			plan.Data.Entries,
+			dataRoot,
+			"data",
+			r.newProgressReporter(ctx, "data"),
+		)
+		if err == nil {
+			break
+		}
+		if !errors.Is(err, materialize.ErrSignedURLExpired) || attempt >= maxURLRefreshRetries {
+			return r.failWithError(ctx, err)
+		}
+		_, _ = r.api.EmitLogs(ctx, []runtimeapi.LogLine{
+			{Message: "bootstrap: signed URLs expired, re-fetching plan", Level: "warn", Source: "bootstrap"},
+		})
+		plan, err = r.api.GetBootstrapPlan(ctx)
+		if err != nil {
+			return r.failWithError(ctx, fmt.Errorf("re-fetch bootstrap plan: %w", err))
+		}
 	}
 
 	bundleExtractStartedAt := time.Now()

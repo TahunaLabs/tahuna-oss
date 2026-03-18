@@ -7,6 +7,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -19,6 +20,9 @@ import (
 
 	"warden/internal/runtimeapi"
 )
+
+// ErrSignedURLExpired is returned when a signed download URL has expired (HTTP 403).
+var ErrSignedURLExpired = errors.New("signed download URL expired")
 
 type Stats struct {
 	FileCount  int
@@ -62,6 +66,9 @@ func (d *Downloader) FetchToFile(ctx context.Context, url, dest string) (size in
 		return 0, "", fmt.Errorf("download request failed: %w", err)
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusForbidden {
+		return 0, "", fmt.Errorf("download failed: status=403: %w", ErrSignedURLExpired)
+	}
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
 		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
 		msg := strings.TrimSpace(string(raw))
