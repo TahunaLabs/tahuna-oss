@@ -21,6 +21,7 @@ import { ENVIRONMENT_CONFIG_FILE_NAME, parseEnvironmentConfig, renderEnvironment
 const environmentResponseValidator = v.object({
   environment_id: v.string(),
   data_id: v.string(),
+  latest_data_manifest_hash: v.union(v.string(), v.null()),
   bound_data_ids: v.array(v.string()),
   bound_data_manifest_hashes: v.array(v.string()),
   name: v.string(),
@@ -321,6 +322,7 @@ function toEnvironmentResponse(row: Doc<"environments">) {
   return {
     environment_id: String(row._id),
     data_id: dataId,
+    latest_data_manifest_hash: row.latestDataManifestHash || null,
     bound_data_ids: row.boundDataIds || [],
     bound_data_manifest_hashes: row.boundDataManifestHashes || [],
     name: row.name,
