@@ -112,4 +112,26 @@ export default defineSchema({
     unit: v.optional(v.string()),
     source: v.string(),
   }).index("by_run", ["runId"]),
+
+  shares: defineTable({
+    resourceType: v.union(v.literal("environment"), v.literal("run"), v.literal("data")),
+    resourceId: v.string(),
+    grantedToUserId: v.string(),
+    permission: v.union(v.literal("read"), v.literal("edit")),
+    grantedByUserId: v.string(),
+  })
+    .index("by_resource", ["resourceType", "resourceId"])
+    .index("by_grantee", ["grantedToUserId"])
+    .index("by_grantor", ["grantedByUserId"]),
+
+  dataBlobs: defineTable({
+    userId: v.string(),
+    blobId: v.string(),
+    filename: v.string(),
+    key: v.string(),
+    size: v.number(),
+    createdAt: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_key", ["key"]),
 });
