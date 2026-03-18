@@ -32,6 +32,20 @@ import { useAction, useConvexAuth, useMutation, useQuery } from "convex/react"
 import { useRouter } from "next/navigation"
 import { useEffect, useMemo, useState, type FormEvent } from "react"
 
+function formatCreditsFromCents(balanceCents: number, currency: string) {
+  const amount = Number.isFinite(balanceCents) ? Math.max(0, balanceCents) / 100 : 0
+  try {
+    return new Intl.NumberFormat(undefined, {
+      style: "currency",
+      currency,
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 2,
+    }).format(amount)
+  } catch {
+    return `${amount.toFixed(2)} ${currency}`
+  }
+}
+
 export default function DashboardPage() {
   const router = useRouter()
   const { resolvedTheme, setTheme } = useTheme()
@@ -76,6 +90,9 @@ export default function DashboardPage() {
   const shouldLoadQueries = !authLoading && isAuthenticated && !loggingOut
 
   const currentUser = useQuery(api.auth.getCurrentUser, shouldLoadQueries ? {} : "skip")
+  const myCredits = useQuery(api.auth.getMyCredits, shouldLoadQueries ? {} : "skip") as
+    | { balance_cents: number; currency: string }
+    | undefined
   const envResult = useQuery(api.environments.list, shouldLoadQueries ? {} : "skip") as
     | { environments: EnvironmentRow[] }
     | undefined
@@ -146,6 +163,7 @@ export default function DashboardPage() {
 
   const userEmail = currentUser?.email ?? ""
   const userInitial = userEmail.trim().charAt(0).toUpperCase() || "U"
+  const creditsLabel = formatCreditsFromCents(myCredits?.balance_cents ?? 0, myCredits?.currency ?? "EUR")
   const storageItems = storageResult?.items ?? []
   const storageTotal = storageResult?.total ?? 0
   const isDark = resolvedTheme === "dark"
@@ -699,6 +717,7 @@ export default function DashboardPage() {
         activeView={activeView}
         onViewChange={setActiveView}
         userInitial={userInitial}
+        creditsLabel={creditsLabel}
         isDark={isDark}
         onThemeToggle={() => setTheme(isDark ? "light" : "dark")}
         onLogout={logout}

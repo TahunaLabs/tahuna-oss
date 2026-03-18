@@ -11,7 +11,7 @@ import { sha256Hex } from "@convex/crypto";
 import { shortId } from "@convex/ids";
 import { ensureUserLedger } from "@convex/credits";
 import { sendOtpEmail } from "@convex/resend";
-import { AUTH_CONFIG, NETWORK_CONFIG } from "../config";
+import { AUTH_CONFIG, BILLING_CONFIG, NETWORK_CONFIG } from "../config";
 
 const siteUrl = process.env.SITE_URL || process.env.NEXT_PUBLIC_SITE_URL || NETWORK_CONFIG.defaultApiUrl;
 const apiKeyListItemValidator = v.object({
@@ -52,6 +52,35 @@ export const getCurrentUser = query({
   returns: v.any(),
   handler: async (ctx) => {
     return authComponent.getAuthUser(ctx);
+  },
+});
+
+export const getMyCredits = query({
+  args: {},
+  returns: v.object({
+    balance_cents: v.number(),
+    currency: v.string(),
+  }),
+  handler: async (ctx) => {
+    const user = await authComponent.getAuthUser(ctx);
+    if (!user) {
+      throw new ConvexError("Not authenticated");
+    }
+    const userId = String(user._id);
+    const row = await ctx.db
+      .query("userCredits")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .first();
+    if (!row) {
+      return {
+        balance_cents: BILLING_CONFIG.initialCreditCents,
+        currency: BILLING_CONFIG.currency,
+      };
+    }
+    return {
+      balance_cents: row.balanceCents,
+      currency: row.currency || BILLING_CONFIG.currency,
+    };
   },
 });
 
