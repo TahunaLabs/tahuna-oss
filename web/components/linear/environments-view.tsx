@@ -1,6 +1,6 @@
 "use client"
 
-import { Server, Filter, Settings2, LayoutGrid, Play, Trash2, ExternalLink, Copy, Check, FileCode2, Share2, Users, X } from "lucide-react"
+import { Server, Play, Trash2, ExternalLink, Copy, Check, FileCode2, Share2, Users, X } from "lucide-react"
 import { Fragment, useEffect, useState } from "react"
 import Link from "next/link"
 import {
@@ -26,6 +26,7 @@ import { Notice } from "@/components/ui/notice"
 import { Textarea } from "@/components/ui/textarea"
 
 type EnvironmentsViewProps = {
+  creditsLabel: string
   environments: EnvironmentRow[]
   uniqueDataBlobs: DataBlobRow[]
   dataBlobsById: ReadonlyMap<string, DataBlobRow>
@@ -53,6 +54,7 @@ type EnvironmentsViewProps = {
 }
 
 export function EnvironmentsView({
+  creditsLabel,
   environments,
   uniqueDataBlobs,
   dataBlobsById,
@@ -186,24 +188,16 @@ export function EnvironmentsView({
             </>
           ) : (
             <>
-              <Button type="button" variant="dashboard-icon-secondary" size="none">
-                <Filter className="w-4 h-4" />
-              </Button>
-              <Button type="button" variant="dashboard-icon-secondary" size="none">
-                <Settings2 className="w-4 h-4" />
-              </Button>
-              <Button type="button" variant="dashboard-icon-secondary" size="none">
-                <LayoutGrid className="w-4 h-4" />
-              </Button>
+              <span className="text-xs text-muted-foreground">Credits: {creditsLabel}</span>
               <Button
                 type="button"
-                variant="dashboard-icon-secondary"
-                size="none"
+                variant="dashboard-outline"
+                size="sm"
                 onClick={() => setSelectionMode(true)}
                 aria-label="Select environments"
                 disabled={busy || !hasData}
               >
-                <Trash2 className="w-4 h-4" />
+                Select
               </Button>
             </>
           )}

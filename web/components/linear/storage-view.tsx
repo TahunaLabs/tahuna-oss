@@ -5,8 +5,6 @@ import {
   HardDrive,
   Plus,
   Filter,
-  Settings2,
-  LayoutGrid,
   ExternalLink,
   Download,
   Pencil,
@@ -36,6 +34,7 @@ import {
 import type { FormEvent } from "react"
 
 type StorageViewProps = {
+  creditsLabel: string
   selectedDataFiles: File[]
   uploadingData: boolean
   uploadError: string
@@ -66,6 +65,7 @@ type StorageViewProps = {
 }
 
 export function StorageView({
+  creditsLabel,
   selectedDataFiles,
   uploadingData,
   uploadError,
@@ -137,6 +137,7 @@ export function StorageView({
           )}
         </div>
         <div className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground">Credits: {creditsLabel}</span>
           <Button
             type="button"
             variant={showFilters ? "dashboard-icon-secondary-active" : "dashboard-icon-secondary"}
@@ -144,20 +145,6 @@ export function StorageView({
             onClick={() => setShowFilters(!showFilters)}
           >
             <Filter className="w-4 h-4" />
-          </Button>
-          <Button
-            type="button"
-            variant="dashboard-icon-secondary"
-            size="none"
-          >
-            <Settings2 className="w-4 h-4" />
-          </Button>
-          <Button
-            type="button"
-            variant="dashboard-icon-secondary"
-            size="none"
-          >
-            <LayoutGrid className="w-4 h-4" />
           </Button>
           <Button
             type="button"

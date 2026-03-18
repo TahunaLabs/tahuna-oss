@@ -13,6 +13,9 @@ import {
   LogOut,
   Moon,
   Sun,
+  Wallet,
+  BarChart3,
+  ClipboardList,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
@@ -22,14 +25,14 @@ interface SidebarProps {
   activeView: string
   onViewChange: (view: string) => void
   userInitial: string
-  creditsLabel: string
   isDark: boolean
   onThemeToggle: () => void
   onLogout: () => void
 }
 
-export function Sidebar({ activeView, onViewChange, userInitial, creditsLabel, isDark, onThemeToggle, onLogout }: SidebarProps) {
+export function Sidebar({ activeView, onViewChange, userInitial, isDark, onThemeToggle, onLogout }: SidebarProps) {
   const [workspaceOpen, setWorkspaceOpen] = useState(true)
+  const [accountOpen, setAccountOpen] = useState(true)
   const [moreOpen, setMoreOpen] = useState(false)
 
   return (
@@ -107,14 +110,42 @@ export function Sidebar({ activeView, onViewChange, userInitial, creditsLabel, i
             </div>
           )}
         </div>
+
+        <div className="mt-2">
+          <Button
+            type="button"
+            variant="sidebar-workspace"
+            size="none"
+            onClick={() => setAccountOpen(!accountOpen)}
+          >
+            <span>Account</span>
+            <ChevronDown className={cn("w-3 h-3 transition-transform", !accountOpen && "-rotate-90")} />
+          </Button>
+          {accountOpen && (
+            <div className="mt-1 space-y-0.5">
+              <SidebarItem
+                icon={<Wallet className="w-4 h-4" />}
+                label="Billing"
+              />
+              <SidebarItem
+                icon={<BarChart3 className="w-4 h-4" />}
+                label="Usage"
+              />
+              <SidebarItem
+                icon={<ClipboardList className="w-4 h-4" />}
+                label="Audit logs"
+              />
+              <SidebarItem
+                icon={<Settings className="w-4 h-4" />}
+                label="Settings"
+              />
+            </div>
+          )}
+        </div>
       </nav>
 
       {/* Footer */}
       <div className="border-t border-sidebar-border shrink-0">
-        <div className="px-3 pt-2 pb-1">
-          <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Credits</p>
-          <p className="text-sm font-semibold text-foreground">{creditsLabel}</p>
-        </div>
         <div className="flex items-center justify-between px-3 h-10">
           <div className="w-6 h-6 rounded-full bg-secondary flex items-center justify-center text-[11px] font-semibold text-secondary-foreground shrink-0">
             {userInitial}

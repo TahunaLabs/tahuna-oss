@@ -600,6 +600,7 @@ export default function DashboardPage() {
       case "storage":
         return (
           <StorageView
+            creditsLabel={creditsLabel}
             selectedDataFiles={selectedDataFiles}
             uploadingData={uploadingData}
             dataFileInputKey={dataFileInputKey}
@@ -648,6 +649,7 @@ export default function DashboardPage() {
       case "environments":
         return (
           <EnvironmentsView
+            creditsLabel={creditsLabel}
             environments={environments}
             uniqueDataBlobs={uniqueDataBlobs}
             dataBlobsById={dataBlobsById}
@@ -691,6 +693,7 @@ export default function DashboardPage() {
       case "runs":
         return (
           <RunsView
+            creditsLabel={creditsLabel}
             environments={environments}
             runs={runs}
             busy={busy}
@@ -717,7 +720,6 @@ export default function DashboardPage() {
         activeView={activeView}
         onViewChange={setActiveView}
         userInitial={userInitial}
-        creditsLabel={creditsLabel}
         isDark={isDark}
         onThemeToggle={() => setTheme(isDark ? "light" : "dark")}
         onLogout={logout}
