@@ -50,6 +50,7 @@ cover.out
 **/dist/
 
 # Project binaries
+cli/tahuna
 cli/tahuna-cli
 
 # Web generated artifacts
