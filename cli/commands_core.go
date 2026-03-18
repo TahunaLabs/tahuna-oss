@@ -25,8 +25,9 @@ func handleInit(args []string) {
 }
 
 func initProject(target string) error {
-	if cfg.apiKey == "" {
-		return errors.New("Not authenticated. Run `tahuna login` first.")
+	gpus, versionsByFramework, pythonsByFrameworkVersion, err := fetchGpusAndImages()
+	if err != nil {
+		return err
 	}
 
 	projectPath, created, err := prepareProjectPath(target)
@@ -84,7 +85,7 @@ func initProject(target string) error {
 		return fmt.Errorf("failed to create output directory: %w", err)
 	}
 
-	setup, err := guidedSetup(envName, frameworkKey, projectCfg.PythonVersion)
+	setup, err := guidedSetup(envName, frameworkKey, projectCfg.PythonVersion, gpus, versionsByFramework, pythonsByFrameworkVersion)
 	if err != nil {
 		return err
 	}
@@ -142,12 +143,7 @@ type guidedSetupResult struct {
 	pythonVersion    string
 }
 
-func guidedSetup(environmentName, frameworkHint, pythonVersionHint string) (guidedSetupResult, error) {
-	gpus, versionsByFramework, pythonsByFrameworkVersion, err := fetchGpusAndImages()
-	if err != nil {
-		return guidedSetupResult{}, err
-	}
-
+func guidedSetup(environmentName, frameworkHint, pythonVersionHint string, gpus []string, versionsByFramework map[string][]string, pythonsByFrameworkVersion map[string]map[string][]string) (guidedSetupResult, error) {
 	frameworks := sortedKeys(versionsByFramework)
 	framework := strings.TrimSpace(frameworkHint)
 	if framework == "" || versionsByFramework[framework] == nil {
