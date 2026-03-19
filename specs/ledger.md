@@ -1,154 +1,169 @@
 # Spec: User Credits Ledger
 
-## Scope
+## Why Transparency Matters First
 
-This document describes the current ledger implementation in Tahuna.
+A payment/credits model is only trustworthy if users can predict charges before they act and verify charges after they happen.
+
+For Tahuna, transparency means:
+
+- Clear pricing inputs and formulas.
+- Clear trigger points for debits/credits.
+- User-visible history for every balance mutation.
+- Explicit policy for edge cases (cancel, fail, partial usage).
+
+Without this, users experience billing as "guesswork," even if the backend logic is internally consistent.
+
+## What We Have Right Now
+
+### Scope
+
+Current implementation is internal credits accounting:
 
 - Internal credit accounting only (no bank/payment-provider integration yet).
 - One credit balance per Better Auth user.
 - Append-only usage history for every debit/credit.
-- Charges currently applied for run compute reservation and storage size growth.
+- Debits currently applied for run compute reservation and storage size growth.
 
-## Identity Source of Truth
+### Identity Source of Truth
 
-Users come from Better Auth (Convex component). There is no duplicate app-level `users` table for identity.
+- Users come from Better Auth (Convex component).
+- Session-authenticated requests resolve via `authComponent.getAuthUser(...)`.
+- API key-authenticated requests resolve via `apiKeys.userId`.
+- Ledger entries are keyed by canonical `userId`.
 
-- Session-authenticated requests resolve user via `authComponent.getAuthUser(...)`.
-- API key-authenticated requests resolve user via `apiKeys.userId`.
-- Ledger entries are keyed by this canonical `userId`.
+### Data Model
 
-## Data Model
+`userCredits` (current balance):
 
-### `userCredits` (current state)
-
-One row per user:
-
-- `userId`: Better Auth user id
-- `balanceCents`: current balance (integer cents)
-- `currency`: currency code (currently `EUR`)
+- `userId`
+- `balanceCents`
+- `currency`
 - `createdAt`, `updatedAt`
 
-### `usageEvents` (history / audit)
-
-Append-only ledger events:
+`usageEvents` (append-only history):
 
 - `userId`
 - `eventType`
-- `creditsDeltaCents` (positive for credit, negative for debit)
+- `creditsDeltaCents` (positive credit, negative debit)
 - `balanceAfterCents`
 - `referenceType`, `referenceId` (optional)
 - `metadata` (optional)
 - `createdAt`
 
-## Configuration
+### Config Used Today
 
-Billing constants are in `web/config.ts` (`BILLING_CONFIG`):
+`BILLING_CONFIG` in `web/config.ts`:
 
 - `currency: "EUR"`
-- `initialCreditCents: 0` (0.00 EUR)
+- `initialCreditCents: 0`
 - `computeReservationHours: 1`
 - `computeGpuHourlyRateCents: 120`
 - `computeVolumeGbHourlyRateCents: 2`
 - `storageGiBDeltaRateCents: 3`
 - `minimumChargeCents: 1`
 
-## Initialization Flow
+### Initialization Flow
 
-When a user is authenticated for app/CLI usage, backend ensures ledger rows exist:
+On authenticated app/CLI usage:
 
-1. Resolve canonical user id from Better Auth / API key.
-2. Ensure one `userCredits` row for that `userId`.
-3. If first time, initialize `balanceCents = initialCreditCents`.
-4. Insert `usageEvents` with:
+1. Resolve canonical user id from Better Auth/API key.
+2. Ensure one `userCredits` row exists for that user.
+3. On first initialization, set `balanceCents = initialCreditCents`.
+4. Insert `usageEvents` row:
    - `eventType = "initial_grant"`
    - `creditsDeltaCents = +initialCreditCents`
 
-This runs on both:
+### Debit/Credit Primitives
 
-- Session-authenticated backend path (`requireUser` flow).
-- API key-authenticated backend path (`authenticateApiRequest` flow).
+Shared helpers in `web/convex/credits.ts`:
 
-## Debit/Credit Primitives
-
-Shared ledger helpers (Convex module):
-
-- `consumeUserCredits(...)`:
+- `consumeUserCredits(...)`
   - checks `balanceCents >= amount`
   - debits balance
-  - inserts negative `usageEvents` row
+  - inserts negative usage event
   - returns `null` on insufficient credits
-- `grantUserCredits(...)`:
+- `grantUserCredits(...)`
   - increments balance
-  - inserts positive `usageEvents` row
+  - inserts positive usage event
 
-## Run Compute Charging
+### Compute Charging (Current)
 
-### Reservation at run creation
+Current compute model is reservation-at-create:
 
-Credits are debited once, at run creation time.
-
-On run create:
-
-1. Calculate reservation:
+1. On run create, estimate reservation:
    - `hourlyRate = gpuCount * computeGpuHourlyRateCents + volumeGb * computeVolumeGbHourlyRateCents`
    - `reserved = max(minimumChargeCents, ceil(hourlyRate * computeReservationHours))`
 2. Debit with `eventType = "run_compute_reserved"`.
-3. If insufficient credits:
-   - run creation fails with `insufficient credits`
-   - API endpoints map this to HTTP `402`.
+3. If insufficient credits, run creation fails (`insufficient credits`, HTTP `402` on API routes).
 
-Run row stores charging markers:
+Run row tracks:
 
 - `creditsReservedCents`
 - `computeChargeCents`
 - `computeChargeStatus` (`pending`/`charged`/`failed`)
-- `computeStartedAt` (set when run enters `running`)
+- `computeStartedAt`
 
-There is currently no automatic compute refund path.
+Important current limitations:
 
-Current compute-pricing behavior:
+- Pricing uses `gpuCount` + `volumeGb` only.
+- `gpuType` is tracked but not used to select pricing tiers.
+- No duration-based settlement (no post-run per-second/per-minute reconciliation).
+- No automatic refund path.
 
-- Pricing is based on `gpuCount` and `volumeGb`.
-- `gpuType` is currently tracked for runtime/provisioning metadata, but not used to choose a different credit rate.
-- There is no duration-based settlement today (no post-run per-second/per-minute reconciliation).
+### Storage Charging (Current)
 
-## Storage Charging
-
-Storage charges are applied when indexed object size grows (data uploads and run artifacts).
+Storage debits are applied on indexed size growth:
 
 1. Compute size delta: `newSize - previousSize`.
-2. If delta is positive, convert to cents:
+2. If delta > 0:
    - `deltaGiB = sizeDeltaBytes / (1024^3)`
    - `deltaCents = max(minimumChargeCents, ceil(deltaGiB * storageGiBDeltaRateCents))`
-   - apply debit (`storage_charge`)
-3. If delta is zero or negative, do nothing.
+   - debit with `storage_charge`
+3. If delta <= 0: no-op.
 
-Behavior:
+Trigger points:
 
-- On insufficient credits for a positive storage delta, operation fails with `insufficient credits`.
-- For data upload callback path, uploaded object cleanup is attempted (best effort) on post-upload ledger failure.
-- There is currently no automatic storage refund path.
+- Data upload indexing (`storageObjects` upsert for data uploads).
+- Run artifact indexing (`storageObjects` upsert for run artifacts).
 
-Storage debit trigger summary:
+### Invariants
 
-- Data upload indexing path (`storageObjects` upsert for data uploads).
-- Run artifact indexing path (`storageObjects` upsert for run artifacts).
-- Only positive size deltas debit credits; zero/negative deltas do nothing.
-
-## Invariants
-
-- Identity source of truth is Better Auth; ledger is keyed by `userId`.
+- Better Auth is the identity source of truth.
 - `userCredits` is current state.
-- `usageEvents` is append-only audit history.
-- Every balance mutation is paired with a usage event.
-- Balances are integer cents only.
+- `usageEvents` is append-only history.
+- Every balance mutation has a usage event.
+- Balances are integer cents.
 
-## Known Limits (Current Implementation)
+## What It Should Be (Target State)
 
-- No payment provider/bank integration.
-- No automatic top-up/checkout.
-- Compute settlement is reservation-based right now:
-  - reserve at create
-  - no automatic refund path yet
-  - no duration-based post-run overage/refund yet for started runs.
-  - no GPU-type-specific pricing tiers yet (single fixed rate by GPU count + volume GB).
+To be user-trustworthy and payment-ready, we should add:
+
+1. Real top-up/checkout rails
+- Connect Stripe/Lemon/etc. so credits are purchased, not manually granted.
+
+2. Public pricing catalog
+- Publish rates by billable resource (including likely `gpuType` tiers), with version/effective date.
+
+3. Pre-run estimate in UI/API
+- Show expected reservation before launch (and what inputs are used).
+
+4. Duration-based compute settlement
+- Meter actual runtime usage and settle final charge at terminal state.
+
+5. Explicit lifecycle policy
+- Define/communicate how queued/provisioning/running/cancelled/failed states affect charges.
+
+6. User-facing ledger/history surface
+- Show event history (date, reason, delta, balance-after), filters, and CSV export.
+
+7. Billing artifacts
+- Receipts/invoices for top-ups and period summaries.
+
+8. Balance safety
+- Low-balance alerts, hard-stop thresholds, optional auto top-up.
+
+9. Accounting safety hardening
+- Idempotency for billing events, race-safe updates, reconciliation checks/jobs.
+
+10. Admin/ops tooling
+- Controlled manual adjustments with actor attribution, reason, and immutable audit trail.
