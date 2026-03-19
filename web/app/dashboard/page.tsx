@@ -180,6 +180,40 @@ export default function DashboardPage() {
   const environments: EnvironmentRow[] = envResult?.environments ?? []
   const dataBlobs: DataBlobRow[] = dataResult?.blobs ?? []
   const runs: RunRow[] = runResult?.runs ?? []
+  const environmentNameById = useMemo(() => {
+    const byId = new Map<string, string>()
+    for (const environment of environments) {
+      byId.set(String(environment.environment_id), environment.name)
+    }
+    return byId
+  }, [environments])
+  const runContextById = useMemo(() => {
+    const byId = new Map<string, { run_name: string; environment_name: string | null }>()
+    for (const run of runs) {
+      byId.set(String(run.run_id), {
+        run_name: run.name,
+        environment_name: environmentNameById.get(run.environment_id) ?? null,
+      })
+    }
+    return byId
+  }, [environmentNameById, runs])
+  const usageEventsWithContext = useMemo(() => {
+    return (usageEvents ?? []).map((event) => {
+      if (event.reference_type !== "run" || !event.reference_id) {
+        return {
+          ...event,
+          run_name: null,
+          environment_name: null,
+        }
+      }
+      const runContext = runContextById.get(event.reference_id)
+      return {
+        ...event,
+        run_name: runContext?.run_name ?? null,
+        environment_name: runContext?.environment_name ?? null,
+      }
+    })
+  }, [runContextById, usageEvents])
 
   useEffect(() => {
     if (selectedRunId === null || runResult === undefined) {
@@ -836,11 +870,11 @@ export default function DashboardPage() {
             bootstrapCreditCents={BILLING_CONFIG.initialCreditCents}
             currency={myCredits?.currency ?? "USD"}
             initialized={myCredits?.initialized === true}
-            usageEvents={usageEvents ?? []}
+            usageEvents={usageEventsWithContext}
           />
         )
       case "audit_logs":
-        return <AuditLogsView runs={runs} />
+        return <AuditLogsView runs={runs} environmentNameById={environmentNameById} />
       case "settings":
         return (
           <SettingsView

@@ -8,6 +8,8 @@ type UsageEventRow = {
   balance_after_cents: number
   reference_type: string | null
   reference_id: string | null
+  run_name: string | null
+  environment_name: string | null
   metadata: unknown | null
   created_at: number
 }
@@ -147,7 +149,6 @@ export function BillingView({ balanceCents, bootstrapCreditCents, currency, init
                   <tr className="border-b border-border text-left">
                     <th className="py-2 text-xs text-muted-foreground font-medium">Date</th>
                     <th className="py-2 text-xs text-muted-foreground font-medium">Event</th>
-                    <th className="py-2 text-xs text-muted-foreground font-medium">Reference</th>
                     <th className="py-2 text-xs text-muted-foreground font-medium text-right">Delta</th>
                     <th className="py-2 text-xs text-muted-foreground font-medium text-right">Balance after</th>
                   </tr>
@@ -155,6 +156,12 @@ export function BillingView({ balanceCents, bootstrapCreditCents, currency, init
                 <tbody>
                   {usageEvents.map((event, index) => {
                     const computeEventDetails = formatComputeEventDetails(event, currency)
+                    const runContext = event.run_name || event.environment_name
+                      ? [
+                          event.run_name ? `run ${event.run_name}` : null,
+                          event.environment_name ? `env ${event.environment_name}` : null,
+                        ].filter((value): value is string => Boolean(value)).join(" • ")
+                      : null
                     return (
                       <tr key={`${event.created_at}-${index}`} className="border-b border-border/60">
                         <td className="py-2 text-sm text-muted-foreground">
@@ -167,11 +174,11 @@ export function BillingView({ balanceCents, bootstrapCreditCents, currency, init
                               {computeEventDetails}
                             </div>
                           ) : null}
-                        </td>
-                        <td className="py-2 text-sm text-muted-foreground">
-                          {event.reference_type && event.reference_id
-                            ? `${event.reference_type}:${event.reference_id}`
-                            : "—"}
+                          {runContext ? (
+                            <div className="text-xs text-muted-foreground">
+                              {runContext}
+                            </div>
+                          ) : null}
                         </td>
                         <td
                           className={`py-2 text-sm text-right ${event.credits_delta_cents < 0 ? "text-red-400" : "text-green-400"}`}

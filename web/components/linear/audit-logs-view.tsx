@@ -9,6 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 
 type AuditLogsViewProps = {
   runs: RunRow[]
+  environmentNameById: ReadonlyMap<string, string>
 }
 
 type AuditActionFilter = "all" | "active" | "completed" | "failed" | "cancelled"
@@ -53,7 +54,7 @@ function formatRunUptime(uptimeMs: number) {
   return `${seconds}s`
 }
 
-export function AuditLogsView({ runs }: AuditLogsViewProps) {
+export function AuditLogsView({ runs, environmentNameById }: AuditLogsViewProps) {
   const [search, setSearch] = useState("")
   const [actionFilter, setActionFilter] = useState<AuditActionFilter>("all")
   const [dateFilter, setDateFilter] = useState("")
@@ -78,8 +79,7 @@ export function AuditLogsView({ runs }: AuditLogsViewProps) {
       }
       return (
         run.name.toLowerCase().includes(searchTerm) ||
-        run.run_id.toLowerCase().includes(searchTerm) ||
-        run.environment_id.toLowerCase().includes(searchTerm) ||
+        (environmentNameById.get(run.environment_id) || "").toLowerCase().includes(searchTerm) ||
         run.status.toLowerCase().includes(searchTerm) ||
         run.effective_gpu_type.toLowerCase().includes(searchTerm) ||
         String(run.effective_gpu_count).includes(searchTerm)
@@ -155,6 +155,7 @@ export function AuditLogsView({ runs }: AuditLogsViewProps) {
                   const isCompleted = action === "completed"
                   const isFailure = action === "failed" || action === "cancelled"
                   const actionLabel = isCompleted ? "completed" : isFailure ? action : "updated"
+                  const environmentName = environmentNameById.get(run.environment_id) || "Unknown environment"
 
                   return (
                     <TableRow key={run.run_id} variant="dashboard" className="hover:bg-secondary/20">
@@ -173,7 +174,7 @@ export function AuditLogsView({ runs }: AuditLogsViewProps) {
                               {actionLabel} run
                             </p>
                             <p className="text-xs text-muted-foreground truncate">
-                              {run.run_id} • env {run.environment_id}
+                              env {environmentName}
                             </p>
                           </div>
                         </div>
