@@ -4,6 +4,7 @@ import { Sidebar } from "@/components/linear/sidebar"
 import { StorageView } from "@/components/linear/storage-view"
 import { EnvironmentsView } from "@/components/linear/environments-view"
 import { RunsView } from "@/components/linear/runs-view"
+import { AuditLogsView } from "@/components/linear/audit-logs-view"
 import { ShareDialog } from "@/components/linear/share-dialog"
 import { useTheme } from "@/components/theme-provider"
 import { Button } from "@/components/ui/button"
@@ -34,7 +35,7 @@ import { useRouter } from "next/navigation"
 import { parseAsInteger, parseAsString, parseAsStringLiteral, useQueryState } from "nuqs"
 import { useEffect, useMemo, useState, type FormEvent } from "react"
 
-const DASHBOARD_VIEW_VALUES = ["storage", "environments", "runs"] as const
+const DASHBOARD_VIEW_VALUES = ["storage", "environments", "runs", "audit_logs"] as const
 const STORAGE_SOURCE_FILTER_VALUES = ["all", "shared", "private"] as const
 const STORAGE_SORT_VALUES = [
   "created_desc",
@@ -779,6 +780,8 @@ export default function DashboardPage() {
             onShareRun={(runId) => openShareDialog("run", runId)}
           />
         )
+      case "audit_logs":
+        return <AuditLogsView runs={runs} />
       default:
         return null
     }
