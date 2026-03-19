@@ -20,7 +20,7 @@ Current implementation is internal credits accounting:
 - Internal credit accounting only (no bank/payment-provider integration yet).
 - One credit balance per Better Auth user.
 - Append-only usage history for every debit/credit.
-- Debits currently applied for run compute reservation and storage size growth.
+- Debits currently applied for minute-by-minute run compute accrual and storage size growth.
 
 ### Identity Source of Truth
 
@@ -54,8 +54,6 @@ Current implementation is internal credits accounting:
 
 - `currency: "USD"`
 - `initialCreditCents: 1000` (USD 10.00)
-- `computeReservationHours: 1`
-- `defaultComputeGpuHourlyRateCents: 120`
 - `computeVolumeGbHourlyRateCents: 2`
 - `storageGiBDeltaRateCents: 3`
 - `minimumChargeCents: 1`
@@ -63,8 +61,8 @@ Current implementation is internal credits accounting:
 RunPod GPU hourly inputs come from `web/lib/runpod-gpu-pricing.ts`:
 
 - `gpuType -> pricePerHour` static lookup table
-- compute billing resolves `gpuType` from that table first
-- unmapped GPU types fall back to `defaultComputeGpuHourlyRateCents`
+- compute billing requires `gpuType` to resolve from that table
+- unmapped GPU types are rejected at run creation (no fallback/default GPU rate)
 
 ### Initialization Flow
 
@@ -98,30 +96,37 @@ Current top-up policy:
 
 ### Compute Charging (Current)
 
-Current compute model is reservation + terminal settlement:
+Current compute model is minute accrual + terminal settlement:
 
-1. On run create, estimate reservation:
-   - `hourlyRate = gpuCount * gpuTypeHourlyRateCents + volumeGb * computeVolumeGbHourlyRateCents`
-   - `reserved = max(minimumChargeCents, ceil(hourlyRate * computeReservationHours))`
-2. Debit with `eventType = "run_compute_reserved"`.
-3. If insufficient credits, run creation fails (`insufficient credits`, HTTP `402` on API routes).
-4. On terminal run states, compute final usage from runtime duration and settle delta:
-   - `run_compute_settlement_refund` when actual < reserved
-   - `run_compute_settlement_debit` when actual > reserved
-   - run charge row stores final `computeChargeCents` and settlement status/error.
+1. On run create:
+   - resolve strict hourly pricing:
+     - `hourlyRate = gpuCount * gpuTypeHourlyRateCents + volumeGb * computeVolumeGbHourlyRateCents`
+   - persist `computeHourlyRateCents` on the run row.
+   - no upfront reservation debit.
+2. Every minute (batched cron):
+   - for each running run, compute cumulative target usage:
+     - `targetCharge = max(minimumChargeCents, ceil(hourlyRate * uptimeMs / 3600000))` once uptime > 0
+   - debit only incremental delta:
+     - `delta = targetCharge - computeCollectedCents`
+   - when debit cannot be collected, record owed event metadata.
+3. On terminal run states, perform reconciliation:
+   - charge or refund the remaining delta to align final `computeChargeCents` with runtime duration.
 
 Run row tracks:
 
+- `computeHourlyRateCents`
 - `creditsReservedCents`
 - `computeChargeCents`
-- `computeChargeStatus` (`pending`/`charged`/`failed`)
+- `computeCollectedCents`
+- `computeOutstandingCents`
+- `computeChargeStatus` (`pending`/`charged`/`owed`)
 - `computeStartedAt`
 
 Important current limitations:
 
 - GPU pricing is a static TypeScript lookup, not a versioned pricing catalog yet.
-- Unmapped GPU types still fall back to `defaultComputeGpuHourlyRateCents`.
-- Settlement uses runtime terminal timing (best effort from compute start/end timestamps).
+- Unknown/unmapped GPU labels fail fast at run creation; operationally this requires catalog/name hygiene.
+- Minute accrual still depends on `computeStartedAt`/runtime lifecycle timing quality.
 
 ### Storage Charging (Current)
 
@@ -166,7 +171,7 @@ To be user-trustworthy and payment-ready, we should add:
 - Publish rates by billable resource (including likely `gpuType` tiers), with version/effective date.
 
 3. Pre-run estimate in UI/API
-- Show expected reservation before launch (and what inputs are used).
+- Show expected hourly and projected spend before launch (and what inputs are used).
 
 4. Settlement hardening
 - Add idempotency keys + replay-safe settlement for terminal events.

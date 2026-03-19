@@ -20,6 +20,8 @@ const CLEANUP_TABLES = [
   "runs",
   "shareLinks",
   "storageObjects",
+  "usageEvents",
+  "userCredits",
   "wandbMetrics",
   "wandbRuns",
 ] as const;
@@ -36,6 +38,8 @@ type CleanupDocId =
   | Id<"runs">
   | Id<"shareLinks">
   | Id<"storageObjects">
+  | Id<"usageEvents">
+  | Id<"userCredits">
   | Id<"wandbMetrics">
   | Id<"wandbRuns">;
 
@@ -60,6 +64,8 @@ const cleanupTableValidator = v.union(
   v.literal("runs"),
   v.literal("shareLinks"),
   v.literal("storageObjects"),
+  v.literal("usageEvents"),
+  v.literal("userCredits"),
   v.literal("wandbMetrics"),
   v.literal("wandbRuns"),
 );
@@ -145,6 +151,12 @@ async function loadTableBatchIds(ctx: MutationCtx, table: CleanupTable, batchSiz
   if (table === "storageObjects") {
     return (await ctx.db.query("storageObjects").take(batchSize)).map((row) => row._id);
   }
+  if (table === "usageEvents") {
+    return (await ctx.db.query("usageEvents").take(batchSize)).map((row) => row._id);
+  }
+  if (table === "userCredits") {
+    return (await ctx.db.query("userCredits").take(batchSize)).map((row) => row._id);
+  }
   if (table === "wandbMetrics") {
     return (await ctx.db.query("wandbMetrics").take(batchSize)).map((row) => row._id);
   }
@@ -186,6 +198,14 @@ async function deleteTableIds(ctx: MutationCtx, table: CleanupTable, ids: Cleanu
   }
   if (table === "storageObjects") {
     await Promise.all(ids.map((id) => ctx.db.delete("storageObjects", id as Id<"storageObjects">)));
+    return;
+  }
+  if (table === "usageEvents") {
+    await Promise.all(ids.map((id) => ctx.db.delete("usageEvents", id as Id<"usageEvents">)));
+    return;
+  }
+  if (table === "userCredits") {
+    await Promise.all(ids.map((id) => ctx.db.delete("userCredits", id as Id<"userCredits">)));
     return;
   }
   if (table === "wandbMetrics") {
@@ -296,6 +316,22 @@ export const internalCountTable = internalMutation({
     }
     if (args.table === "storageObjects") {
       const result = await ctx.db.query("storageObjects").paginate({ cursor: args.cursor, numItems: batchSize });
+      return {
+        count: result.page.length,
+        has_more: !result.isDone,
+        next_cursor: result.isDone ? null : result.continueCursor,
+      };
+    }
+    if (args.table === "usageEvents") {
+      const result = await ctx.db.query("usageEvents").paginate({ cursor: args.cursor, numItems: batchSize });
+      return {
+        count: result.page.length,
+        has_more: !result.isDone,
+        next_cursor: result.isDone ? null : result.continueCursor,
+      };
+    }
+    if (args.table === "userCredits") {
+      const result = await ctx.db.query("userCredits").paginate({ cursor: args.cursor, numItems: batchSize });
       return {
         count: result.page.length,
         has_more: !result.isDone,
