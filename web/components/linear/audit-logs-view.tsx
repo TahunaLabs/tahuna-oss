@@ -131,7 +131,7 @@ export function AuditLogsView({ runs }: AuditLogsViewProps) {
             No audit logs match the current filters.
           </div>
         ) : (
-          <div className="rounded-lg border border-border bg-card overflow-hidden">
+          <div className="overflow-x-auto">
             <Table variant="dashboard" className="table-fixed">
               <colgroup>
                 <col className="w-[46%]" />
