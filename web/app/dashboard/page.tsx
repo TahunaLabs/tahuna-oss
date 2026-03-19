@@ -115,11 +115,25 @@ export default function DashboardPage() {
   const [shareBusy, setShareBusy] = useState(false)
   const [shareError, setShareError] = useState("")
   const [shareMessage, setShareMessage] = useState("")
+  const [savingSettingsProfile, setSavingSettingsProfile] = useState(false)
   const shouldLoadQueries = !authLoading && isAuthenticated && !loggingOut
 
   const currentUser = useQuery(api.auth.getCurrentUser, shouldLoadQueries ? {} : "skip")
   const myCredits = useQuery(api.auth.getMyCredits, shouldLoadQueries ? {} : "skip") as
     | { balance_cents: number; currency: string }
+    | undefined
+  const myProfile = useQuery(api.auth.getMyProfile, shouldLoadQueries ? {} : "skip") as
+    | {
+        first_name: string
+        last_name: string
+        address_line_1: string
+        address_line_2: string
+        country: string
+        company_name: string
+        company_id: string
+        tax_id: string
+        updated_at?: number
+      }
     | undefined
   const envResult = useQuery(api.environments.list, shouldLoadQueries ? {} : "skip") as
     | { environments: EnvironmentRow[] }
@@ -183,6 +197,7 @@ export default function DashboardPage() {
   const removeEnvMutation = useMutation(api.environments.remove)
   const updateEnvironmentConfigMutation = useMutation(api.environments.updateConfig)
   const grantMyCreditsMutation = useMutation(api.auth.grantMyCredits)
+  const saveMyProfileMutation = useMutation(api.auth.saveMyProfile)
   const createRunMutation = useMutation(api.runs.create)
   const cancelRunMutation = useMutation(api.runs.cancel)
   const removeRunMutation = useMutation(api.runs.remove)
@@ -666,6 +681,38 @@ export default function DashboardPage() {
     }
   }
 
+  async function saveSettingsProfile(profile: {
+    firstName: string
+    lastName: string
+    addressLine1: string
+    addressLine2: string
+    country: string
+    companyName: string
+    companyId: string
+    taxId: string
+  }) {
+    setSavingSettingsProfile(true)
+    setError("")
+    setMessage("")
+    try {
+      await saveMyProfileMutation({
+        first_name: profile.firstName,
+        last_name: profile.lastName,
+        address_line_1: profile.addressLine1,
+        address_line_2: profile.addressLine2,
+        country: profile.country,
+        company_name: profile.companyName,
+        company_id: profile.companyId,
+        tax_id: profile.taxId,
+      })
+      setMessage("Settings saved.")
+    } catch (settingsError) {
+      setError(settingsError instanceof Error ? settingsError.message : "Failed to save settings")
+    } finally {
+      setSavingSettingsProfile(false)
+    }
+  }
+
   if (authLoading || loggingOut || !isAuthenticated) {
     return <PageLoader message="Loading dashboard…" />
   }
@@ -803,6 +850,20 @@ export default function DashboardPage() {
             onThemeChange={(theme) => setTheme(theme)}
             userEmail={currentUser?.email ?? ""}
             apiKeys={apiKeys ?? []}
+            profile={{
+              firstName: myProfile?.first_name ?? "",
+              lastName: myProfile?.last_name ?? "",
+              addressLine1: myProfile?.address_line_1 ?? "",
+              addressLine2: myProfile?.address_line_2 ?? "",
+              country: myProfile?.country ?? "",
+              companyName: myProfile?.company_name ?? "",
+              companyId: myProfile?.company_id ?? "",
+              taxId: myProfile?.tax_id ?? "",
+            }}
+            savingProfile={savingSettingsProfile}
+            onSaveProfile={(profile) => {
+              void saveSettingsProfile(profile)
+            }}
           />
         )
       default:

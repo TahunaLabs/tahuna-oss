@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { ChevronDown, ChevronUp, KeyRound, Moon, ShieldCheck, Sun } from "lucide-react"
 import Link from "next/link"
 import type { Id } from "@convex/_generated/dataModel"
@@ -29,6 +29,9 @@ type SettingsViewProps = {
   onThemeChange: (theme: ThemeChoice) => void
   userEmail: string
   apiKeys: ApiKeyRow[]
+  profile: ProfileDraft
+  savingProfile: boolean
+  onSaveProfile: (profile: ProfileDraft) => void
 }
 
 type ProfileDraft = {
@@ -76,20 +79,23 @@ function SectionRow({
   )
 }
 
-export function SettingsView({ theme, onThemeChange, userEmail, apiKeys }: SettingsViewProps) {
-  const [profile, setProfile] = useState<ProfileDraft>({
-    firstName: "",
-    lastName: "",
-    addressLine1: "",
-    addressLine2: "",
-    country: "",
-    companyName: "",
-    companyId: "",
-    taxId: "",
-  })
+export function SettingsView({
+  theme,
+  onThemeChange,
+  userEmail,
+  apiKeys,
+  profile: initialProfile,
+  savingProfile,
+  onSaveProfile,
+}: SettingsViewProps) {
+  const [profile, setProfile] = useState<ProfileDraft>(initialProfile)
   const [apiKeysOpen, setApiKeysOpen] = useState(false)
   const [sessionsOpen, setSessionsOpen] = useState(false)
   const [loginOpen, setLoginOpen] = useState(false)
+
+  useEffect(() => {
+    setProfile(initialProfile)
+  }, [initialProfile])
 
   const activeKeys = useMemo(() => apiKeys.filter((key) => key.status === "active"), [apiKeys])
   const activeSessions = useMemo(
@@ -220,8 +226,14 @@ export function SettingsView({ theme, onThemeChange, userEmail, apiKeys }: Setti
             </div>
           </div>
           <div className="flex justify-end">
-            <Button type="button" variant="dashboard-primary" size="none" disabled>
-              Save changes
+            <Button
+              type="button"
+              variant="dashboard-primary"
+              size="none"
+              disabled={savingProfile}
+              onClick={() => onSaveProfile(profile)}
+            >
+              {savingProfile ? "Saving..." : "Save changes"}
             </Button>
           </div>
           <p className="text-xs text-muted-foreground">
