@@ -328,3 +328,63 @@ func TestMonitorRunWithLogs_RetriesTransientStatusPollError(t *testing.T) {
 		t.Fatalf("expected log polling after retry, got %d", logCalls)
 	}
 }
+
+func TestPersistFallbackEnvironmentGPU_UpdatesLinkedEnvironmentGPUType(t *testing.T) {
+	var mu sync.Mutex
+	patchCalls := 0
+	var patchPayload map[string]any
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method == http.MethodPatch && r.URL.Path == "/api/environments/env-test" {
+			mu.Lock()
+			patchCalls++
+			mu.Unlock()
+			if err := json.NewDecoder(r.Body).Decode(&patchPayload); err != nil {
+				t.Fatalf("failed decoding environment patch payload: %v", err)
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"environment_id": "env-test"})
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+		_ = json.NewEncoder(w).Encode(map[string]any{"detail": "not found"})
+	}))
+	defer server.Close()
+
+	t.Setenv("TAHUNA_API_URL", server.URL)
+
+	persistFallbackEnvironmentGPU("/environments/env-test/runs", "NVIDIA RTX A5000")
+
+	mu.Lock()
+	defer mu.Unlock()
+	if patchCalls != 1 {
+		t.Fatalf("expected one environment patch call, got %d", patchCalls)
+	}
+	if asString(patchPayload["gpu_type"]) != "NVIDIA RTX A5000" {
+		t.Fatalf("expected gpu_type patch to match selected fallback GPU, got %v", patchPayload["gpu_type"])
+	}
+}
+
+func TestPersistFallbackEnvironmentGPU_IgnoresInvalidRunPath(t *testing.T) {
+	var mu sync.Mutex
+	requestCount := 0
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		requestCount++
+		mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"detail": "unexpected request"})
+	}))
+	defer server.Close()
+
+	t.Setenv("TAHUNA_API_URL", server.URL)
+
+	persistFallbackEnvironmentGPU("/runs", "NVIDIA RTX A5000")
+
+	mu.Lock()
+	defer mu.Unlock()
+	if requestCount != 0 {
+		t.Fatalf("expected no API calls for invalid path, got %d", requestCount)
+	}
+}

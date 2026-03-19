@@ -1095,6 +1095,7 @@ func createRunWithCapacityPrompt(path string, payload map[string]any) (createRun
 
 		resp, err = doJSONAs[createRunResponse](http.MethodPost, path, payload)
 		if err == nil {
+			persistFallbackEnvironmentGPU(path, nextGPU)
 			return resp, nil
 		}
 		lastErr = err
@@ -1112,6 +1113,23 @@ func createRunWithCapacityPrompt(path string, payload map[string]any) (createRun
 				break
 			}
 		}
+	}
+}
+
+func persistFallbackEnvironmentGPU(path, gpuType string) {
+	selectedGPU := strings.TrimSpace(gpuType)
+	if selectedGPU == "" {
+		return
+	}
+	environmentID, err := environmentIDFromRunsPath(path)
+	if err != nil {
+		return
+	}
+	_, err = doJSON(http.MethodPatch, "/environments/"+environmentID, map[string]any{
+		"gpu_type": selectedGPU,
+	})
+	if err != nil {
+		logWarn("run created with fallback GPU %q but failed to update environment %s: %v", selectedGPU, environmentID, err)
 	}
 }
 
@@ -1134,15 +1152,23 @@ func supportsInteractivePrompts() bool {
 	return (in.Mode()&os.ModeCharDevice) != 0 && (out.Mode()&os.ModeCharDevice) != 0
 }
 
-func inferEnvironmentGPU(path string) (string, error) {
+func environmentIDFromRunsPath(path string) (string, error) {
 	parts := strings.Split(strings.Trim(path, "/"), "/")
 	// Expected: environments/{env_id}/runs
-	if len(parts) < 3 || parts[0] != "environments" {
+	if len(parts) < 3 || parts[0] != "environments" || parts[2] != "runs" {
 		return "", errors.New("environment id not found in path")
 	}
 	environmentID := strings.TrimSpace(parts[1])
 	if environmentID == "" {
 		return "", errors.New("environment id is empty")
+	}
+	return environmentID, nil
+}
+
+func inferEnvironmentGPU(path string) (string, error) {
+	environmentID, err := environmentIDFromRunsPath(path)
+	if err != nil {
+		return "", err
 	}
 	env, err := doJSONAs[environmentResponse](http.MethodGet, "/environments/"+environmentID, nil)
 	if err != nil {
