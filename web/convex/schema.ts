@@ -56,8 +56,10 @@ export default defineSchema({
     computeEndedAt: v.optional(v.number()),
     creditsReservedCents: v.optional(v.number()),
     computeChargeCents: v.optional(v.number()),
+    computeCollectedCents: v.optional(v.number()),
+    computeOutstandingCents: v.optional(v.number()),
     computeChargeStatus: v.optional(
-      v.union(v.literal("pending"), v.literal("charged"), v.literal("failed")),
+      v.union(v.literal("pending"), v.literal("charged"), v.literal("owed")),
     ),
     computeChargeError: v.optional(v.string()),
   })
@@ -109,13 +111,15 @@ export default defineSchema({
     eventType: v.string(),
     creditsDeltaCents: v.number(),
     balanceAfterCents: v.number(),
+    idempotencyKey: v.optional(v.string()),
     referenceType: v.optional(v.string()),
     referenceId: v.optional(v.string()),
     metadata: v.optional(v.any()),
     createdAt: v.number(),
   })
     .index("by_user", ["userId"])
-    .index("by_user_and_created_at", ["userId", "createdAt"]),
+    .index("by_user_and_created_at", ["userId", "createdAt"])
+    .index("by_user_and_idempotency_key", ["userId", "idempotencyKey"]),
 
   wandbRuns: defineTable({
     runId: v.id("runs"),

@@ -130,6 +130,7 @@ async function upsertDataUploadIndexRow(
   await applyStorageDeltaCredits(ctx, {
     userId: args.userId,
     sizeDeltaBytes: normalizedSize - previousSize,
+    idempotencyKey: `storage:data:${args.key}:${normalizedSize}`,
     referenceType: "storage_object",
     referenceId: args.key,
     metadata: {

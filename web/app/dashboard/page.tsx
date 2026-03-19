@@ -34,6 +34,7 @@ import { useAction, useConvexAuth, useMutation, useQuery } from "convex/react"
 import { useRouter } from "next/navigation"
 import { parseAsInteger, parseAsString, parseAsStringLiteral, useQueryState } from "nuqs"
 import { useEffect, useMemo, useState, type FormEvent } from "react"
+import { BILLING_CONFIG } from "@/config"
 
 const DASHBOARD_VIEW_VALUES = ["storage", "environments", "runs", "billing", "audit_logs", "settings"] as const
 const STORAGE_SOURCE_FILTER_VALUES = ["all", "shared", "private"] as const
@@ -79,6 +80,7 @@ export default function DashboardPage() {
   const [uploadingData, setUploadingData] = useState(false)
   const [uploadError, setUploadError] = useState("")
   const [uploadMessage, setUploadMessage] = useState("")
+  const [ensuringLedger, setEnsuringLedger] = useState(false)
   const [dataFileInputKey, setDataFileInputKey] = useState(0)
   const [storageSourceFilter, setStorageSourceFilter] = useQueryState(
     "storageSource",
@@ -118,7 +120,7 @@ export default function DashboardPage() {
 
   const currentUser = useQuery(api.auth.getCurrentUser, shouldLoadQueries ? {} : "skip")
   const myCredits = useQuery(api.auth.getMyCredits, shouldLoadQueries ? {} : "skip") as
-    | { balance_cents: number; currency: string }
+    | { balance_cents: number; currency: string; initialized: boolean }
     | undefined
   const myProfile = useQuery(api.profile.getMyProfile, shouldLoadQueries ? {} : "skip") as UserProfileResponse | undefined
   const envResult = useQuery(api.environments.list, shouldLoadQueries ? {} : "skip") as
@@ -168,6 +170,7 @@ export default function DashboardPage() {
   ) as RunMetricsOnlyDetail | undefined
   const runLogs = runLogsLive ?? (hasTerminalLogsCache ? terminalLogsCache.logs : undefined)
   const runMetrics = runMetricsLive ?? (hasTerminalMetricsCache ? terminalMetricsCache.metrics : undefined)
+
   const shouldLoadEnvironmentConfig = shouldLoadQueries && configEditorEnvironmentId !== null
   const environmentConfig = useQuery(
     api.environments.getConfig,
@@ -179,6 +182,7 @@ export default function DashboardPage() {
   const runs: RunRow[] = runResult?.runs ?? []
 
   const generateDataUploadUrlMutation = useMutation(api.data.generateUploadUrl)
+  const ensureMyLedgerMutation = useMutation(api.auth.ensureMyLedger)
   const removeEnvMutation = useMutation(api.environments.remove)
   const updateEnvironmentConfigMutation = useMutation(api.environments.updateConfig)
   const saveMyProfileMutation = useMutation(api.profile.saveMyProfile)
@@ -188,6 +192,26 @@ export default function DashboardPage() {
   const syncDataMetadataMutation = useMutation(api.data.syncMetadata)
   const bindDataMutation = useMutation(api.environments.bindData)
   const unbindDataMutation = useMutation(api.environments.unbindData)
+
+  useEffect(() => {
+    if (!shouldLoadQueries || ensuringLedger || myCredits?.initialized === true) {
+      return
+    }
+    let cancelled = false
+    setEnsuringLedger(true)
+    void ensureMyLedgerMutation({})
+      .catch(() => {
+        // Ignore bootstrap retries here; subsequent renders can retry.
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setEnsuringLedger(false)
+        }
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [ensureMyLedgerMutation, ensuringLedger, myCredits?.initialized, shouldLoadQueries])
   const listStorageAction = useAction(api.storage.list)
   const renameArtifactAction = useAction(api.storage.renameArtifact)
   const setStorageVisibilityMutation = useMutation(api.storage.setVisibility)
@@ -792,7 +816,9 @@ export default function DashboardPage() {
         return (
           <BillingView
             balanceCents={myCredits?.balance_cents ?? 0}
+            bootstrapCreditCents={BILLING_CONFIG.initialCreditCents}
             currency={myCredits?.currency ?? "USD"}
+            initialized={myCredits?.initialized === true}
             usageEvents={usageEvents ?? []}
           />
         )

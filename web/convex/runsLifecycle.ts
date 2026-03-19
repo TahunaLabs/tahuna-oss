@@ -89,12 +89,15 @@ export async function createRunForUserId(
     dataManifestHash: dataManifestHash || undefined,
     creditsReservedCents: reservedCents,
     computeChargeCents: reservedCents,
+    computeCollectedCents: reservedCents,
+    computeOutstandingCents: 0,
     computeChargeStatus: "pending",
   });
   const reservation = await consumeUserCredits(ctx, {
     userId: args.userId,
     amountCents: reservedCents,
     eventType: USAGE_EVENT_TYPE.RUN_COMPUTE_RESERVED,
+    idempotencyKey: `run:${String(runId)}:reservation`,
     referenceType: "run",
     referenceId: String(runId),
     metadata: {
@@ -154,6 +157,8 @@ export async function cancelRunForUserId(
       cancellationRequested: true,
       computeEndedAt: terminalTiming.computeEndedAt,
       computeChargeCents: settlement.chargeCents,
+      computeCollectedCents: settlement.collectedCents,
+      computeOutstandingCents: settlement.outstandingCents,
       computeChargeStatus: settlement.chargeStatus,
       computeChargeError: settlement.chargeError,
     });

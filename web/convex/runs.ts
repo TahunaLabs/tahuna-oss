@@ -320,6 +320,7 @@ async function upsertRunArtifactIndexRow(
   await applyStorageDeltaCredits(ctx, {
     userId: args.userId,
     sizeDeltaBytes: normalizedSize - previousSize,
+    idempotencyKey: `storage:artifact:${args.key}:${normalizedSize}`,
     referenceType: "run_artifact",
     referenceId: args.key,
     metadata: {
@@ -1003,6 +1004,8 @@ export const markCancelledAfterTermination = internalMutation({
       status: RUN_STATUS.CANCELLED,
       computeEndedAt: terminalTiming.computeEndedAt,
       computeChargeCents: settlement.chargeCents,
+      computeCollectedCents: settlement.collectedCents,
+      computeOutstandingCents: settlement.outstandingCents,
       computeChargeStatus: settlement.chargeStatus,
       computeChargeError: settlement.chargeError,
     });
@@ -1040,6 +1043,8 @@ export const markCancellationTerminationFailed = internalMutation({
       runtimeTokenHash: "revoked",
       computeEndedAt: terminalTiming.computeEndedAt,
       computeChargeCents: settlement.chargeCents,
+      computeCollectedCents: settlement.collectedCents,
+      computeOutstandingCents: settlement.outstandingCents,
       computeChargeStatus: settlement.chargeStatus,
       computeChargeError: settlement.chargeError,
     });
@@ -1403,6 +1408,8 @@ export const markProvisioning = internalMutation({
           status: RUN_STATUS.CANCELLED,
           computeEndedAt: terminalTiming.computeEndedAt,
           computeChargeCents: settlement.chargeCents,
+          computeCollectedCents: settlement.collectedCents,
+          computeOutstandingCents: settlement.outstandingCents,
           computeChargeStatus: settlement.chargeStatus,
           computeChargeError: settlement.chargeError,
         });
@@ -1438,6 +1445,8 @@ export const markRunning = internalMutation({
           status: RUN_STATUS.CANCELLED,
           computeEndedAt: terminalTiming.computeEndedAt,
           computeChargeCents: settlement.chargeCents,
+          computeCollectedCents: settlement.collectedCents,
+          computeOutstandingCents: settlement.outstandingCents,
           computeChargeStatus: settlement.chargeStatus,
           computeChargeError: settlement.chargeError,
         });
@@ -1485,6 +1494,8 @@ export const markFailed = internalMutation({
       runtimeTokenHash: "revoked",
       computeEndedAt: terminalTiming.computeEndedAt,
       computeChargeCents: settlement.chargeCents,
+      computeCollectedCents: settlement.collectedCents,
+      computeOutstandingCents: settlement.outstandingCents,
       computeChargeStatus: settlement.chargeStatus,
       computeChargeError: settlement.chargeError,
     });
@@ -1611,6 +1622,8 @@ export const ingestRuntimeStatus = internalMutation({
         runtimeTokenHash: "revoked",
         computeEndedAt: terminalTiming.computeEndedAt,
         computeChargeCents: settlement.chargeCents,
+        computeCollectedCents: settlement.collectedCents,
+        computeOutstandingCents: settlement.outstandingCents,
         computeChargeStatus: settlement.chargeStatus,
         computeChargeError: settlement.chargeError,
       });
@@ -1637,7 +1650,9 @@ export const ingestRuntimeStatus = internalMutation({
       runtimeTokenHash?: string;
       computeEndedAt?: number;
       computeChargeCents?: number;
-      computeChargeStatus?: "charged" | "failed";
+      computeCollectedCents?: number;
+      computeOutstandingCents?: number;
+      computeChargeStatus?: "charged" | "owed";
       computeChargeError?: string;
     } = { status };
     const isTerminalStatus = status === RUN_STATUS.COMPLETED || status === RUN_STATUS.CANCELLED;
@@ -1648,6 +1663,8 @@ export const ingestRuntimeStatus = internalMutation({
       settlement = await settleRunComputeCharge(ctx, row, terminalTiming);
       patch.computeEndedAt = terminalTiming.computeEndedAt;
       patch.computeChargeCents = settlement.chargeCents;
+      patch.computeCollectedCents = settlement.collectedCents;
+      patch.computeOutstandingCents = settlement.outstandingCents;
       patch.computeChargeStatus = settlement.chargeStatus;
       patch.computeChargeError = settlement.chargeError;
     }
@@ -1727,13 +1744,22 @@ export const ingestRuntimeArtifacts = internalMutation({
         seen.add(artifact.key);
         newKeys.push(artifact.key);
       }
-      await upsertRunArtifactIndexRow(ctx, {
-        userId: row.userId,
-        runId: args.runId,
-        key: artifact.key,
-        size: artifact.size,
-        createdAt: artifact.createdAt,
-      });
+      try {
+        await upsertRunArtifactIndexRow(ctx, {
+          userId: row.userId,
+          runId: args.runId,
+          key: artifact.key,
+          size: artifact.size,
+          createdAt: artifact.createdAt,
+        });
+      } catch (error) {
+        try {
+          await r2.deleteObject(ctx, artifact.key);
+        } catch {
+          // Best-effort cleanup when artifact billing/indexing fails.
+        }
+        throw error;
+      }
     }
     if (newKeys.length > 0) {
       await ctx.db.patch("runs", args.runId, {

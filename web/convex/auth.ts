@@ -60,6 +60,7 @@ export const getMyCredits = query({
   returns: v.object({
     balance_cents: v.number(),
     currency: v.string(),
+    initialized: v.boolean(),
   }),
   handler: async (ctx) => {
     const user = await authComponent.getAuthUser(ctx);
@@ -73,13 +74,15 @@ export const getMyCredits = query({
       .first();
     if (!row) {
       return {
-        balance_cents: BILLING_CONFIG.initialCreditCents,
+        balance_cents: 0,
         currency: BILLING_CONFIG.currency,
+        initialized: false,
       };
     }
     return {
       balance_cents: row.balanceCents,
       currency: row.currency || BILLING_CONFIG.currency,
+      initialized: true,
     };
   },
 });
@@ -100,7 +103,10 @@ export const listMyUsageEvents = query({
     }),
   ),
   handler: async (ctx, args) => {
-    const user = await requireUser(ctx);
+    const user = await authComponent.getAuthUser(ctx);
+    if (!user) {
+      throw new ConvexError("Not authenticated");
+    }
     const userId = String(user._id);
     const rawLimit = typeof args.limit === "number" && Number.isFinite(args.limit) ? Math.floor(args.limit) : 100;
     const limit = Math.max(1, Math.min(200, rawLimit));
@@ -118,6 +124,25 @@ export const listMyUsageEvents = query({
       metadata: row.metadata ?? null,
       created_at: row.createdAt,
     }));
+  },
+});
+
+export const ensureMyLedger = mutation({
+  args: {},
+  returns: v.object({
+    balance_cents: v.number(),
+    currency: v.string(),
+  }),
+  handler: async (ctx) => {
+    const user = await requireUser(ctx);
+    const row = await ensureUserLedger(ctx, {
+      userId: String(user._id),
+      source: "dashboard_bootstrap",
+    });
+    return {
+      balance_cents: row.balanceCents,
+      currency: row.currency,
+    };
   },
 });
 

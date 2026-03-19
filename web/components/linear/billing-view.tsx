@@ -14,7 +14,9 @@ type UsageEventRow = {
 
 type BillingViewProps = {
   balanceCents: number
+  bootstrapCreditCents: number
   currency: string
+  initialized: boolean
   usageEvents: UsageEventRow[]
 }
 
@@ -43,7 +45,7 @@ function eventLabel(value: string) {
     .replace(/\b\w/g, (m) => m.toUpperCase())
 }
 
-export function BillingView({ balanceCents, currency, usageEvents }: BillingViewProps) {
+export function BillingView({ balanceCents, bootstrapCreditCents, currency, initialized, usageEvents }: BillingViewProps) {
   return (
     <main className="flex-1 h-full overflow-y-auto">
       <header className="px-6 py-4 border-b border-border">
@@ -53,11 +55,13 @@ export function BillingView({ balanceCents, currency, usageEvents }: BillingView
       <div className="px-6 py-5 space-y-5">
         <section className="rounded-lg border border-border bg-card p-4">
           <p className="text-sm text-muted-foreground">Account balance</p>
-          <p className="mt-1 text-3xl font-semibold text-foreground">{formatMoney(balanceCents, currency)}</p>
+          <p className="mt-1 text-3xl font-semibold text-foreground">
+            {initialized ? formatMoney(balanceCents, currency) : "Initializing..."}
+          </p>
           <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3">
             <div className="rounded border border-border p-3">
               <p className="text-xs text-muted-foreground">Bootstrap credit</p>
-              <p className="mt-1 text-lg text-foreground">{formatMoney(1000, currency)}</p>
+              <p className="mt-1 text-lg text-foreground">{formatMoney(bootstrapCreditCents, currency)}</p>
             </div>
             <div className="rounded border border-border p-3">
               <p className="text-xs text-muted-foreground">Manual top-up</p>
@@ -80,7 +84,9 @@ export function BillingView({ balanceCents, currency, usageEvents }: BillingView
             <h2 className="text-base text-foreground">Ledger history</h2>
             <span className="text-xs text-muted-foreground">{usageEvents.length} events</span>
           </div>
-          {usageEvents.length === 0 ? (
+          {!initialized ? (
+            <p className="mt-3 text-sm text-muted-foreground">Persisting bootstrap ledger entry...</p>
+          ) : usageEvents.length === 0 ? (
             <p className="mt-3 text-sm text-muted-foreground">No usage events yet.</p>
           ) : (
             <div className="mt-3 overflow-x-auto">

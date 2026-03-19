@@ -10,6 +10,7 @@ export const USAGE_EVENT_TYPE = {
   RUN_COMPUTE_RESERVED: "run_compute_reserved",
   RUN_COMPUTE_SETTLEMENT_DEBIT: "run_compute_settlement_debit",
   RUN_COMPUTE_SETTLEMENT_REFUND: "run_compute_settlement_refund",
+  RUN_COMPUTE_SETTLEMENT_OWED: "run_compute_settlement_owed",
   STORAGE_CHARGE: "storage_charge",
 } as const;
 
@@ -22,9 +23,26 @@ type CreditEventArgs = {
   userId: string;
   amountCents: number;
   eventType: string;
+  idempotencyKey?: string;
   referenceType?: string;
   referenceId?: string;
   metadata?: Record<string, unknown>;
+};
+
+type LedgerEntryArgs = {
+  userId: string;
+  deltaCents: number;
+  eventType: string;
+  idempotencyKey?: string;
+  referenceType?: string;
+  referenceId?: string;
+  metadata?: Record<string, unknown>;
+};
+
+type LedgerEntryResult = {
+  balanceCents: number;
+  applied: boolean;
+  deltaCents: number;
 };
 
 function normalizeUserId(value: string) {
@@ -44,6 +62,13 @@ function normalizeCents(value: number) {
     throw new ConvexError("amount must be greater than zero");
   }
   return cents;
+}
+
+function normalizeLedgerDelta(value: number) {
+  if (!Number.isFinite(value)) {
+    throw new ConvexError("amount must be a finite number");
+  }
+  return Math.trunc(value);
 }
 
 function normalizeOptionalText(value: string | undefined) {
@@ -104,6 +129,68 @@ async function requireCreditsRow(ctx: MutationCtx, args: EnsureUserLedgerArgs): 
   return ensureCreditsRow(ctx, args, now);
 }
 
+async function findUsageEventByIdempotencyKey(
+  ctx: MutationCtx,
+  userId: string,
+  idempotencyKey: string | undefined,
+) {
+  const normalizedIdempotencyKey = normalizeOptionalText(idempotencyKey);
+  if (!normalizedIdempotencyKey) {
+    return null;
+  }
+  return ctx.db
+    .query("usageEvents")
+    .withIndex("by_user_and_idempotency_key", (q) => q.eq("userId", userId).eq("idempotencyKey", normalizedIdempotencyKey))
+    .first();
+}
+
+export async function postLedgerEntry(ctx: MutationCtx, args: LedgerEntryArgs): Promise<LedgerEntryResult | null> {
+  const userId = normalizeUserId(args.userId);
+  const deltaCents = normalizeLedgerDelta(args.deltaCents);
+  const idempotencyKey = normalizeOptionalText(args.idempotencyKey);
+  const existing = await findUsageEventByIdempotencyKey(ctx, userId, idempotencyKey);
+  if (existing) {
+    return {
+      balanceCents: existing.balanceAfterCents,
+      applied: false,
+      deltaCents: existing.creditsDeltaCents,
+    };
+  }
+
+  const creditsRow = await requireCreditsRow(ctx, {
+    userId,
+    source: "usage_event",
+  });
+  if (deltaCents < 0 && creditsRow.balanceCents < Math.abs(deltaCents)) {
+    return null;
+  }
+
+  const now = Date.now();
+  const balanceAfterCents = creditsRow.balanceCents + deltaCents;
+  if (deltaCents !== 0) {
+    await ctx.db.patch(creditsRow._id, {
+      balanceCents: balanceAfterCents,
+      updatedAt: now,
+    });
+  }
+  await ctx.db.insert("usageEvents", {
+    userId,
+    eventType: args.eventType,
+    creditsDeltaCents: deltaCents,
+    balanceAfterCents,
+    idempotencyKey,
+    referenceType: normalizeOptionalText(args.referenceType),
+    referenceId: normalizeOptionalText(args.referenceId),
+    metadata: args.metadata,
+    createdAt: now,
+  });
+  return {
+    balanceCents: balanceAfterCents,
+    applied: true,
+    deltaCents,
+  };
+}
+
 export async function ensureUserLedger(ctx: MutationCtx, args: EnsureUserLedgerArgs) {
   const userId = normalizeUserId(args.userId);
   return requireCreditsRow(ctx, {
@@ -115,60 +202,39 @@ export async function ensureUserLedger(ctx: MutationCtx, args: EnsureUserLedgerA
 export async function consumeUserCredits(ctx: MutationCtx, args: CreditEventArgs) {
   const userId = normalizeUserId(args.userId);
   const amountCents = normalizeCents(args.amountCents);
-  const creditsRow = await requireCreditsRow(ctx, {
+  return postLedgerEntry(ctx, {
     userId,
-    source: "usage_event",
-  });
-  if (creditsRow.balanceCents < amountCents) {
-    return null;
-  }
-  const now = Date.now();
-  const balanceAfterCents = creditsRow.balanceCents - amountCents;
-  await ctx.db.patch(creditsRow._id, {
-    balanceCents: balanceAfterCents,
-    updatedAt: now,
-  });
-  await ctx.db.insert("usageEvents", {
-    userId,
+    deltaCents: -amountCents,
     eventType: args.eventType,
-    creditsDeltaCents: -amountCents,
-    balanceAfterCents,
-    referenceType: normalizeOptionalText(args.referenceType),
-    referenceId: normalizeOptionalText(args.referenceId),
+    idempotencyKey: args.idempotencyKey,
+    referenceType: args.referenceType,
+    referenceId: args.referenceId,
     metadata: args.metadata,
-    createdAt: now,
   });
-  return {
-    balanceCents: balanceAfterCents,
-  };
 }
 
 export async function grantUserCredits(ctx: MutationCtx, args: CreditEventArgs) {
   const userId = normalizeUserId(args.userId);
   const amountCents = normalizeCents(args.amountCents);
-  const creditsRow = await requireCreditsRow(ctx, {
+  return postLedgerEntry(ctx, {
     userId,
-    source: "usage_event",
-  });
-  const now = Date.now();
-  const balanceAfterCents = creditsRow.balanceCents + amountCents;
-  await ctx.db.patch(creditsRow._id, {
-    balanceCents: balanceAfterCents,
-    updatedAt: now,
-  });
-  await ctx.db.insert("usageEvents", {
-    userId,
+    deltaCents: amountCents,
     eventType: args.eventType,
-    creditsDeltaCents: amountCents,
-    balanceAfterCents,
-    referenceType: normalizeOptionalText(args.referenceType),
-    referenceId: normalizeOptionalText(args.referenceId),
+    idempotencyKey: args.idempotencyKey,
+    referenceType: args.referenceType,
+    referenceId: args.referenceId,
     metadata: args.metadata,
-    createdAt: now,
   });
-  return {
-    balanceCents: balanceAfterCents,
-  };
+}
+
+export async function recordLedgerEvent(
+  ctx: MutationCtx,
+  args: Omit<LedgerEntryArgs, "deltaCents"> & { deltaCents?: number },
+) {
+  return postLedgerEntry(ctx, {
+    ...args,
+    deltaCents: args.deltaCents ?? 0,
+  });
 }
 
 export function estimateRunReservationCents(args: {
@@ -219,6 +285,7 @@ export async function applyStorageDeltaCredits(
   args: {
     userId: string;
     sizeDeltaBytes: number;
+    idempotencyKey?: string;
     referenceType: string;
     referenceId: string;
     metadata?: Record<string, unknown>;
@@ -232,6 +299,7 @@ export async function applyStorageDeltaCredits(
     userId: args.userId,
     amountCents: deltaCents,
     eventType: USAGE_EVENT_TYPE.STORAGE_CHARGE,
+    idempotencyKey: args.idempotencyKey,
     referenceType: args.referenceType,
     referenceId: args.referenceId,
     metadata: args.metadata,

@@ -5,6 +5,7 @@ import {
   consumeUserCredits,
   estimateRunUsageCents,
   grantUserCredits,
+  recordLedgerEvent,
   USAGE_EVENT_TYPE,
 } from "@convex/credits";
 
@@ -67,39 +68,62 @@ export function resolveTerminalRunTiming(
 
 export type ComputeSettlementResult = {
   chargeCents: number;
-  chargeStatus: "charged" | "failed";
+  chargeStatus: "charged" | "owed";
   chargeError?: string;
   chargeDeltaCents: number;
   balanceAfterCents?: number;
+  collectedCents: number;
+  outstandingCents: number;
   durationMs: number;
   hourlyRateCents: number;
 };
+
+function runSettlementIdempotencyKey(runId: string, kind: "debit" | "refund" | "owed") {
+  return `run:${runId}:settlement:${kind}`;
+}
 
 export async function settleRunComputeCharge(
   ctx: MutationCtx,
   run: Doc<"runs">,
   timing: { durationMs: number },
 ): Promise<ComputeSettlementResult> {
-  if (run.computeChargeStatus !== "pending") {
+  if (run.computeChargeStatus === "charged") {
     return {
       chargeCents: Math.max(0, Math.floor(run.computeChargeCents || 0)),
-      chargeStatus: run.computeChargeStatus === "failed" ? "failed" : "charged",
+      chargeStatus: "charged",
       chargeError: run.computeChargeError,
       chargeDeltaCents: 0,
       durationMs: timing.durationMs,
       hourlyRateCents: 0,
+      collectedCents: Math.max(0, Math.floor(run.computeCollectedCents ?? run.computeChargeCents ?? 0)),
+      outstandingCents: Math.max(0, Math.floor(run.computeOutstandingCents || 0)),
     };
   }
 
+  const runId = String(run._id);
   const gpuCount = typeof run.effectiveGpuCount === "number" ? run.effectiveGpuCount : 0;
   const volumeGb = typeof run.effectiveVolumeGb === "number" ? run.effectiveVolumeGb : 0;
   const reservedCents = Math.max(0, Math.floor(run.creditsReservedCents || 0));
-  const chargeCents = estimateRunUsageCents({
-    gpuCount,
-    volumeGb,
-    durationMs: timing.durationMs,
-  });
-  const chargeDeltaCents = chargeCents - reservedCents;
+  const initialChargeCents =
+    run.computeChargeStatus === "owed"
+      ? Math.max(0, Math.floor(run.computeChargeCents || 0))
+      : estimateRunUsageCents({
+          gpuCount,
+          volumeGb,
+          durationMs: timing.durationMs,
+        });
+  const initialCollectedCents =
+    run.computeChargeStatus === "owed"
+      ? Math.max(0, Math.floor(run.computeCollectedCents ?? reservedCents))
+      : reservedCents;
+  const initialOutstandingCents =
+    run.computeChargeStatus === "owed"
+      ? Math.max(0, Math.floor(run.computeOutstandingCents ?? initialChargeCents - initialCollectedCents))
+      : Math.max(0, initialChargeCents - reservedCents);
+  const chargeDeltaCents =
+    run.computeChargeStatus === "owed"
+      ? initialOutstandingCents
+      : initialChargeCents - reservedCents;
   const hourlyRateCents =
     gpuCount * BILLING_CONFIG.computeGpuHourlyRateCents +
     volumeGb * BILLING_CONFIG.computeVolumeGbHourlyRateCents;
@@ -109,33 +133,55 @@ export async function settleRunComputeCharge(
       userId: run.userId,
       amountCents: chargeDeltaCents,
       eventType: USAGE_EVENT_TYPE.RUN_COMPUTE_SETTLEMENT_DEBIT,
+      idempotencyKey: runSettlementIdempotencyKey(runId, "debit"),
       referenceType: "run",
-      referenceId: String(run._id),
+      referenceId: runId,
       metadata: {
         settlement: "runtime_terminal",
         reserved_cents: reservedCents,
-        charge_cents: chargeCents,
+        charge_cents: initialChargeCents,
         duration_ms: timing.durationMs,
         hourly_rate_cents: hourlyRateCents,
+        outstanding_cents: initialOutstandingCents,
       },
     });
     if (!consumed) {
+      await recordLedgerEvent(ctx, {
+        userId: run.userId,
+        eventType: USAGE_EVENT_TYPE.RUN_COMPUTE_SETTLEMENT_OWED,
+        idempotencyKey: runSettlementIdempotencyKey(runId, "owed"),
+        referenceType: "run",
+        referenceId: runId,
+        metadata: {
+          settlement: "runtime_terminal",
+          reserved_cents: reservedCents,
+          charge_cents: initialChargeCents,
+          collected_cents: initialCollectedCents,
+          outstanding_cents: initialOutstandingCents,
+          duration_ms: timing.durationMs,
+          hourly_rate_cents: hourlyRateCents,
+        },
+      });
       return {
-        chargeCents,
-        chargeStatus: "failed",
-        chargeError: "insufficient credits for compute settlement",
+        chargeCents: initialChargeCents,
+        chargeStatus: "owed",
+        chargeError: "outstanding compute settlement",
         chargeDeltaCents,
         durationMs: timing.durationMs,
         hourlyRateCents,
+        collectedCents: initialCollectedCents,
+        outstandingCents: initialOutstandingCents,
       };
     }
     return {
-      chargeCents,
+      chargeCents: initialChargeCents,
       chargeStatus: "charged",
       chargeDeltaCents,
       balanceAfterCents: consumed.balanceCents,
       durationMs: timing.durationMs,
       hourlyRateCents,
+      collectedCents: initialChargeCents,
+      outstandingCents: 0,
     };
   }
 
@@ -144,31 +190,39 @@ export async function settleRunComputeCharge(
       userId: run.userId,
       amountCents: Math.abs(chargeDeltaCents),
       eventType: USAGE_EVENT_TYPE.RUN_COMPUTE_SETTLEMENT_REFUND,
+      idempotencyKey: runSettlementIdempotencyKey(runId, "refund"),
       referenceType: "run",
-      referenceId: String(run._id),
+      referenceId: runId,
       metadata: {
         settlement: "runtime_terminal",
         reserved_cents: reservedCents,
-        charge_cents: chargeCents,
+        charge_cents: initialChargeCents,
         duration_ms: timing.durationMs,
         hourly_rate_cents: hourlyRateCents,
       },
     });
+    if (!refunded) {
+      throw new Error("refund grant failed unexpectedly");
+    }
     return {
-      chargeCents,
+      chargeCents: initialChargeCents,
       chargeStatus: "charged",
       chargeDeltaCents,
       balanceAfterCents: refunded.balanceCents,
       durationMs: timing.durationMs,
       hourlyRateCents,
+      collectedCents: initialChargeCents,
+      outstandingCents: 0,
     };
   }
 
   return {
-    chargeCents,
+    chargeCents: initialChargeCents,
     chargeStatus: "charged",
     chargeDeltaCents: 0,
     durationMs: timing.durationMs,
     hourlyRateCents,
+    collectedCents: initialChargeCents,
+    outstandingCents: 0,
   };
 }
