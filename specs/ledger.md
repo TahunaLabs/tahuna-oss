@@ -85,6 +85,8 @@ Shared ledger helpers (Convex module):
 
 ### Reservation at run creation
 
+Credits are debited once, at run creation time.
+
 On run create:
 
 1. Calculate reservation:
@@ -104,6 +106,12 @@ Run row stores charging markers:
 
 There is currently no automatic compute refund path.
 
+Current compute-pricing behavior:
+
+- Pricing is based on `gpuCount` and `volumeGb`.
+- `gpuType` is currently tracked for runtime/provisioning metadata, but not used to choose a different credit rate.
+- There is no duration-based settlement today (no post-run per-second/per-minute reconciliation).
+
 ## Storage Charging
 
 Storage charges are applied when indexed object size grows (data uploads and run artifacts).
@@ -121,6 +129,12 @@ Behavior:
 - For data upload callback path, uploaded object cleanup is attempted (best effort) on post-upload ledger failure.
 - There is currently no automatic storage refund path.
 
+Storage debit trigger summary:
+
+- Data upload indexing path (`storageObjects` upsert for data uploads).
+- Run artifact indexing path (`storageObjects` upsert for run artifacts).
+- Only positive size deltas debit credits; zero/negative deltas do nothing.
+
 ## Invariants
 
 - Identity source of truth is Better Auth; ledger is keyed by `userId`.
@@ -137,3 +151,4 @@ Behavior:
   - reserve at create
   - no automatic refund path yet
   - no duration-based post-run overage/refund yet for started runs.
+  - no GPU-type-specific pricing tiers yet (single fixed rate by GPU count + volume GB).
