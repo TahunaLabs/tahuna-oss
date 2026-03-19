@@ -14,7 +14,6 @@ const CLEANUP_TABLES = [
   "apiKeys",
   "dataBlobs",
   "environments",
-  "gpuPricingSnapshots",
   "runEvents",
   "runRuntimeLogs",
   "runRuntimeMetrics",
@@ -31,7 +30,6 @@ type CleanupDocId =
   | Id<"apiKeys">
   | Id<"dataBlobs">
   | Id<"environments">
-  | Id<"gpuPricingSnapshots">
   | Id<"runEvents">
   | Id<"runRuntimeLogs">
   | Id<"runRuntimeMetrics">
@@ -56,7 +54,6 @@ const cleanupTableValidator = v.union(
   v.literal("apiKeys"),
   v.literal("dataBlobs"),
   v.literal("environments"),
-  v.literal("gpuPricingSnapshots"),
   v.literal("runEvents"),
   v.literal("runRuntimeLogs"),
   v.literal("runRuntimeMetrics"),
@@ -130,9 +127,6 @@ async function loadTableBatchIds(ctx: MutationCtx, table: CleanupTable, batchSiz
   if (table === "environments") {
     return (await ctx.db.query("environments").take(batchSize)).map((row) => row._id);
   }
-  if (table === "gpuPricingSnapshots") {
-    return (await ctx.db.query("gpuPricingSnapshots").take(batchSize)).map((row) => row._id);
-  }
   if (table === "runEvents") {
     return (await ctx.db.query("runEvents").take(batchSize)).map((row) => row._id);
   }
@@ -168,10 +162,6 @@ async function deleteTableIds(ctx: MutationCtx, table: CleanupTable, ids: Cleanu
   }
   if (table === "environments") {
     await Promise.all(ids.map((id) => ctx.db.delete("environments", id as Id<"environments">)));
-    return;
-  }
-  if (table === "gpuPricingSnapshots") {
-    await Promise.all(ids.map((id) => ctx.db.delete("gpuPricingSnapshots", id as Id<"gpuPricingSnapshots">)));
     return;
   }
   if (table === "runEvents") {
@@ -258,14 +248,6 @@ export const internalCountTable = internalMutation({
     }
     if (args.table === "environments") {
       const result = await ctx.db.query("environments").paginate({ cursor: args.cursor, numItems: batchSize });
-      return {
-        count: result.page.length,
-        has_more: !result.isDone,
-        next_cursor: result.isDone ? null : result.continueCursor,
-      };
-    }
-    if (args.table === "gpuPricingSnapshots") {
-      const result = await ctx.db.query("gpuPricingSnapshots").paginate({ cursor: args.cursor, numItems: batchSize });
       return {
         count: result.page.length,
         has_more: !result.isDone,

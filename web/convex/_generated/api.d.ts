@@ -21,7 +21,6 @@ import type * as credits from "../credits.js";
 import type * as crypto from "../crypto.js";
 import type * as data from "../data.js";
 import type * as environments from "../environments.js";
-import type * as gpuPricing from "../gpuPricing.js";
 import type * as http from "../http.js";
 import type * as ids from "../ids.js";
 import type * as maintenance from "../maintenance.js";
@@ -63,7 +62,6 @@ declare const fullApi: ApiFromModules<{
   crypto: typeof crypto;
   data: typeof data;
   environments: typeof environments;
-  gpuPricing: typeof gpuPricing;
   http: typeof http;
   ids: typeof ids;
   maintenance: typeof maintenance;

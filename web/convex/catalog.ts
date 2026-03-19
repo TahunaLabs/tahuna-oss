@@ -1,6 +1,7 @@
 import { action, query } from "@convex/_generated/server";
 import { v } from "convex/values";
 import runtimeImageBases from "@/convex/runtime-images.json";
+import { getRunpodGpuPricePerHour } from "@/lib/runpod-gpu-pricing";
 
 const MANAGED_RUNTIME_IMAGE_REPO = (
   process.env.TAHUNA_RUNTIME_IMAGE_REPO?.trim() ||
@@ -35,22 +36,13 @@ export const getCatalog = query({
   handler: async () => ({ images }),
 });
 
-type RunpodCloudPricing = {
-  lowestPrice?: number | string | null;
-  price?: number | string | null;
-  pricePerGpu?: number | string | null;
-  pricePerHr?: number | string | null;
-  pricePerHour?: number | string | null;
-  spotPrice?: number | string | null;
-};
-
 type RunpodGpuType = {
   id: string;
   displayName: string;
   memoryInGb: number;
   maxGpuCount?: number | null;
-  secureCloud?: RunpodCloudPricing | null;
-  communityCloud?: RunpodCloudPricing | null;
+  secureCloud?: Record<string, unknown> | null;
+  communityCloud?: Record<string, unknown> | null;
 };
 
 type RunpodGraphqlResponse = {
@@ -101,28 +93,6 @@ export const getDynamicGpus = action({
         return [];
       }
 
-      const extractHourlyPrice = (cloud: RunpodCloudPricing | null | undefined): number | undefined => {
-        if (!cloud || typeof cloud !== "object") return undefined;
-        const candidates = [
-          cloud.lowestPrice,
-          cloud.price,
-          cloud.pricePerGpu,
-          cloud.pricePerHr,
-          cloud.pricePerHour,
-          cloud.spotPrice,
-        ];
-
-        for (const candidate of candidates) {
-          if (typeof candidate === "number" && Number.isFinite(candidate)) return candidate;
-          if (typeof candidate === "string") {
-            const parsed = Number.parseFloat(candidate);
-            if (Number.isFinite(parsed)) return parsed;
-          }
-        }
-
-        return undefined;
-      };
-
       // Filter to only include GPUs that actually have stock and aren't 'unknown'
       const gpuTypes = json.data?.gpuTypes ?? [];
       const remoteGpus = gpuTypes
@@ -132,7 +102,7 @@ export const getDynamicGpus = action({
           displayName: g.displayName,
           memoryInGb: g.memoryInGb,
           maxGpuCount: g.maxGpuCount || 1,
-          pricePerHour: extractHourlyPrice(g.communityCloud) ?? extractHourlyPrice(g.secureCloud),
+          pricePerHour: getRunpodGpuPricePerHour(g.displayName) ?? getRunpodGpuPricePerHour(g.id),
         }));
 
       // Sort by memory size descending, then alphabetically by name to present nice options
