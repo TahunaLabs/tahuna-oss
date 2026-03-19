@@ -45,6 +45,12 @@ type LedgerEntryResult = {
   deltaCents: number;
 };
 
+type UpsertLedgerDebitTotalResult = {
+  balanceCents: number;
+  debitedCents: number;
+  appliedCents: number;
+};
+
 function normalizeUserId(value: string) {
   const userId = value.trim();
   if (!userId) {
@@ -228,6 +234,84 @@ export async function recordLedgerEvent(
     ...args,
     deltaCents: args.deltaCents ?? 0,
   });
+}
+
+export async function upsertLedgerDebitTotal(
+  ctx: MutationCtx,
+  args: {
+    userId: string;
+    targetDebitCents: number;
+    eventType: string;
+    idempotencyKey: string;
+    referenceType?: string;
+    referenceId?: string;
+    metadata?: Record<string, unknown>;
+  },
+): Promise<UpsertLedgerDebitTotalResult> {
+  const userId = normalizeUserId(args.userId);
+  const targetDebitCents = Math.max(0, Math.floor(args.targetDebitCents));
+  const idempotencyKey = normalizeOptionalText(args.idempotencyKey);
+  if (!idempotencyKey) {
+    throw new ConvexError("idempotency_key is required");
+  }
+
+  const creditsRow = await requireCreditsRow(ctx, {
+    userId,
+    source: "usage_event",
+  });
+  const existing = await findUsageEventByIdempotencyKey(ctx, userId, idempotencyKey);
+  const existingDebitedCents = existing ? Math.max(0, -Math.floor(existing.creditsDeltaCents)) : 0;
+  const debitDeltaCents = Math.max(0, targetDebitCents - existingDebitedCents);
+  const appliedCents = Math.min(debitDeltaCents, creditsRow.balanceCents);
+  const nextDebitedCents = existingDebitedCents + appliedCents;
+  const now = Date.now();
+  const balanceAfterCents = creditsRow.balanceCents - appliedCents;
+
+  if (appliedCents > 0) {
+    await ctx.db.patch(creditsRow._id, {
+      balanceCents: balanceAfterCents,
+      updatedAt: now,
+    });
+  }
+
+  const nextDeltaCents = -nextDebitedCents;
+  if (existing) {
+    if (
+      existing.creditsDeltaCents !== nextDeltaCents ||
+      existing.balanceAfterCents !== balanceAfterCents ||
+      existing.referenceType !== normalizeOptionalText(args.referenceType) ||
+      existing.referenceId !== normalizeOptionalText(args.referenceId) ||
+      existing.eventType !== args.eventType
+    ) {
+      await ctx.db.patch(existing._id, {
+        eventType: args.eventType,
+        creditsDeltaCents: nextDeltaCents,
+        balanceAfterCents: balanceAfterCents,
+        referenceType: normalizeOptionalText(args.referenceType),
+        referenceId: normalizeOptionalText(args.referenceId),
+        metadata: args.metadata,
+        createdAt: now,
+      });
+    }
+  } else {
+    await ctx.db.insert("usageEvents", {
+      userId,
+      eventType: args.eventType,
+      creditsDeltaCents: nextDeltaCents,
+      balanceAfterCents: balanceAfterCents,
+      idempotencyKey,
+      referenceType: normalizeOptionalText(args.referenceType),
+      referenceId: normalizeOptionalText(args.referenceId),
+      metadata: args.metadata,
+      createdAt: now,
+    });
+  }
+
+  return {
+    balanceCents: balanceAfterCents,
+    debitedCents: nextDebitedCents,
+    appliedCents,
+  };
 }
 
 export function estimateStorageDeltaCents(sizeDeltaBytes: number | undefined) {
