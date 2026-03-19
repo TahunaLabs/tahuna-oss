@@ -1,13 +1,14 @@
 "use client"
 
 import { useMemo, useState } from "react"
-import { ChevronDown, ChevronUp, Disc3, Github, KeyRound, Moon, ShieldCheck, Sun } from "lucide-react"
+import { ChevronDown, ChevronUp, KeyRound, Moon, ShieldCheck, Sun } from "lucide-react"
 import Link from "next/link"
 import type { Id } from "@convex/_generated/dataModel"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { Select } from "@/components/ui/select"
 
 type ApiKeyRow = {
   _id: Id<"apiKeys">
@@ -27,13 +28,21 @@ type SettingsViewProps = {
   theme: ThemeChoice
   onThemeChange: (theme: ThemeChoice) => void
   userEmail: string
-  userId: string
-  creditsLabel: string
-  currency: string
   apiKeys: ApiKeyRow[]
-  environmentCount: number
-  runCount: number
 }
+
+type ProfileDraft = {
+  firstName: string
+  lastName: string
+  addressLine1: string
+  addressLine2: string
+  country: string
+  companyName: string
+  companyId: string
+  taxId: string
+}
+
+const COUNTRY_OPTIONS = ["France", "United States", "United Kingdom", "Germany", "Spain", "Morocco"]
 
 function formatDate(timestamp?: number) {
   if (!timestamp) return "—"
@@ -67,17 +76,17 @@ function SectionRow({
   )
 }
 
-export function SettingsView({
-  theme,
-  onThemeChange,
-  userEmail,
-  userId,
-  creditsLabel,
-  currency,
-  apiKeys,
-  environmentCount,
-  runCount,
-}: SettingsViewProps) {
+export function SettingsView({ theme, onThemeChange, userEmail, apiKeys }: SettingsViewProps) {
+  const [profile, setProfile] = useState<ProfileDraft>({
+    firstName: "",
+    lastName: "",
+    addressLine1: "",
+    addressLine2: "",
+    country: "",
+    companyName: "",
+    companyId: "",
+    taxId: "",
+  })
   const [apiKeysOpen, setApiKeysOpen] = useState(false)
   const [sessionsOpen, setSessionsOpen] = useState(false)
   const [loginOpen, setLoginOpen] = useState(false)
@@ -108,16 +117,16 @@ export function SettingsView({
               <Moon className="w-4 h-4" />
               Dark
             </Button>
-              <Button
-                type="button"
-                variant={theme === "light" ? "dashboard-tab-compact-active" : "dashboard-tab-compact"}
-                size="none"
-                className="rounded-none"
-                onClick={() => onThemeChange("light")}
-              >
-                <Sun className="w-4 h-4" />
-                Light
-              </Button>
+            <Button
+              type="button"
+              variant={theme === "light" ? "dashboard-tab-compact-active" : "dashboard-tab-compact"}
+              size="none"
+              className="rounded-none"
+              onClick={() => onThemeChange("light")}
+            >
+              <Sun className="w-4 h-4" />
+              Light
+            </Button>
           </div>
           <p className="text-xs text-muted-foreground">
             System theme mode is not available in the current theme provider.
@@ -128,67 +137,96 @@ export function SettingsView({
           <h2 className="text-2xl font-medium text-foreground">Account information</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
-              <label className="block text-sm text-muted-foreground mb-1.5">Email</label>
+              <label className="block text-sm text-muted-foreground mb-1.5">First name</label>
+              <Input
+                variant="dashboard"
+                value={profile.firstName}
+                onChange={(event) => setProfile((current) => ({ ...current, firstName: event.target.value }))}
+                placeholder="First name"
+              />
+            </div>
+            <div>
+              <label className="block text-sm text-muted-foreground mb-1.5">Last name</label>
+              <Input
+                variant="dashboard"
+                value={profile.lastName}
+                onChange={(event) => setProfile((current) => ({ ...current, lastName: event.target.value }))}
+                placeholder="Last name"
+              />
+            </div>
+            <div>
+              <label className="block text-sm text-muted-foreground mb-1.5">Address line 1</label>
+              <Input
+                variant="dashboard"
+                value={profile.addressLine1}
+                onChange={(event) => setProfile((current) => ({ ...current, addressLine1: event.target.value }))}
+                placeholder="Street address"
+              />
+            </div>
+            <div>
+              <label className="block text-sm text-muted-foreground mb-1.5">Address line 2</label>
+              <Input
+                variant="dashboard"
+                value={profile.addressLine2}
+                onChange={(event) => setProfile((current) => ({ ...current, addressLine2: event.target.value }))}
+                placeholder="Suite, floor, etc. (optional)"
+              />
+            </div>
+            <div>
+              <label className="block text-sm text-muted-foreground mb-1.5">Country</label>
+              <Select
+                variant="dashboard"
+                value={profile.country}
+                onChange={(event) => setProfile((current) => ({ ...current, country: event.target.value }))}
+              >
+                <option value="">Select country</option>
+                {COUNTRY_OPTIONS.map((country) => (
+                  <option key={country} value={country}>
+                    {country}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <div>
+              <label className="block text-sm text-muted-foreground mb-1.5">Company name</label>
+              <Input
+                variant="dashboard"
+                value={profile.companyName}
+                onChange={(event) => setProfile((current) => ({ ...current, companyName: event.target.value }))}
+                placeholder="Company name"
+              />
+            </div>
+            <div>
+              <label className="block text-sm text-muted-foreground mb-1.5">Company ID</label>
+              <Input
+                variant="dashboard"
+                value={profile.companyId}
+                onChange={(event) => setProfile((current) => ({ ...current, companyId: event.target.value }))}
+                placeholder="Company registration ID"
+              />
+            </div>
+            <div>
+              <label className="block text-sm text-muted-foreground mb-1.5">Tax ID</label>
+              <Input
+                variant="dashboard"
+                value={profile.taxId}
+                onChange={(event) => setProfile((current) => ({ ...current, taxId: event.target.value }))}
+                placeholder="Tax ID"
+              />
+            </div>
+            <div className="md:col-span-2">
+              <label className="block text-sm text-muted-foreground mb-1.5">Account email</label>
               <Input variant="dashboard" value={userEmail || "—"} readOnly />
             </div>
-            <div>
-              <label className="block text-sm text-muted-foreground mb-1.5">User ID</label>
-              <Input variant="dashboard" value={userId || "—"} readOnly />
-            </div>
-            <div>
-              <label className="block text-sm text-muted-foreground mb-1.5">Credit balance</label>
-              <Input variant="dashboard" value={creditsLabel} readOnly />
-            </div>
-            <div>
-              <label className="block text-sm text-muted-foreground mb-1.5">Currency</label>
-              <Input variant="dashboard" value={currency} readOnly />
-            </div>
-            <div>
-              <label className="block text-sm text-muted-foreground mb-1.5">Environments</label>
-              <Input variant="dashboard" value={String(environmentCount)} readOnly />
-            </div>
-            <div>
-              <label className="block text-sm text-muted-foreground mb-1.5">Runs</label>
-              <Input variant="dashboard" value={String(runCount)} readOnly />
-            </div>
+          </div>
+          <div className="flex justify-end">
+            <Button type="button" variant="dashboard-primary" size="none" disabled>
+              Save changes
+            </Button>
           </div>
           <p className="text-xs text-muted-foreground">
-            This form is schema-aligned and read-only: no profile table exists yet.
+            Profile fields are UI draft only for now. No profile table exists in the current schema.
           </p>
-        </section>
-
-        <section className="space-y-3">
-          <h2 className="text-2xl font-medium text-foreground">Connections</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <Card variant="dashboard" className="p-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-foreground">
-                  <Github className="w-4 h-4" />
-                  <span className="font-medium">GitHub</span>
-                </div>
-                <Button type="button" variant="dashboard-outline" size="none" disabled>
-                  Not available
-                </Button>
-              </div>
-              <p className="mt-3 text-sm text-muted-foreground">
-                No GitHub connection records exist in the current schema.
-              </p>
-            </Card>
-            <Card variant="dashboard" className="p-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-foreground">
-                  <Disc3 className="w-4 h-4" />
-                  <span className="font-medium">Discord</span>
-                </div>
-                <Button type="button" variant="dashboard-outline" size="none" disabled>
-                  Not available
-                </Button>
-              </div>
-              <p className="mt-3 text-sm text-muted-foreground">
-                No Discord connection records exist in the current schema.
-              </p>
-            </Card>
-          </div>
         </section>
 
         <section className="space-y-2">

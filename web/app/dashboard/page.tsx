@@ -802,12 +802,7 @@ export default function DashboardPage() {
             theme={resolvedTheme}
             onThemeChange={(theme) => setTheme(theme)}
             userEmail={currentUser?.email ?? ""}
-            userId={String(currentUser?._id ?? "")}
-            creditsLabel={creditsLabel}
-            currency={myCredits?.currency ?? "EUR"}
             apiKeys={apiKeys ?? []}
-            environmentCount={environments.length}
-            runCount={runs.length}
           />
         )
       default:
