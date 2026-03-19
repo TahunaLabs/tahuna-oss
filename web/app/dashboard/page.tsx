@@ -204,7 +204,7 @@ export default function DashboardPage() {
 
   const userEmail = currentUser?.email ?? ""
   const userInitial = userEmail.trim().charAt(0).toUpperCase() || "U"
-  const creditsLabel = formatCreditsFromCents(myCredits?.balance_cents ?? 0, myCredits?.currency ?? "EUR")
+  const creditsLabel = formatCreditsFromCents(myCredits?.balance_cents ?? 0, myCredits?.currency ?? "USD")
   const storageItems = storageResult?.items ?? []
   const storageTotal = storageResult?.total ?? 0
   const isDark = resolvedTheme === "dark"
@@ -792,7 +792,7 @@ export default function DashboardPage() {
         return (
           <BillingView
             balanceCents={myCredits?.balance_cents ?? 0}
-            currency={myCredits?.currency ?? "EUR"}
+            currency={myCredits?.currency ?? "USD"}
             usageEvents={usageEvents ?? []}
           />
         )

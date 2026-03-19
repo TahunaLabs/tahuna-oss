@@ -15,7 +15,7 @@ export const AUTH_CONFIG = {
 } as const;
 
 export const BILLING_CONFIG = {
-  currency: "EUR",
+  currency: "USD",
   initialCreditCents: 1000,
   computeReservationHours: 1,
   computeGpuHourlyRateCents: 120,

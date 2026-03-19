@@ -52,8 +52,8 @@ Current implementation is internal credits accounting:
 
 `BILLING_CONFIG` in `web/config.ts`:
 
-- `currency: "EUR"`
-- `initialCreditCents: 1000` (EUR 10.00)
+- `currency: "USD"`
+- `initialCreditCents: 1000` (USD 10.00)
 - `computeReservationHours: 1`
 - `computeGpuHourlyRateCents: 120`
 - `computeVolumeGbHourlyRateCents: 2`
