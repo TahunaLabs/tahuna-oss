@@ -21,8 +21,8 @@ import Link from "next/link"
 import { Button } from "@/components/ui/button"
 
 interface SidebarProps {
-  activeView: "storage" | "environments" | "runs" | "audit_logs"
-  onViewChange: (view: "storage" | "environments" | "runs" | "audit_logs") => void
+  activeView: "storage" | "environments" | "runs" | "audit_logs" | "settings"
+  onViewChange: (view: "storage" | "environments" | "runs" | "audit_logs" | "settings") => void
   userInitial: string
   onOpenBilling?: () => void
   isDark: boolean
@@ -123,6 +123,8 @@ export function Sidebar({ activeView, onViewChange, userInitial, onOpenBilling, 
               <SidebarItem
                 icon={<Settings className="w-4 h-4" />}
                 label="Settings"
+                active={activeView === "settings"}
+                onClick={() => onViewChange("settings")}
               />
             </div>
           )}

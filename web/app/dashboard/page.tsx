@@ -5,6 +5,7 @@ import { StorageView } from "@/components/linear/storage-view"
 import { EnvironmentsView } from "@/components/linear/environments-view"
 import { RunsView } from "@/components/linear/runs-view"
 import { AuditLogsView } from "@/components/linear/audit-logs-view"
+import { SettingsView } from "@/components/linear/settings-view"
 import { ShareDialog } from "@/components/linear/share-dialog"
 import { useTheme } from "@/components/theme-provider"
 import { Button } from "@/components/ui/button"
@@ -35,7 +36,7 @@ import { useRouter } from "next/navigation"
 import { parseAsInteger, parseAsString, parseAsStringLiteral, useQueryState } from "nuqs"
 import { useEffect, useMemo, useState, type FormEvent } from "react"
 
-const DASHBOARD_VIEW_VALUES = ["storage", "environments", "runs", "audit_logs"] as const
+const DASHBOARD_VIEW_VALUES = ["storage", "environments", "runs", "audit_logs", "settings"] as const
 const STORAGE_SOURCE_FILTER_VALUES = ["all", "shared", "private"] as const
 const STORAGE_SORT_VALUES = [
   "created_desc",
@@ -128,6 +129,19 @@ export default function DashboardPage() {
     | undefined
   const runResult = useQuery(api.runs.list, shouldLoadQueries ? {} : "skip") as
     | { runs: RunRow[] }
+    | undefined
+  const apiKeys = useQuery(api.auth.listApiKeys, shouldLoadQueries ? {} : "skip") as
+    | Array<{
+        _id: Id<"apiKeys">
+        _creationTime: number
+        name: string
+        keyPrefix: string
+        machineId?: string
+        status: "active" | "expired" | "revoked"
+        expiresAt: number
+        lastUsedAt?: number
+        revokedAt?: number
+      }>
     | undefined
 
   const shouldLoadRunDetail = shouldLoadQueries && selectedRunId !== null
@@ -782,6 +796,20 @@ export default function DashboardPage() {
         )
       case "audit_logs":
         return <AuditLogsView runs={runs} />
+      case "settings":
+        return (
+          <SettingsView
+            theme={resolvedTheme}
+            onThemeChange={(theme) => setTheme(theme)}
+            userEmail={currentUser?.email ?? ""}
+            userId={String(currentUser?._id ?? "")}
+            creditsLabel={creditsLabel}
+            currency={myCredits?.currency ?? "EUR"}
+            apiKeys={apiKeys ?? []}
+            environmentCount={environments.length}
+            runCount={runs.length}
+          />
+        )
       default:
         return null
     }
