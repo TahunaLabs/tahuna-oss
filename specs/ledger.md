@@ -2,8 +2,7 @@
 
 ## Why Transparency Matters First
 
-
-Payements transparency :
+Payments transparency requires:
 
 - Clear pricing inputs and formulas.
 - Clear trigger points for debits/credits.
@@ -54,7 +53,7 @@ Current implementation is internal credits accounting:
 `BILLING_CONFIG` in `web/config.ts`:
 
 - `currency: "EUR"`
-- `initialCreditCents: 0`
+- `initialCreditCents: 1000` (EUR 10.00)
 - `computeReservationHours: 1`
 - `computeGpuHourlyRateCents: 120`
 - `computeVolumeGbHourlyRateCents: 2`
@@ -85,9 +84,15 @@ Shared helpers in `web/convex/credits.ts`:
   - increments balance
   - inserts positive usage event
 
+Current top-up policy:
+
+- Manual self-serve top-up is disabled.
+- Users cannot arbitrarily grant themselves credits.
+- Payment checkout/card rails are not integrated yet.
+
 ### Compute Charging (Current)
 
-Current compute model is reservation-at-create:
+Current compute model is reservation + terminal settlement:
 
 1. On run create, estimate reservation:
    - `hourlyRate = gpuCount * computeGpuHourlyRateCents + volumeGb * computeVolumeGbHourlyRateCents`
@@ -136,6 +141,14 @@ Trigger points:
 - Every balance mutation has a usage event.
 - Balances are integer cents.
 
+### Current UI Surface
+
+- Billing has a dedicated dashboard page.
+- The page shows:
+  - current account balance,
+  - policy state (bootstrap credit/manual top-up disabled/payment checkout pending),
+  - usage ledger history (`event`, `delta`, `balance_after`, `reference`, `timestamp`).
+
 ## What It Should Be (Target State)
 
 To be user-trustworthy and payment-ready, we should add:
@@ -149,14 +162,15 @@ To be user-trustworthy and payment-ready, we should add:
 3. Pre-run estimate in UI/API
 - Show expected reservation before launch (and what inputs are used).
 
-4. Duration-based compute settlement
-- Meter actual runtime usage and settle final charge at terminal state.
+4. Settlement hardening
+- Add idempotency keys + replay-safe settlement for terminal events.
+- Define debt/arrears handling when settlement debit exceeds available balance.
 
 5. Explicit lifecycle policy
 - Define/communicate how queued/provisioning/running/cancelled/failed states affect charges.
 
-6. User-facing ledger/history surface
-- Show event history (date, reason, delta, balance-after), filters, and CSV export.
+6. User-facing ledger/history surface (v2)
+- Keep current ledger table and add filters, pagination, and CSV export.
 
 7. Billing artifacts
 - Receipts/invoices for top-ups and period summaries.
