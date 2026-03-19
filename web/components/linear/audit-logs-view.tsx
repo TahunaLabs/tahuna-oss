@@ -5,6 +5,7 @@ import { CheckCircle2, Clock3, Search, XCircle } from "lucide-react"
 import type { RunRow } from "@/components/dashboard/shared"
 import { Input } from "@/components/ui/input"
 import { Select } from "@/components/ui/select"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 
 type AuditLogsViewProps = {
   runs: RunRow[]
@@ -124,83 +125,77 @@ export function AuditLogsView({ runs }: AuditLogsViewProps) {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-6 py-3 space-y-2">
+      <div className="flex-1 overflow-y-auto px-6 py-3">
         {filteredRuns.length === 0 ? (
           <div className="rounded-lg border border-border bg-card px-4 py-6 text-center text-sm text-muted-foreground">
             No audit logs match the current filters.
           </div>
         ) : (
-          <>
-            <div className="hidden md:grid md:grid-cols-[minmax(280px,1.8fr)_minmax(150px,1fr)_90px_120px_180px] px-4 py-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-              <span>Event</span>
-              <span>GPU type</span>
-              <span>GPUs</span>
-              <span>Uptime</span>
-              <span>Timestamp</span>
-            </div>
-            {filteredRuns.map((run) => {
-              const action = toAuditAction(run.status)
-              const isCompleted = action === "completed"
-              const isFailure = action === "failed" || action === "cancelled"
-              const actionLabel = isCompleted ? "completed" : isFailure ? action : "updated"
+          <div className="rounded-lg border border-border bg-card overflow-hidden">
+            <Table variant="dashboard" className="table-fixed">
+              <colgroup>
+                <col className="w-[46%]" />
+                <col className="w-[20%]" />
+                <col className="w-[8%]" />
+                <col className="w-[12%]" />
+                <col className="w-[14%]" />
+              </colgroup>
+              <TableHeader variant="dashboard">
+                <TableRow variant="dashboard-head">
+                  <TableHead variant="dashboard">Event</TableHead>
+                  <TableHead variant="dashboard">GPU type</TableHead>
+                  <TableHead variant="dashboard" className="text-center">GPUs</TableHead>
+                  <TableHead variant="dashboard" className="text-center">Uptime</TableHead>
+                  <TableHead variant="dashboard">Timestamp</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredRuns.map((run) => {
+                  const action = toAuditAction(run.status)
+                  const isCompleted = action === "completed"
+                  const isFailure = action === "failed" || action === "cancelled"
+                  const actionLabel = isCompleted ? "completed" : isFailure ? action : "updated"
 
-              return (
-                <article
-                  key={run.run_id}
-                  className="rounded-lg border border-border bg-card px-4 py-3 cursor-pointer hover:bg-secondary/20"
-                >
-                  <div className="grid grid-cols-1 gap-y-2 md:grid-cols-[minmax(280px,1.8fr)_minmax(150px,1fr)_90px_120px_180px] md:items-center md:gap-x-4">
-                    <div className="flex items-start gap-3 min-w-0">
-                      {isCompleted ? (
-                        <CheckCircle2 className="w-4 h-4 mt-0.5 text-emerald-400 shrink-0" />
-                      ) : isFailure ? (
-                        <XCircle className="w-4 h-4 mt-0.5 text-red-400 shrink-0" />
-                      ) : (
-                        <Clock3 className="w-4 h-4 mt-0.5 text-blue-400 shrink-0" />
-                      )}
-                      <div className="min-w-0">
-                        <p className="text-sm text-foreground truncate">
-                          <span className="font-semibold">{run.name}</span>{" "}
-                          {actionLabel} run
-                        </p>
-                        <p className="text-xs text-muted-foreground truncate">
-                          {run.run_id} • env {run.environment_id}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="text-sm text-foreground">
-                      <span className="mr-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground md:hidden">
-                        GPU type
-                      </span>
-                      <span className="font-mono text-xs md:text-sm">{run.effective_gpu_type || "—"}</span>
-                    </div>
-
-                    <div className="text-sm text-foreground">
-                      <span className="mr-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground md:hidden">
-                        GPUs
-                      </span>
-                      {run.effective_gpu_count > 0 ? run.effective_gpu_count : "—"}
-                    </div>
-
-                    <div className="text-sm text-foreground">
-                      <span className="mr-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground md:hidden">
-                        Uptime
-                      </span>
-                      {formatRunUptime(run.uptime_ms)}
-                    </div>
-
-                    <div className="text-xs text-muted-foreground">
-                      <span className="mr-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground md:hidden">
-                        Timestamp
-                      </span>
-                      {formatAuditTimestamp(run.created_at)}
-                    </div>
-                  </div>
-                </article>
-              )
-            })}
-          </>
+                  return (
+                    <TableRow key={run.run_id} variant="dashboard" className="hover:bg-secondary/20">
+                      <TableCell variant="dashboard">
+                        <div className="grid grid-cols-[16px_minmax(0,1fr)] items-start gap-3 min-w-0">
+                          {isCompleted ? (
+                            <CheckCircle2 className="w-4 h-4 mt-0.5 text-emerald-400 shrink-0" />
+                          ) : isFailure ? (
+                            <XCircle className="w-4 h-4 mt-0.5 text-red-400 shrink-0" />
+                          ) : (
+                            <Clock3 className="w-4 h-4 mt-0.5 text-blue-400 shrink-0" />
+                          )}
+                          <div className="min-w-0">
+                            <p className="text-sm text-foreground truncate">
+                              <span className="font-semibold">{run.name}</span>{" "}
+                              {actionLabel} run
+                            </p>
+                            <p className="text-xs text-muted-foreground truncate">
+                              {run.run_id} • env {run.environment_id}
+                            </p>
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell variant="dashboard" className="font-mono text-xs md:text-sm">
+                        {run.effective_gpu_type || "—"}
+                      </TableCell>
+                      <TableCell variant="dashboard" className="text-center">
+                        {run.effective_gpu_count > 0 ? run.effective_gpu_count : "—"}
+                      </TableCell>
+                      <TableCell variant="dashboard" className="text-center">
+                        {formatRunUptime(run.uptime_ms)}
+                      </TableCell>
+                      <TableCell variant="dashboard" className="text-xs text-muted-foreground">
+                        {formatAuditTimestamp(run.created_at)}
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
+              </TableBody>
+            </Table>
+          </div>
         )}
       </div>
     </main>
