@@ -145,8 +145,8 @@ export default function DashboardPage() {
       }>
     | undefined
 
-  const shouldLoadRunDetail = shouldLoadQueries && selectedRunId !== null
   const selectedRunFromList = runResult?.runs.find((r) => r.run_id === selectedRunId)
+  const shouldLoadRunDetail = shouldLoadQueries && selectedRunId !== null && selectedRunFromList !== undefined
   const isSelectedRunTerminal = selectedRunFromList !== undefined && TERMINAL_STATUSES.has(selectedRunFromList.status)
   const [terminalLogsCache, setTerminalLogsCache] = useState<{ runId: string; logs: RunLogsOnlyDetail } | null>(null)
   const [terminalMetricsCache, setTerminalMetricsCache] = useState<{ runId: string; metrics: RunMetricsOnlyDetail } | null>(null)
@@ -180,6 +180,23 @@ export default function DashboardPage() {
   const environments: EnvironmentRow[] = envResult?.environments ?? []
   const dataBlobs: DataBlobRow[] = dataResult?.blobs ?? []
   const runs: RunRow[] = runResult?.runs ?? []
+
+  useEffect(() => {
+    if (selectedRunId === null || runResult === undefined) {
+      return
+    }
+    const hasSelectedRun = runResult.runs.some((run) => run.run_id === selectedRunId)
+    if (hasSelectedRun) {
+      return
+    }
+    setSelectedRunId(null)
+    if (terminalLogsCache?.runId === selectedRunId) {
+      setTerminalLogsCache(null)
+    }
+    if (terminalMetricsCache?.runId === selectedRunId) {
+      setTerminalMetricsCache(null)
+    }
+  }, [runResult, selectedRunId, terminalLogsCache, terminalMetricsCache])
 
   const generateDataUploadUrlMutation = useMutation(api.data.generateUploadUrl)
   const ensureMyLedgerMutation = useMutation(api.auth.ensureMyLedger)
