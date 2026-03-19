@@ -94,6 +94,10 @@ Current compute model is reservation-at-create:
    - `reserved = max(minimumChargeCents, ceil(hourlyRate * computeReservationHours))`
 2. Debit with `eventType = "run_compute_reserved"`.
 3. If insufficient credits, run creation fails (`insufficient credits`, HTTP `402` on API routes).
+4. On terminal run states, compute final usage from runtime duration and settle delta:
+   - `run_compute_settlement_refund` when actual < reserved
+   - `run_compute_settlement_debit` when actual > reserved
+   - run charge row stores final `computeChargeCents` and settlement status/error.
 
 Run row tracks:
 
@@ -106,8 +110,7 @@ Important current limitations:
 
 - Pricing uses `gpuCount` + `volumeGb` only.
 - `gpuType` is tracked but not used to select pricing tiers.
-- No duration-based settlement (no post-run per-second/per-minute reconciliation).
-- No automatic refund path.
+- Settlement uses runtime terminal timing (best effort from compute start/end timestamps).
 
 ### Storage Charging (Current)
 

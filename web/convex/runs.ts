@@ -16,11 +16,13 @@ import { requireUser } from "@convex/auth";
 import { R2 } from "@convex-dev/r2";
 import { HeadObjectCommand } from "@aws-sdk/client-s3";
 import { images } from "@convex/catalog";
-import { PYTHON_CONFIG, RUN_CONFIG, SYNC_CONFIG } from "@convex/appConfig";
+import { BILLING_CONFIG, PYTHON_CONFIG, RUN_CONFIG, SYNC_CONFIG } from "@convex/appConfig";
 import {
   applyStorageDeltaCredits,
   consumeUserCredits,
   estimateRunReservationCents,
+  estimateRunUsageCents,
+  grantUserCredits,
   USAGE_EVENT_TYPE,
 } from "@convex/credits";
 import {
@@ -441,6 +443,114 @@ function resolveTerminalRunTiming(
   return {
     computeEndedAt,
     durationMs: Math.max(0, computeEndedAt - startedAt),
+  };
+}
+
+type ComputeSettlementResult = {
+  chargeCents: number;
+  chargeStatus: "charged" | "failed";
+  chargeError?: string;
+  chargeDeltaCents: number;
+  balanceAfterCents?: number;
+  durationMs: number;
+  hourlyRateCents: number;
+};
+
+async function settleRunComputeCharge(
+  ctx: MutationCtx,
+  run: Doc<"runs">,
+  timing: { durationMs: number },
+): Promise<ComputeSettlementResult> {
+  if (run.computeChargeStatus !== "pending") {
+    return {
+      chargeCents: Math.max(0, Math.floor(run.computeChargeCents || 0)),
+      chargeStatus: run.computeChargeStatus === "failed" ? "failed" : "charged",
+      chargeError: run.computeChargeError,
+      chargeDeltaCents: 0,
+      durationMs: timing.durationMs,
+      hourlyRateCents: 0,
+    };
+  }
+
+  const gpuCount = typeof run.effectiveGpuCount === "number" ? run.effectiveGpuCount : 0;
+  const volumeGb = typeof run.effectiveVolumeGb === "number" ? run.effectiveVolumeGb : 0;
+  const reservedCents = Math.max(0, Math.floor(run.creditsReservedCents || 0));
+  const chargeCents = estimateRunUsageCents({
+    gpuCount,
+    volumeGb,
+    durationMs: timing.durationMs,
+  });
+  const chargeDeltaCents = chargeCents - reservedCents;
+  const hourlyRateCents =
+    gpuCount * BILLING_CONFIG.computeGpuHourlyRateCents +
+    volumeGb * BILLING_CONFIG.computeVolumeGbHourlyRateCents;
+
+  if (chargeDeltaCents > 0) {
+    const consumed = await consumeUserCredits(ctx, {
+      userId: run.userId,
+      amountCents: chargeDeltaCents,
+      eventType: USAGE_EVENT_TYPE.RUN_COMPUTE_SETTLEMENT_DEBIT,
+      referenceType: "run",
+      referenceId: String(run._id),
+      metadata: {
+        settlement: "runtime_terminal",
+        reserved_cents: reservedCents,
+        charge_cents: chargeCents,
+        duration_ms: timing.durationMs,
+        hourly_rate_cents: hourlyRateCents,
+      },
+    });
+    if (!consumed) {
+      return {
+        chargeCents,
+        chargeStatus: "failed",
+        chargeError: "insufficient credits for compute settlement",
+        chargeDeltaCents,
+        durationMs: timing.durationMs,
+        hourlyRateCents,
+      };
+    }
+    return {
+      chargeCents,
+      chargeStatus: "charged",
+      chargeDeltaCents,
+      balanceAfterCents: consumed.balanceCents,
+      durationMs: timing.durationMs,
+      hourlyRateCents,
+    };
+  }
+
+  if (chargeDeltaCents < 0) {
+    const refunded = await grantUserCredits(ctx, {
+      userId: run.userId,
+      amountCents: Math.abs(chargeDeltaCents),
+      eventType: USAGE_EVENT_TYPE.RUN_COMPUTE_SETTLEMENT_REFUND,
+      referenceType: "run",
+      referenceId: String(run._id),
+      metadata: {
+        settlement: "runtime_terminal",
+        reserved_cents: reservedCents,
+        charge_cents: chargeCents,
+        duration_ms: timing.durationMs,
+        hourly_rate_cents: hourlyRateCents,
+      },
+    });
+    return {
+      chargeCents,
+      chargeStatus: "charged",
+      chargeDeltaCents,
+      balanceAfterCents: refunded.balanceCents,
+      durationMs: timing.durationMs,
+      hourlyRateCents,
+    };
+  }
+
+  return {
+    chargeCents,
+    chargeStatus: "charged",
+    chargeDeltaCents: 0,
+    durationMs: timing.durationMs,
+    hourlyRateCents,
   };
 }
 
@@ -1297,6 +1407,7 @@ async function createRunForUserId(
     codeManifestHash: codeManifestHash,
     dataManifestHash: dataManifestHash || undefined,
     creditsReservedCents: reservedCents,
+    computeChargeCents: reservedCents,
     computeChargeStatus: "pending",
   });
   const reservation = await consumeUserCredits(ctx, {
@@ -1312,13 +1423,9 @@ async function createRunForUserId(
     },
   });
   if (!reservation) {
+    await ctx.db.delete("runs", runId);
     throw new ConvexError("insufficient credits");
   }
-  await ctx.db.patch("runs", runId, {
-    computeChargeCents: reservedCents,
-    computeChargeStatus: "charged",
-    computeChargeError: undefined,
-  });
 
   await ctx.db.insert("runEvents", {
     runId,
@@ -1360,10 +1467,14 @@ async function cancelRunForUserId(
 
   if (!row.podId) {
     const terminalTiming = resolveTerminalRunTiming(row);
+    const settlement = await settleRunComputeCharge(ctx, row, terminalTiming);
     await ctx.db.patch("runs", runId, {
       status: RUN_STATUS.CANCELLED,
       cancellationRequested: true,
       computeEndedAt: terminalTiming.computeEndedAt,
+      computeChargeCents: settlement.chargeCents,
+      computeChargeStatus: settlement.chargeStatus,
+      computeChargeError: settlement.chargeError,
     });
     await ctx.db.insert("runEvents", {
       runId,
@@ -1371,6 +1482,11 @@ async function cancelRunForUserId(
       message: force ? "force cancellation requested before provisioning" : "run cancelled before provisioning",
       metadata: {
         duration_ms: terminalTiming.durationMs,
+        compute_charge_cents: settlement.chargeCents,
+        compute_charge_delta_cents: settlement.chargeDeltaCents,
+        compute_charge_status: settlement.chargeStatus,
+        compute_charge_error: settlement.chargeError,
+        balance_after_cents: settlement.balanceAfterCents,
       },
     });
     return { cancel_requested: true, forced: force, run_id: String(runId) };
@@ -1729,9 +1845,13 @@ export const markCancelledAfterTermination = internalMutation({
       return null;
     }
     const terminalTiming = resolveTerminalRunTiming(row);
+    const settlement = await settleRunComputeCharge(ctx, row, terminalTiming);
     await ctx.db.patch("runs", args.runId, {
       status: RUN_STATUS.CANCELLED,
       computeEndedAt: terminalTiming.computeEndedAt,
+      computeChargeCents: settlement.chargeCents,
+      computeChargeStatus: settlement.chargeStatus,
+      computeChargeError: settlement.chargeError,
     });
     await ctx.db.insert("runEvents", {
       runId: args.runId,
@@ -1739,6 +1859,11 @@ export const markCancelledAfterTermination = internalMutation({
       message: args.force === true ? "force cancellation completed" : "cancellation completed",
       metadata: {
         duration_ms: terminalTiming.durationMs,
+        compute_charge_cents: settlement.chargeCents,
+        compute_charge_delta_cents: settlement.chargeDeltaCents,
+        compute_charge_status: settlement.chargeStatus,
+        compute_charge_error: settlement.chargeError,
+        balance_after_cents: settlement.balanceAfterCents,
       },
     });
     return null;
@@ -1755,11 +1880,15 @@ export const markCancellationTerminationFailed = internalMutation({
     }
     const errorText = sanitizeRuntimeMessage(args.error) || "failed to terminate pod during cancellation";
     const terminalTiming = resolveTerminalRunTiming(row);
+    const settlement = await settleRunComputeCharge(ctx, row, terminalTiming);
     await ctx.db.patch("runs", args.runId, {
       status: RUN_STATUS.FAILED,
       error: `cancellation failed: ${errorText}`,
       runtimeTokenHash: "revoked",
       computeEndedAt: terminalTiming.computeEndedAt,
+      computeChargeCents: settlement.chargeCents,
+      computeChargeStatus: settlement.chargeStatus,
+      computeChargeError: settlement.chargeError,
     });
     await ctx.db.insert("runEvents", {
       runId: args.runId,
@@ -1768,6 +1897,11 @@ export const markCancellationTerminationFailed = internalMutation({
       metadata: {
         error: errorText,
         duration_ms: terminalTiming.durationMs,
+        compute_charge_cents: settlement.chargeCents,
+        compute_charge_delta_cents: settlement.chargeDeltaCents,
+        compute_charge_status: settlement.chargeStatus,
+        compute_charge_error: settlement.chargeError,
+        balance_after_cents: settlement.balanceAfterCents,
       },
     });
     return null;
@@ -2111,9 +2245,13 @@ export const markProvisioning = internalMutation({
     if (!row || row.cancellationRequested || TERMINAL_STATUSES.has(row.status)) {
       if (row?.cancellationRequested) {
         const terminalTiming = resolveTerminalRunTiming(row);
+        const settlement = await settleRunComputeCharge(ctx, row, terminalTiming);
         await ctx.db.patch("runs", args.runId, {
           status: RUN_STATUS.CANCELLED,
           computeEndedAt: terminalTiming.computeEndedAt,
+          computeChargeCents: settlement.chargeCents,
+          computeChargeStatus: settlement.chargeStatus,
+          computeChargeError: settlement.chargeError,
         });
       }
       return null;
@@ -2142,9 +2280,13 @@ export const markRunning = internalMutation({
     if (!row || row.cancellationRequested || TERMINAL_STATUSES.has(row.status)) {
       if (row?.cancellationRequested) {
         const terminalTiming = resolveTerminalRunTiming(row);
+        const settlement = await settleRunComputeCharge(ctx, row, terminalTiming);
         await ctx.db.patch("runs", args.runId, {
           status: RUN_STATUS.CANCELLED,
           computeEndedAt: terminalTiming.computeEndedAt,
+          computeChargeCents: settlement.chargeCents,
+          computeChargeStatus: settlement.chargeStatus,
+          computeChargeError: settlement.chargeError,
         });
       }
       return null;
@@ -2183,11 +2325,15 @@ export const markFailed = internalMutation({
     }
     const errorText = args.error.trim() || "pod bootstrap failed";
     const terminalTiming = resolveTerminalRunTiming(row);
+    const settlement = await settleRunComputeCharge(ctx, row, terminalTiming);
     await ctx.db.patch("runs", args.runId, {
       status: RUN_STATUS.FAILED,
       error: errorText,
       runtimeTokenHash: "revoked",
       computeEndedAt: terminalTiming.computeEndedAt,
+      computeChargeCents: settlement.chargeCents,
+      computeChargeStatus: settlement.chargeStatus,
+      computeChargeError: settlement.chargeError,
     });
     await ctx.db.insert("runEvents", {
       runId: args.runId,
@@ -2195,6 +2341,11 @@ export const markFailed = internalMutation({
       message: errorText,
       metadata: {
         duration_ms: terminalTiming.durationMs,
+        compute_charge_cents: settlement.chargeCents,
+        compute_charge_delta_cents: settlement.chargeDeltaCents,
+        compute_charge_status: settlement.chargeStatus,
+        compute_charge_error: settlement.chargeError,
+        balance_after_cents: settlement.balanceAfterCents,
         ...(args.provisioningPayload
           ? {
               provisioning_payload: args.provisioningPayload,
@@ -2300,11 +2451,15 @@ export const ingestRuntimeStatus = internalMutation({
     if (status === RUN_STATUS.FAILED) {
       const errorText = sanitizeRuntimeMessage(args.error || args.message || "runtime failed") || "runtime failed";
       const terminalTiming = resolveTerminalRunTiming(row);
+      const settlement = await settleRunComputeCharge(ctx, row, terminalTiming);
       await ctx.db.patch("runs", args.runId, {
         status: RUN_STATUS.FAILED,
         error: errorText,
         runtimeTokenHash: "revoked",
         computeEndedAt: terminalTiming.computeEndedAt,
+        computeChargeCents: settlement.chargeCents,
+        computeChargeStatus: settlement.chargeStatus,
+        computeChargeError: settlement.chargeError,
       });
       await ctx.db.insert("runEvents", {
         runId: args.runId,
@@ -2313,18 +2468,35 @@ export const ingestRuntimeStatus = internalMutation({
         metadata: {
           source: "pod-runtime",
           duration_ms: terminalTiming.durationMs,
+          compute_charge_cents: settlement.chargeCents,
+          compute_charge_delta_cents: settlement.chargeDeltaCents,
+          compute_charge_status: settlement.chargeStatus,
+          compute_charge_error: settlement.chargeError,
+          balance_after_cents: settlement.balanceAfterCents,
         },
       });
       await scheduleForcedPodTermination(ctx, args.runId, row.podId);
       return { status: RUN_STATUS.FAILED };
     }
 
-    const patch: { status: string; runtimeTokenHash?: string; computeEndedAt?: number } = { status };
+    const patch: {
+      status: string;
+      runtimeTokenHash?: string;
+      computeEndedAt?: number;
+      computeChargeCents?: number;
+      computeChargeStatus?: "charged" | "failed";
+      computeChargeError?: string;
+    } = { status };
     const isTerminalStatus = status === RUN_STATUS.COMPLETED || status === RUN_STATUS.CANCELLED;
     let terminalTiming: { computeEndedAt?: number; durationMs: number } | undefined;
+    let settlement: ComputeSettlementResult | undefined;
     if (isTerminalStatus) {
       terminalTiming = resolveTerminalRunTiming(row);
+      settlement = await settleRunComputeCharge(ctx, row, terminalTiming);
       patch.computeEndedAt = terminalTiming.computeEndedAt;
+      patch.computeChargeCents = settlement.chargeCents;
+      patch.computeChargeStatus = settlement.chargeStatus;
+      patch.computeChargeError = settlement.chargeError;
     }
     if (status === RUN_STATUS.COMPLETED || status === RUN_STATUS.CANCELLED) {
       patch.runtimeTokenHash = "revoked";
@@ -2339,6 +2511,15 @@ export const ingestRuntimeStatus = internalMutation({
       metadata: {
         source: "pod-runtime",
         ...(terminalTiming ? { duration_ms: terminalTiming.durationMs } : {}),
+        ...(settlement
+          ? {
+              compute_charge_cents: settlement.chargeCents,
+              compute_charge_delta_cents: settlement.chargeDeltaCents,
+              compute_charge_status: settlement.chargeStatus,
+              compute_charge_error: settlement.chargeError,
+              balance_after_cents: settlement.balanceAfterCents,
+            }
+          : {}),
       },
     });
     if (status === RUN_STATUS.COMPLETED || status === RUN_STATUS.CANCELLED) {

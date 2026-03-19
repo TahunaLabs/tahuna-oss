@@ -10,7 +10,6 @@ import { ShareDialog } from "@/components/linear/share-dialog"
 import { EMPTY_PROFILE_DRAFT, toProfileDraft, type ApiKeyRow, type ProfileDraft, type UserProfileResponse } from "@/components/dashboard/settings-types"
 import { useTheme } from "@/components/theme-provider"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { Notice } from "@/components/ui/notice"
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { PageLoader } from "@/components/ui/spinner"
@@ -77,8 +76,6 @@ export default function DashboardPage() {
     parseAsStringLiteral(DASHBOARD_VIEW_VALUES).withDefault("environments"),
   )
   const [billingSheetOpen, setBillingSheetOpen] = useState(false)
-  const [billingAmount, setBillingAmount] = useState("50")
-  const [billingBusy, setBillingBusy] = useState(false)
 
   const [selectedDataFiles, setSelectedDataFiles] = useState<File[]>([])
   const [uploadingData, setUploadingData] = useState(false)
@@ -174,7 +171,6 @@ export default function DashboardPage() {
   const generateDataUploadUrlMutation = useMutation(api.data.generateUploadUrl)
   const removeEnvMutation = useMutation(api.environments.remove)
   const updateEnvironmentConfigMutation = useMutation(api.environments.updateConfig)
-  const grantMyCreditsMutation = useMutation(api.auth.grantMyCredits)
   const saveMyProfileMutation = useMutation(api.profile.saveMyProfile)
   const createRunMutation = useMutation(api.runs.create)
   const cancelRunMutation = useMutation(api.runs.cancel)
@@ -637,34 +633,7 @@ export default function DashboardPage() {
   function openBillingTopUp() {
     setError("")
     setMessage("")
-    setBillingAmount("50")
     setBillingSheetOpen(true)
-  }
-
-  async function submitBillingTopUp(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    const amount = Number.parseFloat(billingAmount.trim())
-    if (!Number.isFinite(amount) || amount <= 0) {
-      setError("Enter a positive number")
-      return
-    }
-    const amountCents = Math.round(amount * 100)
-    if (amountCents <= 0) {
-      setError("Amount is too small")
-      return
-    }
-    setBillingBusy(true)
-    setError("")
-    setMessage("")
-    try {
-      const updated = await grantMyCreditsMutation({ amount_cents: amountCents })
-      setMessage(`Credits updated: ${formatCreditsFromCents(updated.balance_cents, updated.currency)}`)
-      setBillingSheetOpen(false)
-    } catch (billingError) {
-      setError(billingError instanceof Error ? billingError.message : "Failed to add credits")
-    } finally {
-      setBillingBusy(false)
-    }
   }
 
   async function saveSettingsProfile(profile: ProfileDraft) {
@@ -860,42 +829,26 @@ export default function DashboardPage() {
       </main>
       <Sheet
         open={billingSheetOpen}
-        onOpenChange={(open) => {
-          if (!billingBusy) {
-            setBillingSheetOpen(open)
-          }
-        }}
+        onOpenChange={setBillingSheetOpen}
       >
         <SheetContent className="p-5">
           <SheetHeader>
-            <SheetTitle>Add credits</SheetTitle>
-            <SheetDescription>Enter an amount in EUR.</SheetDescription>
+            <SheetTitle>Billing</SheetTitle>
+            <SheetDescription>Transparent ledger mode is enabled.</SheetDescription>
           </SheetHeader>
-          <form onSubmit={(event) => { void submitBillingTopUp(event) }} className="mt-4 space-y-3">
-            <Input
-              type="number"
-              min="0.01"
-              step="0.01"
-              inputMode="decimal"
-              value={billingAmount}
-              onChange={(event) => setBillingAmount(event.target.value)}
-              disabled={billingBusy}
-              placeholder="50"
-            />
-            <SheetFooter className="justify-end gap-2">
-              <Button
-                type="button"
-                variant="dashboard-outline"
-                onClick={() => setBillingSheetOpen(false)}
-                disabled={billingBusy}
-              >
-                Cancel
-              </Button>
-              <Button type="submit" disabled={billingBusy}>
-                {billingBusy ? "Adding..." : "Add credits"}
-              </Button>
-            </SheetFooter>
-          </form>
+          <div className="mt-4 space-y-3 text-sm text-muted-foreground">
+            <p>Every user starts with €10.00.</p>
+            <p>Manual credit top-up is disabled. Payment checkout integration will be added next.</p>
+          </div>
+          <SheetFooter className="justify-end gap-2 mt-4">
+            <Button
+              type="button"
+              variant="dashboard-outline"
+              onClick={() => setBillingSheetOpen(false)}
+            >
+              Close
+            </Button>
+          </SheetFooter>
         </SheetContent>
       </Sheet>
       {shareTarget && (

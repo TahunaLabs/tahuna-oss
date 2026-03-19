@@ -8,8 +8,9 @@ const BYTES_PER_GIB = 1024 * 1024 * 1024;
 export const USAGE_EVENT_TYPE = {
   INITIAL_GRANT: "initial_grant",
   RUN_COMPUTE_RESERVED: "run_compute_reserved",
+  RUN_COMPUTE_SETTLEMENT_DEBIT: "run_compute_settlement_debit",
+  RUN_COMPUTE_SETTLEMENT_REFUND: "run_compute_settlement_refund",
   STORAGE_CHARGE: "storage_charge",
-  MANUAL_GRANT: "manual_grant",
 } as const;
 
 type EnsureUserLedgerArgs = {
@@ -181,6 +182,24 @@ export function estimateRunReservationCents(args: {
     volumeGb * BILLING_CONFIG.computeVolumeGbHourlyRateCents;
   const reservationCents = Math.ceil(hourlyRate * BILLING_CONFIG.computeReservationHours);
   return Math.max(BILLING_CONFIG.minimumChargeCents, reservationCents);
+}
+
+export function estimateRunUsageCents(args: {
+  gpuCount: number | undefined;
+  volumeGb: number | undefined;
+  durationMs: number | undefined;
+}) {
+  const gpuCount = safePositiveNumber(args.gpuCount);
+  const volumeGb = safePositiveNumber(args.volumeGb);
+  const durationMs = safePositiveNumber(args.durationMs);
+  if (durationMs <= 0) {
+    return 0;
+  }
+  const hourlyRate =
+    gpuCount * BILLING_CONFIG.computeGpuHourlyRateCents +
+    volumeGb * BILLING_CONFIG.computeVolumeGbHourlyRateCents;
+  const usageCents = Math.ceil((hourlyRate * durationMs) / (60 * 60 * 1000));
+  return Math.max(BILLING_CONFIG.minimumChargeCents, usageCents);
 }
 
 export function estimateStorageDeltaCents(sizeDeltaBytes: number | undefined) {
