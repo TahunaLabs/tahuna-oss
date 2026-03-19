@@ -7,6 +7,7 @@ import { RunsView } from "@/components/linear/runs-view"
 import { AuditLogsView } from "@/components/linear/audit-logs-view"
 import { SettingsView } from "@/components/linear/settings-view"
 import { ShareDialog } from "@/components/linear/share-dialog"
+import { EMPTY_PROFILE_DRAFT, toProfileDraft, type ApiKeyRow, type ProfileDraft, type UserProfileResponse } from "@/components/dashboard/settings-types"
 import { useTheme } from "@/components/theme-provider"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -116,25 +117,14 @@ export default function DashboardPage() {
   const [shareError, setShareError] = useState("")
   const [shareMessage, setShareMessage] = useState("")
   const [savingSettingsProfile, setSavingSettingsProfile] = useState(false)
+  const [settingsProfileDraft, setSettingsProfileDraft] = useState<ProfileDraft>(EMPTY_PROFILE_DRAFT)
   const shouldLoadQueries = !authLoading && isAuthenticated && !loggingOut
 
   const currentUser = useQuery(api.auth.getCurrentUser, shouldLoadQueries ? {} : "skip")
   const myCredits = useQuery(api.auth.getMyCredits, shouldLoadQueries ? {} : "skip") as
     | { balance_cents: number; currency: string }
     | undefined
-  const myProfile = useQuery(api.auth.getMyProfile, shouldLoadQueries ? {} : "skip") as
-    | {
-        first_name: string
-        last_name: string
-        address_line_1: string
-        address_line_2: string
-        country: string
-        company_name: string
-        company_id: string
-        tax_id: string
-        updated_at?: number
-      }
-    | undefined
+  const myProfile = useQuery(api.profile.getMyProfile, shouldLoadQueries ? {} : "skip") as UserProfileResponse | undefined
   const envResult = useQuery(api.environments.list, shouldLoadQueries ? {} : "skip") as
     | { environments: EnvironmentRow[] }
     | undefined
@@ -144,19 +134,7 @@ export default function DashboardPage() {
   const runResult = useQuery(api.runs.list, shouldLoadQueries ? {} : "skip") as
     | { runs: RunRow[] }
     | undefined
-  const apiKeys = useQuery(api.auth.listApiKeys, shouldLoadQueries ? {} : "skip") as
-    | Array<{
-        _id: Id<"apiKeys">
-        _creationTime: number
-        name: string
-        keyPrefix: string
-        machineId?: string
-        status: "active" | "expired" | "revoked"
-        expiresAt: number
-        lastUsedAt?: number
-        revokedAt?: number
-      }>
-    | undefined
+  const apiKeys = useQuery(api.auth.listApiKeys, shouldLoadQueries ? {} : "skip") as ApiKeyRow[] | undefined
 
   const shouldLoadRunDetail = shouldLoadQueries && selectedRunId !== null
   const selectedRunFromList = runResult?.runs.find((r) => r.run_id === selectedRunId)
@@ -197,7 +175,7 @@ export default function DashboardPage() {
   const removeEnvMutation = useMutation(api.environments.remove)
   const updateEnvironmentConfigMutation = useMutation(api.environments.updateConfig)
   const grantMyCreditsMutation = useMutation(api.auth.grantMyCredits)
-  const saveMyProfileMutation = useMutation(api.auth.saveMyProfile)
+  const saveMyProfileMutation = useMutation(api.profile.saveMyProfile)
   const createRunMutation = useMutation(api.runs.create)
   const cancelRunMutation = useMutation(api.runs.cancel)
   const removeRunMutation = useMutation(api.runs.remove)
@@ -322,6 +300,14 @@ export default function DashboardPage() {
     }, 250)
     return () => clearTimeout(timeout)
   }, [storageSearch])
+
+  useEffect(() => {
+    if (!shouldLoadQueries) {
+      setSettingsProfileDraft(EMPTY_PROFILE_DRAFT)
+      return
+    }
+    setSettingsProfileDraft(toProfileDraft(myProfile))
+  }, [myProfile, shouldLoadQueries])
 
   useEffect(() => {
     void setStorageOffset(0)
@@ -681,19 +667,8 @@ export default function DashboardPage() {
     }
   }
 
-  async function saveSettingsProfile(profile: {
-    firstName: string
-    lastName: string
-    addressLine1: string
-    addressLine2: string
-    country: string
-    companyName: string
-    companyId: string
-    taxId: string
-  }) {
+  async function saveSettingsProfile(profile: ProfileDraft) {
     setSavingSettingsProfile(true)
-    setError("")
-    setMessage("")
     try {
       await saveMyProfileMutation({
         first_name: profile.firstName,
@@ -705,9 +680,8 @@ export default function DashboardPage() {
         company_id: profile.companyId,
         tax_id: profile.taxId,
       })
-      setMessage("Settings saved.")
     } catch (settingsError) {
-      setError(settingsError instanceof Error ? settingsError.message : "Failed to save settings")
+      throw settingsError instanceof Error ? settingsError : new Error("Failed to save settings")
     } finally {
       setSavingSettingsProfile(false)
     }
@@ -850,20 +824,10 @@ export default function DashboardPage() {
             onThemeChange={(theme) => setTheme(theme)}
             userEmail={currentUser?.email ?? ""}
             apiKeys={apiKeys ?? []}
-            profile={{
-              firstName: myProfile?.first_name ?? "",
-              lastName: myProfile?.last_name ?? "",
-              addressLine1: myProfile?.address_line_1 ?? "",
-              addressLine2: myProfile?.address_line_2 ?? "",
-              country: myProfile?.country ?? "",
-              companyName: myProfile?.company_name ?? "",
-              companyId: myProfile?.company_id ?? "",
-              taxId: myProfile?.tax_id ?? "",
-            }}
+            profile={settingsProfileDraft}
+            onProfileChange={setSettingsProfileDraft}
             savingProfile={savingSettingsProfile}
-            onSaveProfile={(profile) => {
-              void saveSettingsProfile(profile)
-            }}
+            onSaveProfile={saveSettingsProfile}
           />
         )
       default:

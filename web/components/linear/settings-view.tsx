@@ -1,27 +1,14 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useMemo, useState } from "react"
 import { ChevronDown, ChevronUp, KeyRound, Moon, ShieldCheck, Sun } from "lucide-react"
 import Link from "next/link"
-import type { Id } from "@convex/_generated/dataModel"
+import type { ApiKeyRow, ProfileDraft, ThemeChoice } from "@/components/dashboard/settings-types"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-
-type ApiKeyRow = {
-  _id: Id<"apiKeys">
-  _creationTime: number
-  name: string
-  keyPrefix: string
-  machineId?: string
-  status: "active" | "expired" | "revoked"
-  expiresAt: number
-  lastUsedAt?: number
-  revokedAt?: number
-}
-
-type ThemeChoice = "light" | "dark"
+import { Notice } from "@/components/ui/notice"
 
 type SettingsViewProps = {
   theme: ThemeChoice
@@ -29,19 +16,9 @@ type SettingsViewProps = {
   userEmail: string
   apiKeys: ApiKeyRow[]
   profile: ProfileDraft
+  onProfileChange: (profile: ProfileDraft) => void
   savingProfile: boolean
-  onSaveProfile: (profile: ProfileDraft) => void
-}
-
-type ProfileDraft = {
-  firstName: string
-  lastName: string
-  addressLine1: string
-  addressLine2: string
-  country: string
-  companyName: string
-  companyId: string
-  taxId: string
+  onSaveProfile: (profile: ProfileDraft) => Promise<void>
 }
 
 function formatDate(timestamp?: number) {
@@ -55,24 +32,29 @@ function statusVariant(status: ApiKeyRow["status"]) {
   return "status-error" as const
 }
 
-function SectionRow({
+function CollapsibleSection({
   title,
   open,
   onToggle,
+  children,
 }: {
   title: string
   open: boolean
   onToggle: () => void
+  children: React.ReactNode
 }) {
   return (
-    <button
-      type="button"
-      className="w-full rounded-lg border border-border bg-card px-4 py-3 text-left flex items-center justify-between hover:bg-secondary/30"
-      onClick={onToggle}
-    >
-      <span className="text-sm text-foreground">{title}</span>
-      {open ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
-    </button>
+    <div>
+      <button
+        type="button"
+        className="w-full rounded-lg border border-border bg-card px-4 py-3 text-left flex items-center justify-between hover:bg-secondary/30"
+        onClick={onToggle}
+      >
+        <span className="text-sm text-foreground">{title}</span>
+        {open ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
+      </button>
+      {open ? <div className="mt-2">{children}</div> : null}
+    </div>
   )
 }
 
@@ -81,24 +63,33 @@ export function SettingsView({
   onThemeChange,
   userEmail,
   apiKeys,
-  profile: initialProfile,
+  profile,
+  onProfileChange,
   savingProfile,
   onSaveProfile,
 }: SettingsViewProps) {
-  const [profile, setProfile] = useState<ProfileDraft>(initialProfile)
   const [apiKeysOpen, setApiKeysOpen] = useState(false)
   const [sessionsOpen, setSessionsOpen] = useState(false)
   const [loginOpen, setLoginOpen] = useState(false)
-
-  useEffect(() => {
-    setProfile(initialProfile)
-  }, [initialProfile])
+  const [saveError, setSaveError] = useState("")
+  const [saveMessage, setSaveMessage] = useState("")
 
   const activeKeys = useMemo(() => apiKeys.filter((key) => key.status === "active"), [apiKeys])
   const activeSessions = useMemo(
     () => activeKeys.filter((key) => (key.machineId || "").trim().length > 0),
     [activeKeys],
   )
+
+  async function handleSaveProfile() {
+    setSaveError("")
+    setSaveMessage("")
+    try {
+      await onSaveProfile(profile)
+      setSaveMessage("Settings saved.")
+    } catch (saveProfileError) {
+      setSaveError(saveProfileError instanceof Error ? saveProfileError.message : "Failed to save settings")
+    }
+  }
 
   return (
     <main className="flex-1 h-full overflow-y-auto">
@@ -107,6 +98,9 @@ export function SettingsView({
       </header>
 
       <div className="px-6 py-5 space-y-6">
+        {saveError ? <Notice variant="error">{saveError}</Notice> : null}
+        {saveMessage ? <Notice>{saveMessage}</Notice> : null}
+
         <section className="space-y-2">
           <h2 className="text-base text-foreground">Theme</h2>
           <div className="inline-flex rounded-lg border border-border overflow-hidden bg-card">
@@ -141,7 +135,7 @@ export function SettingsView({
               <Input
                 variant="dashboard"
                 value={profile.firstName}
-                onChange={(event) => setProfile((current) => ({ ...current, firstName: event.target.value }))}
+                onChange={(event) => onProfileChange({ ...profile, firstName: event.target.value })}
                 placeholder="First name"
               />
             </div>
@@ -150,7 +144,7 @@ export function SettingsView({
               <Input
                 variant="dashboard"
                 value={profile.lastName}
-                onChange={(event) => setProfile((current) => ({ ...current, lastName: event.target.value }))}
+                onChange={(event) => onProfileChange({ ...profile, lastName: event.target.value })}
                 placeholder="Last name"
               />
             </div>
@@ -159,7 +153,7 @@ export function SettingsView({
               <Input
                 variant="dashboard"
                 value={profile.addressLine1}
-                onChange={(event) => setProfile((current) => ({ ...current, addressLine1: event.target.value }))}
+                onChange={(event) => onProfileChange({ ...profile, addressLine1: event.target.value })}
                 placeholder="Street address"
               />
             </div>
@@ -168,7 +162,7 @@ export function SettingsView({
               <Input
                 variant="dashboard"
                 value={profile.addressLine2}
-                onChange={(event) => setProfile((current) => ({ ...current, addressLine2: event.target.value }))}
+                onChange={(event) => onProfileChange({ ...profile, addressLine2: event.target.value })}
                 placeholder="Suite, floor, etc. (optional)"
               />
             </div>
@@ -177,7 +171,7 @@ export function SettingsView({
               <Input
                 variant="dashboard"
                 value={profile.country}
-                onChange={(event) => setProfile((current) => ({ ...current, country: event.target.value }))}
+                onChange={(event) => onProfileChange({ ...profile, country: event.target.value })}
                 placeholder="Country"
               />
             </div>
@@ -186,7 +180,7 @@ export function SettingsView({
               <Input
                 variant="dashboard"
                 value={profile.companyName}
-                onChange={(event) => setProfile((current) => ({ ...current, companyName: event.target.value }))}
+                onChange={(event) => onProfileChange({ ...profile, companyName: event.target.value })}
                 placeholder="Company name"
               />
             </div>
@@ -195,7 +189,7 @@ export function SettingsView({
               <Input
                 variant="dashboard"
                 value={profile.companyId}
-                onChange={(event) => setProfile((current) => ({ ...current, companyId: event.target.value }))}
+                onChange={(event) => onProfileChange({ ...profile, companyId: event.target.value })}
                 placeholder="Company registration ID"
               />
             </div>
@@ -204,7 +198,7 @@ export function SettingsView({
               <Input
                 variant="dashboard"
                 value={profile.taxId}
-                onChange={(event) => setProfile((current) => ({ ...current, taxId: event.target.value }))}
+                onChange={(event) => onProfileChange({ ...profile, taxId: event.target.value })}
                 placeholder="Tax ID"
               />
             </div>
@@ -219,7 +213,9 @@ export function SettingsView({
               variant="dashboard-primary"
               size="none"
               disabled={savingProfile}
-              onClick={() => onSaveProfile(profile)}
+              onClick={() => {
+                void handleSaveProfile()
+              }}
             >
               {savingProfile ? "Saving..." : "Save changes"}
             </Button>
@@ -227,8 +223,11 @@ export function SettingsView({
         </section>
 
         <section className="space-y-2">
-          <SectionRow title="API keys" open={apiKeysOpen} onToggle={() => setApiKeysOpen((open) => !open)} />
-          {apiKeysOpen ? (
+          <CollapsibleSection
+            title="API keys"
+            open={apiKeysOpen}
+            onToggle={() => setApiKeysOpen((open) => !open)}
+          >
             <Card variant="dashboard" className="p-4 space-y-3">
               <div className="flex items-center justify-between">
                 <p className="text-sm text-muted-foreground">
@@ -260,10 +259,13 @@ export function SettingsView({
                 </div>
               )}
             </Card>
-          ) : null}
+          </CollapsibleSection>
 
-          <SectionRow title="Active sessions" open={sessionsOpen} onToggle={() => setSessionsOpen((open) => !open)} />
-          {sessionsOpen ? (
+          <CollapsibleSection
+            title="Active sessions"
+            open={sessionsOpen}
+            onToggle={() => setSessionsOpen((open) => !open)}
+          >
             <Card variant="dashboard" className="p-4 space-y-2">
               {activeSessions.length === 0 ? (
                 <p className="text-sm text-muted-foreground">No active machine sessions found.</p>
@@ -279,10 +281,13 @@ export function SettingsView({
                 ))
               )}
             </Card>
-          ) : null}
+          </CollapsibleSection>
 
-          <SectionRow title="Login settings" open={loginOpen} onToggle={() => setLoginOpen((open) => !open)} />
-          {loginOpen ? (
+          <CollapsibleSection
+            title="Login settings"
+            open={loginOpen}
+            onToggle={() => setLoginOpen((open) => !open)}
+          >
             <Card variant="dashboard" className="p-4 space-y-3">
               <div className="flex items-center gap-2 text-foreground">
                 <ShieldCheck className="w-4 h-4 text-emerald-400" />
@@ -292,7 +297,7 @@ export function SettingsView({
                 Password login and social providers are not configured in the current auth schema.
               </p>
             </Card>
-          ) : null}
+          </CollapsibleSection>
         </section>
       </div>
     </main>
