@@ -8,7 +8,6 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { Select } from "@/components/ui/select"
 
 type ApiKeyRow = {
   _id: Id<"apiKeys">
@@ -44,8 +43,6 @@ type ProfileDraft = {
   companyId: string
   taxId: string
 }
-
-const COUNTRY_OPTIONS = ["France", "United States", "United Kingdom", "Germany", "Spain", "Morocco"]
 
 function formatDate(timestamp?: number) {
   if (!timestamp) return "—"
@@ -134,9 +131,6 @@ export function SettingsView({
               Light
             </Button>
           </div>
-          <p className="text-xs text-muted-foreground">
-            System theme mode is not available in the current theme provider.
-          </p>
         </section>
 
         <section className="space-y-3">
@@ -180,18 +174,12 @@ export function SettingsView({
             </div>
             <div>
               <label className="block text-sm text-muted-foreground mb-1.5">Country</label>
-              <Select
+              <Input
                 variant="dashboard"
                 value={profile.country}
                 onChange={(event) => setProfile((current) => ({ ...current, country: event.target.value }))}
-              >
-                <option value="">Select country</option>
-                {COUNTRY_OPTIONS.map((country) => (
-                  <option key={country} value={country}>
-                    {country}
-                  </option>
-                ))}
-              </Select>
+                placeholder="Country"
+              />
             </div>
             <div>
               <label className="block text-sm text-muted-foreground mb-1.5">Company name</label>
@@ -236,9 +224,6 @@ export function SettingsView({
               {savingProfile ? "Saving..." : "Save changes"}
             </Button>
           </div>
-          <p className="text-xs text-muted-foreground">
-            Profile fields are UI draft only for now. No profile table exists in the current schema.
-          </p>
         </section>
 
         <section className="space-y-2">
