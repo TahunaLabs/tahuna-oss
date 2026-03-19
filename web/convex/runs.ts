@@ -18,6 +18,12 @@ import { HeadObjectCommand } from "@aws-sdk/client-s3";
 import { images } from "@convex/catalog";
 import { PYTHON_CONFIG, RUN_CONFIG, SYNC_CONFIG } from "@convex/appConfig";
 import {
+  applyStorageDeltaCredits,
+  consumeUserCredits,
+  estimateRunReservationCents,
+  USAGE_EVENT_TYPE,
+} from "@convex/credits";
+import {
   parseManifest,
   sha256Hex,
   type ManifestEntry,
@@ -442,17 +448,30 @@ async function upsertRunArtifactIndexRow(
     createdAt: number;
   },
 ) {
+  const normalizedSize = Math.max(0, Math.floor(args.size));
+  const normalizedCreatedAt = Math.max(0, Math.floor(args.createdAt));
   const existing = await ctx.db
     .query("storageObjects")
     .withIndex("by_user_and_key", (q) => q.eq("userId", args.userId).eq("key", args.key))
     .first();
+  const previousSize = existing ? Math.max(0, Math.floor(existing.size || 0)) : 0;
+  await applyStorageDeltaCredits(ctx, {
+    userId: args.userId,
+    sizeDeltaBytes: normalizedSize - previousSize,
+    referenceType: "run_artifact",
+    referenceId: args.key,
+    metadata: {
+      run_id: String(args.runId),
+      key: args.key,
+    },
+  });
   const patch = {
     source: "run_artifact" as const,
     objectKind: "run_artifact" as const,
     key: args.key,
     name: storageObjectNameFromKey(args.key),
-    size: Math.max(0, Math.floor(args.size)),
-    createdAt: Math.max(0, Math.floor(args.createdAt)),
+    size: normalizedSize,
+    createdAt: normalizedCreatedAt,
     runId: args.runId,
     dataBlobId: undefined,
     dataId: undefined,
@@ -1186,6 +1205,13 @@ async function createRunForUserId(
   },
 ) {
   const env = await getAccessibleEnvironment(ctx, args.userId, args.environmentId);
+  const effectiveGpuType = args.gpu_type ?? env.gpuType;
+  const effectiveGpuCount = args.gpu_count ?? env.gpuCount;
+  const effectiveVolumeGb = args.volume_gb ?? env.volumeGb;
+  const reservedCents = estimateRunReservationCents({
+    gpuCount: effectiveGpuCount,
+    volumeGb: effectiveVolumeGb,
+  });
   const codeManifestHash = env.latestCodeManifestHash;
   const dataManifestHash = env.latestDataManifestHash;
   const dataId = env.dataId || String(env._id);
@@ -1214,11 +1240,33 @@ async function createRunForUserId(
     logs: `runs/${args.environmentId}/${now}/logs`,
     status: RUN_STATUS.QUEUED,
     cancellationRequested: false,
-    effectiveGpuType: args.gpu_type ?? env.gpuType,
-    effectiveGpuCount: args.gpu_count ?? env.gpuCount,
-    effectiveVolumeGb: args.volume_gb ?? env.volumeGb,
+    effectiveGpuType,
+    effectiveGpuCount,
+    effectiveVolumeGb,
     codeManifestHash: codeManifestHash,
     dataManifestHash: dataManifestHash || undefined,
+    creditsReservedCents: reservedCents,
+    computeChargeStatus: "pending",
+  });
+  const reservation = await consumeUserCredits(ctx, {
+    userId: args.userId,
+    amountCents: reservedCents,
+    eventType: USAGE_EVENT_TYPE.RUN_COMPUTE_RESERVED,
+    referenceType: "run",
+    referenceId: String(runId),
+    metadata: {
+      gpu_type: effectiveGpuType,
+      gpu_count: effectiveGpuCount,
+      volume_gb: effectiveVolumeGb,
+    },
+  });
+  if (!reservation) {
+    throw new ConvexError("insufficient credits");
+  }
+  await ctx.db.patch("runs", runId, {
+    computeChargeCents: reservedCents,
+    computeChargeStatus: "charged",
+    computeChargeError: undefined,
   });
 
   await ctx.db.insert("runEvents", {
@@ -1227,11 +1275,13 @@ async function createRunForUserId(
     message: "run queued for provisioning",
     metadata: {
       name: runName,
-      gpu_type: args.gpu_type || env.gpuType,
-      gpu_count: args.gpu_count ?? env.gpuCount,
-      volume_gb: args.volume_gb ?? env.volumeGb,
+      gpu_type: effectiveGpuType,
+      gpu_count: effectiveGpuCount,
+      volume_gb: effectiveVolumeGb,
       code_manifest_hash: codeManifestHash || null,
       data_manifest_hash: dataManifestHash || null,
+      credits_reserved_cents: reservedCents,
+      balance_after_cents: reservation.balanceCents,
     },
   });
 
@@ -2028,6 +2078,7 @@ export const markRunning = internalMutation({
 
     await ctx.db.patch("runs", args.runId, {
       status: RUN_STATUS.RUNNING,
+      computeStartedAt: row.computeStartedAt ?? Date.now(),
     });
     await ctx.db.insert("runEvents", {
       runId: args.runId,

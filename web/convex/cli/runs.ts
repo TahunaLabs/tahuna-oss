@@ -330,7 +330,12 @@ export const createRun = httpAction(async (ctx, request) => {
     });
   } catch (err) {
     const detail = err instanceof Error ? err.message : "failed to create run";
-    const status = detail.toLowerCase().includes("no gpu capacity currently available") ? 409 : 400;
+    const lower = detail.toLowerCase();
+    const status = lower.includes("no gpu capacity currently available")
+      ? 409
+      : lower.includes("insufficient credits")
+        ? 402
+        : 400;
     return new Response(JSON.stringify({ detail }), {
       status,
       headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),

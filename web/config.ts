@@ -14,6 +14,16 @@ export const AUTH_CONFIG = {
   loginTimeoutSeconds: 5 * 60,
 } as const;
 
+export const BILLING_CONFIG = {
+  currency: "EUR",
+  initialCreditCents: 0,
+  computeReservationHours: 1,
+  computeGpuHourlyRateCents: 120,
+  computeVolumeGbHourlyRateCents: 2,
+  storageGiBDeltaRateCents: 3,
+  minimumChargeCents: 1,
+} as const;
+
 export const RUN_CONFIG = {
   statusPollSeconds: 5,
   logsPollSeconds: 2,

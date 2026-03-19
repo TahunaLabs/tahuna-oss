@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { ChevronDown, ChevronUp, Play, Filter, Settings2, LayoutGrid, Trash2, X, Share2, Users } from "lucide-react"
+import { ChevronDown, ChevronUp, Play, Trash2, X, Share2, Users } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -30,6 +30,7 @@ import {
 } from "recharts"
 
 type RunsViewProps = {
+  creditsLabel: string
   environments: EnvironmentRow[]
   runs: RunRow[]
   busy: boolean
@@ -72,6 +73,7 @@ const STATUS_COLORS: Record<string, string> = {
 }
 
 export function RunsView({
+  creditsLabel,
   environments,
   runs,
   busy,
@@ -194,24 +196,16 @@ export function RunsView({
             </>
           ) : (
             <>
-              <Button type="button" variant="dashboard-icon-secondary" size="none">
-                <Filter className="w-4 h-4" />
-              </Button>
-              <Button type="button" variant="dashboard-icon-secondary" size="none">
-                <Settings2 className="w-4 h-4" />
-              </Button>
-              <Button type="button" variant="dashboard-icon-secondary" size="none">
-                <LayoutGrid className="w-4 h-4" />
-              </Button>
+              <span className="text-xs text-muted-foreground">Credits: {creditsLabel}</span>
               <Button
                 type="button"
-                variant="dashboard-icon-secondary"
-                size="none"
+                variant="dashboard-outline"
+                size="sm"
                 onClick={() => setSelectionMode(true)}
                 aria-label="Select runs"
                 disabled={busy || !hasData}
               >
-                <Trash2 className="w-4 h-4" />
+                Select
               </Button>
             </>
           )}

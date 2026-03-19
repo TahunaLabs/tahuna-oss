@@ -11,6 +11,10 @@ import {
   LogOut,
   Moon,
   Sun,
+  Wallet,
+  BarChart3,
+  ClipboardList,
+  Settings,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
@@ -20,13 +24,15 @@ interface SidebarProps {
   activeView: "storage" | "environments" | "runs"
   onViewChange: (view: "storage" | "environments" | "runs") => void
   userInitial: string
+  onOpenBilling?: () => void
   isDark: boolean
   onThemeToggle: () => void
   onLogout: () => void
 }
 
-export function Sidebar({ activeView, onViewChange, userInitial, isDark, onThemeToggle, onLogout }: SidebarProps) {
+export function Sidebar({ activeView, onViewChange, userInitial, onOpenBilling, isDark, onThemeToggle, onLogout }: SidebarProps) {
   const [workspaceOpen, setWorkspaceOpen] = useState(true)
+  const [accountOpen, setAccountOpen] = useState(true)
 
   return (
     <aside className="w-56 h-screen bg-sidebar flex flex-col">
@@ -86,30 +92,65 @@ export function Sidebar({ activeView, onViewChange, userInitial, isDark, onTheme
             </div>
           )}
         </div>
+
+        <div className="mt-2">
+          <Button
+            type="button"
+            variant="sidebar-workspace"
+            size="none"
+            onClick={() => setAccountOpen(!accountOpen)}
+          >
+            <span>Account</span>
+            <ChevronDown className={cn("w-3 h-3 transition-transform", !accountOpen && "-rotate-90")} />
+          </Button>
+          {accountOpen && (
+            <div className="mt-1 space-y-0.5">
+              <SidebarItem
+                icon={<Wallet className="w-4 h-4" />}
+                label="Billing"
+                onClick={onOpenBilling}
+              />
+              <SidebarItem
+                icon={<BarChart3 className="w-4 h-4" />}
+                label="Usage"
+              />
+              <SidebarItem
+                icon={<ClipboardList className="w-4 h-4" />}
+                label="Audit logs"
+              />
+              <SidebarItem
+                icon={<Settings className="w-4 h-4" />}
+                label="Settings"
+              />
+            </div>
+          )}
+        </div>
       </nav>
 
       {/* Footer */}
-      <div className="flex items-center justify-between px-3 h-10 border-t border-sidebar-border shrink-0">
-        <div className="w-6 h-6 rounded-full bg-secondary flex items-center justify-center text-[11px] font-semibold text-secondary-foreground shrink-0">
-          {userInitial}
-        </div>
-        <div className="flex items-center gap-0.5">
-          <Button
-            type="button"
-            variant="sidebar-icon"
-            size="none"
-            onClick={onThemeToggle}
-          >
-            {isDark ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
-          </Button>
-          <Button
-            type="button"
-            variant="sidebar-icon"
-            size="none"
-            onClick={onLogout}
-          >
-            <LogOut className="w-4 h-4" />
-          </Button>
+      <div className="border-t border-sidebar-border shrink-0">
+        <div className="flex items-center justify-between px-3 h-10">
+          <div className="w-6 h-6 rounded-full bg-secondary flex items-center justify-center text-[11px] font-semibold text-secondary-foreground shrink-0">
+            {userInitial}
+          </div>
+          <div className="flex items-center gap-0.5">
+            <Button
+              type="button"
+              variant="sidebar-icon"
+              size="none"
+              onClick={onThemeToggle}
+            >
+              {isDark ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
+            </Button>
+            <Button
+              type="button"
+              variant="sidebar-icon"
+              size="none"
+              onClick={onLogout}
+            >
+              <LogOut className="w-4 h-4" />
+            </Button>
+          </div>
         </div>
       </div>
     </aside>

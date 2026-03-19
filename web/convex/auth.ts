@@ -3,14 +3,15 @@ import { convex } from "@convex-dev/better-auth/plugins";
 import { betterAuth } from "better-auth/minimal";
 import { emailOTP } from "better-auth/plugins";
 import { ConvexError, v } from "convex/values";
-import { components } from "@convex/_generated/api";
+import { components, internal } from "@convex/_generated/api";
 import type { DataModel } from "@convex/_generated/dataModel";
 import { internalMutation, mutation, query, type ActionCtx, type MutationCtx, type QueryCtx } from "@convex/_generated/server";
 import authConfig from "@convex/auth.config";
 import { sha256Hex } from "@convex/crypto";
 import { shortId } from "@convex/ids";
+import { ensureUserLedger, grantUserCredits, USAGE_EVENT_TYPE } from "@convex/credits";
 import { sendOtpEmail } from "@convex/resend";
-import { AUTH_CONFIG, NETWORK_CONFIG } from "../config";
+import { AUTH_CONFIG, BILLING_CONFIG, NETWORK_CONFIG } from "../config";
 
 const siteUrl = process.env.SITE_URL || process.env.NEXT_PUBLIC_SITE_URL || NETWORK_CONFIG.defaultApiUrl;
 const apiKeyListItemValidator = v.object({
@@ -54,9 +55,51 @@ export const getCurrentUser = query({
   },
 });
 
+export const getMyCredits = query({
+  args: {},
+  returns: v.object({
+    balance_cents: v.number(),
+    currency: v.string(),
+  }),
+  handler: async (ctx) => {
+    const user = await authComponent.getAuthUser(ctx);
+    if (!user) {
+      throw new ConvexError("Not authenticated");
+    }
+    const userId = String(user._id);
+    const row = await ctx.db
+      .query("userCredits")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .first();
+    if (!row) {
+      return {
+        balance_cents: BILLING_CONFIG.initialCreditCents,
+        currency: BILLING_CONFIG.currency,
+      };
+    }
+    return {
+      balance_cents: row.balanceCents,
+      currency: row.currency || BILLING_CONFIG.currency,
+    };
+  },
+});
+
 export async function requireUser(ctx: GenericCtx<DataModel> | QueryCtx | MutationCtx | ActionCtx) {
   const user = await authComponent.getAuthUser(ctx);
   if (!user) throw new Error("Not authenticated");
+  const userId = String(user._id);
+
+  if ("runMutation" in ctx && typeof ctx.runMutation === "function") {
+    await ctx.runMutation(internal.credits.internalEnsureUserLedger, {
+      userId,
+      source: "auth_session",
+    });
+  } else if ("scheduler" in ctx) {
+    await ensureUserLedger(ctx as MutationCtx, {
+      userId,
+      source: "auth_session",
+    });
+  }
   return user;
 }
 
@@ -130,6 +173,37 @@ export const createApiKey = mutation({
       user_id: userId,
       api_key: plaintext,
       api_key_id: String(apiKeyId),
+    };
+  },
+});
+
+export const grantMyCredits = mutation({
+  args: {
+    amount_cents: v.number(),
+  },
+  returns: v.object({
+    balance_cents: v.number(),
+    currency: v.string(),
+  }),
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    if (!Number.isInteger(args.amount_cents) || args.amount_cents <= 0) {
+      throw new ConvexError("amount_cents must be a positive integer");
+    }
+    const userId = String(user._id);
+    const granted = await grantUserCredits(ctx, {
+      userId,
+      amountCents: args.amount_cents,
+      eventType: USAGE_EVENT_TYPE.MANUAL_GRANT,
+      referenceType: "dashboard_billing",
+      referenceId: userId,
+      metadata: {
+        source: "dashboard",
+      },
+    });
+    return {
+      balance_cents: granted.balanceCents,
+      currency: BILLING_CONFIG.currency,
     };
   },
 });
