@@ -61,6 +61,7 @@ const runResponseValidator = v.object({
   run_id: v.string(),
   name: v.string(),
   created_at: v.number(),
+  uptime_ms: v.number(),
   environment_id: v.string(),
   input: v.string(),
   output: v.string(),
@@ -394,11 +395,61 @@ function toUnixMillis(value: number) {
   return Math.max(0, Math.floor(value));
 }
 
+function toOptionalUnixMillis(value: number | undefined) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return undefined;
+  }
+  return Math.max(0, Math.floor(value));
+}
+
+function resolveRunUptimeMs(
+  run: {
+    computeStartedAt?: number;
+    computeEndedAt?: number;
+    status?: string;
+  },
+  nowMs = Date.now(),
+) {
+  const startedAt = toOptionalUnixMillis(run.computeStartedAt);
+  if (startedAt === undefined) {
+    return 0;
+  }
+  const endedAt = toOptionalUnixMillis(run.computeEndedAt);
+  if (endedAt === undefined && run.status && TERMINAL_STATUSES.has(run.status)) {
+    return 0;
+  }
+  const resolvedEndedAt = endedAt ?? Math.max(startedAt, toUnixMillis(nowMs));
+  return Math.max(0, resolvedEndedAt - startedAt);
+}
+
+function resolveTerminalRunTiming(
+  run: {
+    computeStartedAt?: number;
+    computeEndedAt?: number;
+  },
+  nowMs = Date.now(),
+) {
+  const startedAt = toOptionalUnixMillis(run.computeStartedAt);
+  const existingEndedAt = toOptionalUnixMillis(run.computeEndedAt);
+  if (startedAt === undefined) {
+    return {
+      computeEndedAt: existingEndedAt,
+      durationMs: 0,
+    };
+  }
+  const computeEndedAt = existingEndedAt ?? Math.max(startedAt, toUnixMillis(nowMs));
+  return {
+    computeEndedAt,
+    durationMs: Math.max(0, computeEndedAt - startedAt),
+  };
+}
+
 function toRunResponse(row: Doc<"runs">) {
   return {
     run_id: String(row._id),
     name: getRunName(row),
     created_at: toUnixMillis(row._creationTime),
+    uptime_ms: resolveRunUptimeMs(row),
     environment_id: String(row.environmentId),
     input: row.input,
     output: row.output,
@@ -1308,14 +1359,19 @@ async function cancelRunForUserId(
   }
 
   if (!row.podId) {
+    const terminalTiming = resolveTerminalRunTiming(row);
     await ctx.db.patch("runs", runId, {
       status: RUN_STATUS.CANCELLED,
       cancellationRequested: true,
+      computeEndedAt: terminalTiming.computeEndedAt,
     });
     await ctx.db.insert("runEvents", {
       runId,
       status: RUN_STATUS.CANCELLED,
       message: force ? "force cancellation requested before provisioning" : "run cancelled before provisioning",
+      metadata: {
+        duration_ms: terminalTiming.durationMs,
+      },
     });
     return { cancel_requested: true, forced: force, run_id: String(runId) };
   }
@@ -1672,11 +1728,18 @@ export const markCancelledAfterTermination = internalMutation({
     if (!row || !row.cancellationRequested || TERMINAL_STATUSES.has(row.status)) {
       return null;
     }
-    await ctx.db.patch("runs", args.runId, { status: RUN_STATUS.CANCELLED });
+    const terminalTiming = resolveTerminalRunTiming(row);
+    await ctx.db.patch("runs", args.runId, {
+      status: RUN_STATUS.CANCELLED,
+      computeEndedAt: terminalTiming.computeEndedAt,
+    });
     await ctx.db.insert("runEvents", {
       runId: args.runId,
       status: RUN_STATUS.CANCELLED,
       message: args.force === true ? "force cancellation completed" : "cancellation completed",
+      metadata: {
+        duration_ms: terminalTiming.durationMs,
+      },
     });
     return null;
   },
@@ -1691,10 +1754,12 @@ export const markCancellationTerminationFailed = internalMutation({
       return null;
     }
     const errorText = sanitizeRuntimeMessage(args.error) || "failed to terminate pod during cancellation";
+    const terminalTiming = resolveTerminalRunTiming(row);
     await ctx.db.patch("runs", args.runId, {
       status: RUN_STATUS.FAILED,
       error: `cancellation failed: ${errorText}`,
       runtimeTokenHash: "revoked",
+      computeEndedAt: terminalTiming.computeEndedAt,
     });
     await ctx.db.insert("runEvents", {
       runId: args.runId,
@@ -1702,6 +1767,7 @@ export const markCancellationTerminationFailed = internalMutation({
       message: "cancellation termination failed",
       metadata: {
         error: errorText,
+        duration_ms: terminalTiming.durationMs,
       },
     });
     return null;
@@ -2044,7 +2110,11 @@ export const markProvisioning = internalMutation({
     const row = await ctx.db.get("runs", args.runId);
     if (!row || row.cancellationRequested || TERMINAL_STATUSES.has(row.status)) {
       if (row?.cancellationRequested) {
-        await ctx.db.patch("runs", args.runId, { status: RUN_STATUS.CANCELLED });
+        const terminalTiming = resolveTerminalRunTiming(row);
+        await ctx.db.patch("runs", args.runId, {
+          status: RUN_STATUS.CANCELLED,
+          computeEndedAt: terminalTiming.computeEndedAt,
+        });
       }
       return null;
     }
@@ -2071,7 +2141,11 @@ export const markRunning = internalMutation({
     const row = await ctx.db.get("runs", args.runId);
     if (!row || row.cancellationRequested || TERMINAL_STATUSES.has(row.status)) {
       if (row?.cancellationRequested) {
-        await ctx.db.patch("runs", args.runId, { status: RUN_STATUS.CANCELLED });
+        const terminalTiming = resolveTerminalRunTiming(row);
+        await ctx.db.patch("runs", args.runId, {
+          status: RUN_STATUS.CANCELLED,
+          computeEndedAt: terminalTiming.computeEndedAt,
+        });
       }
       return null;
     }
@@ -2108,20 +2182,25 @@ export const markFailed = internalMutation({
       return null;
     }
     const errorText = args.error.trim() || "pod bootstrap failed";
+    const terminalTiming = resolveTerminalRunTiming(row);
     await ctx.db.patch("runs", args.runId, {
       status: RUN_STATUS.FAILED,
       error: errorText,
       runtimeTokenHash: "revoked",
+      computeEndedAt: terminalTiming.computeEndedAt,
     });
     await ctx.db.insert("runEvents", {
       runId: args.runId,
       status: RUN_STATUS.FAILED,
       message: errorText,
-      metadata: args.provisioningPayload
-        ? {
-            provisioning_payload: args.provisioningPayload,
-          }
-        : undefined,
+      metadata: {
+        duration_ms: terminalTiming.durationMs,
+        ...(args.provisioningPayload
+          ? {
+              provisioning_payload: args.provisioningPayload,
+            }
+          : {}),
+      },
     });
     await scheduleForcedPodTermination(ctx, args.runId, row.podId);
     return null;
@@ -2220,10 +2299,12 @@ export const ingestRuntimeStatus = internalMutation({
 
     if (status === RUN_STATUS.FAILED) {
       const errorText = sanitizeRuntimeMessage(args.error || args.message || "runtime failed") || "runtime failed";
+      const terminalTiming = resolveTerminalRunTiming(row);
       await ctx.db.patch("runs", args.runId, {
         status: RUN_STATUS.FAILED,
         error: errorText,
         runtimeTokenHash: "revoked",
+        computeEndedAt: terminalTiming.computeEndedAt,
       });
       await ctx.db.insert("runEvents", {
         runId: args.runId,
@@ -2231,13 +2312,20 @@ export const ingestRuntimeStatus = internalMutation({
         message: errorText,
         metadata: {
           source: "pod-runtime",
+          duration_ms: terminalTiming.durationMs,
         },
       });
       await scheduleForcedPodTermination(ctx, args.runId, row.podId);
       return { status: RUN_STATUS.FAILED };
     }
 
-    const patch: { status: string; runtimeTokenHash?: string } = { status };
+    const patch: { status: string; runtimeTokenHash?: string; computeEndedAt?: number } = { status };
+    const isTerminalStatus = status === RUN_STATUS.COMPLETED || status === RUN_STATUS.CANCELLED;
+    let terminalTiming: { computeEndedAt?: number; durationMs: number } | undefined;
+    if (isTerminalStatus) {
+      terminalTiming = resolveTerminalRunTiming(row);
+      patch.computeEndedAt = terminalTiming.computeEndedAt;
+    }
     if (status === RUN_STATUS.COMPLETED || status === RUN_STATUS.CANCELLED) {
       patch.runtimeTokenHash = "revoked";
     }
@@ -2250,6 +2338,7 @@ export const ingestRuntimeStatus = internalMutation({
         `runtime status: ${status}`,
       metadata: {
         source: "pod-runtime",
+        ...(terminalTiming ? { duration_ms: terminalTiming.durationMs } : {}),
       },
     });
     if (status === RUN_STATUS.COMPLETED || status === RUN_STATUS.CANCELLED) {

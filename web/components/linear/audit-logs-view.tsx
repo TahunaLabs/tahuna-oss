@@ -39,6 +39,19 @@ function toLocalDateInputValue(timestamp: number) {
   return `${year}-${month}-${day}`
 }
 
+function formatRunUptime(uptimeMs: number) {
+  if (!Number.isFinite(uptimeMs) || uptimeMs <= 0) {
+    return "—"
+  }
+  const totalSeconds = Math.floor(uptimeMs / 1000)
+  const hours = Math.floor(totalSeconds / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  const seconds = totalSeconds % 60
+  if (hours > 0) return `${hours}h ${minutes}m ${seconds}s`
+  if (minutes > 0) return `${minutes}m ${seconds}s`
+  return `${seconds}s`
+}
+
 export function AuditLogsView({ runs }: AuditLogsViewProps) {
   const [search, setSearch] = useState("")
   const [actionFilter, setActionFilter] = useState<AuditActionFilter>("all")
@@ -66,7 +79,9 @@ export function AuditLogsView({ runs }: AuditLogsViewProps) {
         run.name.toLowerCase().includes(searchTerm) ||
         run.run_id.toLowerCase().includes(searchTerm) ||
         run.environment_id.toLowerCase().includes(searchTerm) ||
-        run.status.toLowerCase().includes(searchTerm)
+        run.status.toLowerCase().includes(searchTerm) ||
+        run.effective_gpu_type.toLowerCase().includes(searchTerm) ||
+        String(run.effective_gpu_count).includes(searchTerm)
       )
     })
   }, [actionFilter, dateFilter, search, sortedRuns])
@@ -115,41 +130,77 @@ export function AuditLogsView({ runs }: AuditLogsViewProps) {
             No audit logs match the current filters.
           </div>
         ) : (
-          filteredRuns.map((run) => {
-            const action = toAuditAction(run.status)
-            const isCompleted = action === "completed"
-            const isFailure = action === "failed" || action === "cancelled"
-            const actionLabel = isCompleted ? "completed" : isFailure ? action : "updated"
+          <>
+            <div className="hidden md:grid md:grid-cols-[minmax(280px,1.8fr)_minmax(150px,1fr)_90px_120px_180px] px-4 py-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+              <span>Event</span>
+              <span>GPU type</span>
+              <span>GPUs</span>
+              <span>Uptime</span>
+              <span>Timestamp</span>
+            </div>
+            {filteredRuns.map((run) => {
+              const action = toAuditAction(run.status)
+              const isCompleted = action === "completed"
+              const isFailure = action === "failed" || action === "cancelled"
+              const actionLabel = isCompleted ? "completed" : isFailure ? action : "updated"
 
-            return (
-              <article
-                key={run.run_id}
-                className="rounded-lg border border-border bg-card px-4 py-3 flex items-start justify-between gap-3 cursor-pointer hover:bg-secondary/20"
-              >
-                <div className="flex items-start gap-3 min-w-0">
-                  {isCompleted ? (
-                    <CheckCircle2 className="w-4 h-4 mt-0.5 text-emerald-400 shrink-0" />
-                  ) : isFailure ? (
-                    <XCircle className="w-4 h-4 mt-0.5 text-red-400 shrink-0" />
-                  ) : (
-                    <Clock3 className="w-4 h-4 mt-0.5 text-blue-400 shrink-0" />
-                  )}
-                  <div className="min-w-0">
-                    <p className="text-sm text-foreground truncate">
-                      <span className="font-semibold">{run.name}</span>{" "}
-                      {actionLabel} run
-                    </p>
-                    <p className="text-xs text-muted-foreground truncate">
-                      {run.run_id} • env {run.environment_id}
-                    </p>
+              return (
+                <article
+                  key={run.run_id}
+                  className="rounded-lg border border-border bg-card px-4 py-3 cursor-pointer hover:bg-secondary/20"
+                >
+                  <div className="grid grid-cols-1 gap-y-2 md:grid-cols-[minmax(280px,1.8fr)_minmax(150px,1fr)_90px_120px_180px] md:items-center md:gap-x-4">
+                    <div className="flex items-start gap-3 min-w-0">
+                      {isCompleted ? (
+                        <CheckCircle2 className="w-4 h-4 mt-0.5 text-emerald-400 shrink-0" />
+                      ) : isFailure ? (
+                        <XCircle className="w-4 h-4 mt-0.5 text-red-400 shrink-0" />
+                      ) : (
+                        <Clock3 className="w-4 h-4 mt-0.5 text-blue-400 shrink-0" />
+                      )}
+                      <div className="min-w-0">
+                        <p className="text-sm text-foreground truncate">
+                          <span className="font-semibold">{run.name}</span>{" "}
+                          {actionLabel} run
+                        </p>
+                        <p className="text-xs text-muted-foreground truncate">
+                          {run.run_id} • env {run.environment_id}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="text-sm text-foreground">
+                      <span className="mr-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground md:hidden">
+                        GPU type
+                      </span>
+                      <span className="font-mono text-xs md:text-sm">{run.effective_gpu_type || "—"}</span>
+                    </div>
+
+                    <div className="text-sm text-foreground">
+                      <span className="mr-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground md:hidden">
+                        GPUs
+                      </span>
+                      {run.effective_gpu_count > 0 ? run.effective_gpu_count : "—"}
+                    </div>
+
+                    <div className="text-sm text-foreground">
+                      <span className="mr-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground md:hidden">
+                        Uptime
+                      </span>
+                      {formatRunUptime(run.uptime_ms)}
+                    </div>
+
+                    <div className="text-xs text-muted-foreground">
+                      <span className="mr-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground md:hidden">
+                        Timestamp
+                      </span>
+                      {formatAuditTimestamp(run.created_at)}
+                    </div>
                   </div>
-                </div>
-                <div className="text-xs text-muted-foreground shrink-0">
-                  {formatAuditTimestamp(run.created_at)}
-                </div>
-              </article>
-            )
-          })
+                </article>
+              )
+            })}
+          </>
         )}
       </div>
     </main>

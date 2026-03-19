@@ -53,6 +53,7 @@ export default defineSchema({
     artifactKeys: v.optional(v.array(v.string())),
     cancellationRequested: v.boolean(),
     computeStartedAt: v.optional(v.number()),
+    computeEndedAt: v.optional(v.number()),
     creditsReservedCents: v.optional(v.number()),
     computeChargeCents: v.optional(v.number()),
     computeChargeStatus: v.optional(

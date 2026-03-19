@@ -75,6 +75,7 @@ export type RunRow = {
   run_id: Id<"runs">
   name: string
   created_at: number
+  uptime_ms: number
   environment_id: string
   status: string
   effective_gpu_type: string
@@ -86,6 +87,7 @@ export type RunDetail = {
   run_id: string
   name: string
   created_at: number
+  uptime_ms: number
   environment_id: string
   input: string
   output: string
