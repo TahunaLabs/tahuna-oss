@@ -19,6 +19,7 @@ import { applyStorageDeltaCredits, USAGE_EVENT_TYPE, upsertLedgerDebitTotal } fr
 import type { ComputeSettlementResult } from "@convex/runBilling";
 import {
   estimateRunUsageFromHourlyRateCents,
+  runLiveDebitIdempotencyKey,
   resolveRunHourlyRateCents,
   resolveTerminalRunTiming,
   settleRunComputeCharge,
@@ -1012,7 +1013,7 @@ export const billRunningComputeMinute = internalMutation({
           userId: row.userId,
           targetDebitCents: targetChargeCents,
           eventType: USAGE_EVENT_TYPE.RUN_COMPUTE_SETTLEMENT_DEBIT,
-          idempotencyKey: `run:${runId}:live_debit`,
+          idempotencyKey: runLiveDebitIdempotencyKey(runId),
           referenceType: "run",
           referenceId: runId,
           metadata: {

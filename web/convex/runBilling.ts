@@ -3,9 +3,9 @@ import type { MutationCtx } from "@convex/_generated/server";
 import { resolveRunComputePricing } from "@/lib/run-compute-pricing";
 import { BILLING_CONFIG } from "@convex/appConfig";
 import {
-  consumeUserCredits,
   grantUserCredits,
   recordLedgerEvent,
+  upsertLedgerDebitTotal,
   USAGE_EVENT_TYPE,
 } from "@convex/credits";
 
@@ -85,6 +85,10 @@ function runSettlementIdempotencyKey(runId: string, kind: "debit" | "refund" | "
   return `run:${runId}:settlement:${kind}`;
 }
 
+export function runLiveDebitIdempotencyKey(runId: string) {
+  return `run:${runId}:live_debit`;
+}
+
 export function toMinuteBucketUnixMs(value: number) {
   return Math.floor(toUnixMillis(value) / MS_PER_MINUTE) * MS_PER_MINUTE;
 }
@@ -138,11 +142,11 @@ export async function settleRunComputeCharge(
   const chargeDeltaCents = chargeCents - collectedCents;
 
   if (chargeDeltaCents > 0) {
-    const consumed = await consumeUserCredits(ctx, {
+    const debited = await upsertLedgerDebitTotal(ctx, {
       userId: run.userId,
-      amountCents: chargeDeltaCents,
+      targetDebitCents: chargeCents,
       eventType: USAGE_EVENT_TYPE.RUN_COMPUTE_SETTLEMENT_DEBIT,
-      idempotencyKey: runSettlementIdempotencyKey(runId, "debit"),
+      idempotencyKey: runLiveDebitIdempotencyKey(runId),
       referenceType: "run",
       referenceId: runId,
       metadata: {
@@ -153,10 +157,11 @@ export async function settleRunComputeCharge(
         gpu_count: run.effectiveGpuCount,
         volume_gb: run.effectiveVolumeGb,
         hourly_rate_cents: hourlyRateCents,
-        outstanding_cents: chargeDeltaCents,
       },
     });
-    if (!consumed) {
+    const nextCollectedCents = Math.min(chargeCents, debited.debitedCents);
+    const outstandingCents = Math.max(0, chargeCents - nextCollectedCents);
+    if (outstandingCents > 0) {
       await recordLedgerEvent(ctx, {
         userId: run.userId,
         eventType: USAGE_EVENT_TYPE.RUN_COMPUTE_SETTLEMENT_OWED,
@@ -166,8 +171,8 @@ export async function settleRunComputeCharge(
         metadata: {
           settlement: "runtime_terminal",
           charge_cents: chargeCents,
-          collected_cents: collectedCents,
-          outstanding_cents: chargeDeltaCents,
+          collected_cents: nextCollectedCents,
+          outstanding_cents: outstandingCents,
           duration_ms: timing.durationMs,
           gpu_type: run.effectiveGpuType,
           gpu_count: run.effectiveGpuCount,
@@ -182,18 +187,15 @@ export async function settleRunComputeCharge(
         chargeDeltaCents,
         durationMs: timing.durationMs,
         hourlyRateCents,
-        collectedCents: collectedCents,
-        outstandingCents: chargeDeltaCents,
+        collectedCents: nextCollectedCents,
+        outstandingCents,
       };
     }
-    const appliedDeltaCents = consumed.applied ? chargeDeltaCents : Math.abs(consumed.deltaCents);
-    const nextCollectedCents = Math.min(chargeCents, collectedCents + appliedDeltaCents);
-    const outstandingCents = Math.max(0, chargeCents - nextCollectedCents);
     return {
       chargeCents: chargeCents,
       chargeStatus: outstandingCents > 0 ? "owed" : "charged",
       chargeDeltaCents,
-      balanceAfterCents: consumed.balanceCents,
+      balanceAfterCents: debited.balanceCents,
       durationMs: timing.durationMs,
       hourlyRateCents,
       collectedCents: nextCollectedCents,
