@@ -1,7 +1,7 @@
 "use client"
 
 import { useMemo, useState } from "react"
-import { CheckCircle2, Clock3, Search, TriangleAlert, XCircle } from "lucide-react"
+import { CheckCircle2, Clock3, Search, XCircle } from "lucide-react"
 import type { RunRow } from "@/components/dashboard/shared"
 import { Input } from "@/components/ui/input"
 import { Select } from "@/components/ui/select"
@@ -11,9 +11,6 @@ type AuditLogsViewProps = {
 }
 
 type AuditActionFilter = "all" | "active" | "completed" | "failed" | "cancelled"
-
-const TERMINAL_STATUSES = new Set(["completed", "failed", "cancelled"])
-const ACTIVE_STATUSES = new Set(["queued", "provisioning", "running", "cancelling"])
 
 function toAuditAction(status: string): Exclude<AuditActionFilter, "all"> {
   if (status === "completed") return "completed"
@@ -40,13 +37,6 @@ function toLocalDateInputValue(timestamp: number) {
   const month = String(date.getMonth() + 1).padStart(2, "0")
   const day = String(date.getDate()).padStart(2, "0")
   return `${year}-${month}-${day}`
-}
-
-function formatUptimePercentage(runs: RunRow[]) {
-  const terminalRuns = runs.filter((run) => TERMINAL_STATUSES.has(run.status))
-  if (terminalRuns.length === 0) return "100.0%"
-  const successfulRuns = terminalRuns.filter((run) => run.status === "completed").length
-  return `${((successfulRuns / terminalRuns.length) * 100).toFixed(1)}%`
 }
 
 export function AuditLogsView({ runs }: AuditLogsViewProps) {
@@ -81,31 +71,11 @@ export function AuditLogsView({ runs }: AuditLogsViewProps) {
     })
   }, [actionFilter, dateFilter, search, sortedRuns])
 
-  const activeRuns = runs.filter((run) => ACTIVE_STATUSES.has(run.status)).length
-  const terminalRuns = runs.filter((run) => TERMINAL_STATUSES.has(run.status)).length
-
   return (
     <main className="flex-1 flex flex-col h-full overflow-hidden">
       <header className="px-6 py-4 border-b border-border">
         <h1 className="text-sm font-medium text-foreground">Audit logs</h1>
       </header>
-
-      <div className="px-6 py-4 border-b border-border">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <div className="rounded-lg border border-border bg-card px-4 py-3">
-            <p className="text-xs text-muted-foreground">Run uptime</p>
-            <p className="mt-1 text-2xl font-semibold text-foreground">{formatUptimePercentage(runs)}</p>
-          </div>
-          <div className="rounded-lg border border-border bg-card px-4 py-3">
-            <p className="text-xs text-muted-foreground">Active runs</p>
-            <p className="mt-1 text-2xl font-semibold text-foreground">{activeRuns}</p>
-          </div>
-          <div className="rounded-lg border border-border bg-card px-4 py-3">
-            <p className="text-xs text-muted-foreground">Terminal runs</p>
-            <p className="mt-1 text-2xl font-semibold text-foreground">{terminalRuns}</p>
-          </div>
-        </div>
-      </div>
 
       <div className="px-6 py-3 border-b border-border">
         <div className="grid grid-cols-1 md:grid-cols-[1fr_200px_170px] gap-2">
@@ -154,7 +124,7 @@ export function AuditLogsView({ runs }: AuditLogsViewProps) {
             return (
               <article
                 key={run.run_id}
-                className="rounded-lg border border-border bg-card px-4 py-3 flex items-start justify-between gap-3"
+                className="rounded-lg border border-border bg-card px-4 py-3 flex items-start justify-between gap-3 cursor-pointer hover:bg-secondary/20"
               >
                 <div className="flex items-start gap-3 min-w-0">
                   {isCompleted ? (
@@ -182,11 +152,6 @@ export function AuditLogsView({ runs }: AuditLogsViewProps) {
           })
         )}
       </div>
-
-      <footer className="px-6 py-3 border-t border-border text-xs text-muted-foreground flex items-center gap-2">
-        <TriangleAlert className="w-3.5 h-3.5" />
-        Uptime is computed from terminal runs (completed vs failed/cancelled).
-      </footer>
     </main>
   )
 }
