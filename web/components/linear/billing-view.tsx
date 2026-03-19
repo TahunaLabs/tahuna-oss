@@ -39,10 +39,62 @@ function formatSignedMoney(cents: number, currency: string) {
   return `${sign}${formatMoney(Math.abs(cents), currency)}`
 }
 
+function formatShortDuration(durationMs: number) {
+  if (!Number.isFinite(durationMs) || durationMs <= 0) {
+    return null
+  }
+  const totalMinutes = Math.max(1, Math.ceil(durationMs / (60 * 1000)))
+  const hours = Math.floor(totalMinutes / 60)
+  const minutes = totalMinutes % 60
+  if (hours > 0 && minutes > 0) {
+    return `${hours}h ${minutes}m`
+  }
+  if (hours > 0) {
+    return `${hours}h`
+  }
+  return `${minutes}m`
+}
+
 function eventLabel(value: string) {
   return value
     .replaceAll("_", " ")
     .replace(/\b\w/g, (m) => m.toUpperCase())
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+}
+
+function readString(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : null
+}
+
+function readNumber(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? value : null
+}
+
+function formatComputeEventDetails(event: UsageEventRow, currency: string) {
+  if (!isRecord(event.metadata)) {
+    return null
+  }
+  const gpuType = readString(event.metadata.gpu_type)
+  const gpuCount = readNumber(event.metadata.gpu_count)
+  const volumeGb = readNumber(event.metadata.volume_gb)
+  const hourlyRateCents = readNumber(event.metadata.hourly_rate_cents)
+  const durationMs = readNumber(event.metadata.duration_ms)
+  const reservationHours = readNumber(event.metadata.reservation_hours)
+  const uptimeLabel = durationMs !== null ? formatShortDuration(durationMs) : null
+  const parts = [
+    gpuType && gpuCount !== null ? `${gpuType} x${gpuCount}` : gpuType,
+    volumeGb !== null ? `${volumeGb}GB` : null,
+    hourlyRateCents !== null ? `${formatMoney(hourlyRateCents, currency)}/h` : null,
+    uptimeLabel
+      ? `${uptimeLabel} uptime`
+      : reservationHours !== null
+        ? `${reservationHours}h reserved`
+        : null,
+  ].filter((value): value is string => Boolean(value))
+  return parts.length > 0 ? parts.join(" · ") : null
 }
 
 export function BillingView({ balanceCents, bootstrapCreditCents, currency, initialized, usageEvents }: BillingViewProps) {
@@ -101,27 +153,37 @@ export function BillingView({ balanceCents, bootstrapCreditCents, currency, init
                   </tr>
                 </thead>
                 <tbody>
-                  {usageEvents.map((event, index) => (
-                    <tr key={`${event.created_at}-${index}`} className="border-b border-border/60">
-                      <td className="py-2 text-sm text-muted-foreground">
-                        {new Date(event.created_at).toLocaleString()}
-                      </td>
-                      <td className="py-2 text-sm text-foreground">{eventLabel(event.event_type)}</td>
-                      <td className="py-2 text-sm text-muted-foreground">
-                        {event.reference_type && event.reference_id
-                          ? `${event.reference_type}:${event.reference_id}`
-                          : "—"}
-                      </td>
-                      <td
-                        className={`py-2 text-sm text-right ${event.credits_delta_cents < 0 ? "text-red-400" : "text-green-400"}`}
-                      >
-                        {formatSignedMoney(event.credits_delta_cents, currency)}
-                      </td>
-                      <td className="py-2 text-sm text-right text-foreground">
-                        {formatMoney(event.balance_after_cents, currency)}
-                      </td>
-                    </tr>
-                  ))}
+                  {usageEvents.map((event, index) => {
+                    const computeEventDetails = formatComputeEventDetails(event, currency)
+                    return (
+                      <tr key={`${event.created_at}-${index}`} className="border-b border-border/60">
+                        <td className="py-2 text-sm text-muted-foreground">
+                          {new Date(event.created_at).toLocaleString()}
+                        </td>
+                        <td className="py-2 text-sm text-foreground">
+                          <div>{eventLabel(event.event_type)}</div>
+                          {computeEventDetails ? (
+                            <div className="text-xs text-muted-foreground">
+                              {computeEventDetails}
+                            </div>
+                          ) : null}
+                        </td>
+                        <td className="py-2 text-sm text-muted-foreground">
+                          {event.reference_type && event.reference_id
+                            ? `${event.reference_type}:${event.reference_id}`
+                            : "—"}
+                        </td>
+                        <td
+                          className={`py-2 text-sm text-right ${event.credits_delta_cents < 0 ? "text-red-400" : "text-green-400"}`}
+                        >
+                          {formatSignedMoney(event.credits_delta_cents, currency)}
+                        </td>
+                        <td className="py-2 text-sm text-right text-foreground">
+                          {formatMoney(event.balance_after_cents, currency)}
+                        </td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>

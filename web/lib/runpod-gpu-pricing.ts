@@ -52,6 +52,14 @@ export function getRunpodGpuPricePerHour(gpuType: string) {
   return RUNPOD_GPU_PRICING_BY_KEY.get(normalized);
 }
 
+export function getRunpodGpuPricePerHourCents(gpuType: string) {
+  const pricePerHour = getRunpodGpuPricePerHour(gpuType);
+  if (typeof pricePerHour !== "number") {
+    return undefined;
+  }
+  return Math.round(pricePerHour * 100);
+}
+
 export function listRunpodGpuPricingRows() {
   return [...RUNPOD_GPU_PRICING_ROWS];
 }

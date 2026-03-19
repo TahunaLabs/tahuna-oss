@@ -1,9 +1,8 @@
 import type { Doc } from "@convex/_generated/dataModel";
 import type { MutationCtx } from "@convex/_generated/server";
-import { BILLING_CONFIG } from "@convex/appConfig";
+import { estimateRunUsageCents, resolveRunComputePricing } from "@/lib/run-compute-pricing";
 import {
   consumeUserCredits,
-  estimateRunUsageCents,
   grantUserCredits,
   recordLedgerEvent,
   USAGE_EVENT_TYPE,
@@ -101,15 +100,19 @@ export async function settleRunComputeCharge(
   }
 
   const runId = String(run._id);
-  const gpuCount = typeof run.effectiveGpuCount === "number" ? run.effectiveGpuCount : 0;
-  const volumeGb = typeof run.effectiveVolumeGb === "number" ? run.effectiveVolumeGb : 0;
+  const computePricing = resolveRunComputePricing({
+    gpuType: run.effectiveGpuType,
+    gpuCount: run.effectiveGpuCount,
+    volumeGb: run.effectiveVolumeGb,
+  });
   const reservedCents = Math.max(0, Math.floor(run.creditsReservedCents || 0));
   const initialChargeCents =
     run.computeChargeStatus === "owed"
       ? Math.max(0, Math.floor(run.computeChargeCents || 0))
       : estimateRunUsageCents({
-          gpuCount,
-          volumeGb,
+          gpuType: run.effectiveGpuType,
+          gpuCount: computePricing.gpuCount,
+          volumeGb: computePricing.volumeGb,
           durationMs: timing.durationMs,
         });
   const initialCollectedCents =
@@ -124,9 +127,7 @@ export async function settleRunComputeCharge(
     run.computeChargeStatus === "owed"
       ? initialOutstandingCents
       : initialChargeCents - reservedCents;
-  const hourlyRateCents =
-    gpuCount * BILLING_CONFIG.computeGpuHourlyRateCents +
-    volumeGb * BILLING_CONFIG.computeVolumeGbHourlyRateCents;
+  const hourlyRateCents = computePricing.hourlyRateCents;
 
   if (chargeDeltaCents > 0) {
     const consumed = await consumeUserCredits(ctx, {
@@ -141,8 +142,15 @@ export async function settleRunComputeCharge(
         reserved_cents: reservedCents,
         charge_cents: initialChargeCents,
         duration_ms: timing.durationMs,
+        gpu_type: run.effectiveGpuType,
+        gpu_count: computePricing.gpuCount,
+        volume_gb: computePricing.volumeGb,
+        gpu_unit_hourly_rate_cents: computePricing.gpuUnitHourlyRateCents,
+        gpu_hourly_rate_cents: computePricing.gpuHourlyRateCents,
+        volume_hourly_rate_cents: computePricing.volumeHourlyRateCents,
         hourly_rate_cents: hourlyRateCents,
         outstanding_cents: initialOutstandingCents,
+        used_fallback_gpu_rate: computePricing.usedFallbackGpuRate,
       },
     });
     if (!consumed) {
@@ -159,7 +167,14 @@ export async function settleRunComputeCharge(
           collected_cents: initialCollectedCents,
           outstanding_cents: initialOutstandingCents,
           duration_ms: timing.durationMs,
+          gpu_type: run.effectiveGpuType,
+          gpu_count: computePricing.gpuCount,
+          volume_gb: computePricing.volumeGb,
+          gpu_unit_hourly_rate_cents: computePricing.gpuUnitHourlyRateCents,
+          gpu_hourly_rate_cents: computePricing.gpuHourlyRateCents,
+          volume_hourly_rate_cents: computePricing.volumeHourlyRateCents,
           hourly_rate_cents: hourlyRateCents,
+          used_fallback_gpu_rate: computePricing.usedFallbackGpuRate,
         },
       });
       return {
@@ -198,7 +213,14 @@ export async function settleRunComputeCharge(
         reserved_cents: reservedCents,
         charge_cents: initialChargeCents,
         duration_ms: timing.durationMs,
+        gpu_type: run.effectiveGpuType,
+        gpu_count: computePricing.gpuCount,
+        volume_gb: computePricing.volumeGb,
+        gpu_unit_hourly_rate_cents: computePricing.gpuUnitHourlyRateCents,
+        gpu_hourly_rate_cents: computePricing.gpuHourlyRateCents,
+        volume_hourly_rate_cents: computePricing.volumeHourlyRateCents,
         hourly_rate_cents: hourlyRateCents,
+        used_fallback_gpu_rate: computePricing.usedFallbackGpuRate,
       },
     });
     if (!refunded) {

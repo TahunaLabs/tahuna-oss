@@ -76,13 +76,6 @@ function normalizeOptionalText(value: string | undefined) {
   return trimmed ? trimmed : undefined;
 }
 
-function safePositiveNumber(value: number | undefined) {
-  if (typeof value !== "number" || !Number.isFinite(value)) {
-    return 0;
-  }
-  return Math.max(0, value);
-}
-
 async function ensureCreditsRow(
   ctx: MutationCtx,
   args: EnsureUserLedgerArgs,
@@ -235,37 +228,6 @@ export async function recordLedgerEvent(
     ...args,
     deltaCents: args.deltaCents ?? 0,
   });
-}
-
-export function estimateRunReservationCents(args: {
-  gpuCount: number | undefined;
-  volumeGb: number | undefined;
-}) {
-  const gpuCount = safePositiveNumber(args.gpuCount);
-  const volumeGb = safePositiveNumber(args.volumeGb);
-  const hourlyRate =
-    gpuCount * BILLING_CONFIG.computeGpuHourlyRateCents +
-    volumeGb * BILLING_CONFIG.computeVolumeGbHourlyRateCents;
-  const reservationCents = Math.ceil(hourlyRate * BILLING_CONFIG.computeReservationHours);
-  return Math.max(BILLING_CONFIG.minimumChargeCents, reservationCents);
-}
-
-export function estimateRunUsageCents(args: {
-  gpuCount: number | undefined;
-  volumeGb: number | undefined;
-  durationMs: number | undefined;
-}) {
-  const gpuCount = safePositiveNumber(args.gpuCount);
-  const volumeGb = safePositiveNumber(args.volumeGb);
-  const durationMs = safePositiveNumber(args.durationMs);
-  if (durationMs <= 0) {
-    return 0;
-  }
-  const hourlyRate =
-    gpuCount * BILLING_CONFIG.computeGpuHourlyRateCents +
-    volumeGb * BILLING_CONFIG.computeVolumeGbHourlyRateCents;
-  const usageCents = Math.ceil((hourlyRate * durationMs) / (60 * 60 * 1000));
-  return Math.max(BILLING_CONFIG.minimumChargeCents, usageCents);
 }
 
 export function estimateStorageDeltaCents(sizeDeltaBytes: number | undefined) {

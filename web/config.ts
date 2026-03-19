@@ -18,7 +18,7 @@ export const BILLING_CONFIG = {
   currency: "USD",
   initialCreditCents: 1000,
   computeReservationHours: 1,
-  computeGpuHourlyRateCents: 120,
+  defaultComputeGpuHourlyRateCents: 120,
   computeVolumeGbHourlyRateCents: 2,
   storageGiBDeltaRateCents: 3,
   minimumChargeCents: 1,

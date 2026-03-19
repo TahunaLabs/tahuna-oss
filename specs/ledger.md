@@ -55,10 +55,16 @@ Current implementation is internal credits accounting:
 - `currency: "USD"`
 - `initialCreditCents: 1000` (USD 10.00)
 - `computeReservationHours: 1`
-- `computeGpuHourlyRateCents: 120`
+- `defaultComputeGpuHourlyRateCents: 120`
 - `computeVolumeGbHourlyRateCents: 2`
 - `storageGiBDeltaRateCents: 3`
 - `minimumChargeCents: 1`
+
+RunPod GPU hourly inputs come from `web/lib/runpod-gpu-pricing.ts`:
+
+- `gpuType -> pricePerHour` static lookup table
+- compute billing resolves `gpuType` from that table first
+- unmapped GPU types fall back to `defaultComputeGpuHourlyRateCents`
 
 ### Initialization Flow
 
@@ -95,7 +101,7 @@ Current top-up policy:
 Current compute model is reservation + terminal settlement:
 
 1. On run create, estimate reservation:
-   - `hourlyRate = gpuCount * computeGpuHourlyRateCents + volumeGb * computeVolumeGbHourlyRateCents`
+   - `hourlyRate = gpuCount * gpuTypeHourlyRateCents + volumeGb * computeVolumeGbHourlyRateCents`
    - `reserved = max(minimumChargeCents, ceil(hourlyRate * computeReservationHours))`
 2. Debit with `eventType = "run_compute_reserved"`.
 3. If insufficient credits, run creation fails (`insufficient credits`, HTTP `402` on API routes).
@@ -113,8 +119,8 @@ Run row tracks:
 
 Important current limitations:
 
-- Pricing uses `gpuCount` + `volumeGb` only.
-- `gpuType` is tracked but not used to select pricing tiers.
+- GPU pricing is a static TypeScript lookup, not a versioned pricing catalog yet.
+- Unmapped GPU types still fall back to `defaultComputeGpuHourlyRateCents`.
 - Settlement uses runtime terminal timing (best effort from compute start/end timestamps).
 
 ### Storage Charging (Current)

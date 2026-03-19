@@ -3,8 +3,9 @@ import { ConvexError } from "convex/values";
 import { components, internal } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import type { MutationCtx } from "@convex/_generated/server";
-import { RUN_CONFIG } from "@convex/appConfig";
-import { consumeUserCredits, estimateRunReservationCents, USAGE_EVENT_TYPE } from "@convex/credits";
+import { estimateRunReservationCents, resolveRunComputePricing } from "@/lib/run-compute-pricing";
+import { BILLING_CONFIG, RUN_CONFIG } from "@convex/appConfig";
+import { consumeUserCredits, USAGE_EVENT_TYPE } from "@convex/credits";
 import { resolveTerminalRunTiming, settleRunComputeCharge } from "@convex/runBilling";
 import { ACTIVE_STATUSES, RUN_DELETE_BATCH_SIZE, RUN_STATUS, TERMINAL_STATUSES } from "@convex/runsConstants";
 import { getAccessibleEnvironment, getAccessibleRun, listRunsForUser } from "@convex/runsAccess";
@@ -50,7 +51,13 @@ export async function createRunForUserId(
   const effectiveGpuType = args.gpu_type ?? env.gpuType;
   const effectiveGpuCount = args.gpu_count ?? env.gpuCount;
   const effectiveVolumeGb = args.volume_gb ?? env.volumeGb;
+  const computePricing = resolveRunComputePricing({
+    gpuType: effectiveGpuType,
+    gpuCount: effectiveGpuCount,
+    volumeGb: effectiveVolumeGb,
+  });
   const reservedCents = estimateRunReservationCents({
+    gpuType: effectiveGpuType,
     gpuCount: effectiveGpuCount,
     volumeGb: effectiveVolumeGb,
   });
@@ -104,6 +111,12 @@ export async function createRunForUserId(
       gpu_type: effectiveGpuType,
       gpu_count: effectiveGpuCount,
       volume_gb: effectiveVolumeGb,
+      gpu_unit_hourly_rate_cents: computePricing.gpuUnitHourlyRateCents,
+      gpu_hourly_rate_cents: computePricing.gpuHourlyRateCents,
+      volume_hourly_rate_cents: computePricing.volumeHourlyRateCents,
+      hourly_rate_cents: computePricing.hourlyRateCents,
+      reservation_hours: BILLING_CONFIG.computeReservationHours,
+      used_fallback_gpu_rate: computePricing.usedFallbackGpuRate,
     },
   });
   if (!reservation) {
