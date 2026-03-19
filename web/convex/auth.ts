@@ -84,6 +84,43 @@ export const getMyCredits = query({
   },
 });
 
+export const listMyUsageEvents = query({
+  args: {
+    limit: v.optional(v.number()),
+  },
+  returns: v.array(
+    v.object({
+      event_type: v.string(),
+      credits_delta_cents: v.number(),
+      balance_after_cents: v.number(),
+      reference_type: v.union(v.string(), v.null()),
+      reference_id: v.union(v.string(), v.null()),
+      metadata: v.union(v.any(), v.null()),
+      created_at: v.number(),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    const userId = String(user._id);
+    const rawLimit = typeof args.limit === "number" && Number.isFinite(args.limit) ? Math.floor(args.limit) : 100;
+    const limit = Math.max(1, Math.min(200, rawLimit));
+    const rows = await ctx.db
+      .query("usageEvents")
+      .withIndex("by_user_and_created_at", (q) => q.eq("userId", userId))
+      .order("desc")
+      .take(limit);
+    return rows.map((row) => ({
+      event_type: row.eventType,
+      credits_delta_cents: row.creditsDeltaCents,
+      balance_after_cents: row.balanceAfterCents,
+      reference_type: row.referenceType ?? null,
+      reference_id: row.referenceId ?? null,
+      metadata: row.metadata ?? null,
+      created_at: row.createdAt,
+    }));
+  },
+});
+
 export async function requireUser(ctx: GenericCtx<DataModel> | QueryCtx | MutationCtx | ActionCtx) {
   const user = await authComponent.getAuthUser(ctx);
   if (!user) throw new Error("Not authenticated");

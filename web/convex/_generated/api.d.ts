@@ -27,6 +27,7 @@ import type * as maintenance from "../maintenance.js";
 import type * as monitoring_wandb from "../monitoring/wandb.js";
 import type * as profile from "../profile.js";
 import type * as resend from "../resend.js";
+import type * as runBilling from "../runBilling.js";
 import type * as runs from "../runs.js";
 import type * as sharing from "../sharing.js";
 import type * as sleep from "../sleep.js";
@@ -60,6 +61,7 @@ declare const fullApi: ApiFromModules<{
   "monitoring/wandb": typeof monitoring_wandb;
   profile: typeof profile;
   resend: typeof resend;
+  runBilling: typeof runBilling;
   runs: typeof runs;
   sharing: typeof sharing;
   sleep: typeof sleep;

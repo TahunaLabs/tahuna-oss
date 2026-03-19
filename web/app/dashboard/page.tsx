@@ -4,14 +4,13 @@ import { Sidebar } from "@/components/linear/sidebar"
 import { StorageView } from "@/components/linear/storage-view"
 import { EnvironmentsView } from "@/components/linear/environments-view"
 import { RunsView } from "@/components/linear/runs-view"
+import { BillingView } from "@/components/linear/billing-view"
 import { AuditLogsView } from "@/components/linear/audit-logs-view"
 import { SettingsView } from "@/components/linear/settings-view"
 import { ShareDialog } from "@/components/linear/share-dialog"
 import { EMPTY_PROFILE_DRAFT, toProfileDraft, type ApiKeyRow, type ProfileDraft, type UserProfileResponse } from "@/components/dashboard/settings-types"
 import { useTheme } from "@/components/theme-provider"
-import { Button } from "@/components/ui/button"
 import { Notice } from "@/components/ui/notice"
-import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { PageLoader } from "@/components/ui/spinner"
 import {
   STORAGE_PAGE_LIMIT,
@@ -36,7 +35,7 @@ import { useRouter } from "next/navigation"
 import { parseAsInteger, parseAsString, parseAsStringLiteral, useQueryState } from "nuqs"
 import { useEffect, useMemo, useState, type FormEvent } from "react"
 
-const DASHBOARD_VIEW_VALUES = ["storage", "environments", "runs", "audit_logs", "settings"] as const
+const DASHBOARD_VIEW_VALUES = ["storage", "environments", "runs", "billing", "audit_logs", "settings"] as const
 const STORAGE_SOURCE_FILTER_VALUES = ["all", "shared", "private"] as const
 const STORAGE_SORT_VALUES = [
   "created_desc",
@@ -75,7 +74,6 @@ export default function DashboardPage() {
     "view",
     parseAsStringLiteral(DASHBOARD_VIEW_VALUES).withDefault("environments"),
   )
-  const [billingSheetOpen, setBillingSheetOpen] = useState(false)
 
   const [selectedDataFiles, setSelectedDataFiles] = useState<File[]>([])
   const [uploadingData, setUploadingData] = useState(false)
@@ -116,6 +114,7 @@ export default function DashboardPage() {
   const [savingSettingsProfile, setSavingSettingsProfile] = useState(false)
   const [settingsProfileDraft, setSettingsProfileDraft] = useState<ProfileDraft>(EMPTY_PROFILE_DRAFT)
   const shouldLoadQueries = !authLoading && isAuthenticated && !loggingOut
+  const shouldLoadBillingQueries = shouldLoadQueries && activeView === "billing"
 
   const currentUser = useQuery(api.auth.getCurrentUser, shouldLoadQueries ? {} : "skip")
   const myCredits = useQuery(api.auth.getMyCredits, shouldLoadQueries ? {} : "skip") as
@@ -132,6 +131,17 @@ export default function DashboardPage() {
     | { runs: RunRow[] }
     | undefined
   const apiKeys = useQuery(api.auth.listApiKeys, shouldLoadQueries ? {} : "skip") as ApiKeyRow[] | undefined
+  const usageEvents = useQuery(api.auth.listMyUsageEvents, shouldLoadBillingQueries ? { limit: 100 } : "skip") as
+    | Array<{
+        event_type: string
+        credits_delta_cents: number
+        balance_after_cents: number
+        reference_type: string | null
+        reference_id: string | null
+        metadata: unknown | null
+        created_at: number
+      }>
+    | undefined
 
   const shouldLoadRunDetail = shouldLoadQueries && selectedRunId !== null
   const selectedRunFromList = runResult?.runs.find((r) => r.run_id === selectedRunId)
@@ -630,12 +640,6 @@ export default function DashboardPage() {
     }
   }
 
-  function openBillingTopUp() {
-    setError("")
-    setMessage("")
-    setBillingSheetOpen(true)
-  }
-
   async function saveSettingsProfile(profile: ProfileDraft) {
     setSavingSettingsProfile(true)
     try {
@@ -784,6 +788,14 @@ export default function DashboardPage() {
             onShareRun={(runId) => openShareDialog("run", runId)}
           />
         )
+      case "billing":
+        return (
+          <BillingView
+            balanceCents={myCredits?.balance_cents ?? 0}
+            currency={myCredits?.currency ?? "EUR"}
+            usageEvents={usageEvents ?? []}
+          />
+        )
       case "audit_logs":
         return <AuditLogsView runs={runs} />
       case "settings":
@@ -812,7 +824,6 @@ export default function DashboardPage() {
           void setActiveView(view)
         }}
         userInitial={userInitial}
-        onOpenBilling={openBillingTopUp}
         isDark={isDark}
         onThemeToggle={() => setTheme(isDark ? "light" : "dark")}
         onLogout={logout}
@@ -827,30 +838,6 @@ export default function DashboardPage() {
         )}
         {renderMainContent()}
       </main>
-      <Sheet
-        open={billingSheetOpen}
-        onOpenChange={setBillingSheetOpen}
-      >
-        <SheetContent className="p-5">
-          <SheetHeader>
-            <SheetTitle>Billing</SheetTitle>
-            <SheetDescription>Transparent ledger mode is enabled.</SheetDescription>
-          </SheetHeader>
-          <div className="mt-4 space-y-3 text-sm text-muted-foreground">
-            <p>Every user starts with €10.00.</p>
-            <p>Manual credit top-up is disabled. Payment checkout integration will be added next.</p>
-          </div>
-          <SheetFooter className="justify-end gap-2 mt-4">
-            <Button
-              type="button"
-              variant="dashboard-outline"
-              onClick={() => setBillingSheetOpen(false)}
-            >
-              Close
-            </Button>
-          </SheetFooter>
-        </SheetContent>
-      </Sheet>
       {shareTarget && (
         <ShareDialog
           resourceType={shareTarget.resourceType}

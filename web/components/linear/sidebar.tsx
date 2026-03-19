@@ -21,16 +21,15 @@ import Link from "next/link"
 import { Button } from "@/components/ui/button"
 
 interface SidebarProps {
-  activeView: "storage" | "environments" | "runs" | "audit_logs" | "settings"
-  onViewChange: (view: "storage" | "environments" | "runs" | "audit_logs" | "settings") => void
+  activeView: "storage" | "environments" | "runs" | "billing" | "audit_logs" | "settings"
+  onViewChange: (view: "storage" | "environments" | "runs" | "billing" | "audit_logs" | "settings") => void
   userInitial: string
-  onOpenBilling?: () => void
   isDark: boolean
   onThemeToggle: () => void
   onLogout: () => void
 }
 
-export function Sidebar({ activeView, onViewChange, userInitial, onOpenBilling, isDark, onThemeToggle, onLogout }: SidebarProps) {
+export function Sidebar({ activeView, onViewChange, userInitial, isDark, onThemeToggle, onLogout }: SidebarProps) {
   const [workspaceOpen, setWorkspaceOpen] = useState(true)
   const [accountOpen, setAccountOpen] = useState(true)
 
@@ -108,7 +107,8 @@ export function Sidebar({ activeView, onViewChange, userInitial, onOpenBilling, 
               <SidebarItem
                 icon={<Wallet className="w-4 h-4" />}
                 label="Billing"
-                onClick={onOpenBilling}
+                active={activeView === "billing"}
+                onClick={() => onViewChange("billing")}
               />
               <SidebarItem
                 icon={<BarChart3 className="w-4 h-4" />}
