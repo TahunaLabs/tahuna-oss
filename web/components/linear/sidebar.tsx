@@ -12,7 +12,6 @@ import {
   Moon,
   Sun,
   Wallet,
-  BarChart3,
   ClipboardList,
   Settings,
 } from "lucide-react"
@@ -109,10 +108,6 @@ export function Sidebar({ activeView, onViewChange, userInitial, isDark, onTheme
                 label="Billing"
                 active={activeView === "billing"}
                 onClick={() => onViewChange("billing")}
-              />
-              <SidebarItem
-                icon={<BarChart3 className="w-4 h-4" />}
-                label="Usage"
               />
               <SidebarItem
                 icon={<ClipboardList className="w-4 h-4" />}
