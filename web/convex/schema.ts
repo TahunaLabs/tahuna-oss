@@ -84,6 +84,23 @@ export default defineSchema({
     .index("by_user_and_source", ["userId", "source"])
     .index("by_user_and_key", ["userId", "key"]),
 
+  gpuPricingSnapshots: defineTable({
+    provider: v.string(),
+    gpuType: v.string(),
+    gpuTypeKey: v.string(),
+    displayName: v.string(),
+    category: v.string(),
+    featured: v.boolean(),
+    currency: v.string(),
+    listPricePerHour: v.number(),
+    discountedPricePerHour: v.optional(v.number()),
+    source: v.string(),
+    sourceCapturedAt: v.number(),
+    syncedAt: v.number(),
+  })
+    .index("by_provider", ["provider"])
+    .index("by_provider_and_gpu_type_key", ["provider", "gpuTypeKey"]),
+
   userCredits: defineTable({
     userId: v.string(),
     balanceCents: v.number(),
