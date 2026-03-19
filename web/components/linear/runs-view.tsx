@@ -197,16 +197,6 @@ export function RunsView({
           ) : (
             <>
               <span className="text-xs text-muted-foreground">Credits: {creditsLabel}</span>
-              <Button
-                type="button"
-                variant="dashboard-outline"
-                size="sm"
-                onClick={() => setSelectionMode(true)}
-                aria-label="Select runs"
-                disabled={busy || !hasData}
-              >
-                Select
-              </Button>
             </>
           )}
         </div>
