@@ -2,9 +2,8 @@
 
 ## Why Transparency Matters First
 
-A payment/credits model is only trustworthy if users can predict charges before they act and verify charges after they happen.
 
-For Tahuna, transparency means:
+Payements transparency :
 
 - Clear pricing inputs and formulas.
 - Clear trigger points for debits/credits.
