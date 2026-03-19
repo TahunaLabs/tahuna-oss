@@ -836,7 +836,7 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="flex h-screen bg-sidebar dark">
+    <div className="flex h-screen bg-sidebar">
       <Sidebar
         activeView={activeView}
         onViewChange={(view) => {
