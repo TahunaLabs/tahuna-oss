@@ -18,6 +18,7 @@ import type * as cli_shared from "../cli/shared.js";
 import type * as cli_sync from "../cli/sync.js";
 import type * as cli_system from "../cli/system.js";
 import type * as credits from "../credits.js";
+import type * as crons from "../crons.js";
 import type * as crypto from "../crypto.js";
 import type * as data from "../data.js";
 import type * as environments from "../environments.js";
@@ -59,6 +60,7 @@ declare const fullApi: ApiFromModules<{
   "cli/sync": typeof cli_sync;
   "cli/system": typeof cli_system;
   credits: typeof credits;
+  crons: typeof crons;
   crypto: typeof crypto;
   data: typeof data;
   environments: typeof environments;

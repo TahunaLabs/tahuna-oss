@@ -8,7 +8,6 @@ export type RunComputePricing = {
   gpuHourlyRateCents: number;
   volumeHourlyRateCents: number;
   hourlyRateCents: number;
-  usedFallbackGpuRate: boolean;
 };
 
 function safePositiveNumber(value: number | undefined) {
@@ -26,8 +25,11 @@ export function resolveRunComputePricing(args: {
   const gpuCount = safePositiveNumber(args.gpuCount);
   const volumeGb = safePositiveNumber(args.volumeGb);
   const lookupGpuUnitHourlyRateCents = getRunpodGpuPricePerHourCents(args.gpuType || "");
-  const resolvedGpuUnitHourlyRateCents =
-    lookupGpuUnitHourlyRateCents ?? BILLING_CONFIG.defaultComputeGpuHourlyRateCents;
+  if (gpuCount > 0 && typeof lookupGpuUnitHourlyRateCents !== "number") {
+    const gpuType = (args.gpuType || "").trim();
+    throw new Error(`gpu pricing not found for gpu_type "${gpuType || "unknown"}"`);
+  }
+  const resolvedGpuUnitHourlyRateCents = lookupGpuUnitHourlyRateCents ?? 0;
   const gpuUnitHourlyRateCents = gpuCount > 0 ? resolvedGpuUnitHourlyRateCents : 0;
   const gpuHourlyRateCents = gpuCount * gpuUnitHourlyRateCents;
   const volumeHourlyRateCents = volumeGb * BILLING_CONFIG.computeVolumeGbHourlyRateCents;
@@ -38,7 +40,6 @@ export function resolveRunComputePricing(args: {
     gpuHourlyRateCents,
     volumeHourlyRateCents,
     hourlyRateCents: gpuHourlyRateCents + volumeHourlyRateCents,
-    usedFallbackGpuRate: gpuCount > 0 && lookupGpuUnitHourlyRateCents === undefined,
   };
 }
 
@@ -48,8 +49,10 @@ export function estimateRunReservationCents(args: {
   volumeGb: number | undefined;
 }) {
   const pricing = resolveRunComputePricing(args);
-  const reservationCents = Math.ceil(pricing.hourlyRateCents * BILLING_CONFIG.computeReservationHours);
-  return Math.max(BILLING_CONFIG.minimumChargeCents, reservationCents);
+  if (pricing.hourlyRateCents <= 0) {
+    return 0;
+  }
+  return BILLING_CONFIG.minimumChargeCents;
 }
 
 export function estimateRunUsageCents(args: {

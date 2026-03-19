@@ -15,11 +15,15 @@ import { R2 } from "@convex-dev/r2";
 import { HeadObjectCommand } from "@aws-sdk/client-s3";
 import { images } from "@convex/catalog";
 import { PYTHON_CONFIG, RUN_CONFIG, SYNC_CONFIG } from "@convex/appConfig";
-import { applyStorageDeltaCredits } from "@convex/credits";
+import { applyStorageDeltaCredits, consumeUserCredits, recordLedgerEvent, USAGE_EVENT_TYPE } from "@convex/credits";
 import type { ComputeSettlementResult } from "@convex/runBilling";
 import {
+  estimateRunUsageFromHourlyRateCents,
+  resolveRunHourlyRateCents,
   resolveTerminalRunTiming,
   settleRunComputeCharge,
+  toMinuteBucketUnixMs,
+  toUnixMillis,
 } from "@convex/runBilling";
 import { getAccessibleRun } from "@convex/runsAccess";
 import { listByUserId, toRunLogsOnlyResponse, toRunLogsResponse, toRunMetricsOnlyResponse, toRunResponse } from "@convex/runsRead";
@@ -947,6 +951,152 @@ export const internalCreate = internalMutation({
   returns: runResponseValidator,
   handler: async (ctx, args) => {
     return createRunForUserId(ctx, args);
+  },
+});
+
+export const billRunningComputeMinute = internalMutation({
+  args: {},
+  returns: v.object({
+    processed_runs: v.number(),
+    charged_runs: v.number(),
+    owed_runs: v.number(),
+    skipped_runs: v.number(),
+  }),
+  handler: async (ctx) => {
+    const nowMs = Date.now();
+    const minuteBucket = toMinuteBucketUnixMs(nowMs);
+    const runningRuns = await ctx.db
+      .query("runs")
+      .withIndex("by_status", (q) => q.eq("status", RUN_STATUS.RUNNING))
+      .collect();
+
+    let processedRuns = 0;
+    let chargedRuns = 0;
+    let owedRuns = 0;
+    let skippedRuns = 0;
+
+    for (const row of runningRuns) {
+      const startedAt = typeof row.computeStartedAt === "number" ? toUnixMillis(row.computeStartedAt) : 0;
+      if (startedAt <= 0) {
+        skippedRuns += 1;
+        continue;
+      }
+
+      const runId = String(row._id);
+      const durationMs = Math.max(0, nowMs - startedAt);
+      let hourlyRateCents = 0;
+      try {
+        hourlyRateCents = resolveRunHourlyRateCents(row);
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : "run hourly rate is invalid";
+        await ctx.db.patch("runs", row._id, {
+          computeChargeStatus: "owed",
+          computeChargeError: detail,
+        });
+        owedRuns += 1;
+        continue;
+      }
+
+      const targetChargeCents = estimateRunUsageFromHourlyRateCents({
+        hourlyRateCents,
+        durationMs,
+      });
+      const currentCollectedCents = Math.max(0, Math.floor(row.computeCollectedCents || 0));
+      const debitDeltaCents = targetChargeCents - currentCollectedCents;
+      let nextCollectedCents = currentCollectedCents;
+      let nextOutstandingCents = Math.max(0, targetChargeCents - nextCollectedCents);
+      let nextChargeStatus: "pending" | "charged" | "owed" =
+        targetChargeCents > 0 ? (nextOutstandingCents > 0 ? "owed" : "charged") : "pending";
+      let nextChargeError: string | undefined = undefined;
+
+      if (debitDeltaCents > 0) {
+        const consumed = await consumeUserCredits(ctx, {
+          userId: row.userId,
+          amountCents: debitDeltaCents,
+          eventType: USAGE_EVENT_TYPE.RUN_COMPUTE_SETTLEMENT_DEBIT,
+          idempotencyKey: `run:${runId}:minute_debit:${minuteBucket}`,
+          referenceType: "run",
+          referenceId: runId,
+          metadata: {
+            settlement: "minute_tick",
+            charge_cents: targetChargeCents,
+            duration_ms: durationMs,
+            gpu_type: row.effectiveGpuType,
+            gpu_count: row.effectiveGpuCount,
+            volume_gb: row.effectiveVolumeGb,
+            hourly_rate_cents: hourlyRateCents,
+            minute_bucket_ms: minuteBucket,
+          },
+        });
+        if (consumed) {
+          const appliedCents = consumed.applied ? debitDeltaCents : Math.abs(consumed.deltaCents);
+          nextCollectedCents = Math.min(targetChargeCents, currentCollectedCents + appliedCents);
+          chargedRuns += 1;
+        } else {
+          await recordLedgerEvent(ctx, {
+            userId: row.userId,
+            eventType: USAGE_EVENT_TYPE.RUN_COMPUTE_SETTLEMENT_OWED,
+            idempotencyKey: `run:${runId}:minute_owed:${minuteBucket}`,
+            referenceType: "run",
+            referenceId: runId,
+            metadata: {
+              settlement: "minute_tick",
+              charge_cents: targetChargeCents,
+              collected_cents: currentCollectedCents,
+              outstanding_cents: debitDeltaCents,
+              duration_ms: durationMs,
+              gpu_type: row.effectiveGpuType,
+              gpu_count: row.effectiveGpuCount,
+              volume_gb: row.effectiveVolumeGb,
+              hourly_rate_cents: hourlyRateCents,
+              minute_bucket_ms: minuteBucket,
+            },
+          });
+          nextCollectedCents = currentCollectedCents;
+          owedRuns += 1;
+        }
+      }
+
+      nextOutstandingCents = Math.max(0, targetChargeCents - nextCollectedCents);
+      if (nextOutstandingCents > 0) {
+        nextChargeStatus = "owed";
+        nextChargeError = "outstanding compute settlement";
+      } else if (targetChargeCents > 0) {
+        nextChargeStatus = "charged";
+      } else {
+        nextChargeStatus = "pending";
+      }
+
+      const previousChargeCents = Math.max(0, Math.floor(row.computeChargeCents || 0));
+      const previousOutstandingCents = Math.max(0, Math.floor(row.computeOutstandingCents || 0));
+      const previousChargeStatus = row.computeChargeStatus || "pending";
+      const previousChargeError = row.computeChargeError;
+      if (
+        previousChargeCents !== targetChargeCents ||
+        currentCollectedCents !== nextCollectedCents ||
+        previousOutstandingCents !== nextOutstandingCents ||
+        previousChargeStatus !== nextChargeStatus ||
+        previousChargeError !== nextChargeError
+      ) {
+        await ctx.db.patch("runs", row._id, {
+          computeChargeCents: targetChargeCents,
+          computeCollectedCents: nextCollectedCents,
+          computeOutstandingCents: nextOutstandingCents,
+          computeChargeStatus: nextChargeStatus,
+          computeChargeError: nextChargeError,
+        });
+        processedRuns += 1;
+      } else {
+        skippedRuns += 1;
+      }
+    }
+
+    return {
+      processed_runs: processedRuns,
+      charged_runs: chargedRuns,
+      owed_runs: owedRuns,
+      skipped_runs: skippedRuns,
+    };
   },
 });
 

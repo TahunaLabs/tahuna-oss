@@ -3,9 +3,8 @@ import { ConvexError } from "convex/values";
 import { components, internal } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import type { MutationCtx } from "@convex/_generated/server";
-import { estimateRunReservationCents, resolveRunComputePricing } from "@/lib/run-compute-pricing";
-import { BILLING_CONFIG, RUN_CONFIG } from "@convex/appConfig";
-import { consumeUserCredits, USAGE_EVENT_TYPE } from "@convex/credits";
+import { resolveRunComputePricing } from "@/lib/run-compute-pricing";
+import { RUN_CONFIG } from "@convex/appConfig";
 import { resolveTerminalRunTiming, settleRunComputeCharge } from "@convex/runBilling";
 import { ACTIVE_STATUSES, RUN_DELETE_BATCH_SIZE, RUN_STATUS, TERMINAL_STATUSES } from "@convex/runsConstants";
 import { getAccessibleEnvironment, getAccessibleRun, listRunsForUser } from "@convex/runsAccess";
@@ -56,11 +55,6 @@ export async function createRunForUserId(
     gpuCount: effectiveGpuCount,
     volumeGb: effectiveVolumeGb,
   });
-  const reservedCents = estimateRunReservationCents({
-    gpuType: effectiveGpuType,
-    gpuCount: effectiveGpuCount,
-    volumeGb: effectiveVolumeGb,
-  });
   const codeManifestHash = env.latestCodeManifestHash;
   const dataManifestHash = env.latestDataManifestHash;
   const dataId = env.dataId || String(env._id);
@@ -94,35 +88,13 @@ export async function createRunForUserId(
     effectiveVolumeGb,
     codeManifestHash: codeManifestHash,
     dataManifestHash: dataManifestHash || undefined,
-    creditsReservedCents: reservedCents,
-    computeChargeCents: reservedCents,
-    computeCollectedCents: reservedCents,
+    computeHourlyRateCents: computePricing.hourlyRateCents,
+    creditsReservedCents: 0,
+    computeChargeCents: 0,
+    computeCollectedCents: 0,
     computeOutstandingCents: 0,
     computeChargeStatus: "pending",
   });
-  const reservation = await consumeUserCredits(ctx, {
-    userId: args.userId,
-    amountCents: reservedCents,
-    eventType: USAGE_EVENT_TYPE.RUN_COMPUTE_RESERVED,
-    idempotencyKey: `run:${String(runId)}:reservation`,
-    referenceType: "run",
-    referenceId: String(runId),
-    metadata: {
-      gpu_type: effectiveGpuType,
-      gpu_count: effectiveGpuCount,
-      volume_gb: effectiveVolumeGb,
-      gpu_unit_hourly_rate_cents: computePricing.gpuUnitHourlyRateCents,
-      gpu_hourly_rate_cents: computePricing.gpuHourlyRateCents,
-      volume_hourly_rate_cents: computePricing.volumeHourlyRateCents,
-      hourly_rate_cents: computePricing.hourlyRateCents,
-      reservation_hours: BILLING_CONFIG.computeReservationHours,
-      used_fallback_gpu_rate: computePricing.usedFallbackGpuRate,
-    },
-  });
-  if (!reservation) {
-    await ctx.db.delete("runs", runId);
-    throw new ConvexError("insufficient credits");
-  }
 
   await ctx.db.insert("runEvents", {
     runId,
@@ -135,8 +107,7 @@ export async function createRunForUserId(
       volume_gb: effectiveVolumeGb,
       code_manifest_hash: codeManifestHash || null,
       data_manifest_hash: dataManifestHash || null,
-      credits_reserved_cents: reservedCents,
-      balance_after_cents: reservation.balanceCents,
+      hourly_rate_cents: computePricing.hourlyRateCents,
     },
   });
 

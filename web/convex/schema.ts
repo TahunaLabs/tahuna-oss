@@ -54,6 +54,7 @@ export default defineSchema({
     cancellationRequested: v.boolean(),
     computeStartedAt: v.optional(v.number()),
     computeEndedAt: v.optional(v.number()),
+    computeHourlyRateCents: v.optional(v.number()),
     creditsReservedCents: v.optional(v.number()),
     computeChargeCents: v.optional(v.number()),
     computeCollectedCents: v.optional(v.number()),
@@ -65,6 +66,7 @@ export default defineSchema({
   })
     .index("by_user", ["userId"])
     .index("by_user_and_environment", ["userId", "environmentId"])
+    .index("by_status", ["status"])
     .index("by_runtime_token_hash", ["runtimeTokenHash"]),
 
   storageObjects: defineTable({
