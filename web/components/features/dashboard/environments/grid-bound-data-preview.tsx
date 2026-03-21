@@ -1,6 +1,7 @@
 "use client"
 
 import type { DataBlobRow, EnvironmentRow } from "@/components/features/dashboard-model"
+import { Badge } from "@/components/ui/badge"
 
 type GridBoundDataPreviewProps = {
   environment: EnvironmentRow
@@ -16,27 +17,22 @@ function GridBoundDataPreview({
   return (
     <div className="mt-3 flex flex-wrap items-center gap-1">
       {hasPrimaryData ? (
-        <span className="inline-flex max-w-full truncate rounded bg-secondary px-2 py-0.5 text-xs text-foreground">
-          Primary synced data
-        </span>
+        <Badge variant="dashboard-data">Primary synced data</Badge>
       ) : null}
 
       {environment.bound_data_ids.slice(0, 2).map((dataId) => {
         const blob = dataBlobsById.get(dataId)
         return (
-          <span
-            key={`${environment.environment_id}-grid-${dataId}`}
-            className="inline-flex max-w-full truncate rounded bg-secondary px-2 py-0.5 text-xs text-foreground"
-          >
+          <Badge key={`${environment.environment_id}-grid-${dataId}`} variant="dashboard-data">
             {blob?.filename || "Unnamed dataset"}
-          </span>
+          </Badge>
         )
       })}
 
       {environment.bound_data_ids.length > 2 ? (
-        <span className="inline-flex rounded bg-secondary px-2 py-0.5 text-xs text-muted-foreground">
+        <Badge variant="dashboard-data" className="text-muted-foreground">
           +{environment.bound_data_ids.length - 2}
-        </span>
+        </Badge>
       ) : null}
     </div>
   )

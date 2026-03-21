@@ -4,6 +4,7 @@ import { ExternalLink, Server } from "lucide-react"
 import Link from "next/link"
 
 import { CliStep } from "@/components/features/dashboard/environments/cli-step"
+import { Button } from "@/components/ui/button"
 
 function EnvironmentsEmptyState() {
   return (
@@ -28,13 +29,12 @@ function EnvironmentsEmptyState() {
             set up your own using <code className="rounded bg-secondary px-1 py-0.5">tahuna init</code>.
           </p>
 
-          <Link
-            href="https://github.com/Pazuzzu/tahuna/tree/develop/docs"
-            className="flex w-full items-center justify-center gap-2 rounded-lg bg-secondary px-4 py-2.5 text-sm text-foreground transition-colors hover:bg-secondary/80"
-          >
-            Full Documentation
-            <ExternalLink className="h-3.5 w-3.5" />
-          </Link>
+          <Button asChild variant="dashboard-secondary" size="none">
+            <Link href="https://github.com/Pazuzzu/tahuna/tree/develop/docs">
+              Full Documentation
+              <ExternalLink className="h-3.5 w-3.5" />
+            </Link>
+          </Button>
         </div>
       </div>
     </div>

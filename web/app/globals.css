@@ -39,10 +39,16 @@
   --dashboard-title-font-weight: 500;
   --dashboard-table-cell-px: 12px;
   --dashboard-table-cell-py: 8px;
+  --warning: #d97706;
+  --success: #16a34a;
+  --secondary-dim: color-mix(in srgb, var(--secondary) 70%, var(--background));
+  --secondary-subtle: color-mix(in srgb, var(--secondary) 20%, var(--background));
 }
 
 .dark,
 .landing-theme {
+  --warning: #fbbf24;
+  --success: #4ade80;
   /* AMP-inspired dark teal palette */
   --background: #0b1d1f;
   --foreground: #e8e0d4;
@@ -94,6 +100,10 @@
   --color-input: var(--input);
   --color-ring: var(--ring);
   --color-logo: var(--logo);
+  --color-warning: var(--warning);
+  --color-success: var(--success);
+  --color-secondary-dim: var(--secondary-dim);
+  --color-secondary-subtle: var(--secondary-subtle);
   --text-dashboard-control: var(--dashboard-control-font-size);
   --text-dashboard-control--line-height: var(--dashboard-control-line-height);
   --text-dashboard-control-small: var(--dashboard-control-font-size-small);

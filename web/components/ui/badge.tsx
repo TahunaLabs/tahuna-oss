@@ -23,6 +23,8 @@ const badgeVariants = cva("inline-flex items-center font-mono", {
         "rounded border border-rose-500/40 bg-rose-900/20 px-2 py-0.5 text-ui-micro uppercase tracking-wider text-rose-200",
       "dashboard-run-status":
         "rounded-full border border-border px-2.5 py-1 text-ui-caption capitalize tracking-normal text-muted-foreground",
+      "dashboard-data":
+        "max-w-full truncate rounded bg-secondary px-2 py-0.5 text-xs font-sans normal-case tracking-normal text-foreground",
     },
   },
   defaultVariants: { variant: "default" },

@@ -48,7 +48,7 @@ function EnvironmentConfigPanel({
 
         <div className="flex items-center gap-2">
           {configDirty ? (
-            <span className="text-xs text-amber-500">Unsaved changes</span>
+            <span className="text-xs text-warning">Unsaved changes</span>
           ) : (
             <span className="text-xs text-muted-foreground">Saved</span>
           )}

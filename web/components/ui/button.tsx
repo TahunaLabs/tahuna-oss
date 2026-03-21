@@ -80,6 +80,8 @@ const buttonVariants = cva(
           'h-auto w-full flex-col items-start justify-start gap-0 whitespace-normal rounded-none border-b border-border bg-secondary px-4 py-3 text-left transition-colors hover:bg-secondary/50',
         'dashboard-context-toggle':
           'h-auto w-full items-center justify-between rounded-lg border border-border bg-background/60 px-4 py-3 text-left font-normal hover:bg-secondary/30',
+        'dashboard-secondary':
+          'w-full justify-center rounded-lg bg-secondary px-4 py-2.5 text-dashboard-control text-foreground hover:bg-muted',
       },
       size: {
         default: 'h-9 px-4 py-2 has-[>svg]:px-3',

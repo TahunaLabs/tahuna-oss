@@ -1,6 +1,7 @@
 "use client"
 
 import type { DataBlobRow, EnvironmentRow } from "@/components/features/dashboard-model"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Select } from "@/components/ui/select"
 
@@ -36,18 +37,14 @@ function EnvironmentBindingCell({
       {hasAnyData ? (
         <div className="flex flex-wrap items-center gap-1">
           {hasPrimaryData ? (
-            <span className="inline-flex max-w-full truncate rounded bg-secondary px-2 py-0.5 text-xs text-foreground">
-              Primary synced data
-            </span>
+            <Badge variant="dashboard-data">Primary synced data</Badge>
           ) : null}
 
           {environment.bound_data_ids.map((dataId) => {
             const blob = dataBlobsById.get(dataId)
             return (
               <div key={`${environment.environment_id}-${dataId}`} className="flex max-w-full items-center gap-1">
-                <span className="inline-flex max-w-40 truncate rounded bg-secondary px-2 py-0.5 text-xs text-foreground">
-                  {blob?.filename || "Unnamed dataset"}
-                </span>
+                <Badge variant="dashboard-data">{blob?.filename || "Unnamed dataset"}</Badge>
                 <Button
                   type="button"
                   variant="dashboard-outline-compact-muted"
@@ -64,7 +61,7 @@ function EnvironmentBindingCell({
       ) : (
         <div className="flex min-w-0 items-center gap-1.5">
           <Select
-            variant="dashboard"
+            variant="dashboard-binding"
             value={bindSelectionByEnvironment[environment.environment_id] || ""}
             onChange={(event) => {
               const nextValue = event.target.value.trim()
@@ -75,7 +72,6 @@ function EnvironmentBindingCell({
               onBindSelectedData(environment, nextValue)
             }}
             disabled={busy || availableDataBlobs.length === 0}
-            className="h-6 min-w-0 flex-1 bg-secondary/50 px-2 text-dashboard-control-small"
           >
             <option value="">
               {availableDataBlobs.length === 0 ? "No datasets available" : "Select dataset"}

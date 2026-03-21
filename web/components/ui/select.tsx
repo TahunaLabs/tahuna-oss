@@ -11,6 +11,8 @@ const selectVariants = cva(
         default: '',
         dashboard:
           'h-dashboard-control rounded-lg border-border bg-card px-3.5 font-sans text-dashboard-control text-foreground',
+        'dashboard-binding':
+          'h-6 flex-1 rounded border-border bg-muted px-2 font-sans text-dashboard-control-small text-foreground',
       },
     },
     defaultVariants: { variant: 'default' },
