@@ -12,8 +12,8 @@ function CreditsGauge({ balanceCents, maxCents }: CreditsGaugeProps) {
     <Gauge
       percentage={percentage}
       label="Credits"
-      variant="accent"
       size="md"
+      gradient
     />
   )
 }
