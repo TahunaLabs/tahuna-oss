@@ -1,7 +1,5 @@
 "use client"
 
-import { Play } from "lucide-react"
-
 import { Button } from "@/components/ui/button"
 
 type RunsEmptyStateProps = {
@@ -20,8 +18,6 @@ function RunsEmptyState({ noEnvironments, activeTab, onTriggerRun }: RunsEmptySt
   return (
     <div className="flex h-full items-center justify-center">
       <div className="max-w-md text-center">
-        <Play className="mx-auto mb-6 h-16 w-16 text-icon-faint" strokeWidth={1} />
-        <h2 className="mb-3 text-lg font-medium text-foreground">Runs</h2>
         <p className="mb-6 text-sm leading-relaxed text-muted-foreground">{message}</p>
         {!noEnvironments && activeTab === "all" && onTriggerRun ? (
           <div className="flex items-center justify-center gap-3">
