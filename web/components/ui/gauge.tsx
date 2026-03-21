@@ -5,20 +5,14 @@ const gaugeVariants = cva(
   "rounded transition-all relative overflow-hidden",
   {
     variants: {
-      variant: {
-        accent: "bg-accent text-accent-foreground",
-        warning: "bg-warning text-white",
-        destructive: "bg-destructive text-white",
-      },
       size: {
-        xs: "h-2 w-8",
-        sm: "h-3 w-12",
-        md: "h-4 w-16",
-        lg: "h-6 w-24",
+        xs: "h-3 w-3",
+        sm: "h-4 w-4",
+        md: "h-5 w-5",
+        lg: "h-6 w-6",
       },
     },
     defaultVariants: {
-      variant: "accent",
       size: "sm",
     },
   },
@@ -33,15 +27,16 @@ function Gauge({ percentage, size, className, ...props }: GaugeProps) {
     <div
       className={cn(
         gaugeVariants({ size, className }),
-        "bg-muted"
+        "bg-muted shrink-0"
       )}
       {...props}
     >
       <div
-        className="h-full rounded transition-all duration-300"
+        className="w-full rounded transition-all duration-300"
         style={{
-          width: `${percentage}%`,
+          height: `${percentage}%`,
           backgroundColor: "var(--accent)",
+          marginTop: `${100 - percentage}%`,
         }}
       />
     </div>

@@ -74,7 +74,8 @@ export function Sidebar({ activeView, onViewChange, userInitial, isDark, onTheme
       {/* Bottom Navigation */}
       <nav className="px-2 py-1 space-y-0.5">
         {balanceCents !== undefined && maxCents !== undefined && (
-          <div className="mb-2">
+          <div className="mb-1 flex items-center justify-between px-2 py-1.5">
+            <span className="text-xs text-muted-foreground">Credits</span>
             <CreditsGauge
               balanceCents={balanceCents}
               maxCents={maxCents}
