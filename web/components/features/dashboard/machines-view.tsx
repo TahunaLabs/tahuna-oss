@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
+import { CreditsGauge } from "@/components/ui/credits-gauge"
 import { Notice } from "@/components/ui/notice"
 import { StatusDot } from "@/components/ui/status-dot"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -29,6 +30,9 @@ type MachinesViewProps = {
   revokingId: Id<"apiKeys"> | null
   onRevoke: (id: Id<"apiKeys">, name: string) => void
   onClearFeedback: () => void
+  balanceCents?: number
+  maxCents?: number
+  currency?: string
 }
 
 function formatDate(timestamp?: number) {
@@ -36,12 +40,21 @@ function formatDate(timestamp?: number) {
   return new Date(timestamp).toLocaleString()
 }
 
-export function MachinesView({ keys, message, error, revokingId, onRevoke, onClearFeedback }: MachinesViewProps) {
+export function MachinesView({ keys, message, error, revokingId, onRevoke, onClearFeedback, balanceCents, maxCents, currency }: MachinesViewProps) {
+  const hasCreditsData = balanceCents !== undefined && maxCents !== undefined && currency !== undefined
+
   return (
     <DashboardViewLayout
       sectionLabel="Machines"
       title="Machines"
       titleIcon={<Monitor size={24} />}
+      rightContent={hasCreditsData && balanceCents !== undefined && maxCents !== undefined && currency ? (
+        <CreditsGauge
+          balanceCents={balanceCents}
+          maxCents={maxCents}
+          currency={currency}
+        />
+      ) : null}
       toolbar={null}
     >
       {error ? <Notice variant="error" className="mb-4">{error}</Notice> : null}
