@@ -2,14 +2,14 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "@/lib/utils"
 
 const gaugeVariants = cva(
-  "rounded transition-all relative overflow-hidden",
+  "rounded-sm transition-all relative overflow-hidden",
   {
     variants: {
       size: {
-        xs: "h-3 w-3",
-        sm: "h-4 w-4",
-        md: "h-5 w-5",
-        lg: "h-6 w-6",
+        xs: "h-1.5 w-2",
+        sm: "h-2 w-3",
+        md: "h-2 w-4",
+        lg: "h-3 w-6",
       },
     },
     defaultVariants: {

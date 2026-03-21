@@ -1,6 +1,6 @@
 "use client"
 
-import { Search, HardDrive, Server, Play, Monitor, LogOut, Moon, Sun, Wallet, ClipboardList, Settings } from "lucide-react"
+import { Search, HardDrive, Server, Play, Monitor, LogOut, Moon, Sun, Wallet, ClipboardList, Settings, Zap } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { CreditsGauge } from "@/components/ui/credits-gauge"
@@ -74,8 +74,11 @@ export function Sidebar({ activeView, onViewChange, userInitial, isDark, onTheme
       {/* Bottom Navigation */}
       <nav className="px-2 py-1 space-y-0.5">
         {balanceCents !== undefined && maxCents !== undefined && (
-          <div className="mb-1 flex items-center justify-between px-2 py-1.5">
-            <span className="text-xs text-muted-foreground">Credits</span>
+          <div className="mb-1 h-auto w-full rounded px-2 py-1.5 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Zap className="w-4 h-4 text-foreground" />
+              <span className="text-sm font-normal text-foreground">Credits</span>
+            </div>
             <CreditsGauge
               balanceCents={balanceCents}
               maxCents={maxCents}
