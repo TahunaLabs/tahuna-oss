@@ -41,14 +41,12 @@ function formatDate(timestamp?: number) {
 }
 
 export function MachinesView({ keys, message, error, revokingId, onRevoke, onClearFeedback, balanceCents, maxCents, currency }: MachinesViewProps) {
-  const hasCreditsData = balanceCents !== undefined && maxCents !== undefined && currency !== undefined
-
   return (
     <DashboardViewLayout
       sectionLabel="Machines"
       title="Machines"
       titleIcon={<Monitor size={24} />}
-      rightContent={hasCreditsData && balanceCents !== undefined && maxCents !== undefined && currency ? (
+      rightContent={balanceCents !== undefined && maxCents !== undefined && currency !== undefined ? (
         <CreditsGauge
           balanceCents={balanceCents}
           maxCents={maxCents}

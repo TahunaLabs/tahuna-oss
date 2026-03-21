@@ -26,27 +26,25 @@ function CreditsGauge({ balanceCents, maxCents, currency, className }: CreditsGa
   const isLow = percentage < 20
   const isCritical = percentage < 5
 
+  const textColor = isCritical ? "var(--destructive)" : isLow ? "var(--warning)" : "var(--foreground)"
+  const barColor = isCritical ? "var(--destructive)" : isLow ? "var(--warning)" : "var(--success)"
+
   return (
     <div className={cn("flex flex-col gap-2", className)}>
       <div className="flex items-baseline justify-between gap-3">
         <p className="text-xs text-muted-foreground">Credits available</p>
-        <p className={cn("text-sm font-medium", {
-          "text-destructive": isCritical,
-          "text-warning": isLow && !isCritical,
-          "text-foreground": !isLow,
-        })}>
+        <p className="text-sm font-medium" style={{ color: textColor }}>
           {formatMoney(balanceCents, currency)}
         </p>
       </div>
       <div className="flex items-center gap-2">
         <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
           <div
-            className={cn("h-full rounded-full transition-all duration-300", {
-              "bg-destructive": isCritical,
-              "bg-warning": isLow && !isCritical,
-              "bg-success": !isLow,
-            })}
-            style={{ width: `${percentage}%` }}
+            className="h-full rounded-full transition-all duration-300"
+            style={{
+              width: `${percentage}%`,
+              backgroundColor: barColor,
+            }}
           />
         </div>
         <span className="text-xs text-muted-foreground min-w-fit">
