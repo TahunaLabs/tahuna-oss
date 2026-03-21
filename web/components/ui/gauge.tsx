@@ -6,10 +6,10 @@ const gaugeVariants = cva(
   {
     variants: {
       size: {
-        xs: "h-1.5 w-2",
-        sm: "h-2 w-3",
-        md: "h-2 w-4",
-        lg: "h-3 w-6",
+        xs: "h-1.5 w-5",
+        sm: "h-2 w-8",
+        md: "h-2 w-10",
+        lg: "h-3 w-16",
       },
     },
     defaultVariants: {

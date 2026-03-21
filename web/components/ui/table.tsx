@@ -21,7 +21,7 @@ const tableHeaderVariants = cva("", {
     variant: {
       default: "[&_tr]:border-b text-ui-xs text-muted-foreground",
       dashboard:
-        "border-b border-border text-dashboard-table-header text-muted-foreground",
+        "border-b border-border text-dashboard-table-header",
     },
   },
   defaultVariants: {
@@ -44,13 +44,13 @@ const tableRowVariants = cva("", {
 })
 
 const tableHeadVariants = cva(
-  "h-10 px-2 text-left align-middle text-ui-xs font-medium text-muted-foreground",
+  "h-10 px-2 text-left align-middle text-ui-xs font-medium",
   {
     variants: {
       variant: {
-        default: "",
+        default: "text-muted-foreground",
         dashboard:
-          "h-auto px-dashboard-table-cell-x py-dashboard-table-cell-y text-dashboard-table-header font-dashboard-table-header",
+          "h-auto px-dashboard-table-cell-x py-dashboard-table-cell-y text-dashboard-table-header font-dashboard-table-header text-foreground",
       },
     },
     defaultVariants: {

@@ -1,6 +1,5 @@
 "use client"
 
-import { Users } from "lucide-react"
 import { Fragment } from "react"
 
 import {
@@ -73,10 +72,7 @@ function EnvironmentTableRow({
         <TableCell variant="dashboard" className="px-0" />
 
         <TableCell variant="dashboard" className="text-foreground">
-          <div className="flex min-w-0 items-center gap-1.5">
-            <p className="truncate">{environment.name}</p>
-            {isShared ? <Users className="h-3.5 w-3.5 shrink-0 text-muted-foreground" /> : null}
-          </div>
+          <p className="truncate">{environment.name}</p>
         </TableCell>
 
         <TableCell variant="dashboard" className="hidden text-muted-foreground lg:table-cell">
