@@ -26,42 +26,29 @@ const gaugeVariants = cva(
 interface GaugeProps extends React.ComponentProps<"div">, VariantProps<typeof gaugeVariants> {
   percentage: number
   label: string
-  gradient?: boolean
 }
 
-function Gauge({ percentage, label, variant, size, className, gradient = false, ...props }: GaugeProps) {
-  let bgColor = "bg-accent"
-  let textColor = "text-accent-foreground"
-
-  if (gradient) {
-    const ratio = percentage / 100
-    const hue = ratio * 240
-    bgColor = `hsl(${hue}, 100%, 50%)`
-  }
-
+function Gauge({ percentage, label, size, className, ...props }: GaugeProps) {
   return (
     <div
       className={cn(
-        "w-full rounded font-medium transition-all relative overflow-hidden flex items-center justify-between",
-        !gradient && gaugeVariants({ variant, size }),
+        "w-full rounded font-medium transition-all relative overflow-hidden flex items-center justify-between bg-muted",
         className
       )}
-      style={gradient ? {
-        backgroundColor: `hsl(${(percentage / 100) * 240}, 100%, 50%)`,
-        color: "white",
+      style={{
         padding: size === "sm" ? "4px 8px" : size === "lg" ? "12px 24px" : "8px 16px",
         fontSize: size === "sm" ? "12px" : size === "lg" ? "16px" : "14px",
-      } : {}}
+        color: "var(--foreground)",
+      }}
       {...props}
     >
       <span className="relative z-10">{label}</span>
       <span className="relative z-10">{Math.round(percentage)}%</span>
       <div
-        className="absolute inset-0 rounded opacity-20 transition-all duration-300"
+        className="absolute inset-0 rounded transition-all duration-300"
         style={{
-          width: `${100 - percentage}%`,
-          backgroundColor: "rgba(0, 0, 0, 0.3)",
-          marginLeft: `${percentage}%`,
+          width: `${percentage}%`,
+          backgroundColor: "var(--accent)",
         }}
       />
     </div>
