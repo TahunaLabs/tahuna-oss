@@ -6,7 +6,7 @@ function DashboardTabsHeader({ className, ...props }: React.ComponentProps<"div"
   return (
     <div
       data-slot="dashboard-tabs-header"
-      className={cn("px-6 py-2", className)}
+      className={cn(className)}
       {...props}
     />
   )

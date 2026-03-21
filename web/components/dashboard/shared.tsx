@@ -43,6 +43,9 @@ export type StorageListResult = {
 export type EnvironmentRow = {
   environment_id: Id<"environments">
   data_id: string
+  access: "private" | "shared"
+  created_at: number
+  last_updated_at: number
   latest_data_manifest_hash: string | null
   bound_data_ids: string[]
   bound_data_manifest_hashes: string[]

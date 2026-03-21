@@ -21,6 +21,9 @@ import { ENVIRONMENT_CONFIG_FILE_NAME, parseEnvironmentConfig, renderEnvironment
 const environmentResponseValidator = v.object({
   environment_id: v.string(),
   data_id: v.string(),
+  access: v.union(v.literal("private"), v.literal("shared")),
+  created_at: v.number(),
+  last_updated_at: v.number(),
   latest_data_manifest_hash: v.union(v.string(), v.null()),
   bound_data_ids: v.array(v.string()),
   bound_data_manifest_hashes: v.array(v.string()),
@@ -390,11 +393,21 @@ function validateEnvironmentPayload(args: {
   }
 }
 
-function toEnvironmentResponse(row: Doc<"environments">) {
+function getEnvironmentLastUpdatedAt(row: Doc<"environments">) {
+  return row.latestSyncAt || row._creationTime;
+}
+
+function toEnvironmentResponse(
+  row: Doc<"environments">,
+  access: "private" | "shared" = "private",
+) {
   const dataId = row.dataId || String(row._id);
   return {
     environment_id: String(row._id),
     data_id: dataId,
+    access,
+    created_at: row._creationTime,
+    last_updated_at: getEnvironmentLastUpdatedAt(row),
     latest_data_manifest_hash: row.latestDataManifestHash || null,
     bound_data_ids: row.boundDataIds || [],
     bound_data_manifest_hashes: row.boundDataManifestHashes || [],
@@ -409,9 +422,34 @@ function toEnvironmentResponse(row: Doc<"environments">) {
   };
 }
 
-function toEnvironmentConfigResponse(row: Doc<"environments">) {
+async function hasEnvironmentShareLink(
+  ctx: QueryCtx | MutationCtx,
+  environmentId: string,
+) {
+  const link = await ctx.db
+    .query("shareLinks")
+    .withIndex("by_resource", (q) =>
+      q.eq("resourceType", "environment").eq("resourceId", environmentId),
+    )
+    .first();
+  return !!link;
+}
+
+async function toEnvironmentResponseWithAccess(
+  ctx: QueryCtx | MutationCtx,
+  row: Doc<"environments">,
+) {
+  const environmentId = String(row._id);
+  const isShared = await hasEnvironmentShareLink(ctx, environmentId);
+  return toEnvironmentResponse(row, isShared ? "shared" : "private");
+}
+
+async function toEnvironmentConfigResponse(
+  ctx: QueryCtx | MutationCtx,
+  row: Doc<"environments">,
+) {
   return {
-    environment: toEnvironmentResponse(row),
+    environment: await toEnvironmentResponseWithAccess(ctx, row),
     config_name: ENVIRONMENT_CONFIG_FILE_NAME,
     config_text: renderEnvironmentConfig({
       name: row.name,
@@ -426,13 +464,32 @@ function toEnvironmentConfigResponse(row: Doc<"environments">) {
 }
 
 async function listByUserId(ctx: QueryCtx, userId: string) {
-  const rows = await ctx.db
-    .query("environments")
-    .withIndex("by_user", (q) => q.eq("userId", userId))
-    .collect();
+  const [rows, shareLinks] = await Promise.all([
+    ctx.db
+      .query("environments")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .collect(),
+    ctx.db
+      .query("shareLinks")
+      .withIndex("by_creator", (q) => q.eq("createdByUserId", userId))
+      .collect(),
+  ]);
+
+  const sharedEnvironmentIds = new Set(
+    shareLinks
+      .filter((link) => link.resourceType === "environment")
+      .map((link) => link.resourceId),
+  );
 
   return {
-    environments: rows.sort((a, b) => b._creationTime - a._creationTime).map(toEnvironmentResponse),
+    environments: rows
+      .sort((a, b) => b._creationTime - a._creationTime)
+      .map((row) =>
+        toEnvironmentResponse(
+          row,
+          sharedEnvironmentIds.has(String(row._id)) ? "shared" : "private",
+        ),
+      ),
   };
 }
 
@@ -491,7 +548,7 @@ async function createEnvironmentForUserId(
     throw new ConvexError("failed to create environment");
   }
 
-  return toEnvironmentResponse(env);
+  return toEnvironmentResponse(env, "private");
 }
 
 function normalizeDataId(value: string) {
@@ -553,7 +610,7 @@ async function bindDataForUserId(
   if (!updated) {
     throw new ConvexError("failed to update environment data bindings");
   }
-  return toEnvironmentResponse(updated);
+  return await toEnvironmentResponseWithAccess(ctx, updated);
 }
 
 async function unbindDataForUserId(
@@ -578,7 +635,7 @@ async function unbindDataForUserId(
   if (!updated) {
     throw new ConvexError("failed to update environment data bindings");
   }
-  return toEnvironmentResponse(updated);
+  return await toEnvironmentResponseWithAccess(ctx, updated);
 }
 
 async function updateEnvironmentSpecsForUserId(
@@ -634,7 +691,7 @@ async function updateEnvironmentSpecsForUserId(
   if (!updated) {
     throw new ConvexError("failed to update environment");
   }
-  return toEnvironmentResponse(updated);
+  return await toEnvironmentResponseWithAccess(ctx, updated);
 }
 
 async function updateEnvironmentConfigForUserId(
@@ -672,7 +729,7 @@ async function updateEnvironmentConfigForUserId(
     throw new ConvexError("failed to update environment config");
   }
 
-  return toEnvironmentConfigResponse(updated);
+  return await toEnvironmentConfigResponse(ctx, updated);
 }
 
 async function removeEnvironmentForUserId(ctx: MutationCtx, userId: string, environmentId: Id<"environments">) {
@@ -785,7 +842,7 @@ export const getConfig = query({
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
     const row = await getAccessibleEnvironment(ctx, String(user._id), args.environmentId, "read");
-    return toEnvironmentConfigResponse(row);
+    return await toEnvironmentConfigResponse(ctx, row);
   },
 });
 
@@ -861,7 +918,7 @@ export const internalGet = internalQuery({
   returns: environmentResponseValidator,
   handler: async (ctx, args) => {
     const row = await getAccessibleEnvironment(ctx, args.userId, args.environmentId, "read");
-    return toEnvironmentResponse(row);
+    return await toEnvironmentResponseWithAccess(ctx, row);
   },
 });
 

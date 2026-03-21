@@ -11,6 +11,7 @@ presets/
 **/dummy/
 **/dummy
 **/dummy.*
+**replit.design
 
 # Python cache and environments
 __pycache__/
@@ -71,3 +72,6 @@ test_ml_project/data/*
 */node_modules/*
 
 /out/
+
+
+

@@ -2,12 +2,19 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { ChevronDown, ChevronUp, Play, Trash2, X, Share2, Users } from "lucide-react"
-import { Badge } from "@/components/ui/badge"
+import { DashboardViewLayout } from "@/components/dashboard/layout-shell"
+import { MetricSection } from "@/components/linear/runs/metric-section"
+import { RunTabButton } from "@/components/linear/runs/run-tab-button"
 import { Button } from "@/components/ui/button"
-import { Checkbox } from "@/components/ui/checkbox"
-import { DashboardTabsHeader } from "@/components/ui/dashboard-tabs-header"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
 import { cn } from "@/lib/utils"
-import type { Id } from "@convex/_generated/dataModel"
 import { ActionsMenu } from "@/components/linear/actions-menu"
 import {
   CANCELLABLE_STATUSES,
@@ -19,15 +26,6 @@ import {
   type RunLogsOnlyDetail,
   type RunMetricsOnlyDetail,
 } from "@/components/dashboard/shared"
-import {
-  CartesianGrid,
-  Line,
-  LineChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts"
 
 type RunsViewProps = {
   creditsLabel: string
@@ -90,8 +88,6 @@ export function RunsView({
   onShareRun,
 }: RunsViewProps) {
   const [showRunContext, setShowRunContext] = useState(false)
-  const [selectionMode, setSelectionMode] = useState(false)
-  const [selectedRunIds, setSelectedRunIds] = useState<Id<"runs">[]>([])
   const environmentNameById = useMemo(
     () => new Map(environments.map((environment) => [String(environment.environment_id), environment.name])),
     [environments],
@@ -108,246 +104,210 @@ export function RunsView({
   const series = metricSeries(runMetrics)
   const primarySeries = series.filter((metric) => metric.category !== "system")
   const systemSeries = series.filter((metric) => metric.category === "system")
-  const allFilteredRunsSelected = filteredRuns.length > 0 && selectedRunIds.length === filteredRuns.length
-  const selectedRunCount = selectedRunIds.length
-
-  function disableSelectionMode() {
-    setSelectionMode(false)
-    setSelectedRunIds([])
-  }
 
   useEffect(() => {
     setShowRunContext(false)
   }, [selectedRunId])
 
-  useEffect(() => {
-    const runIdSet = new Set(filteredRuns.map((run) => run.run_id))
-    setSelectedRunIds((current) => {
-      const next = current.filter((runId) => runIdSet.has(runId))
-      if (next.length === current.length && next.every((runId, index) => runId === current[index])) {
-        return current
-      }
-      return next
-    })
-  }, [filteredRuns])
-
-  useEffect(() => {
-    if (!hasData && selectionMode) {
-      disableSelectionMode()
-    }
-  }, [hasData, selectionMode])
-
-  function toggleRunSelection(runId: Id<"runs">, nextChecked: boolean) {
-    setSelectedRunIds((current) => {
-      if (nextChecked) {
-        if (current.includes(runId)) return current
-        return [...current, runId]
-      }
-      return current.filter((id) => id !== runId)
-    })
-  }
-
-  function toggleAllRunSelections(nextChecked: boolean) {
-    if (nextChecked) {
-      setSelectedRunIds(filteredRuns.map((run) => run.run_id))
-      return
-    }
-    setSelectedRunIds([])
-  }
-
   return (
-    <main className="flex-1 flex flex-col h-full">
-      {/* Header */}
-      <header className="flex items-center justify-between px-6 py-3 border-b border-border">
-        <div className="flex items-center gap-2">
-          <h1 className="text-sm font-medium text-foreground">Runs</h1>
-          {runs.length > 0 && (
-            <span className="text-xs text-muted-foreground">{runs.length}</span>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          {selectionMode ? (
-            <>
-              <span className="text-xs text-muted-foreground">{selectedRunCount}</span>
-              <Button
-                type="button"
-                variant="dashboard-icon-secondary"
-                size="none"
-                aria-label="Delete selected runs"
-                disabled={busy || selectedRunCount === 0}
-                onClick={() => {
-                  void onDeleteRuns(selectedRunIds).then(() => {
-                    disableSelectionMode()
-                  })
-                }}
-              >
-                <Trash2 className="w-4 h-4" />
-              </Button>
-              <Button
-                type="button"
-                variant="dashboard-icon-secondary"
-                size="none"
-                onClick={disableSelectionMode}
-                aria-label="Done selecting runs"
-                disabled={busy}
-              >
-                <X className="w-4 h-4" />
-              </Button>
-            </>
-          ) : (
-            <>
-              <span className="text-xs text-muted-foreground">Credits: {creditsLabel}</span>
-            </>
-          )}
-        </div>
-      </header>
-
-      {/* Tabs */}
-      <DashboardTabsHeader>
-        <div className="flex items-center gap-1">
-          <TabButton label="All runs" active={activeTab === "all"} onClick={() => onActiveTabChange("all")} />
-          <TabButton
+    <DashboardViewLayout
+      sectionLabel="Runs"
+      title="Runs"
+      titleIcon={<Play />}
+      count={runs.length > 0 ? runs.length : undefined}
+      creditsLabel={creditsLabel}
+      toolbar={(
+        <div className="flex items-center gap-1.5">
+          <RunTabButton label="All runs" active={activeTab === "all"} onClick={() => onActiveTabChange("all")} />
+          <RunTabButton
             label="Active"
             active={activeTab === "active"}
             onClick={() => onActiveTabChange("active")}
             count={runs.filter((r) => ACTIVE_STATUSES.has(r.status)).length}
           />
-          <TabButton
+          <RunTabButton
             label="Completed"
             active={activeTab === "completed"}
             onClick={() => onActiveTabChange("completed")}
           />
         </div>
-      </DashboardTabsHeader>
+      )}
+    >
 
       {/* Content */}
       {noEnvironments ? (
-        <div className="flex-1 flex items-center justify-center">
-          <div className="text-center max-w-md">
-            <div className="flex justify-center mb-6">
-              <Play className="w-16 h-16 text-muted-foreground/50" strokeWidth={1} />
+        <div>
+          <div className="flex h-full items-center justify-center">
+            <div className="max-w-md text-center">
+              <div className="mb-6 flex justify-center">
+                <Play className="h-16 w-16 text-muted-foreground/50" strokeWidth={1} />
+              </div>
+              <h2 className="mb-3 text-lg font-medium text-foreground">Runs</h2>
+              <p className="mb-6 text-sm leading-relaxed text-muted-foreground">
+                Create an environment first to launch runs. Run <code className="rounded bg-secondary px-1 py-0.5 text-xs">tahuna init .</code> from your project folder.
+              </p>
             </div>
-            <h2 className="text-lg font-medium text-foreground mb-3">Runs</h2>
-            <p className="text-sm text-muted-foreground mb-6 leading-relaxed">
-              Create an environment first to launch runs. Run <code className="px-1 py-0.5 bg-secondary rounded text-xs">tahuna init .</code> from your project folder.
-            </p>
           </div>
         </div>
       ) : !hasData ? (
-        <div className="flex-1 flex items-center justify-center">
-          <div className="text-center max-w-md">
-            <div className="flex justify-center mb-6">
-              <Play className="w-16 h-16 text-muted-foreground/50" strokeWidth={1} />
-            </div>
-            <h2 className="text-lg font-medium text-foreground mb-3">Runs</h2>
-            <p className="text-sm text-muted-foreground mb-6 leading-relaxed">
-              {activeTab !== "all"
-                ? `No ${activeTab} runs.`
-                : "View and manage your workflow runs. Track builds, deployments, and automated tasks across all your projects."}
-            </p>
-            {activeTab === "all" && (
-              <div className="flex items-center justify-center gap-3">
-                <Button type="button" variant="dashboard-primary-compact" size="none">
-                  Trigger run
-                  <kbd className="px-1.5 py-0.5 bg-accent-foreground/20 rounded text-xs">N</kbd>
-                  <span className="text-xs opacity-70">then</span>
-                  <kbd className="px-1.5 py-0.5 bg-accent-foreground/20 rounded text-xs">R</kbd>
-                </Button>
+        <div>
+          <div className="flex h-full items-center justify-center">
+            <div className="max-w-md text-center">
+              <div className="mb-6 flex justify-center">
+                <Play className="h-16 w-16 text-muted-foreground/50" strokeWidth={1} />
               </div>
-            )}
+              <h2 className="mb-3 text-lg font-medium text-foreground">Runs</h2>
+              <p className="mb-6 text-sm leading-relaxed text-muted-foreground">
+                {activeTab !== "all"
+                  ? `No ${activeTab} runs.`
+                  : "View and manage your workflow runs. Track builds, deployments, and automated tasks across all your projects."}
+              </p>
+              {activeTab === "all" && (
+                <div className="flex items-center justify-center gap-3">
+                  <Button type="button" variant="dashboard-primary-compact" size="none">
+                    Trigger run
+                    <kbd className="rounded bg-accent-foreground/20 px-1.5 py-0.5 text-xs">N</kbd>
+                    <span className="text-xs opacity-70">then</span>
+                    <kbd className="rounded bg-accent-foreground/20 px-1.5 py-0.5 text-xs">R</kbd>
+                  </Button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       ) : (
-        <div className="flex-1 flex min-h-0">
-          {/* Left panel — run list */}
-          <div className="w-80 border-r border-border flex flex-col min-h-0 shrink-0">
-            <div className="h-9 border-b border-border px-3 py-2">
-              <div className="flex items-center gap-2">
-                <div className="w-4 shrink-0">
-                  <Checkbox
-                    checked={allFilteredRunsSelected || (selectedRunCount > 0 && "indeterminate")}
-                    onCheckedChange={(checked) => toggleAllRunSelections(checked === true)}
-                    className={selectionMode ? "" : "pointer-events-none invisible"}
-                    tabIndex={selectionMode ? 0 : -1}
-                    aria-label="Select all runs"
-                    disabled={!selectionMode || busy}
-                  />
-                </div>
-                <span className="text-xs text-muted-foreground">{selectionMode ? "All" : ""}</span>
-              </div>
-            </div>
-            <div className="flex-1 overflow-y-auto">
-              {filteredRuns.map((run) => {
-                const runLabel = run.name || "Untitled run"
-                const environmentLabel = environmentNameById.get(run.environment_id) || "Unknown environment"
-                return (
-                  <div
-                    key={run.run_id}
-                    className={cn(
-                      "flex items-stretch border-b border-border",
-                      selectedRunId === run.run_id ? "bg-secondary" : "hover:bg-secondary/50",
-                    )}
-                  >
-                    <div className="flex w-10 items-start px-3 pt-2">
-                      <Checkbox
-                        checked={selectedRunIds.includes(run.run_id)}
-                        onCheckedChange={(checked) => toggleRunSelection(run.run_id, checked === true)}
-                        className={selectionMode ? "" : "pointer-events-none invisible"}
-                        tabIndex={selectionMode ? 0 : -1}
-                        aria-label={`Select run ${runLabel}`}
-                        disabled={!selectionMode || busy}
-                      />
-                    </div>
-                    <Button
-                      type="button"
-                      variant="dashboard-run-list-item"
-                      size="none"
-                      className="flex-1 border-none px-3 py-2"
-                      onClick={() => onSelectRun(selectedRunId === run.run_id ? null : run.run_id)}
+        <div className="space-y-3">
+          <div className="h-full overflow-auto rounded-lg border border-border bg-background">
+            <Table variant="dashboard" className="table-fixed">
+              <colgroup>
+                <col className="w-[300px]" />
+                <col className="w-[120px]" />
+                <col className="w-[220px]" />
+                <col className="w-[140px]" />
+                <col className="w-[130px]" />
+                <col className="w-[40px]" />
+              </colgroup>
+              <TableHeader variant="dashboard" className="sticky top-0 bg-background">
+                <TableRow variant="dashboard-head" className="text-left">
+                  <TableHead variant="dashboard">Name</TableHead>
+                  <TableHead variant="dashboard">Status</TableHead>
+                  <TableHead variant="dashboard">Environment</TableHead>
+                  <TableHead variant="dashboard">Started</TableHead>
+                  <TableHead variant="dashboard">Runtime</TableHead>
+                  <TableHead variant="dashboard" className="px-0" />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredRuns.map((run) => {
+                  const runLabel = run.name || "Untitled run"
+                  const environmentLabel = environmentNameById.get(run.environment_id) || "Unknown environment"
+                  const selected = selectedRunId === run.run_id
+                  return (
+                    <TableRow
+                      key={run.run_id}
+                      variant="dashboard"
+                      className={cn(
+                        "group cursor-pointer align-middle hover:bg-secondary/50",
+                        selected ? "bg-secondary/30" : "",
+                      )}
+                      onClick={() => onSelectRun(selected ? null : run.run_id)}
                     >
-                      <div className="mb-1 flex items-center gap-2">
-                        <span className={cn("h-2 w-2 shrink-0 rounded-full", STATUS_DOT[run.status] || "bg-muted-foreground")} />
-                        <span className="truncate text-sm font-medium text-foreground">
-                          {runLabel}
+                      <TableCell variant="dashboard" className="text-foreground">
+                        <div className="flex min-w-0 items-center gap-2">
+                          <p className="truncate">{runLabel}</p>
+                          {sharedByMeResourceIds?.has(run.run_id) ? (
+                            <Users className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                          ) : null}
+                        </div>
+                      </TableCell>
+                      <TableCell variant="dashboard" className="text-muted-foreground">
+                        <span className="inline-flex items-center gap-2 capitalize">
+                          <span className={cn("h-2 w-2 shrink-0 rounded-full", STATUS_DOT[run.status] || "bg-muted-foreground")} />
+                          {run.status}
                         </span>
-                        {sharedByMeResourceIds?.has(run.run_id) && (
-                          <Users className="w-3 h-3 shrink-0 text-muted-foreground" />
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs capitalize text-muted-foreground">{run.status}</span>
-                        <span className="text-xs text-muted-foreground">·</span>
-                        <span className="truncate text-xs text-muted-foreground">
-                          {environmentLabel}
-                        </span>
-                      </div>
-                      {run.created_at > 0 ? (
-                        <p className="mt-0.5 text-xs text-muted-foreground">
-                          {relativeTime(run.created_at)}
-                        </p>
-                      ) : null}
-                    </Button>
-                  </div>
-                )
-              })}
-            </div>
+                      </TableCell>
+                      <TableCell variant="dashboard" className="text-muted-foreground">
+                        <p className="truncate">{environmentLabel}</p>
+                      </TableCell>
+                      <TableCell variant="dashboard" className="text-muted-foreground">
+                        {run.created_at > 0 ? relativeTime(run.created_at) : "—"}
+                      </TableCell>
+                      <TableCell variant="dashboard" className="text-muted-foreground">
+                        {formatRunUptime(run.uptime_ms)}
+                      </TableCell>
+                      <TableCell
+                        variant="dashboard"
+                        className="px-0 align-middle"
+                        onClick={(event) => event.stopPropagation()}
+                      >
+                        <div className="flex items-center justify-center">
+                          <ActionsMenu triggerLabel={`Open actions for ${runLabel}`}>
+                            {(close) => (
+                              <>
+                                {onShareRun ? (
+                                  <Button
+                                    type="button"
+                                    variant="sidebar-menu-item"
+                                    size="none"
+                                    onClick={() => {
+                                      close()
+                                      onShareRun(run.run_id)
+                                    }}
+                                  >
+                                    <Share2 className="w-3.5 h-3.5" />
+                                    Share
+                                  </Button>
+                                ) : null}
+                                {CANCELLABLE_STATUSES.has(run.status) ? (
+                                  <Button
+                                    type="button"
+                                    variant="sidebar-menu-item"
+                                    size="none"
+                                    disabled={busy}
+                                    onClick={() => {
+                                      close()
+                                      onCancelRun(run.run_id)
+                                    }}
+                                  >
+                                    <X className="w-3.5 h-3.5" />
+                                    Cancel run
+                                  </Button>
+                                ) : null}
+                                <Button
+                                  type="button"
+                                  variant="sidebar-menu-item"
+                                  size="none"
+                                  disabled={busy}
+                                  onClick={() => {
+                                    close()
+                                    void onDeleteRuns([run.run_id]).then(() => {
+                                      if (selectedRunId === run.run_id) {
+                                        onSelectRun(null)
+                                      }
+                                    })
+                                  }}
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                  Delete run
+                                </Button>
+                              </>
+                            )}
+                          </ActionsMenu>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
+              </TableBody>
+            </Table>
           </div>
 
-          {/* Right panel — run detail */}
-          <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-            {selectedRunId === null ? (
-              <div className="flex-1 flex items-center justify-center">
-                <div className="text-center">
-                  <Play className="w-12 h-12 text-muted-foreground/30 mx-auto mb-3" strokeWidth={1} />
-                  <p className="text-sm text-muted-foreground">Select a run to view details</p>
-                </div>
-              </div>
-            ) : !runDetail ? (
-              <div className="flex-1 flex items-center justify-center">
-                <p className="text-sm text-muted-foreground">Loading run details…</p>
-              </div>
-            ) : (
-              <div className="flex-1 overflow-y-auto">
+          {selectedRunId === null ? null : !runDetail ? (
+            <div className="rounded-lg border border-border bg-background px-6 py-10">
+              <p className="text-sm text-muted-foreground">Loading run details…</p>
+            </div>
+          ) : (
+            <div className="overflow-hidden rounded-lg border border-border bg-background">
                 {/* Detail header */}
                 <div className="flex items-center justify-between px-6 py-3 border-b border-border">
                   <div className="flex items-center gap-3 min-w-0">
@@ -368,43 +328,56 @@ export function RunsView({
                     </span>
                   </div>
                   <div className="flex items-center gap-1.5 shrink-0">
-                    {(onShareRun || CANCELLABLE_STATUSES.has(runDetail.status)) && (
-                      <ActionsMenu triggerLabel="Open run actions" triggerVariant="dashboard-icon-secondary">
-                        {(close) => (
-                          <>
-                            {onShareRun && (
-                              <Button
-                                type="button"
-                                variant="sidebar-menu-item"
-                                size="none"
-                                onClick={() => {
-                                  close()
-                                  onShareRun(runDetail.run_id)
-                                }}
-                              >
-                                <Share2 className="w-3.5 h-3.5" />
-                                Share
-                              </Button>
-                            )}
-                            {CANCELLABLE_STATUSES.has(runDetail.status) && (
-                              <Button
-                                type="button"
-                                variant="sidebar-menu-item"
-                                size="none"
-                                disabled={busy}
-                                onClick={() => {
-                                  close()
-                                  onCancelRun(runDetail.run_id as RunRow["run_id"])
-                                }}
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                                Cancel run
-                              </Button>
-                            )}
-                          </>
-                        )}
-                      </ActionsMenu>
-                    )}
+                    <ActionsMenu triggerLabel="Open run actions" triggerVariant="dashboard-icon-secondary">
+                      {(close) => (
+                        <>
+                          {onShareRun && (
+                            <Button
+                              type="button"
+                              variant="sidebar-menu-item"
+                              size="none"
+                              onClick={() => {
+                                close()
+                                onShareRun(runDetail.run_id)
+                              }}
+                            >
+                              <Share2 className="w-3.5 h-3.5" />
+                              Share
+                            </Button>
+                          )}
+                          {CANCELLABLE_STATUSES.has(runDetail.status) && (
+                            <Button
+                              type="button"
+                              variant="sidebar-menu-item"
+                              size="none"
+                              disabled={busy}
+                              onClick={() => {
+                                close()
+                                onCancelRun(runDetail.run_id as RunRow["run_id"])
+                              }}
+                            >
+                              <X className="w-3.5 h-3.5" />
+                              Cancel run
+                            </Button>
+                          )}
+                          <Button
+                            type="button"
+                            variant="sidebar-menu-item"
+                            size="none"
+                            disabled={busy}
+                            onClick={() => {
+                              close()
+                              void onDeleteRuns([runDetail.run_id as RunRow["run_id"]]).then(() => {
+                                onSelectRun(null)
+                              })
+                            }}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            Delete run
+                          </Button>
+                        </>
+                      )}
+                    </ActionsMenu>
                     <Button
                       type="button"
                       variant="dashboard-icon-secondary"
@@ -556,197 +529,27 @@ export function RunsView({
                     )}
                   </div>
                 </div>
-              </div>
-            )}
-          </div>
+            </div>
+          )}
         </div>
       )}
-    </main>
+    </DashboardViewLayout>
   )
 }
 
-function MetricSection({
-  title,
-  description,
-  metrics,
-  emptyMessage,
-}: {
-  title: string
-  description: string
-  metrics: ReturnType<typeof metricSeries>
-  emptyMessage: string
-}) {
-  return (
-    <section className="space-y-3">
-      <div>
-        <div className="flex items-center justify-between gap-3">
-          <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{title}</h4>
-          <span className="text-[11px] text-muted-foreground">{metrics.length} charts</span>
-        </div>
-        <p className="mt-1 text-xs text-muted-foreground">{description}</p>
-      </div>
-      {metrics.length === 0 ? (
-        <p className="text-sm text-muted-foreground">{emptyMessage}</p>
-      ) : (
-        <div className="grid grid-cols-1 2xl:grid-cols-2 gap-4">
-          {metrics.map((metric) => (
-            <MetricChart key={`${metric.source}:${metric.name}`} metric={metric} />
-          ))}
-        </div>
-      )}
-    </section>
-  )
-}
-
-function MetricChart({
-  metric,
-}: {
-  metric: ReturnType<typeof metricSeries>[number]
-}) {
-  const sourceVariant =
-    metric.category === "model"
-      ? "status-success"
-      : metric.category === "runtime"
-        ? "status-info"
-        : "status-warning"
-
-  const values = metric.points.map((point) => point.value)
-  const minValue = values.length > 0 ? Math.min(...values) : 0
-  const maxValue = values.length > 0 ? Math.max(...values) : 0
-  const spread = maxValue - minValue
-  const padding =
-    spread === 0
-      ? Math.max(Math.abs(maxValue) * 0.12, 1)
-      : Math.max(spread * 0.2, Math.abs(maxValue) * 0.04)
-  const yDomain: [number, number] = [minValue - padding, maxValue + padding]
-  const xValues = metric.points.map((point) => point.x)
-  const minX = xValues.length > 0 ? Math.min(...xValues) : 0
-  const maxX = xValues.length > 0 ? Math.max(...xValues) : 0
-  const xSpread = maxX - minX
-  const xPadding = xSpread === 0 ? 1 : Math.max(xSpread * 0.04, 1)
-  const xDomain: [number, number] = [minX - xPadding, maxX + xPadding]
-
-  return (
-    <div className="rounded border border-border p-3">
-      <div className="mb-3 flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="truncate text-sm font-medium text-foreground">{metric.name}</p>
-          <div className="mt-1 flex flex-wrap items-center gap-2">
-            <Badge variant={sourceVariant}>{metric.source}</Badge>
-            <span className="text-[11px] text-muted-foreground">{metric.pointCount} point{metric.pointCount === 1 ? "" : "s"}</span>
-          </div>
-        </div>
-        <div className="text-right">
-          <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Latest</p>
-          <p className="font-mono text-sm text-foreground">{formatMetricValue(metric.latestValue)}</p>
-        </div>
-      </div>
-      <div className="h-36 w-full">
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={metric.points}>
-            <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="var(--border)" opacity={0.35} />
-            <XAxis
-              dataKey="x"
-              type="number"
-              domain={xDomain}
-              tick={{ fontSize: 10 }}
-              tickFormatter={(value: number) =>
-                metric.xAxis === "step" ? String(Math.round(value)) : new Date(value).toLocaleTimeString()
-              }
-              label={{
-                value: metric.xAxis === "step" ? "Step" : "Time",
-                position: "insideBottomRight",
-                offset: -2,
-                fill: "var(--muted-foreground)",
-                fontSize: 10,
-              }}
-            />
-            <YAxis
-              width={56}
-              tick={{ fontSize: 10 }}
-              domain={yDomain}
-              tickFormatter={(value: number) => formatAxisValue(value)}
-            />
-            <Tooltip
-              formatter={(value: number) => formatMetricValue(value)}
-              labelFormatter={(value: number) =>
-                metric.xAxis === "step" ? `Step ${Math.round(value)}` : new Date(value).toLocaleTimeString()
-              }
-              contentStyle={{
-                backgroundColor: "var(--popover)",
-                border: "1px solid var(--border)",
-                borderRadius: "6px",
-                fontSize: "12px",
-              }}
-            />
-            <Line
-              type="linear"
-              dataKey="value"
-              stroke="var(--accent)"
-              strokeWidth={3}
-              dot={metric.pointCount <= 4 ? { r: 3, strokeWidth: 0, fill: "var(--accent)" } : false}
-              activeDot={{ r: 5, strokeWidth: 0, fill: "var(--accent)" }}
-              connectNulls
-            />
-          </LineChart>
-        </ResponsiveContainer>
-      </div>
-    </div>
-  )
-}
-
-function formatMetricValue(value: number) {
-  if (!Number.isFinite(value)) {
+function formatRunUptime(uptimeMs: number) {
+  if (!Number.isFinite(uptimeMs) || uptimeMs <= 0) {
     return "—"
   }
-  const absolute = Math.abs(value)
-  if (absolute >= 1000 || absolute === 0) {
-    return value.toLocaleString(undefined, { maximumFractionDigits: 2 })
+  const totalSeconds = Math.floor(uptimeMs / 1000)
+  const hours = Math.floor(totalSeconds / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  const seconds = totalSeconds % 60
+  if (hours > 0) {
+    return `${hours}h ${minutes}m`
   }
-  if (absolute >= 1) {
-    return value.toFixed(3)
+  if (minutes > 0) {
+    return `${minutes}m ${seconds}s`
   }
-  return value.toPrecision(3)
-}
-
-function formatAxisValue(value: number) {
-  if (!Number.isFinite(value)) {
-    return ""
-  }
-  const absolute = Math.abs(value)
-  if (absolute >= 1000) {
-    return value.toLocaleString(undefined, { maximumFractionDigits: 0 })
-  }
-  if (absolute >= 1) {
-    return value.toFixed(2)
-  }
-  return value.toPrecision(2)
-}
-
-function TabButton({
-  label,
-  active,
-  onClick,
-  count,
-}: {
-  label: string
-  active: boolean
-  onClick: () => void
-  count?: number
-}) {
-  return (
-    <Button
-      type="button"
-      variant={active ? "dashboard-tab-compact-active" : "dashboard-tab-compact"}
-      size="none"
-      onClick={onClick}
-    >
-      {label}
-      {count !== undefined && count > 0 && (
-        <span className="px-1.5 py-0.5 rounded-full bg-accent/20 text-accent text-xs">
-          {count}
-        </span>
-      )}
-    </Button>
-  )
+  return `${seconds}s`
 }

@@ -33,7 +33,7 @@ export function Sidebar({ activeView, onViewChange, userInitial, isDark, onTheme
   const [accountOpen, setAccountOpen] = useState(true)
 
   return (
-    <aside className="w-56 h-screen bg-sidebar flex flex-col">
+    <aside className="h-full w-full bg-sidebar flex flex-col">
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-2.5">
         <div className="-ml-1.5">

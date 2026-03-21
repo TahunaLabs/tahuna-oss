@@ -13,9 +13,19 @@ import {
   ChevronDown,
   X,
 } from "lucide-react"
+import { DashboardViewLayout } from "@/components/dashboard/layout-shell"
 import { Button } from "@/components/ui/button"
-import { DashboardTabsHeader } from "@/components/ui/dashboard-tabs-header"
+import { Input } from "@/components/ui/input"
 import { ActionsMenu } from "@/components/linear/actions-menu"
+import { Select } from "@/components/ui/select"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
 import {
   Sheet,
   SheetContent,
@@ -32,6 +42,7 @@ import {
   type StorageSort,
   type StorageSourceFilter,
 } from "@/components/dashboard/shared"
+import { cn } from "@/lib/utils"
 import type { FormEvent } from "react"
 
 type StorageViewProps = {
@@ -128,37 +139,97 @@ export function StorageView({
   }
 
   return (
-    <main className="relative flex-1 flex flex-col h-full">
-      {/* Header */}
-      <header className="flex items-center justify-between px-6 py-3 border-b border-border">
-        <div className="flex items-center gap-2">
-          <h1 className="text-sm font-medium text-foreground">Storage</h1>
-          {storageTotal > 0 && (
-            <span className="text-xs text-muted-foreground">{storageTotal}</span>
+    <DashboardViewLayout
+      sectionLabel="Storage"
+      title="Storage"
+      titleIcon={<HardDrive />}
+      count={storageTotal > 0 ? storageTotal : undefined}
+      creditsLabel={creditsLabel}
+      toolbar={(
+        <>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-1">
+              <Button
+                type="button"
+                variant="dashboard-tab-compact"
+                size="none"
+                className={cn("text-[15px]", storageSourceFilter === "all" ? "text-foreground" : "text-muted-foreground")}
+                onClick={() => onStorageSourceFilterChange("all")}
+              >
+                All storage
+                <ChevronDown className="h-3.5 w-3.5" />
+              </Button>
+              <Button
+                type="button"
+                variant="dashboard-tab-compact"
+                size="none"
+                className={cn("text-[15px]", storageSourceFilter === "shared" ? "text-foreground" : "text-muted-foreground")}
+                onClick={() => onStorageSourceFilterChange("shared")}
+              >
+                Shared
+                <ChevronDown className="h-3.5 w-3.5" />
+              </Button>
+              <Button
+                type="button"
+                variant="dashboard-tab-compact"
+                size="none"
+                className={cn("text-[15px]", storageSourceFilter === "private" ? "text-foreground" : "text-muted-foreground")}
+                onClick={() => onStorageSourceFilterChange("private")}
+              >
+                Private
+                <ChevronDown className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant={showFilters ? "dashboard-icon-secondary-active" : "dashboard-icon-secondary"}
+                size="none"
+                onClick={() => setShowFilters(!showFilters)}
+              >
+                <Filter className="w-4 h-4" />
+              </Button>
+              <Button
+                type="button"
+                variant={showUploadDrawer ? "dashboard-icon-secondary-active" : "dashboard-icon-secondary"}
+                size="none"
+                onClick={() => openUploadDrawer(true)}
+                disabled={uploadingData}
+              >
+                <Plus className="w-4 h-4" />
+              </Button>
+            </div>
+          </div>
+          {showFilters && (
+            <div className="mt-3 flex items-center gap-3">
+              <div className="flex flex-1 items-center gap-2">
+                <Input
+                  type="text"
+                  variant="dashboard"
+                  value={storageSearch}
+                  onChange={(e) => onStorageSearchChange(e.target.value)}
+                  placeholder="Search files..."
+                  className="h-10 w-56 bg-background"
+                />
+                <Select
+                  variant="dashboard"
+                  value={storageSort}
+                  onChange={(e) => onStorageSortChange(e.target.value as StorageSort)}
+                  className="h-10 w-auto min-w-44 bg-background pr-8"
+                >
+                  <option value="created_desc">Newest first</option>
+                  <option value="created_asc">Oldest first</option>
+                  <option value="name_asc">Name A-Z</option>
+                  <option value="name_desc">Name Z-A</option>
+                  <option value="size_desc">Largest first</option>
+                  <option value="size_asc">Smallest first</option>
+                </Select>
+              </div>
+            </div>
           )}
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground">Credits: {creditsLabel}</span>
-          <Button
-            type="button"
-            variant={showFilters ? "dashboard-icon-secondary-active" : "dashboard-icon-secondary"}
-            size="none"
-            onClick={() => setShowFilters(!showFilters)}
-          >
-            <Filter className="w-4 h-4" />
-          </Button>
-          <Button
-            type="button"
-            variant={showUploadDrawer ? "dashboard-icon-secondary-active" : "dashboard-icon-secondary"}
-            size="none"
-            onClick={() => openUploadDrawer(true)}
-            disabled={uploadingData}
-          >
-            <Plus className="w-4 h-4" />
-          </Button>
-        </div>
-      </header>
-
+        </>
+      )}
+    >
       <input
         key={dataFileInputKey}
         ref={fileInputRef}
@@ -169,128 +240,76 @@ export function StorageView({
         className="hidden"
       />
 
-      {/* Filter bar */}
-      {showFilters && (
-        <div className="px-6 py-3 border-b border-border">
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 flex-1">
-              <input
-                type="text"
-                value={storageSearch}
-                onChange={(e) => onStorageSearchChange(e.target.value)}
-                placeholder="Search files..."
-                className="h-8 w-48 rounded border border-border bg-secondary/50 px-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-              />
-              <select
-                value={storageSort}
-                onChange={(e) => onStorageSortChange(e.target.value as StorageSort)}
-                className="h-8 rounded border border-border bg-secondary/50 px-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-              >
-                <option value="created_desc">Newest first</option>
-                <option value="created_asc">Oldest first</option>
-                <option value="name_asc">Name A-Z</option>
-                <option value="name_desc">Name Z-A</option>
-                <option value="size_desc">Largest first</option>
-                <option value="size_asc">Smallest first</option>
-              </select>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Tabs */}
-      <DashboardTabsHeader>
-        <div className="flex items-center gap-1">
-          <Button
-            type="button"
-            variant={storageSourceFilter === "all" ? "dashboard-tab-compact-active" : "dashboard-tab-compact"}
-            size="none"
-            onClick={() => onStorageSourceFilterChange("all")}
-          >
-            All storage
-          </Button>
-          <Button
-            type="button"
-            variant={storageSourceFilter === "shared" ? "dashboard-tab-compact-active" : "dashboard-tab-compact"}
-            size="none"
-            onClick={() => onStorageSourceFilterChange("shared")}
-          >
-            Shared
-          </Button>
-          <Button
-            type="button"
-            variant={storageSourceFilter === "private" ? "dashboard-tab-compact-active" : "dashboard-tab-compact"}
-            size="none"
-            onClick={() => onStorageSourceFilterChange("private")}
-          >
-            Private
-          </Button>
-        </div>
-      </DashboardTabsHeader>
-
       {/* Content */}
       {storageResult === undefined && storageLoading ? (
-        <div className="flex-1 flex items-center justify-center">
-          <p className="text-sm text-muted-foreground">Loading storage...</p>
+        <div>
+          <div className="flex h-full items-center justify-center">
+            <p className="text-sm text-muted-foreground">Loading storage...</p>
+          </div>
         </div>
       ) : storageError ? (
-        <div className="flex-1 flex items-center justify-center">
-          <p className="text-sm text-destructive-foreground">{storageError}</p>
+        <div>
+          <div className="flex h-full items-center justify-center">
+            <p className="text-sm text-destructive-foreground">{storageError}</p>
+          </div>
         </div>
       ) : !hasData ? (
-        <div className="flex-1 flex items-center justify-center">
-          <div className="text-center max-w-md">
-            <div className="flex justify-center mb-6">
-              <HardDrive className="w-16 h-16 text-muted-foreground/50" strokeWidth={1} />
-            </div>
-            <h2 className="text-lg font-medium text-foreground mb-3">Storage</h2>
-            <p className="text-sm text-muted-foreground mb-6 leading-relaxed">
-              {storageSearch.trim() || storageSourceFilter !== "all"
-                ? "No storage items match your current filters."
-                : "Manage your storage buckets and artifacts. Store and organize files, build outputs, and other assets for your projects."}
-            </p>
-            {!storageSearch.trim() && storageSourceFilter === "all" && (
-              <div className="flex items-center justify-center gap-3">
-                <Button
-                  type="button"
-                  variant="dashboard-primary-compact"
-                  size="none"
-                  onClick={() => openUploadDrawer(true)}
-                >
-                  Upload data
-                </Button>
+        <div>
+          <div className="flex h-full items-center justify-center">
+            <div className="max-w-md text-center">
+              <div className="mb-6 flex justify-center">
+                <HardDrive className="h-16 w-16 text-muted-foreground/50" strokeWidth={1} />
               </div>
-            )}
+              <h2 className="mb-3 text-lg font-medium text-foreground">Storage</h2>
+              <p className="mb-6 text-sm leading-relaxed text-muted-foreground">
+                {storageSearch.trim() || storageSourceFilter !== "all"
+                  ? "No storage items match your current filters."
+                  : "Manage your storage buckets and artifacts. Store and organize files, build outputs, and other assets for your projects."}
+              </p>
+              {!storageSearch.trim() && storageSourceFilter === "all" && (
+                <div className="flex items-center justify-center gap-3">
+                  <Button
+                    type="button"
+                    variant="dashboard-primary-compact"
+                    size="none"
+                    onClick={() => openUploadDrawer(true)}
+                  >
+                    Upload data
+                  </Button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       ) : (
-        <div className="flex-1 flex flex-col min-h-0">
-          {/* Table */}
-          <div className="flex-1 overflow-auto">
-            <table className="w-full table-fixed">
+        <div>
+          <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-lg border border-border bg-background">
+            <div className="flex-1 overflow-auto">
+              <Table variant="dashboard" className="table-fixed">
               <colgroup>
-                <col className="w-[40%]" />
-                <col className="w-[14%]" />
-                <col className="w-[12%]" />
-                <col className="w-[14%]" />
-                <col className="w-[20%]" />
+                <col className="w-[380px]" />
+                <col className="w-[140px]" />
+                <col className="w-[120px]" />
+                <col className="w-[140px]" />
+                <col className="w-[200px]" />
               </colgroup>
-              <thead className="sticky top-0 bg-background">
-                <tr className="border-b border-border text-left">
-                  <th className="px-6 py-2 text-xs font-medium text-muted-foreground">Name</th>
-                  <th className="px-3 py-2 text-xs font-medium text-muted-foreground">Visibility</th>
-                  <th className="px-3 py-2 text-xs font-medium text-muted-foreground">Size</th>
-                  <th className="px-3 py-2 text-xs font-medium text-muted-foreground">Created</th>
-                  <th className="px-3 py-2 text-xs font-medium text-muted-foreground">Source</th>
-                </tr>
-              </thead>
-              <tbody>
+                <TableHeader variant="dashboard" className="sticky top-0 bg-background">
+                  <TableRow variant="dashboard-head" className="text-left">
+                    <TableHead variant="dashboard">Name</TableHead>
+                    <TableHead variant="dashboard">Visibility</TableHead>
+                    <TableHead variant="dashboard">Size</TableHead>
+                    <TableHead variant="dashboard">Created</TableHead>
+                    <TableHead variant="dashboard">Source</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
                 {storageItems.map((item) => (
-                  <tr
+                  <TableRow
                     key={item.id}
-                    className="border-b border-border hover:bg-secondary/50 group"
+                    variant="dashboard"
+                    className="group hover:bg-secondary/50"
                   >
-                    <td className="px-6 py-2">
+                    <TableCell variant="dashboard">
                       {renamingStorageId === item.id ? (
                         <form
                           className="flex items-center gap-1.5"
@@ -299,12 +318,14 @@ export function StorageView({
                             onSaveRenameArtifact(item)
                           }}
                         >
-                          <input
+                          <Input
+                            type="text"
+                            variant="dashboard"
                             value={artifactRenameDraft}
                             onChange={(e) => onArtifactRenameDraftChange(e.target.value)}
                             disabled={artifactRenameBusyId === item.id}
                             maxLength={MAX_ARTIFACT_NAME_CHARS}
-                            className="h-7 w-40 rounded border border-border bg-secondary/50 px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                            className="h-7 w-40 bg-secondary/50 px-2 text-[var(--dashboard-control-font-size-small)]"
                           />
                           <Button
                             type="submit"
@@ -326,7 +347,7 @@ export function StorageView({
                         </form>
                       ) : (
                         <div className="flex items-center justify-between gap-2">
-                          <p className="min-w-0 truncate text-sm text-foreground">{item.name}</p>
+                          <p className="min-w-0 truncate text-foreground">{item.name}</p>
                           <div className="shrink-0">
                             <ActionsMenu triggerLabel={`Open actions for ${item.name}`}>
                               {(close) => (
@@ -393,8 +414,8 @@ export function StorageView({
                           </div>
                         </div>
                       )}
-                    </td>
-                    <td className="px-3 py-2">
+                    </TableCell>
+                    <TableCell variant="dashboard">
                       <Button
                         type="button"
                         variant={item.visibility === "shared" ? "dashboard-outline-compact-active" : "dashboard-outline-compact"}
@@ -404,46 +425,46 @@ export function StorageView({
                       >
                         {item.visibility === "shared" ? "Shared" : "Private"}
                       </Button>
-                    </td>
-                    <td className="px-3 py-2 text-sm text-muted-foreground">
+                    </TableCell>
+                    <TableCell variant="dashboard" className="text-muted-foreground">
                       {formatBytes(item.size)}
-                    </td>
-                    <td className="px-3 py-2 text-sm text-muted-foreground">
+                    </TableCell>
+                    <TableCell variant="dashboard" className="text-muted-foreground">
                       {new Date(item.created_at).toLocaleDateString()}
-                    </td>
-                    <td className="px-3 py-2 text-sm text-muted-foreground">
+                    </TableCell>
+                    <TableCell variant="dashboard" className="text-muted-foreground">
                       {item.source === "data" ? "Data upload" : "Run artifact"}
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ))}
-              </tbody>
-            </table>
-          </div>
+                </TableBody>
+              </Table>
+            </div>
 
-          {/* Pagination */}
-          <div className="flex items-center justify-between border-t border-border px-6 h-10 text-sm text-muted-foreground shrink-0">
-            <span>
-              {storageTotal === 0 ? 0 : storageOffset + 1}–{storageOffset + storageItems.length} of {storageTotal}
-            </span>
-            <div className="flex items-center gap-1.5">
-              <Button
-                type="button"
-                variant="dashboard-outline-icon-muted"
-                size="none"
-                onClick={onPreviousStoragePage}
-                disabled={storageOffset === 0}
-              >
-                <ChevronUp className="w-4 h-4 -rotate-90" />
-              </Button>
-              <Button
-                type="button"
-                variant="dashboard-outline-icon-muted"
-                size="none"
-                onClick={onNextStoragePage}
-                disabled={!storageHasMore}
-              >
-                <ChevronDown className="w-4 h-4 -rotate-90" />
-              </Button>
+            <div className="flex h-11 shrink-0 items-center justify-between border-t border-border px-4 text-sm text-muted-foreground">
+              <span>
+                {storageTotal === 0 ? 0 : storageOffset + 1}–{storageOffset + storageItems.length} of {storageTotal}
+              </span>
+              <div className="flex items-center gap-1.5">
+                <Button
+                  type="button"
+                  variant="dashboard-outline-icon-muted"
+                  size="none"
+                  onClick={onPreviousStoragePage}
+                  disabled={storageOffset === 0}
+                >
+                  <ChevronUp className="w-4 h-4 -rotate-90" />
+                </Button>
+                <Button
+                  type="button"
+                  variant="dashboard-outline-icon-muted"
+                  size="none"
+                  onClick={onNextStoragePage}
+                  disabled={!storageHasMore}
+                >
+                  <ChevronDown className="w-4 h-4 -rotate-90" />
+                </Button>
+              </div>
             </div>
           </div>
         </div>
@@ -532,6 +553,6 @@ export function StorageView({
           </form>
         </SheetContent>
       </Sheet>
-    </main>
+    </DashboardViewLayout>
   )
 }

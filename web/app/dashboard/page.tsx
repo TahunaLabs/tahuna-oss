@@ -8,6 +8,8 @@ import { BillingView } from "@/components/linear/billing-view"
 import { AuditLogsView } from "@/components/linear/audit-logs-view"
 import { SettingsView } from "@/components/linear/settings-view"
 import { ShareDialog } from "@/components/linear/share-dialog"
+import { DashboardAppLayout } from "@/components/dashboard/app-layout"
+import { DashboardContentShell } from "@/components/dashboard/layout-shell"
 import { EMPTY_PROFILE_DRAFT, toProfileDraft, type ApiKeyRow, type ProfileDraft, type UserProfileResponse } from "@/components/dashboard/settings-types"
 import { useTheme } from "@/components/theme-provider"
 import { Notice } from "@/components/ui/notice"
@@ -214,6 +216,7 @@ export default function DashboardPage() {
       }
     })
   }, [runContextById, usageEvents])
+  const environmentsLoading = shouldLoadQueries && envResult === undefined
 
   useEffect(() => {
     if (selectedRunId === null || runResult === undefined) {
@@ -469,8 +472,10 @@ export default function DashboardPage() {
     setMessage("")
     try {
       await task()
+      return true
     } catch (taskError) {
       setError(taskError instanceof Error ? taskError.message : "unexpected error")
+      return false
     } finally {
       setBusy(false)
     }
@@ -520,8 +525,8 @@ export default function DashboardPage() {
   }
 
   async function deleteEnvironments(environmentIds: Id<"environments">[]) {
-    if (environmentIds.length === 0) return
-    await withBusy(async () => {
+    if (environmentIds.length === 0) return false
+    return withBusy(async () => {
       for (const environmentId of environmentIds) {
         await removeEnvMutation({ environmentId })
       }
@@ -558,22 +563,29 @@ export default function DashboardPage() {
     })
   }
 
-  async function bindSelectedData(environment: EnvironmentRow) {
-    const selectedDataId = (bindSelectionByEnvironment[environment.environment_id] || "").trim()
-    if (!selectedDataId) {
+  async function bindSelectedData(environmentId: Id<"environments">, selectedDataId: string) {
+    const trimmedDataId = selectedDataId.trim()
+    if (!trimmedDataId) {
       setError("Select a dataset to bind.")
       return
     }
+    if (busy) {
+      return
+    }
+    setBindSelectionByEnvironment((current) => ({
+      ...current,
+      [environmentId]: trimmedDataId,
+    }))
     await withBusy(async () => {
       await bindDataMutation({
-        environmentId: environment.environment_id,
-        data_ids: [selectedDataId],
+        environmentId,
+        data_ids: [trimmedDataId],
       })
       setBindSelectionByEnvironment((current) => ({
         ...current,
-        [environment.environment_id]: "",
+        [environmentId]: "",
       }))
-      setMessage(`Bound ${selectedDataId} to environment ${environment.environment_id}.`)
+      setMessage(`Bound ${trimmedDataId} to environment ${environmentId}.`)
     })
   }
 
@@ -805,6 +817,7 @@ export default function DashboardPage() {
             dataBlobsById={dataBlobsById}
             bindSelectionByEnvironment={bindSelectionByEnvironment}
             busy={busy}
+            environmentsLoading={environmentsLoading}
             configEditorEnvironmentId={configEditorEnvironmentId}
             configName={environmentConfig?.config_name || ENVIRONMENT_CONFIG_FILE_NAME}
             configDraft={configDraft}
@@ -818,8 +831,8 @@ export default function DashboardPage() {
                 [environmentId]: value,
               }))
             }
-            onBindSelectedData={(environment) => {
-              void bindSelectedData(environment)
+            onBindSelectedData={(environment, dataId) => {
+              void bindSelectedData(environment.environment_id, dataId)
             }}
             onUnbindData={(environmentId, dataId) => {
               void unbindDataFromEnvironment(environmentId, dataId)
@@ -894,27 +907,31 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="flex h-screen bg-sidebar">
-      <Sidebar
-        activeView={activeView}
-        onViewChange={(view) => {
-          void setActiveView(view)
-        }}
-        userInitial={userInitial}
-        isDark={isDark}
-        onThemeToggle={() => setTheme(isDark ? "light" : "dark")}
-        onLogout={logout}
-      />
-      <main className="flex-1 bg-background rounded-tl-xl border-l border-border overflow-hidden flex flex-col">
-        {/* Notices */}
-        {(error || message) && (
-          <div className="px-6 pt-3">
-            {error ? <Notice variant="error" className="mb-2">{error}</Notice> : null}
-            {message ? <Notice className="mb-2">{message}</Notice> : null}
-          </div>
+    <>
+      <DashboardAppLayout
+        sidebar={(
+          <Sidebar
+            activeView={activeView}
+            onViewChange={(view) => {
+              void setActiveView(view)
+            }}
+            userInitial={userInitial}
+            isDark={isDark}
+            onThemeToggle={() => setTheme(isDark ? "light" : "dark")}
+            onLogout={logout}
+          />
         )}
-        {renderMainContent()}
-      </main>
+      >
+        <DashboardContentShell>
+          {(error || message) && (
+            <div className="pt-3">
+              {error ? <Notice variant="error" className="mb-2">{error}</Notice> : null}
+              {message ? <Notice className="mb-2">{message}</Notice> : null}
+            </div>
+          )}
+          {renderMainContent()}
+        </DashboardContentShell>
+      </DashboardAppLayout>
       {shareTarget && (
         <ShareDialog
           resourceType={shareTarget.resourceType}
@@ -937,6 +954,6 @@ export default function DashboardPage() {
           }}
         />
       )}
-    </div>
+    </>
   )
 }

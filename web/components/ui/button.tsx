@@ -33,21 +33,21 @@ const buttonVariants = cva(
         'sidebar-menu-item':
           'h-auto w-full justify-start gap-2 rounded-none px-3 py-2 text-sm font-normal text-foreground hover:bg-secondary',
         'dashboard-nav':
-          'h-7 w-full justify-start gap-2 px-2 text-[13px] font-normal text-muted-foreground hover:bg-muted hover:text-foreground rounded-lg',
+          'h-[var(--dashboard-control-height)] w-full justify-start gap-2 px-2 text-[13px] font-normal text-muted-foreground hover:bg-muted hover:text-foreground rounded-lg',
         'dashboard-nav-active':
-          'h-7 w-full justify-start gap-2 px-2 text-left text-[13px] font-medium bg-secondary text-foreground rounded-lg',
+          'h-[var(--dashboard-control-height)] w-full justify-start gap-2 px-2 text-left text-[13px] font-medium bg-secondary text-foreground rounded-lg',
         'dashboard-icon-secondary':
-          'rounded p-1.5 text-muted-foreground hover:bg-secondary hover:text-foreground',
+          'h-[var(--dashboard-control-height)] w-[var(--dashboard-control-height)] rounded-md p-0 text-muted-foreground hover:bg-secondary hover:text-foreground',
         'dashboard-icon-secondary-active':
-          'rounded bg-secondary p-1.5 text-foreground hover:bg-secondary/80',
+          'h-[var(--dashboard-control-height)] w-[var(--dashboard-control-height)] rounded-md bg-secondary p-0 text-foreground hover:bg-secondary/80',
         'dashboard-primary':
-          'h-8 rounded-lg bg-primary px-3 text-primary-foreground hover:bg-primary/90',
+          'h-[var(--dashboard-control-height)] rounded-lg bg-primary px-3 text-primary-foreground hover:bg-primary/90',
         'dashboard-primary-compact':
           'h-auto rounded bg-accent px-4 py-2 text-sm text-accent-foreground hover:opacity-90',
         'dashboard-primary-compact-sm':
           'h-auto rounded bg-accent px-3 py-1.5 text-sm text-accent-foreground hover:opacity-90',
         'dashboard-outline':
-          'h-7 rounded-lg border border-border bg-card px-3 text-foreground shadow-none hover:bg-muted',
+          'h-[var(--dashboard-control-height)] rounded-lg border border-border bg-card px-3 text-[var(--dashboard-control-font-size)] text-foreground shadow-none hover:bg-muted',
         'dashboard-outline-compact':
           'h-auto rounded border border-border px-2 py-1 text-xs text-foreground hover:bg-secondary',
         'dashboard-outline-compact-active':
@@ -57,15 +57,23 @@ const buttonVariants = cva(
         'dashboard-outline-compact-gap':
           'h-auto gap-1 rounded border border-border px-2 py-1 text-xs text-foreground hover:bg-secondary',
         'dashboard-outline-icon':
-          'h-7 rounded-lg border border-border bg-card px-2 text-foreground shadow-none hover:bg-muted',
+          'h-[var(--dashboard-control-height)] rounded-lg border border-border bg-card px-2 text-foreground shadow-none hover:bg-muted',
         'dashboard-outline-icon-muted':
           'h-6 w-6 rounded p-0 text-muted-foreground hover:bg-secondary hover:text-foreground',
         'dashboard-outline-icon-danger':
           'h-6 w-6 rounded p-0 text-muted-foreground hover:bg-secondary hover:text-destructive-foreground',
         'dashboard-tab-compact':
-          'h-auto rounded px-3 py-1.5 text-sm font-normal tracking-normal text-muted-foreground hover:bg-secondary hover:text-foreground',
+          'h-[var(--dashboard-control-height)] rounded px-3 text-[var(--dashboard-control-font-size)] font-normal tracking-normal text-muted-foreground hover:bg-secondary hover:text-foreground',
         'dashboard-tab-compact-active':
-          'h-auto rounded bg-secondary px-3 py-1.5 text-sm font-medium tracking-normal text-foreground',
+          'h-[var(--dashboard-control-height)] rounded bg-secondary px-3 text-[var(--dashboard-control-font-size)] font-normal tracking-normal text-foreground',
+        'dashboard-filter':
+          'h-[var(--dashboard-control-height)] rounded-md px-3 text-[var(--dashboard-control-font-size)] font-normal text-foreground hover:bg-secondary',
+        'dashboard-folder-filter':
+          'h-[var(--dashboard-control-height)] rounded-md border border-border bg-card px-3 text-[var(--dashboard-control-font-size)] font-normal text-foreground hover:bg-secondary',
+        'dashboard-view-toggle':
+          'h-[var(--dashboard-control-height)] min-w-9 rounded-md border border-transparent px-2 text-muted-foreground hover:bg-secondary hover:text-foreground',
+        'dashboard-view-toggle-active':
+          'h-[var(--dashboard-control-height)] min-w-9 rounded-md border border-border bg-background px-2 text-foreground shadow-xs',
         'dashboard-run-list-item':
           'h-auto w-full flex-col items-start justify-start gap-0 whitespace-normal rounded-none border-b border-border px-4 py-3 text-left transition-colors hover:bg-secondary/50',
         'dashboard-run-list-item-active':

@@ -1,6 +1,6 @@
 "use client"
 
-import { MoreHorizontal } from "lucide-react"
+import { MoreVertical } from "lucide-react"
 import { useState, type ComponentProps, type ReactNode } from "react"
 import { Button } from "@/components/ui/button"
 import {
@@ -42,7 +42,7 @@ export function ActionsMenu({
           className={triggerClassName}
           aria-label={triggerLabel}
         >
-          {triggerContent ?? <MoreHorizontal className="w-4 h-4" />}
+          {triggerContent ?? <MoreVertical className="w-4 h-4" />}
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent

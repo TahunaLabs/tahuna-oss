@@ -10,7 +10,7 @@ const selectVariants = cva(
       variant: {
         default: '',
         dashboard:
-          'h-9 rounded-lg border-border bg-card px-3 font-sans text-sm text-foreground',
+          'h-[var(--dashboard-control-height)] rounded-lg border-border bg-card px-3.5 font-sans text-[var(--dashboard-control-font-size)] leading-[1.6] text-foreground',
       },
     },
     defaultVariants: { variant: 'default' },

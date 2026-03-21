@@ -25,6 +25,20 @@
   --ring: #c8a84e;
   --logo: var(--ring);
   --radius: 0.5rem;
+  --dashboard-control-height: 32px;
+  --dashboard-control-font-size: 14px;
+  --dashboard-control-line-height: 1.6;
+  --dashboard-control-font-size-small: 12px;
+  --dashboard-control-line-height-small: 1.5;
+  --dashboard-control-font-weight-medium: 500;
+  --dashboard-table-header-font-size: 12px;
+  --dashboard-table-header-line-height: 1.5;
+  --dashboard-table-header-font-weight: 500;
+  --dashboard-title-size: 24px;
+  --dashboard-title-line-height: 1.333;
+  --dashboard-title-font-weight: 500;
+  --dashboard-table-cell-px: 12px;
+  --dashboard-table-cell-py: 8px;
 }
 
 .dark,
@@ -57,7 +71,7 @@
 }
 
 @theme inline {
-  --font-sans: "Geist", "Geist Fallback";
+  --font-sans: "IBM Plex Sans", "Geist", "Geist Fallback", sans-serif;
   --font-serif: "Cormorant Garamond", serif;
   --font-mono: "Geist Mono", "Geist Mono Fallback";
   --color-background: var(--background);
@@ -108,4 +122,99 @@
 
 html {
   scroll-behavior: smooth;
+}
+
+.dashboard-app-layout {
+  --dashboard-sidebar-width: 240px;
+  position: relative;
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: var(--dashboard-sidebar-width) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  background: var(--background);
+}
+
+.dashboard-skip-link {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 50;
+  transform: translateY(-200%);
+  border-radius: 9999px;
+  border: 1px solid var(--border);
+  background: var(--background);
+  padding: 4px 10px;
+  font-size: 12px;
+  color: var(--foreground);
+}
+
+.dashboard-skip-link:focus-visible {
+  transform: translateY(0);
+}
+
+.dashboard-app-layout__sidebar {
+  grid-column: 1;
+  grid-row: 1;
+  min-height: 100vh;
+}
+
+.dashboard-app-layout__main {
+  grid-column: 2;
+  grid-row: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  border-left: 1px solid var(--border);
+  border-top-left-radius: 12px;
+  background: var(--background);
+}
+
+.dashboard-content-shell {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  margin-inline: auto;
+  min-height: 396px;
+  width: min(1171px, 100%);
+  padding: 96px 96px 0;
+}
+
+.dashboard-view-layout {
+  display: flex;
+  flex-direction: column;
+}
+
+.dashboard-view-layout__spacer {
+  height: 16px;
+}
+
+.dashboard-view-layout__toolbar {
+  padding-top: 0;
+  padding-bottom: 16px;
+}
+
+.dashboard-view-layout__content {
+  padding-bottom: 24px;
+}
+
+@media (max-width: 1024px) {
+  .dashboard-app-layout {
+    --dashboard-sidebar-width: 224px;
+  }
+
+  :root {
+    --dashboard-title-size: 24px;
+  }
+
+  .dashboard-content-shell {
+    min-height: 0;
+  }
+}
+
+@media (max-width: 640px) {
+  .dashboard-content-shell {
+    padding: 56px 24px 0;
+  }
 }
