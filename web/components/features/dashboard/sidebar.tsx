@@ -14,10 +14,9 @@ interface SidebarProps {
   onLogout: () => void
   balanceCents?: number
   maxCents?: number
-  currency?: string
 }
 
-export function Sidebar({ activeView, onViewChange, userInitial, isDark, onThemeToggle, onLogout, balanceCents, maxCents, currency }: SidebarProps) {
+export function Sidebar({ activeView, onViewChange, userInitial, isDark, onThemeToggle, onLogout, balanceCents, maxCents }: SidebarProps) {
   return (
     <aside className="h-full w-full bg-sidebar flex flex-col">
       {/* Header */}
@@ -74,12 +73,11 @@ export function Sidebar({ activeView, onViewChange, userInitial, isDark, onTheme
 
       {/* Bottom Navigation */}
       <nav className="px-2 py-1 space-y-0.5">
-        {balanceCents !== undefined && maxCents !== undefined && currency !== undefined && (
+        {balanceCents !== undefined && maxCents !== undefined && (
           <div className="mb-2">
             <CreditsGauge
               balanceCents={balanceCents}
               maxCents={maxCents}
-              currency={currency}
             />
           </div>
         )}

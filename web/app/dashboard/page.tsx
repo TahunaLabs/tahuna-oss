@@ -938,7 +938,6 @@ export default function DashboardPage() {
             onLogout={logout}
             balanceCents={myCredits?.balance_cents}
             maxCents={BILLING_CONFIG.initialCreditCents}
-            currency={myCredits?.currency}
           />
         )}
       >
