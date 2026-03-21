@@ -1,7 +1,7 @@
 "use client"
 
 import { Play } from "lucide-react"
-import { useMemo } from "react"
+import { useMemo, useState } from "react"
 
 import { DashboardViewLayout } from "@/components/app-shell/layout-shell"
 import {
@@ -11,8 +11,8 @@ import {
   type RunMetricsOnlyDetail,
   type RunRow,
 } from "@/components/features/dashboard-model"
-import { DashboardTabButton } from "@/components/features/dashboard/dashboard-tab-button"
 import { RunDetailPanel } from "@/components/features/dashboard/runs/run-detail-panel"
+import { RunsToolbar } from "@/components/features/dashboard/runs/runs-toolbar"
 import { RunTableRow } from "@/components/features/dashboard/runs/run-table-row"
 import { RunsEmptyState } from "@/components/features/dashboard/runs/runs-empty-state"
 import { Card } from "@/components/ui/card"
@@ -64,18 +64,29 @@ export function RunsView({
   sharedByMeResourceIds,
   onShareRun,
 }: RunsViewProps) {
+  const [searchQuery, setSearchQuery] = useState("")
+
   const environmentNameById = useMemo(
     () => new Map(environments.map((e) => [String(e.environment_id), e.name])),
     [environments],
   )
 
-  const filteredRuns = runs.filter((run) => {
-    if (activeTab === "active") return ACTIVE_STATUSES.has(run.status)
-    if (activeTab === "completed") return COMPLETED_STATUSES.has(run.status)
-    return true
-  })
-
   const activeCount = runs.filter((r) => ACTIVE_STATUSES.has(r.status)).length
+
+  const filteredRuns = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase()
+    return runs.filter((run) => {
+      if (activeTab === "active" && !ACTIVE_STATUSES.has(run.status)) return false
+      if (activeTab === "completed" && !COMPLETED_STATUSES.has(run.status)) return false
+      if (query) {
+        const envName = environmentNameById.get(run.environment_id) ?? ""
+        const target = [run.name ?? "", run.status, envName].join(" ").toLowerCase()
+        if (!target.includes(query)) return false
+      }
+      return true
+    })
+  }, [activeTab, environmentNameById, runs, searchQuery])
+
   const noEnvironments = environments.length === 0
   const hasData = filteredRuns.length > 0
 
@@ -87,16 +98,13 @@ export function RunsView({
       count={runs.length > 0 ? runs.length : undefined}
       creditsLabel={creditsLabel}
       toolbar={(
-        <div className="flex items-center gap-1.5">
-          <DashboardTabButton label="All runs" active={activeTab === "all"} onClick={() => onActiveTabChange("all")} />
-          <DashboardTabButton
-            label="Active"
-            active={activeTab === "active"}
-            onClick={() => onActiveTabChange("active")}
-            count={activeCount}
-          />
-          <DashboardTabButton label="Completed" active={activeTab === "completed"} onClick={() => onActiveTabChange("completed")} />
-        </div>
+        <RunsToolbar
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          activeTab={activeTab}
+          activeCount={activeCount}
+          onActiveTabChange={onActiveTabChange}
+        />
       )}
     >
       {noEnvironments ? (

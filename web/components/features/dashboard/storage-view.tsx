@@ -87,7 +87,6 @@ export function StorageView({
   onShareStorageItem,
   onSetVisibility,
 }: StorageViewProps) {
-  const [showFilters, setShowFilters] = useState(false)
   const [showUploadDrawer, setShowUploadDrawer] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -124,16 +123,14 @@ export function StorageView({
       creditsLabel={creditsLabel}
       toolbar={(
         <StorageToolbar
-          storageSourceFilter={storageSourceFilter}
-          onStorageSourceFilterChange={onStorageSourceFilterChange}
-          showFilters={showFilters}
-          onToggleFilters={() => setShowFilters((prev) => !prev)}
-          uploadingData={uploadingData}
-          onOpenUploadDrawer={openUploadDrawer}
           storageSearch={storageSearch}
           onStorageSearchChange={onStorageSearchChange}
+          storageSourceFilter={storageSourceFilter}
+          onStorageSourceFilterChange={onStorageSourceFilterChange}
           storageSort={storageSort}
           onStorageSortChange={onStorageSortChange}
+          uploadingData={uploadingData}
+          onOpenUploadDrawer={openUploadDrawer}
         />
       )}
     >
