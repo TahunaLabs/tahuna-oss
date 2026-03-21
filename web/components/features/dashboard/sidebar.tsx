@@ -1,22 +1,9 @@
 "use client"
 
-import { useState } from "react"
-import {
-  ChevronDown,
-  Search,
-  HardDrive,
-  Server,
-  Play,
-  Monitor,
-  LogOut,
-  Moon,
-  Sun,
-  Wallet,
-  ClipboardList,
-  Settings,
-} from "lucide-react"
+import { Search, HardDrive, Server, Play, Monitor, LogOut, Moon, Sun, Wallet, ClipboardList, Settings } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
+import { CreditsGauge } from "@/components/ui/credits-gauge"
 
 interface SidebarProps {
   activeView: "storage" | "environments" | "runs" | "machines" | "billing" | "audit_logs" | "settings"
@@ -25,9 +12,12 @@ interface SidebarProps {
   isDark: boolean
   onThemeToggle: () => void
   onLogout: () => void
+  balanceCents?: number
+  maxCents?: number
+  currency?: string
 }
 
-export function Sidebar({ activeView, onViewChange, userInitial, isDark, onThemeToggle, onLogout }: SidebarProps) {
+export function Sidebar({ activeView, onViewChange, userInitial, isDark, onThemeToggle, onLogout, balanceCents, maxCents, currency }: SidebarProps) {
   return (
     <aside className="h-full w-full bg-sidebar flex flex-col">
       {/* Header */}
@@ -84,6 +74,16 @@ export function Sidebar({ activeView, onViewChange, userInitial, isDark, onTheme
 
       {/* Bottom Navigation */}
       <nav className="px-2 py-1 space-y-0.5">
+        {balanceCents !== undefined && maxCents !== undefined && currency !== undefined && (
+          <div className="mb-2 rounded border border-border bg-card/50 p-2">
+            <CreditsGauge
+              balanceCents={balanceCents}
+              maxCents={maxCents}
+              currency={currency}
+              className="text-xs"
+            />
+          </div>
+        )}
         <SidebarItem
           icon={<Monitor className="w-4 h-4" />}
           label="Machines"

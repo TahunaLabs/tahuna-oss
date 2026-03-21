@@ -901,9 +901,6 @@ export default function DashboardPage() {
               setMachinesMessage("")
               setMachinesError("")
             }}
-            balanceCents={myCredits?.balance_cents}
-            maxCents={BILLING_CONFIG.initialCreditCents}
-            currency={myCredits?.currency}
           />
         )
       case "audit_logs":
@@ -939,6 +936,9 @@ export default function DashboardPage() {
             isDark={isDark}
             onThemeToggle={() => setTheme(isDark ? "light" : "dark")}
             onLogout={logout}
+            balanceCents={myCredits?.balance_cents}
+            maxCents={BILLING_CONFIG.initialCreditCents}
+            currency={myCredits?.currency}
           />
         )}
       >
