@@ -28,9 +28,6 @@ interface SidebarProps {
 }
 
 export function Sidebar({ activeView, onViewChange, userInitial, isDark, onThemeToggle, onLogout }: SidebarProps) {
-  const [workspaceOpen, setWorkspaceOpen] = useState(true)
-  const [accountOpen, setAccountOpen] = useState(true)
-
   return (
     <aside className="h-full w-full bg-sidebar flex flex-col">
       {/* Header */}
@@ -47,82 +44,64 @@ export function Sidebar({ activeView, onViewChange, userInitial, isDark, onTheme
         </div>
       </div>
 
-      {/* Navigation */}
-      <nav className="flex-1 overflow-y-auto px-2 py-1">
-        {/* Workspace section */}
-        <div>
-          <Button
-            type="button"
-            variant="sidebar-workspace"
-            size="none"
-            onClick={() => setWorkspaceOpen(!workspaceOpen)}
-          >
-            <span>Workspace</span>
-            <ChevronDown className={cn("w-3 h-3 transition-transform", !workspaceOpen && "-rotate-90")} />
-          </Button>
-          {workspaceOpen && (
-            <div className="mt-1 space-y-0.5">
-              <SidebarItem
-                icon={<HardDrive className="w-4 h-4" />}
-                label="Storage"
-                active={activeView === "storage"}
-                onClick={() => onViewChange("storage")}
-              />
-              <SidebarItem
-                icon={<Server className="w-4 h-4" />}
-                label="Environments"
-                active={activeView === "environments"}
-                onClick={() => onViewChange("environments")}
-              />
-              <SidebarItem
-                icon={<Play className="w-4 h-4" />}
-                label="Runs"
-                active={activeView === "runs"}
-                onClick={() => onViewChange("runs")}
-              />
-              <SidebarItem
-                icon={<Monitor className="w-4 h-4" />}
-                label="Machines"
-                active={activeView === "machines"}
-                onClick={() => onViewChange("machines")}
-              />
-            </div>
-          )}
-        </div>
+      {/* Create Environment CTA */}
+      <div className="px-2 py-1.5">
+        <Button type="button" variant="dashboard-primary-compact" size="none" className="w-full justify-center">
+          <span>+ New environment</span>
+        </Button>
+      </div>
 
-        <div className="mt-2">
-          <Button
-            type="button"
-            variant="sidebar-workspace"
-            size="none"
-            onClick={() => setAccountOpen(!accountOpen)}
-          >
-            <span>Account</span>
-            <ChevronDown className={cn("w-3 h-3 transition-transform", !accountOpen && "-rotate-90")} />
-          </Button>
-          {accountOpen && (
-            <div className="mt-1 space-y-0.5">
-              <SidebarItem
-                icon={<Wallet className="w-4 h-4" />}
-                label="Billing"
-                active={activeView === "billing"}
-                onClick={() => onViewChange("billing")}
-              />
-              <SidebarItem
-                icon={<ClipboardList className="w-4 h-4" />}
-                label="Audit logs"
-                active={activeView === "audit_logs"}
-                onClick={() => onViewChange("audit_logs")}
-              />
-              <SidebarItem
-                icon={<Settings className="w-4 h-4" />}
-                label="Settings"
-                active={activeView === "settings"}
-                onClick={() => onViewChange("settings")}
-              />
-            </div>
-          )}
-        </div>
+      {/* Top Navigation */}
+      <nav className="px-2 py-1 space-y-0.5">
+        <SidebarItem
+          icon={<HardDrive className="w-4 h-4" />}
+          label="Storage"
+          active={activeView === "storage"}
+          onClick={() => onViewChange("storage")}
+        />
+        <SidebarItem
+          icon={<Server className="w-4 h-4" />}
+          label="Environments"
+          active={activeView === "environments"}
+          onClick={() => onViewChange("environments")}
+        />
+        <SidebarItem
+          icon={<Play className="w-4 h-4" />}
+          label="Runs"
+          active={activeView === "runs"}
+          onClick={() => onViewChange("runs")}
+        />
+        <SidebarItem
+          icon={<Settings className="w-4 h-4" />}
+          label="Settings"
+          active={activeView === "settings"}
+          onClick={() => onViewChange("settings")}
+        />
+      </nav>
+
+      {/* Spacer */}
+      <div className="flex-1" />
+
+      {/* Bottom Navigation */}
+      <nav className="px-2 py-1 space-y-0.5">
+        <SidebarItem
+          icon={<Monitor className="w-4 h-4" />}
+          label="Machines"
+          active={activeView === "machines"}
+          onClick={() => onViewChange("machines")}
+        />
+        <SidebarItem
+          icon={<Wallet className="w-4 h-4" />}
+          label="Billing"
+          active={activeView === "billing"}
+          onClick={() => onViewChange("billing")}
+        />
+        <SidebarItem
+          icon={<ClipboardList className="w-4 h-4" />}
+          label="Audit logs"
+          active={activeView === "audit_logs"}
+          onClick={() => onViewChange("audit_logs")}
+        />
       </nav>
 
       {/* Footer */}
