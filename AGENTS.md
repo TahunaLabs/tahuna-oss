@@ -33,6 +33,7 @@
 - Remove dead UI, duplicate helpers, and legacy flows once forward path is confirmed.
 - Keep presentation separate from data/mutation orchestration. Extract repeated view logic into focused components.
 - One canonical path per screen state (loading/empty/success/error). No duplicate client state derivable from fetched data.
+- One component per file by default, keep component structure/naming consistent across usages, and only allow multi-component files for shadcn primitives in `web/components/ui/**`.
 - Preserve existing naming, copy tone, and interaction patterns. Reuse shared primitives before introducing variants.
 - Use shadcn/ui components when available; create a local shadcn-style component if the primitive doesn't exist yet.
 
