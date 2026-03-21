@@ -17,11 +17,13 @@ const statusDotVariants = cva("rounded-full", {
       cancelling: "bg-status-cancelling",
     },
     size: {
-      sm: "w-1.5 h-1.5",
-      md: "w-3 h-3",
+      xs: "h-1.5 w-1.5",
+      sm: "h-2 w-2",
+      md: "h-2.5 w-2.5",
+      lg: "h-3 w-3",
     },
   },
-  defaultVariants: { variant: "muted", size: "md" },
+  defaultVariants: { variant: "muted", size: "sm" },
 })
 
 function StatusDot({
@@ -40,4 +42,6 @@ function StatusDot({
   )
 }
 
-export { StatusDot, statusDotVariants }
+type StatusDotVariant = VariantProps<typeof statusDotVariants>["variant"]
+
+export { StatusDot, statusDotVariants, type StatusDotVariant }

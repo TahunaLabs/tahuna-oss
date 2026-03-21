@@ -88,7 +88,7 @@ export function MachinesView({ keys, message, error, revokingId, onRevoke, onCle
                     </TableCell>
                     <TableCell variant="dashboard">
                       <div className="flex items-center gap-2 text-sm capitalize">
-                        <StatusDot variant={isActive ? "success" : "muted"} size="sm" />
+                        <StatusDot variant={isActive ? "success" : "muted"} size="xs" />
                         <span>{key.status}</span>
                       </div>
                     </TableCell>

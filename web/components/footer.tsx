@@ -11,7 +11,7 @@ export function Footer() {
               Tahuna
             </Link>
             <div className="flex items-center gap-2">
-              <StatusDot variant="success" size="sm" />
+              <StatusDot variant="success" size="xs" />
               <span className="text-xs text-muted-foreground">All Systems Operational</span>
             </div>
           </div>
