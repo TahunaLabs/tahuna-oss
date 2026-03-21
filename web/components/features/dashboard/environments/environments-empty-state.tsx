@@ -11,7 +11,7 @@ function EnvironmentsEmptyState() {
     <div className="flex h-full items-center justify-center">
       <div className="w-full max-w-lg">
         <div className="mb-6 text-center">
-          <Server className="mx-auto mb-4 h-12 w-12 text-muted-foreground/40" strokeWidth={1} />
+          <Server className="mx-auto mb-4 h-12 w-12 text-icon-faint" strokeWidth={1} />
           <h2 className="mb-2 text-lg font-medium text-foreground">New Environment</h2>
           <p className="text-sm leading-relaxed text-muted-foreground">
             Create and manage compute environments using the Tahuna CLI.
