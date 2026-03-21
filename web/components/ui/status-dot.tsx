@@ -8,6 +8,13 @@ const statusDotVariants = cva("rounded-full", {
     variant: {
       success: "bg-green-400",
       muted: "bg-muted-foreground/30",
+      queued: "bg-status-queued",
+      provisioning: "bg-status-provisioning",
+      running: "bg-status-running",
+      completed: "bg-status-running",
+      failed: "bg-status-failed",
+      cancelled: "bg-muted-foreground",
+      cancelling: "bg-status-cancelling",
     },
     size: {
       sm: "w-1.5 h-1.5",

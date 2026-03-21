@@ -164,9 +164,9 @@ export function RunsView({
                 onShareRun={onShareRun}
               />
             ) : (
-              <div className="rounded-lg border border-border bg-background px-6 py-10">
+              <Card variant="dashboard-surface" className="px-6 py-10">
                 <p className="text-sm text-muted-foreground">Loading run details…</p>
-              </div>
+              </Card>
             )
           ) : null}
         </div>

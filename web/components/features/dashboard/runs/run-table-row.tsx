@@ -4,7 +4,7 @@ import { Users } from "lucide-react"
 
 import { relativeTime, type RunRow } from "@/components/features/dashboard-model"
 import { RunActionsMenu } from "@/components/features/dashboard/runs/run-actions-menu"
-import { RunStatusDot } from "@/components/features/dashboard/runs/run-status-dot"
+import { StatusDot } from "@/components/ui/status-dot"
 import { TableCell, TableRow } from "@/components/ui/table"
 import { cn } from "@/lib/utils"
 
@@ -64,7 +64,7 @@ function RunTableRow({
 
       <TableCell variant="dashboard" className="text-muted-foreground">
         <span className="inline-flex items-center gap-2 capitalize">
-          <RunStatusDot status={run.status} />
+          <StatusDot variant={run.status as Parameters<typeof StatusDot>[0]["variant"]} size="sm" />
           {run.status}
         </span>
       </TableCell>

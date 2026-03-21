@@ -12,10 +12,11 @@ import {
 } from "@/components/features/dashboard-model"
 import { MetricSection } from "@/components/features/dashboard/runs/metric-section"
 import { RunActionsMenu } from "@/components/features/dashboard/runs/run-actions-menu"
-import { RunStatusDot } from "@/components/features/dashboard/runs/run-status-dot"
 import { Badge, statusVariant } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Card } from "@/components/ui/card"
 import { Notice } from "@/components/ui/notice"
+import { StatusDot } from "@/components/ui/status-dot"
 
 type RunDetailPanelProps = {
   runDetail: RunDetail
@@ -44,11 +45,11 @@ function RunDetailPanel({
   const systemSeries = series.filter((m) => m.category === "system")
 
   return (
-    <div className="overflow-hidden rounded-lg border border-border bg-background">
+    <Card variant="dashboard-surface" className="overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between border-b border-border px-6 py-3">
         <div className="flex min-w-0 items-center gap-3">
-          <RunStatusDot status={runDetail.status} size="md" />
+          <StatusDot variant={runDetail.status as Parameters<typeof StatusDot>[0]["variant"]} size="md" />
           <div className="min-w-0">
             <h2 className="truncate text-sm font-medium text-foreground">
               {runDetail.name || "Untitled run"}
@@ -160,7 +161,7 @@ function RunDetailPanel({
           )}
         </div>
       </div>
-    </div>
+    </Card>
   )
 }
 
