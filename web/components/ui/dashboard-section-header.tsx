@@ -19,7 +19,6 @@ function DashboardSectionHeader({
 }: DashboardSectionHeaderProps) {
   return (
     <header
-      data-slot="dashboard-section-header"
       className={cn("flex items-center justify-between gap-3 pb-4", className)}
       {...props}
     >

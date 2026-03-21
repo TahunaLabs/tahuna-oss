@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react"
 import { CheckCircle2, Clock3, Search, XCircle } from "lucide-react"
-import type { RunRow } from "@/components/dashboard/shared"
+import type { RunRow } from "@/components/features/dashboard-model"
 import { Input } from "@/components/ui/input"
 import { Select } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"

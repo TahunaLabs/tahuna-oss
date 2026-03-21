@@ -2,9 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { ChevronDown, ChevronUp, Play, Trash2, X, Share2, Users } from "lucide-react"
-import { DashboardViewLayout } from "@/components/dashboard/layout-shell"
-import { MetricSection } from "@/components/linear/runs/metric-section"
-import { RunTabButton } from "@/components/linear/runs/run-tab-button"
+import { DashboardViewLayout } from "@/components/app-shell/layout-shell"
+import { MetricSection } from "@/components/features/dashboard/runs/metric-section"
+import { RunTabButton } from "@/components/features/dashboard/runs/run-tab-button"
 import { Button } from "@/components/ui/button"
 import {
   Table,
@@ -15,7 +15,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { cn } from "@/lib/utils"
-import { ActionsMenu } from "@/components/linear/actions-menu"
+import { ActionsMenu } from "@/components/features/dashboard/actions-menu"
 import {
   CANCELLABLE_STATUSES,
   metricSeries,
@@ -25,7 +25,7 @@ import {
   type RunDetail,
   type RunLogsOnlyDetail,
   type RunMetricsOnlyDetail,
-} from "@/components/dashboard/shared"
+} from "@/components/features/dashboard-model"
 
 type RunsViewProps = {
   creditsLabel: string
@@ -471,7 +471,7 @@ export function RunsView({
                       {runLogs && (
                         <div className="mb-3 space-y-1">
                           <p className="text-xs text-muted-foreground">{runLogs.note}</p>
-                          <p className="text-[11px] text-muted-foreground">
+                          <p className="text-ui-caption text-muted-foreground">
                             Showing {runLogs.logs_window.returned_logs} logs (tail {runLogs.logs_window.tail_limit}
                             {runLogs.logs_window.includes_pinned_bootstrap
                               ? ` + ${runLogs.logs_window.pinned_bootstrap_count} pinned bootstrap`
@@ -501,7 +501,7 @@ export function RunsView({
                   <div className="rounded-lg border border-border p-4">
                     <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Live metrics</h3>
                     {runMetrics && (
-                      <p className="mb-3 text-[11px] text-muted-foreground">
+                      <p className="mb-3 text-ui-caption text-muted-foreground">
                         Showing {runMetrics.metrics_window.returned_points} points across {runMetrics.metrics_window.returned_series} series
                         (scan {runMetrics.metrics_window.scanned_points}/{runMetrics.metrics_window.scan_limit}).
                         {runMetrics.metrics_window.dropped_series_count > 0

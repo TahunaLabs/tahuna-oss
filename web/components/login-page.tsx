@@ -1,6 +1,6 @@
 "use client"
 
-import { AuthPageShell } from "@/components/auth-page-shell"
+import { AuthPageShell } from "@/components/features/auth/auth-page-shell"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"

@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react"
 import { ChevronDown, ChevronUp, KeyRound, Moon, ShieldCheck, Sun } from "lucide-react"
 import Link from "next/link"
-import type { ApiKeyRow, ProfileDraft, ThemeChoice } from "@/components/dashboard/settings-types"
+import type { ApiKeyRow, ProfileDraft, ThemeChoice } from "@/components/features/dashboard-settings-model"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"

@@ -13,10 +13,10 @@ import {
   ChevronDown,
   X,
 } from "lucide-react"
-import { DashboardViewLayout } from "@/components/dashboard/layout-shell"
+import { DashboardViewLayout } from "@/components/app-shell/layout-shell"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { ActionsMenu } from "@/components/linear/actions-menu"
+import { ActionsMenu } from "@/components/features/dashboard/actions-menu"
 import { Select } from "@/components/ui/select"
 import {
   Table,
@@ -41,7 +41,7 @@ import {
   type StorageListResult,
   type StorageSort,
   type StorageSourceFilter,
-} from "@/components/dashboard/shared"
+} from "@/components/features/dashboard-model"
 import { cn } from "@/lib/utils"
 import type { FormEvent } from "react"
 
@@ -153,7 +153,7 @@ export function StorageView({
                 type="button"
                 variant="dashboard-tab-compact"
                 size="none"
-                className={cn("text-[15px]", storageSourceFilter === "all" ? "text-foreground" : "text-muted-foreground")}
+                className={cn("text-ui-tab", storageSourceFilter === "all" ? "text-foreground" : "text-muted-foreground")}
                 onClick={() => onStorageSourceFilterChange("all")}
               >
                 All storage
@@ -163,7 +163,7 @@ export function StorageView({
                 type="button"
                 variant="dashboard-tab-compact"
                 size="none"
-                className={cn("text-[15px]", storageSourceFilter === "shared" ? "text-foreground" : "text-muted-foreground")}
+                className={cn("text-ui-tab", storageSourceFilter === "shared" ? "text-foreground" : "text-muted-foreground")}
                 onClick={() => onStorageSourceFilterChange("shared")}
               >
                 Shared
@@ -173,7 +173,7 @@ export function StorageView({
                 type="button"
                 variant="dashboard-tab-compact"
                 size="none"
-                className={cn("text-[15px]", storageSourceFilter === "private" ? "text-foreground" : "text-muted-foreground")}
+                className={cn("text-ui-tab", storageSourceFilter === "private" ? "text-foreground" : "text-muted-foreground")}
                 onClick={() => onStorageSourceFilterChange("private")}
               >
                 Private
@@ -325,7 +325,7 @@ export function StorageView({
                             onChange={(e) => onArtifactRenameDraftChange(e.target.value)}
                             disabled={artifactRenameBusyId === item.id}
                             maxLength={MAX_ARTIFACT_NAME_CHARS}
-                            className="h-7 w-40 bg-secondary/50 px-2 text-[var(--dashboard-control-font-size-small)]"
+                            className="h-7 w-40 bg-secondary/50 px-2 text-dashboard-control-small"
                           />
                           <Button
                             type="submit"

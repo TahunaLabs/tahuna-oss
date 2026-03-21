@@ -1,8 +1,8 @@
 "use client"
 
-import { metricSeries } from "@/components/dashboard/shared"
+import { metricSeries } from "@/components/features/dashboard-model"
 
-import { MetricChart } from "@/components/linear/runs/metric-chart"
+import { MetricChart } from "@/components/features/dashboard/runs/metric-chart"
 
 type MetricSectionProps = {
   title: string
@@ -22,7 +22,7 @@ function MetricSection({
       <div>
         <div className="flex items-center justify-between gap-3">
           <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{title}</h4>
-          <span className="text-[11px] text-muted-foreground">{metrics.length} charts</span>
+          <span className="text-ui-caption text-muted-foreground">{metrics.length} charts</span>
         </div>
         <p className="mt-1 text-xs text-muted-foreground">{description}</p>
       </div>

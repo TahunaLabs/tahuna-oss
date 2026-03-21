@@ -3,7 +3,7 @@
 import { ExternalLink, Server } from "lucide-react"
 import Link from "next/link"
 
-import { CliStep } from "@/components/linear/environments/cli-step"
+import { CliStep } from "@/components/features/dashboard/environments/cli-step"
 
 function EnvironmentsEmptyState() {
   return (

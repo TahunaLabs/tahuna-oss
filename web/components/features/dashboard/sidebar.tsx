@@ -129,7 +129,7 @@ export function Sidebar({ activeView, onViewChange, userInitial, isDark, onTheme
       {/* Footer */}
       <div className="border-t border-sidebar-border shrink-0">
         <div className="flex items-center justify-between px-3 h-10">
-          <div className="w-6 h-6 rounded-full bg-secondary flex items-center justify-center text-[11px] font-semibold text-secondary-foreground shrink-0">
+          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-secondary text-ui-caption font-semibold text-secondary-foreground">
             {userInitial}
           </div>
           <div className="flex items-center gap-0.5">

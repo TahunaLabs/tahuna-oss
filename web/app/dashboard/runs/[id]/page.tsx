@@ -17,7 +17,7 @@ import {
   type RunDetail,
   type RunLogsOnlyDetail,
   type RunMetricsOnlyDetail,
-} from "@/components/dashboard/shared"
+} from "@/components/features/dashboard-model"
 import {
   CartesianGrid,
   Line,
@@ -151,7 +151,7 @@ export default function RunDetailPage() {
         <Card variant="dashboard" className="min-h-0 p-4">
           <h2 className="text-sm font-semibold">Live logs</h2>
           <p className="mt-1 text-xs text-muted-foreground">{logs.note}</p>
-          <p className="mt-1 text-[11px] text-muted-foreground">
+          <p className="mt-1 text-ui-caption text-muted-foreground">
             Showing {logs.logs_window.returned_logs} logs (tail {logs.logs_window.tail_limit}
             {logs.logs_window.includes_pinned_bootstrap
               ? ` + ${logs.logs_window.pinned_bootstrap_count} pinned bootstrap`
@@ -175,7 +175,7 @@ export default function RunDetailPage() {
 
         <Card variant="dashboard" className="p-4">
           <h2 className="text-sm font-semibold">Live metrics</h2>
-          <p className="mt-1 text-[11px] text-muted-foreground">
+          <p className="mt-1 text-ui-caption text-muted-foreground">
             Showing {metrics.metrics_window.returned_points} points across {metrics.metrics_window.returned_series} series
             (scan {metrics.metrics_window.scanned_points}/{metrics.metrics_window.scan_limit}).
             {metrics.metrics_window.dropped_series_count > 0

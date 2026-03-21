@@ -40,7 +40,7 @@ export function IssuesView() {
       {/* Header */}
       <header className="flex items-center justify-between px-4 py-2 border-b border-border">
         <div className="flex items-center gap-2">
-          <div className="w-5 h-5 rounded bg-orange-500 flex items-center justify-center text-[10px]">
+          <div className="flex h-5 w-5 items-center justify-center rounded bg-orange-500 text-ui-micro">
             🤠
           </div>
           <h1 className="text-sm font-medium text-foreground">Tahuna</h1>
@@ -170,7 +170,7 @@ function IssueRow({ issue, selected, onSelect }: IssueRowProps) {
 
       {/* Assignee */}
       <div className="w-5 h-5 rounded-full bg-secondary flex items-center justify-center">
-        <span className="text-[10px] text-muted-foreground">👤</span>
+        <span className="text-ui-micro text-muted-foreground">👤</span>
       </div>
 
       {/* Date */}

@@ -11,19 +11,19 @@ import {
 } from "lucide-react"
 import { Fragment, useMemo, useState } from "react"
 
-import { DashboardViewLayout } from "@/components/dashboard/layout-shell"
+import { DashboardViewLayout } from "@/components/app-shell/layout-shell"
 import {
   type DataBlobRow,
   type EnvironmentRow,
   relativeTime,
-} from "@/components/dashboard/shared"
-import { EnvironmentActionsMenu } from "@/components/linear/environments/environment-actions-menu"
-import { EnvironmentBindingCell } from "@/components/linear/environments/environment-binding-cell"
-import { EnvironmentConfigPanel } from "@/components/linear/environments/environment-config-panel"
-import { EnvironmentsEmptyState } from "@/components/linear/environments/environments-empty-state"
-import { FilterDropdown, type FilterDropdownOption } from "@/components/linear/environments/filter-dropdown"
-import { GridBoundDataPreview } from "@/components/linear/environments/grid-bound-data-preview"
-import { ViewToggleButton } from "@/components/linear/environments/view-toggle-button"
+} from "@/components/features/dashboard-model"
+import { EnvironmentActionsMenu } from "@/components/features/dashboard/environments/environment-actions-menu"
+import { EnvironmentBindingCell } from "@/components/features/dashboard/environments/environment-binding-cell"
+import { EnvironmentConfigPanel } from "@/components/features/dashboard/environments/environment-config-panel"
+import { EnvironmentsEmptyState } from "@/components/features/dashboard/environments/environments-empty-state"
+import { FilterDropdown, type FilterDropdownOption } from "@/components/features/dashboard/environments/filter-dropdown"
+import { GridBoundDataPreview } from "@/components/features/dashboard/environments/grid-bound-data-preview"
+import { ViewToggleButton } from "@/components/features/dashboard/environments/view-toggle-button"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { DashboardViewSwitcher } from "@/components/ui/dashboard-view-switcher"

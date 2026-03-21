@@ -23,8 +23,8 @@ export function AuthPageShell({ eyebrow, title, subtitle, children }: AuthPageSh
 
       <main className="flex-1 px-6 py-16 md:py-24">
         <div className="mx-auto max-w-3xl">
-          <Badge variant="ghost" className="text-primary mb-4 block tracking-[0.22em]">{eyebrow}</Badge>
-          <h1 className="font-serif text-4xl md:text-6xl tracking-tight leading-[0.95] text-foreground mb-6">{title}</h1>
+          <Badge variant="ghost" className="mb-4 block text-primary tracking-ui-eyebrow">{eyebrow}</Badge>
+          <h1 className="mb-6 font-serif text-4xl leading-display-tight tracking-tight text-foreground md:text-6xl">{title}</h1>
           <p className="text-lg text-foreground/80 max-w-2xl">{subtitle}</p>
 
           <Card variant="elevated" className="mt-10">

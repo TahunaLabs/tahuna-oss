@@ -1,6 +1,6 @@
 "use client"
 
-import type { EnvironmentRow } from "@/components/dashboard/shared"
+import type { EnvironmentRow } from "@/components/features/dashboard-model"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Notice } from "@/components/ui/notice"

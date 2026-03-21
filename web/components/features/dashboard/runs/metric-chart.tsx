@@ -10,7 +10,7 @@ import {
   YAxis,
 } from "recharts"
 
-import { metricSeries } from "@/components/dashboard/shared"
+import { metricSeries } from "@/components/features/dashboard-model"
 import { Badge } from "@/components/ui/badge"
 
 type MetricChartProps = {
@@ -48,13 +48,13 @@ function MetricChart({ metric }: MetricChartProps) {
           <p className="truncate text-sm font-medium text-foreground">{metric.name}</p>
           <div className="mt-1 flex flex-wrap items-center gap-2">
             <Badge variant={sourceVariant}>{metric.source}</Badge>
-            <span className="text-[11px] text-muted-foreground">
+            <span className="text-ui-caption text-muted-foreground">
               {metric.pointCount} point{metric.pointCount === 1 ? "" : "s"}
             </span>
           </div>
         </div>
         <div className="text-right">
-          <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Latest</p>
+          <p className="text-ui-caption uppercase tracking-wide text-muted-foreground">Latest</p>
           <p className="font-mono text-sm text-foreground">{formatMetricValue(metric.latestValue)}</p>
         </div>
       </div>

@@ -175,8 +175,8 @@ export function ShareDialog({
                         </div>
                         <span className={
                           link.permission === "edit"
-                            ? "inline-flex mt-1 px-1.5 py-0.5 rounded text-[11px] bg-blue-500/20 text-blue-400"
-                            : "inline-flex mt-1 px-1.5 py-0.5 rounded text-[11px] bg-secondary text-muted-foreground"
+                            ? "mt-1 inline-flex rounded bg-blue-500/20 px-1.5 py-0.5 text-ui-caption text-blue-400"
+                            : "mt-1 inline-flex rounded bg-secondary px-1.5 py-0.5 text-ui-caption text-muted-foreground"
                         }>
                           {link.permission}
                         </span>

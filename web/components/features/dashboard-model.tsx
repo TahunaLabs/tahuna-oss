@@ -341,7 +341,7 @@ export function SidebarSection({
 }) {
   return (
     <section>
-      <p className="px-2 pb-1 pt-2 text-[11px] font-medium tracking-[0.01em] text-muted-foreground">{label}</p>
+      <p className="px-2 pb-1 pt-2 text-ui-caption font-medium tracking-ui-label text-muted-foreground">{label}</p>
       <div className="space-y-0.5">
         {items.map((item) => {
           const Icon = item.icon

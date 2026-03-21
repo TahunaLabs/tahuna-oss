@@ -1,7 +1,6 @@
 import type * as React from "react"
 
 import { DashboardSectionHeader } from "@/components/ui/dashboard-section-header"
-import { DashboardTabsHeader } from "@/components/ui/dashboard-tabs-header"
 
 type DashboardViewLayoutProps = {
   sectionLabel: string
@@ -30,18 +29,17 @@ function DashboardViewLayout({
       : rightContent
 
   return (
-    <section aria-label={sectionLabel} className="dashboard-view-layout">
-      <div className="dashboard-view-layout__spacer" aria-hidden />
+    <section aria-label={sectionLabel} className="flex flex-col pb-6 pt-4">
       <DashboardSectionHeader
         title={title}
         icon={titleIcon}
         count={count}
         rightContent={resolvedRightContent}
       />
-      <DashboardTabsHeader className="dashboard-view-layout__toolbar">
+      <div className="pb-4">
         {toolbar}
-      </DashboardTabsHeader>
-      <div className="dashboard-view-layout__content">{children}</div>
+      </div>
+      {children}
     </section>
   )
 }

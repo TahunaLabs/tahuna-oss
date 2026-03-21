@@ -8,7 +8,7 @@ const sectionHeadingVariants = cva("tracking-tight text-foreground", {
     variant: {
       default: "text-3xl md:text-4xl font-serif",
       display: "text-4xl md:text-5xl lg:text-6xl font-serif italic",
-      hero: "font-serif text-5xl md:text-7xl lg:text-[5.5rem] leading-[0.95]",
+      hero: "font-serif text-5xl leading-display-tight md:text-7xl lg:text-display-hero",
       medium: "text-3xl md:text-4xl font-medium",
     },
   },

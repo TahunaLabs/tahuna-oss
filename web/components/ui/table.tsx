@@ -8,7 +8,7 @@ const tableVariants = cva("w-full caption-bottom text-sm", {
     variant: {
       default: "",
       dashboard:
-        "w-full border-separate border-spacing-0 text-left text-[var(--dashboard-control-font-size)] leading-[var(--dashboard-control-line-height)] text-foreground",
+        "w-full border-separate border-spacing-0 text-left text-dashboard-control text-foreground",
     },
   },
   defaultVariants: {
@@ -19,9 +19,9 @@ const tableVariants = cva("w-full caption-bottom text-sm", {
 const tableHeaderVariants = cva("", {
   variants: {
     variant: {
-      default: "[&_tr]:border-b text-[12px] leading-[1.5] text-muted-foreground",
+      default: "[&_tr]:border-b text-ui-xs text-muted-foreground",
       dashboard:
-        "border-b border-border text-[var(--dashboard-table-header-font-size)] leading-[var(--dashboard-table-header-line-height)] text-muted-foreground",
+        "border-b border-border text-dashboard-table-header text-muted-foreground",
     },
   },
   defaultVariants: {
@@ -44,13 +44,13 @@ const tableRowVariants = cva("", {
 })
 
 const tableHeadVariants = cva(
-  "h-10 px-2 text-left align-middle text-[12px] leading-[1.5] font-medium text-muted-foreground",
+  "h-10 px-2 text-left align-middle text-ui-xs font-medium text-muted-foreground",
   {
     variants: {
       variant: {
         default: "",
         dashboard:
-          "h-auto px-[var(--dashboard-table-cell-px)] py-[var(--dashboard-table-cell-py)] text-[var(--dashboard-table-header-font-size)] leading-[var(--dashboard-table-header-line-height)] font-[var(--dashboard-table-header-font-weight)]",
+          "h-auto px-dashboard-table-cell-x py-dashboard-table-cell-y text-dashboard-table-header font-dashboard-table-header",
       },
     },
     defaultVariants: {
@@ -64,7 +64,7 @@ const tableCellVariants = cva("p-2 align-middle", {
     variant: {
       default: "",
       dashboard:
-        "px-[var(--dashboard-table-cell-px)] py-[var(--dashboard-table-cell-py)] text-[var(--dashboard-control-font-size)] leading-[var(--dashboard-control-line-height)] [&.text-muted-foreground]:text-[var(--dashboard-control-font-size-small)] [&.text-muted-foreground]:leading-[var(--dashboard-control-line-height-small)]",
+        "px-dashboard-table-cell-x py-dashboard-table-cell-y text-dashboard-control [&.text-muted-foreground]:text-dashboard-control-small",
     },
   },
   defaultVariants: {

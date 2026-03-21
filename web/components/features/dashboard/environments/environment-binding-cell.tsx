@@ -1,6 +1,6 @@
 "use client"
 
-import type { DataBlobRow, EnvironmentRow } from "@/components/dashboard/shared"
+import type { DataBlobRow, EnvironmentRow } from "@/components/features/dashboard-model"
 import { Button } from "@/components/ui/button"
 import { Select } from "@/components/ui/select"
 
@@ -75,7 +75,7 @@ function EnvironmentBindingCell({
               onBindSelectedData(environment, nextValue)
             }}
             disabled={busy || availableDataBlobs.length === 0}
-            className="h-6 min-w-0 flex-1 bg-secondary/50 px-2 text-[var(--dashboard-control-font-size-small)] leading-[var(--dashboard-control-line-height-small)]"
+            className="h-6 min-w-0 flex-1 bg-secondary/50 px-2 text-dashboard-control-small"
           >
             <option value="">
               {availableDataBlobs.length === 0 ? "No datasets available" : "Select dataset"}

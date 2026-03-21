@@ -13,7 +13,7 @@ export function Hero() {
 
       <SectionContainer>
         <div className="max-w-4xl">
-          <h1 className="font-serif text-5xl md:text-7xl lg:text-[5.5rem] leading-[0.95] tracking-tight mb-10 text-foreground">
+          <h1 className="mb-10 font-serif text-5xl leading-display-tight tracking-tight text-foreground md:text-7xl lg:text-display-hero">
             <span className="italic">Engineered</span>
             <br />
             <span>For The Frontier</span>

@@ -1,6 +1,6 @@
 "use client"
 
-import type { DataBlobRow, EnvironmentRow } from "@/components/dashboard/shared"
+import type { DataBlobRow, EnvironmentRow } from "@/components/features/dashboard-model"
 
 type GridBoundDataPreviewProps = {
   environment: EnvironmentRow

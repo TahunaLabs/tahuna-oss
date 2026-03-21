@@ -2,8 +2,8 @@
 
 import { FileCode2, Play, Share2, Trash2 } from "lucide-react"
 
-import type { EnvironmentRow } from "@/components/dashboard/shared"
-import { ActionsMenu } from "@/components/linear/actions-menu"
+import type { EnvironmentRow } from "@/components/features/dashboard-model"
+import { ActionsMenu } from "@/components/features/dashboard/actions-menu"
 import { Button } from "@/components/ui/button"
 
 type EnvironmentActionsMenuProps = {
