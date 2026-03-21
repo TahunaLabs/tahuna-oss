@@ -29,10 +29,12 @@ function DashboardSectionHeader({
             {icon}
           </span>
         ) : null}
-        <h1 className="truncate text-[var(--dashboard-title-size)] leading-[var(--dashboard-title-line-height)] font-[var(--dashboard-title-font-weight)] tracking-tight text-foreground">{title}</h1>
+        <h1 className="m-0 truncate font-sans text-dashboard-title font-dashboard-title tracking-tight text-foreground">
+          {title}
+        </h1>
         {count !== undefined ? <span className="text-sm text-muted-foreground">{count}</span> : null}
       </div>
-      {rightContent ? <div className="shrink-0 text-[var(--dashboard-control-font-size)] text-muted-foreground">{rightContent}</div> : null}
+      {rightContent ? <div className="shrink-0 text-dashboard-control text-muted-foreground">{rightContent}</div> : null}
     </header>
   )
 }

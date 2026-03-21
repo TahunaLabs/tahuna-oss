@@ -36,6 +36,7 @@
 - One component per file by default, keep component structure/naming consistent across usages, and only allow multi-component files for shadcn primitives in `web/components/ui/**`.
 - Preserve existing naming, copy tone, and interaction patterns. Reuse shared primitives before introducing variants.
 - Use shadcn/ui components when available; create a local shadcn-style component if the primitive doesn't exist yet.
+- For typography/spacing tokens, define or update canonical values in `web/app/globals.css` (`:root` + `@theme inline`) and consume them via semantic Tailwind utilities; avoid ad-hoc arbitrary-value wrappers like `text-[var(--...)]` in component classes when a semantic utility can be used.
 
 ## Convex (`web/convex/**`)
 

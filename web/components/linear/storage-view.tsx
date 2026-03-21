@@ -142,7 +142,7 @@ export function StorageView({
     <DashboardViewLayout
       sectionLabel="Storage"
       title="Storage"
-      titleIcon={<HardDrive />}
+      titleIcon={<HardDrive size={24} />}
       count={storageTotal > 0 ? storageTotal : undefined}
       creditsLabel={creditsLabel}
       toolbar={(

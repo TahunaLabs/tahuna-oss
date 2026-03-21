@@ -113,7 +113,7 @@ export function RunsView({
     <DashboardViewLayout
       sectionLabel="Runs"
       title="Runs"
-      titleIcon={<Play />}
+      titleIcon={<Play size={24} />}
       count={runs.length > 0 ? runs.length : undefined}
       creditsLabel={creditsLabel}
       toolbar={(

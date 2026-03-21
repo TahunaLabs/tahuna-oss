@@ -250,7 +250,7 @@ export function EnvironmentsView({
     <DashboardViewLayout
       sectionLabel="Environments"
       title="Environments"
-      titleIcon={<Server />}
+      titleIcon={<Server size={24} />}
       creditsLabel={creditsLabel}
       rightContent={null}
       toolbar={(
