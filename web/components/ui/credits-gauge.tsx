@@ -26,31 +26,27 @@ function CreditsGauge({ balanceCents, maxCents, currency, className }: CreditsGa
   const isLow = percentage < 20
   const isCritical = percentage < 5
 
-  const textColor = isCritical ? "var(--destructive)" : isLow ? "var(--warning)" : "var(--foreground)"
-  const barColor = isCritical ? "var(--destructive)" : isLow ? "var(--warning)" : "var(--success)"
+  const bgColor = isCritical ? "var(--destructive)" : isLow ? "var(--warning)" : "var(--accent)"
 
   return (
-    <div className={cn("flex flex-col gap-2", className)}>
-      <div className="flex items-baseline justify-between gap-3">
-        <p className="text-xs text-muted-foreground">Credits available</p>
-        <p className="text-sm font-medium" style={{ color: textColor }}>
-          {formatMoney(balanceCents, currency)}
-        </p>
+    <div
+      className={cn("w-full rounded px-4 py-2 text-sm font-medium transition-all relative overflow-hidden", className)}
+      style={{
+        backgroundColor: bgColor,
+        color: isCritical || isLow ? "white" : "var(--accent-foreground)",
+      }}
+    >
+      <div className="flex items-center justify-between relative z-10">
+        <span>Credits</span>
+        <span>{Math.round(percentage)}%</span>
       </div>
-      <div className="flex items-center gap-2">
-        <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
-          <div
-            className="h-full rounded-full transition-all duration-300"
-            style={{
-              width: `${percentage}%`,
-              backgroundColor: barColor,
-            }}
-          />
-        </div>
-        <span className="text-xs text-muted-foreground min-w-fit">
-          {Math.round(percentage)}%
-        </span>
-      </div>
+      <div
+        className="absolute inset-0 rounded opacity-30 transition-all duration-300"
+        style={{
+          width: `${percentage}%`,
+          backgroundColor: "rgba(255, 255, 255, 0.2)",
+        }}
+      />
     </div>
   )
 }

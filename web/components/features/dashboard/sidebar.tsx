@@ -75,12 +75,11 @@ export function Sidebar({ activeView, onViewChange, userInitial, isDark, onTheme
       {/* Bottom Navigation */}
       <nav className="px-2 py-1 space-y-0.5">
         {balanceCents !== undefined && maxCents !== undefined && currency !== undefined && (
-          <div className="mb-2 rounded border border-border bg-card/50 p-2">
+          <div className="mb-2">
             <CreditsGauge
               balanceCents={balanceCents}
               maxCents={maxCents}
               currency={currency}
-              className="text-xs"
             />
           </div>
         )}
