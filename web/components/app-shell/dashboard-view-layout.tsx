@@ -7,7 +7,6 @@ type DashboardViewLayoutProps = {
   title: string
   titleIcon?: React.ReactNode
   count?: number
-  creditsLabel?: string
   rightContent?: React.ReactNode
   toolbar: React.ReactNode
   children: React.ReactNode
@@ -18,23 +17,17 @@ function DashboardViewLayout({
   title,
   titleIcon,
   count,
-  creditsLabel,
   rightContent,
   toolbar,
   children,
 }: DashboardViewLayoutProps) {
-  const resolvedRightContent =
-    rightContent === undefined
-      ? (creditsLabel ? `Credits: ${creditsLabel}` : undefined)
-      : rightContent
-
   return (
     <section aria-label={sectionLabel} className="flex flex-col pb-6 pt-4">
       <DashboardSectionHeader
         title={title}
         icon={titleIcon}
         count={count}
-        rightContent={resolvedRightContent}
+        rightContent={rightContent}
       />
       <div className="pb-4">
         {toolbar}

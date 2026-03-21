@@ -16,12 +16,11 @@ import {
   Settings,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
-import Link from "next/link"
 import { Button } from "@/components/ui/button"
 
 interface SidebarProps {
-  activeView: "storage" | "environments" | "runs" | "billing" | "audit_logs" | "settings"
-  onViewChange: (view: "storage" | "environments" | "runs" | "billing" | "audit_logs" | "settings") => void
+  activeView: "storage" | "environments" | "runs" | "machines" | "billing" | "audit_logs" | "settings"
+  onViewChange: (view: "storage" | "environments" | "runs" | "machines" | "billing" | "audit_logs" | "settings") => void
   userInitial: string
   isDark: boolean
   onThemeToggle: () => void
@@ -81,12 +80,12 @@ export function Sidebar({ activeView, onViewChange, userInitial, isDark, onTheme
                 active={activeView === "runs"}
                 onClick={() => onViewChange("runs")}
               />
-              <Button asChild type="button" variant="sidebar-item" size="none">
-                <Link href="/machines">
-                  <Monitor className="w-4 h-4" />
-                  <span>Machines</span>
-                </Link>
-              </Button>
+              <SidebarItem
+                icon={<Monitor className="w-4 h-4" />}
+                label="Machines"
+                active={activeView === "machines"}
+                onClick={() => onViewChange("machines")}
+              />
             </div>
           )}
         </div>

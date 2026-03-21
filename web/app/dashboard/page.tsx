@@ -6,6 +6,7 @@ import { EnvironmentsView } from "@/components/features/dashboard/environments-v
 import { RunsView } from "@/components/features/dashboard/runs-view"
 import { BillingView } from "@/components/features/dashboard/billing-view"
 import { AuditLogsView } from "@/components/features/dashboard/audit-logs-view"
+import { MachinesView } from "@/components/features/dashboard/machines-view"
 import { SettingsView } from "@/components/features/dashboard/settings-view"
 import { ShareDialog } from "@/components/features/dashboard/share-dialog"
 import { DashboardAppLayout } from "@/components/app-shell/dashboard-app-layout"
@@ -38,7 +39,7 @@ import { parseAsInteger, parseAsString, parseAsStringLiteral, useQueryState } fr
 import { useEffect, useMemo, useState, type FormEvent } from "react"
 import { BILLING_CONFIG } from "@/config"
 
-const DASHBOARD_VIEW_VALUES = ["storage", "environments", "runs", "billing", "audit_logs", "settings"] as const
+const DASHBOARD_VIEW_VALUES = ["storage", "environments", "runs", "machines", "billing", "audit_logs", "settings"] as const
 const STORAGE_SOURCE_FILTER_VALUES = ["all", "shared", "private"] as const
 const STORAGE_SORT_VALUES = [
   "created_desc",
@@ -49,19 +50,6 @@ const STORAGE_SORT_VALUES = [
   "size_asc",
 ] as const
 const RUN_TAB_VALUES = ["all", "active", "completed"] as const
-function formatCreditsFromCents(balanceCents: number, currency: string) {
-  const amount = Number.isFinite(balanceCents) ? Math.max(0, balanceCents) / 100 : 0
-  try {
-    return new Intl.NumberFormat(undefined, {
-      style: "currency",
-      currency,
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 2,
-    }).format(amount)
-  } catch {
-    return `${amount.toFixed(2)} ${currency}`
-  }
-}
 
 export default function DashboardPage() {
   const router = useRouter()
@@ -246,6 +234,11 @@ export default function DashboardPage() {
   const syncDataMetadataMutation = useMutation(api.data.syncMetadata)
   const bindDataMutation = useMutation(api.environments.bindData)
   const unbindDataMutation = useMutation(api.environments.unbindData)
+  const revokeApiKeyMutation = useMutation(api.auth.revokeApiKey)
+
+  const [machinesMessage, setMachinesMessage] = useState("")
+  const [machinesError, setMachinesError] = useState("")
+  const [revokingId, setRevokingId] = useState<Id<"apiKeys"> | null>(null)
 
   useEffect(() => {
     if (!shouldLoadQueries || ensuringLedger || myCredits?.initialized === true) {
@@ -282,7 +275,6 @@ export default function DashboardPage() {
 
   const userEmail = currentUser?.email ?? ""
   const userInitial = userEmail.trim().charAt(0).toUpperCase() || "U"
-  const creditsLabel = formatCreditsFromCents(myCredits?.balance_cents ?? 0, myCredits?.currency ?? "USD")
   const storageItems = storageResult?.items ?? []
   const storageTotal = storageResult?.total ?? 0
   const isDark = resolvedTheme === "dark"
@@ -747,6 +739,20 @@ export default function DashboardPage() {
     }
   }
 
+  async function revokeKey(id: Id<"apiKeys">, name: string) {
+    setRevokingId(id)
+    setMachinesMessage("")
+    setMachinesError("")
+    try {
+      await revokeApiKeyMutation({ id })
+      setMachinesMessage(`Revoked ${name}.`)
+    } catch (revokeError) {
+      setMachinesError(revokeError instanceof Error ? revokeError.message : "Failed to revoke key.")
+    } finally {
+      setRevokingId(null)
+    }
+  }
+
   if (authLoading || loggingOut || !isAuthenticated) {
     return <PageLoader message="Loading dashboard…" />
   }
@@ -756,7 +762,6 @@ export default function DashboardPage() {
       case "storage":
         return (
           <StorageView
-            creditsLabel={creditsLabel}
             selectedDataFiles={selectedDataFiles}
             uploadingData={uploadingData}
             dataFileInputKey={dataFileInputKey}
@@ -811,7 +816,6 @@ export default function DashboardPage() {
       case "environments":
         return (
           <EnvironmentsView
-            creditsLabel={creditsLabel}
             environments={environments}
             uniqueDataBlobs={uniqueDataBlobs}
             dataBlobsById={dataBlobsById}
@@ -856,7 +860,6 @@ export default function DashboardPage() {
       case "runs":
         return (
           <RunsView
-            creditsLabel={creditsLabel}
             environments={environments}
             runs={runs}
             busy={busy}
@@ -884,6 +887,20 @@ export default function DashboardPage() {
             currency={myCredits?.currency ?? "USD"}
             initialized={myCredits?.initialized === true}
             usageEvents={usageEventsWithContext}
+          />
+        )
+      case "machines":
+        return (
+          <MachinesView
+            keys={apiKeys ?? []}
+            message={machinesMessage}
+            error={machinesError}
+            revokingId={revokingId}
+            onRevoke={revokeKey}
+            onClearFeedback={() => {
+              setMachinesMessage("")
+              setMachinesError("")
+            }}
           />
         )
       case "audit_logs":

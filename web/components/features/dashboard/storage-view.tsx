@@ -27,7 +27,6 @@ import {
 } from "@/components/ui/table"
 
 type StorageViewProps = {
-  creditsLabel: string
   selectedDataFiles: File[]
   uploadingData: boolean
   uploadError: string
@@ -58,7 +57,6 @@ type StorageViewProps = {
 }
 
 export function StorageView({
-  creditsLabel,
   selectedDataFiles,
   uploadingData,
   uploadError,
@@ -120,7 +118,6 @@ export function StorageView({
       title="Storage"
       titleIcon={<HardDrive size={24} />}
       count={storageTotal > 0 ? storageTotal : undefined}
-      creditsLabel={creditsLabel}
       toolbar={(
         <StorageToolbar
           storageSearch={storageSearch}

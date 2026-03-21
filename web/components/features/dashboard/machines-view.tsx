@@ -1,9 +1,9 @@
 "use client"
 
-import { ArrowLeft, Monitor } from "lucide-react"
-import Link from "next/link"
+import { Monitor } from "lucide-react"
 
 import { DashboardViewLayout } from "@/components/app-shell/layout-shell"
+import { type ApiKeyRow } from "@/components/features/dashboard-settings-model"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -21,18 +21,6 @@ import { Notice } from "@/components/ui/notice"
 import { StatusDot } from "@/components/ui/status-dot"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import type { Id } from "@convex/_generated/dataModel"
-
-export type ApiKeyRow = {
-  _id: Id<"apiKeys">
-  _creationTime: number
-  name: string
-  keyPrefix: string
-  machineId?: string
-  status: "active" | "expired" | "revoked"
-  expiresAt: number
-  lastUsedAt?: number
-  revokedAt?: number
-}
 
 type MachinesViewProps = {
   keys: ApiKeyRow[]
@@ -54,14 +42,6 @@ export function MachinesView({ keys, message, error, revokingId, onRevoke, onCle
       sectionLabel="Machines"
       title="Machines"
       titleIcon={<Monitor size={24} />}
-      rightContent={(
-        <Button asChild variant="dashboard-outline" size="none">
-          <Link href="/dashboard">
-            <ArrowLeft className="h-3.5 w-3.5" />
-            Back to dashboard
-          </Link>
-        </Button>
-      )}
       toolbar={null}
     >
       {error ? <Notice variant="error" className="mb-4">{error}</Notice> : null}

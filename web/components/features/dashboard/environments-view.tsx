@@ -24,7 +24,6 @@ import {
 } from "@/components/ui/table"
 
 type EnvironmentsViewProps = {
-  creditsLabel: string
   environments: EnvironmentRow[]
   uniqueDataBlobs: DataBlobRow[]
   dataBlobsById: ReadonlyMap<string, DataBlobRow>
@@ -53,7 +52,6 @@ type EnvironmentsViewProps = {
 }
 
 export function EnvironmentsView({
-  creditsLabel,
   environments,
   uniqueDataBlobs,
   dataBlobsById,
@@ -154,7 +152,6 @@ export function EnvironmentsView({
       sectionLabel="Environments"
       title="Environments"
       titleIcon={<Server size={24} />}
-      creditsLabel={creditsLabel}
       rightContent={null}
       toolbar={(
         <EnvironmentsToolbar

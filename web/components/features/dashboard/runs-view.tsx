@@ -30,7 +30,6 @@ const ACTIVE_STATUSES = new Set(["queued", "provisioning", "running", "cancellin
 const COMPLETED_STATUSES = new Set(["completed", "failed", "cancelled"])
 
 type RunsViewProps = {
-  creditsLabel: string
   environments: EnvironmentRow[]
   runs: RunRow[]
   busy: boolean
@@ -48,7 +47,6 @@ type RunsViewProps = {
 }
 
 export function RunsView({
-  creditsLabel,
   environments,
   runs,
   busy,
@@ -96,7 +94,6 @@ export function RunsView({
       title="Runs"
       titleIcon={<Play size={24} />}
       count={runs.length > 0 ? runs.length : undefined}
-      creditsLabel={creditsLabel}
       toolbar={(
         <RunsToolbar
           searchQuery={searchQuery}
