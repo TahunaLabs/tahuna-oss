@@ -21,15 +21,15 @@ const buttonVariants = cva(
         link: 'text-primary underline-offset-4 hover:underline',
         pill: 'bg-card border border-border rounded-full text-foreground hover:bg-foreground/5',
         'sidebar-brand':
-          'h-auto justify-start gap-2 rounded px-1.5 py-1 text-sm font-medium text-sidebar-foreground hover:bg-sidebar-accent',
+          'h-auto justify-start gap-2 rounded px-1.5 py-1 text-sm font-medium text-sidebar-foreground hover:bg-secondary-hover',
         'sidebar-icon':
-          'rounded p-1.5 text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground',
+          'rounded p-1.5 text-foreground hover:bg-secondary-hover',
         'sidebar-workspace':
           'h-auto w-full justify-start gap-1 px-2 py-1 text-xs font-medium text-muted-foreground hover:bg-transparent hover:text-sidebar-foreground',
         'sidebar-item':
-          'h-auto w-full justify-start gap-2 rounded px-2 py-1.5 text-sm font-normal text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground',
+          'h-auto w-full justify-start gap-2 rounded px-2 py-1.5 text-sm font-normal text-foreground hover:bg-secondary-hover',
         'sidebar-item-active':
-          'h-auto w-full justify-start gap-2 rounded px-2 py-1.5 text-sm font-normal bg-sidebar-accent text-sidebar-foreground',
+          'h-auto w-full justify-start gap-2 rounded px-2 py-1.5 text-sm font-normal bg-secondary text-foreground',
         'sidebar-menu-item':
           'h-auto w-full justify-start gap-2 rounded-none px-3 py-2 text-sm font-normal text-foreground hover:bg-secondary',
         'dashboard-nav':
@@ -63,7 +63,7 @@ const buttonVariants = cva(
         'dashboard-outline-icon-danger':
           'h-6 w-6 rounded p-0 text-muted-foreground hover:bg-secondary hover:text-destructive-foreground',
         'dashboard-tab-compact':
-          'h-dashboard-control rounded px-3 text-dashboard-control font-normal tracking-normal text-muted-foreground hover:bg-secondary hover:text-foreground',
+          'h-dashboard-control rounded px-3 text-dashboard-control font-normal tracking-normal text-foreground hover:bg-secondary-hover',
         'dashboard-tab-compact-active':
           'h-dashboard-control rounded bg-secondary px-3 text-dashboard-control font-normal tracking-normal text-foreground',
         'dashboard-filter':

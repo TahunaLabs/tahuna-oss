@@ -42,6 +42,7 @@
   --warning: #d97706;
   --success: #16a34a;
   --secondary-dim: color-mix(in srgb, var(--secondary) 70%, var(--background));
+  --secondary-hover: color-mix(in srgb, var(--secondary) 50%, var(--background));
   --secondary-subtle: color-mix(in srgb, var(--secondary) 20%, var(--background));
   --secondary-faint: color-mix(in srgb, var(--secondary) 30%, var(--background));
   --icon-faint: color-mix(in srgb, var(--muted-foreground) 40%, transparent);
@@ -116,6 +117,7 @@
   --color-warning: var(--warning);
   --color-success: var(--success);
   --color-secondary-dim: var(--secondary-dim);
+  --color-secondary-hover: var(--secondary-hover);
   --color-secondary-subtle: var(--secondary-subtle);
   --color-secondary-faint: var(--secondary-faint);
   --color-icon-faint: var(--icon-faint);
