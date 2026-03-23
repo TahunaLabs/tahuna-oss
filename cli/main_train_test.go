@@ -388,3 +388,40 @@ func TestPersistFallbackEnvironmentGPU_IgnoresInvalidRunPath(t *testing.T) {
 		t.Fatalf("expected no API calls for invalid path, got %d", requestCount)
 	}
 }
+
+func TestAvailableGPUChoices_FiltersUnavailableCaseInsensitive(t *testing.T) {
+	gpus := []string{
+		"NVIDIA H200 NVL",
+		"NVIDIA GeForce RTX 3070",
+		"NVIDIA GeForce RTX 3090",
+	}
+	unavailable := map[string]struct{}{
+		normalizeGPUChoice("nvidia geforce rtx 3070"): {},
+	}
+
+	got := availableGPUChoices(gpus, unavailable)
+	if len(got) != 2 {
+		t.Fatalf("expected 2 choices after filtering, got %d (%v)", len(got), got)
+	}
+	if got[0] != "NVIDIA H200 NVL" || got[1] != "NVIDIA GeForce RTX 3090" {
+		t.Fatalf("unexpected filtered order: %v", got)
+	}
+}
+
+func TestAvailableGPUChoices_DeduplicatesAndTrims(t *testing.T) {
+	gpus := []string{
+		" NVIDIA H200 NVL ",
+		"nvidia h200 nvl",
+		"",
+		"  ",
+		"NVIDIA GeForce RTX 3090",
+	}
+
+	got := availableGPUChoices(gpus, map[string]struct{}{})
+	if len(got) != 2 {
+		t.Fatalf("expected 2 unique choices, got %d (%v)", len(got), got)
+	}
+	if got[0] != "NVIDIA H200 NVL" || got[1] != "NVIDIA GeForce RTX 3090" {
+		t.Fatalf("unexpected normalized choices: %v", got)
+	}
+}

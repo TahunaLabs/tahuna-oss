@@ -1077,14 +1077,27 @@ func createRunWithCapacityPrompt(path string, payload map[string]any) (createRun
 		}
 	}
 
+	unavailable := map[string]struct{}{}
+	if defaultGPU != "" {
+		unavailable[normalizeGPUChoice(defaultGPU)] = struct{}{}
+	}
+
 	lastErr := err
 	for {
 		fmt.Printf("%sNo GPU capacity for current selection.%s\n", cAmpGold, cReset)
-		nextGPU := promptChoice("Choose available GPU", gpus, defaultIndex)
+		candidates := availableGPUChoices(gpus, unavailable)
+		if len(candidates) == 0 {
+			return createRunResponse{}, fmt.Errorf("no GPU capacity currently available in listed GPUs; run `tahuna gpus list` and try again later")
+		}
+		if defaultIndex >= len(candidates) {
+			defaultIndex = 0
+		}
+		nextGPU := promptChoice("Choose available GPU", candidates, defaultIndex)
 		payload["gpu_type"] = nextGPU
 		if gpuCount := int(asInt64(payload["gpu_count"])); gpuCount > 0 {
 			if err := validateGPUSelection(nextGPU, gpuCount); err != nil {
 				fmt.Printf("%s%s%s\n", cAmpGold, err.Error(), cReset)
+				unavailable[normalizeGPUChoice(nextGPU)] = struct{}{}
 				choice := promptChoice("Still unavailable", []string{"Try another GPU", "Cancel"}, 0)
 				if choice == "Cancel" {
 					return createRunResponse{}, lastErr
@@ -1103,17 +1116,51 @@ func createRunWithCapacityPrompt(path string, payload map[string]any) (createRun
 			return createRunResponse{}, err
 		}
 
+		unavailable[normalizeGPUChoice(nextGPU)] = struct{}{}
 		choice := promptChoice("Still unavailable", []string{"Try another GPU", "Cancel"}, 0)
 		if choice == "Cancel" {
 			return createRunResponse{}, lastErr
 		}
-		for i, gpu := range gpus {
+		candidates = availableGPUChoices(gpus, unavailable)
+		if len(candidates) == 0 {
+			return createRunResponse{}, fmt.Errorf("no GPU capacity currently available in listed GPUs; run `tahuna gpus list` and try again later")
+		}
+		defaultIndex = 0
+		for i, gpu := range candidates {
 			if strings.EqualFold(strings.TrimSpace(gpu), nextGPU) {
-				defaultIndex = (i + 1) % len(gpus)
+				defaultIndex = (i + 1) % len(candidates)
 				break
 			}
 		}
 	}
+}
+
+func normalizeGPUChoice(value string) string {
+	return strings.ToLower(strings.TrimSpace(value))
+}
+
+func availableGPUChoices(gpus []string, unavailable map[string]struct{}) []string {
+	if len(gpus) == 0 {
+		return nil
+	}
+	choices := make([]string, 0, len(gpus))
+	seen := map[string]struct{}{}
+	for _, gpu := range gpus {
+		trimmed := strings.TrimSpace(gpu)
+		if trimmed == "" {
+			continue
+		}
+		key := normalizeGPUChoice(trimmed)
+		if _, blocked := unavailable[key]; blocked {
+			continue
+		}
+		if _, exists := seen[key]; exists {
+			continue
+		}
+		seen[key] = struct{}{}
+		choices = append(choices, trimmed)
+	}
+	return choices
 }
 
 func persistFallbackEnvironmentGPU(path, gpuType string) {
