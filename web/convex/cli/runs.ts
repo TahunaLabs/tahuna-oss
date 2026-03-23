@@ -6,6 +6,7 @@ import {
   corsHeaders,
   createAndProvisionRunStrict,
   readJsonBody,
+  toClientErrorDetail,
   validateGpuCountLimit,
 } from "@convex/cli/shared";
 import { handleCancelRun, handleRuntimeGet, handleRuntimePost, parseRuntimeRoute } from "@convex/runsHttp";
@@ -85,7 +86,7 @@ export const createRun = httpAction(async (ctx, request) => {
       headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
     });
   } catch (err) {
-    const detail = err instanceof Error ? err.message : "failed to create run";
+    const detail = toClientErrorDetail(err, "failed to create run");
     const lower = detail.toLowerCase();
     const status = lower.includes("no gpu capacity currently available")
       ? 409
@@ -139,7 +140,7 @@ export const renameRun = httpAction(async (ctx, request) => {
       headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
     });
   } catch (err) {
-    const detail = err instanceof Error ? err.message : "failed to rename run";
+    const detail = toClientErrorDetail(err, "failed to rename run");
     return new Response(JSON.stringify({ detail }), {
       status: 400,
       headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
@@ -186,7 +187,7 @@ export const getRunOrLogs = httpAction(async (ctx, request) => {
         headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
       });
     } catch (err) {
-      const detail = err instanceof Error ? err.message : "failed to load run logs";
+      const detail = toClientErrorDetail(err, "failed to load run logs");
       return new Response(JSON.stringify({ detail }), {
         status: 404,
         headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
@@ -204,7 +205,7 @@ export const getRunOrLogs = httpAction(async (ctx, request) => {
       headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
     });
   } catch (err) {
-    const detail = err instanceof Error ? err.message : "failed to load run";
+    const detail = toClientErrorDetail(err, "failed to load run");
     return new Response(JSON.stringify({ detail }), {
       status: 404,
       headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
@@ -246,7 +247,7 @@ export const removeRun = httpAction(async (ctx, request) => {
       headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
     });
   } catch (err) {
-    const detail = err instanceof Error ? err.message : "failed to delete run";
+    const detail = toClientErrorDetail(err, "failed to delete run");
     const lower = detail.toLowerCase();
     const status =
       lower.includes("cancel it before deleting") || lower.includes("cancellation requested") ? 409 : 400;

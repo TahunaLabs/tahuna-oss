@@ -25,6 +25,7 @@ const RUNPOD_GPU_PRICING_ROWS: RunpodGpuPricingRow[] = [
   { gpuType: "RTX A4000", pricePerHour: 0.25 },
   { gpuType: "RTX A4500", pricePerHour: 0.25 },
   { gpuType: "RTX 3090", pricePerHour: 0.46 },
+  { gpuType: "RTX 3070", pricePerHour: 0.24 },
   { gpuType: "RTX A5000", pricePerHour: 0.27 },
   { gpuType: "RTX A6000", pricePerHour: 0.49 },
   { gpuType: "A100 PCIe", pricePerHour: 1.39 },
@@ -37,6 +38,7 @@ function normalizeGpuKey(value: string) {
     .trim()
     .toLowerCase()
     .replace(/^nvidia\s+/, "")
+    .replace(/^geforce\s+/, "")
     .replace(/\s+/g, " ");
 }
 

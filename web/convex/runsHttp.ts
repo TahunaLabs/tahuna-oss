@@ -1,7 +1,7 @@
 import { internal } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import type { ActionCtx } from "@convex/_generated/server";
-import { corsHeaders, extractBearerToken, r2, readJsonBody } from "@convex/cli/shared";
+import { corsHeaders, extractBearerToken, r2, readJsonBody, toClientErrorDetail } from "@convex/cli/shared";
 import { sha256Hex } from "@convex/syncManifest";
 
 const RUNTIME_STATUS_VALUES = ["provisioning", "running", "completed", "failed", "cancelled"] as const;
@@ -60,7 +60,7 @@ export async function handleRuntimeGet(ctx: ActionCtx, request: Request, route: 
         headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
       });
     } catch (err) {
-      const detail = err instanceof Error ? err.message : "failed to build bootstrap plan";
+      const detail = toClientErrorDetail(err, "failed to build bootstrap plan");
       return new Response(JSON.stringify({ detail }), {
         status: 400,
         headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
@@ -207,7 +207,7 @@ export async function handleRuntimePost(ctx: ActionCtx, request: Request, route:
         const upload = await r2.generateUploadUrl(key);
         uploads.push({ name: artifact.name, key: upload.key, url: upload.url });
       } catch (err) {
-        const detail = err instanceof Error ? err.message : "failed to generate upload URL";
+        const detail = toClientErrorDetail(err, "failed to generate upload URL");
         return new Response(JSON.stringify({ detail: `artifact upload URL failed for ${artifact.name}: ${detail}` }), {
           status: 500,
           headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
@@ -279,7 +279,7 @@ export async function handleCancelRun(ctx: ActionCtx, request: Request, authenti
       headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
     });
   } catch (err) {
-    const detail = err instanceof Error ? err.message : "failed to cancel run";
+    const detail = toClientErrorDetail(err, "failed to cancel run");
     const lower = detail.toLowerCase();
     const status = lower.includes("already") ? 409 : 400;
     return new Response(JSON.stringify({ detail }), {

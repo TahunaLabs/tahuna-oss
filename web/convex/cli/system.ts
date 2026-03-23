@@ -1,7 +1,7 @@
 import { api } from "@convex/_generated/api";
 import { httpAction } from "@convex/_generated/server";
 import { AUTH_CONFIG, NETWORK_CONFIG, RUN_CONFIG, SYNC_CONFIG } from "@convex/appConfig";
-import { type GpuRow, authenticateApiRequest, corsHeaders, loadDynamicGpuRows } from "@convex/cli/shared";
+import { type GpuRow, authenticateApiRequest, corsHeaders, loadDynamicGpuRows, toClientErrorDetail } from "@convex/cli/shared";
 
 export const optionsHandler = httpAction(async () => {
   return new Response(null, {
@@ -67,7 +67,7 @@ export const getGpus = httpAction(async (ctx, request) => {
       },
     );
   } catch (err) {
-    const detail = err instanceof Error ? err.message : "failed to load gpus";
+    const detail = toClientErrorDetail(err, "failed to load gpus");
     return new Response(JSON.stringify({ detail }), {
       status: 500,
       headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),

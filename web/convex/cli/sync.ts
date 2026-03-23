@@ -13,6 +13,7 @@ import {
   r2,
   readJsonBody,
   requireAccessibleEnvironment,
+  toClientErrorDetail,
 } from "@convex/cli/shared";
 import { internal } from "@convex/_generated/api";
 import {
@@ -224,7 +225,7 @@ export const createBlobUploadUrl = httpAction(async (ctx, request) => {
       },
     );
   } catch (err) {
-    const detail = err instanceof Error ? err.message : "failed to generate blob upload URL";
+    const detail = toClientErrorDetail(err, "failed to generate blob upload URL");
     return new Response(JSON.stringify({ detail }), {
       status: 400,
       headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
@@ -304,7 +305,7 @@ export const createManifestUploadUrl = httpAction(async (ctx, request) => {
       },
     );
   } catch (err) {
-    const detail = err instanceof Error ? err.message : "failed to generate manifest upload URL";
+    const detail = toClientErrorDetail(err, "failed to generate manifest upload URL");
     return new Response(JSON.stringify({ detail }), {
       status: 400,
       headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
@@ -386,7 +387,7 @@ export const commitSync = httpAction(async (ctx, request) => {
     try {
       await fetchManifestFromR2(ctx, codeManifestKey, "code", codeManifestHash);
     } catch (err) {
-      const detail = err instanceof Error ? err.message : "code manifest validation failed";
+      const detail = toClientErrorDetail(err, "code manifest validation failed");
       return new Response(JSON.stringify({ detail }), {
         status: 400,
         headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
@@ -410,7 +411,7 @@ export const commitSync = httpAction(async (ctx, request) => {
     try {
       await fetchManifestFromR2(ctx, dataManifestKey, "data", dataManifestHash);
     } catch (err) {
-      const detail = err instanceof Error ? err.message : "data manifest validation failed";
+      const detail = toClientErrorDetail(err, "data manifest validation failed");
       return new Response(JSON.stringify({ detail }), {
         status: 400,
         headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
@@ -430,7 +431,7 @@ export const commitSync = httpAction(async (ctx, request) => {
       headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
     });
   } catch (err) {
-    const detail = err instanceof Error ? err.message : "failed to commit sync pointers";
+    const detail = toClientErrorDetail(err, "failed to commit sync pointers");
     return new Response(JSON.stringify({ detail }), {
       status: 400,
       headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),

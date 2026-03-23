@@ -6,6 +6,7 @@ import {
   corsHeaders,
   createAndProvisionRunStrict,
   readJsonBody,
+  toClientErrorDetail,
   validateGpuCountLimit,
 } from "@convex/cli/shared";
 
@@ -60,7 +61,7 @@ export const createEnvironment = httpAction(async (ctx, request) => {
       headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
     });
   } catch (err) {
-    const detail = err instanceof Error ? err.message : "failed to create environment";
+    const detail = toClientErrorDetail(err, "failed to create environment");
     return new Response(JSON.stringify({ detail }), {
       status: 400,
       headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
@@ -114,7 +115,7 @@ export const removeEnvironment = httpAction(async (ctx, request) => {
       headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
     });
   } catch (err) {
-    const detail = err instanceof Error ? err.message : "failed to delete environment";
+    const detail = toClientErrorDetail(err, "failed to delete environment");
     return new Response(JSON.stringify({ detail }), {
       status: 400,
       headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
@@ -152,7 +153,7 @@ export const getEnvironment = httpAction(async (ctx, request) => {
       headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
     });
   } catch (err) {
-    const detail = err instanceof Error ? err.message : "failed to load environment";
+    const detail = toClientErrorDetail(err, "failed to load environment");
     return new Response(JSON.stringify({ detail }), {
       status: 404,
       headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
@@ -233,7 +234,7 @@ export const updateEnvironmentSpecs = httpAction(async (ctx, request) => {
       headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
     });
   } catch (err) {
-    const detail = err instanceof Error ? err.message : "failed to update environment specs";
+    const detail = toClientErrorDetail(err, "failed to update environment specs");
     return new Response(JSON.stringify({ detail }), {
       status: 400,
       headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
@@ -293,7 +294,7 @@ async function handleBindEnvironmentData(ctx: ActionCtx, request: Request) {
       headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
     });
   } catch (err) {
-    const detail = err instanceof Error ? err.message : "failed to bind data";
+    const detail = toClientErrorDetail(err, "failed to bind data");
     return new Response(JSON.stringify({ detail }), {
       status: 400,
       headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
@@ -342,7 +343,7 @@ async function handleUnbindEnvironmentData(ctx: ActionCtx, request: Request) {
       headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
     });
   } catch (err) {
-    const detail = err instanceof Error ? err.message : "failed to unbind data";
+    const detail = toClientErrorDetail(err, "failed to unbind data");
     return new Response(JSON.stringify({ detail }), {
       status: 400,
       headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
@@ -412,7 +413,7 @@ export const createRunFromEnvironment = httpAction(async (ctx, request) => {
       headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
     });
   } catch (err) {
-    const detail = err instanceof Error ? err.message : "failed to create run";
+    const detail = toClientErrorDetail(err, "failed to create run");
     const lower = detail.toLowerCase();
     const status = lower.includes("no gpu capacity currently available")
       ? 409

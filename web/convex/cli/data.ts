@@ -1,6 +1,6 @@
 import { internal } from "@convex/_generated/api";
 import { httpAction } from "@convex/_generated/server";
-import { authenticateApiRequest, corsHeaders } from "@convex/cli/shared";
+import { authenticateApiRequest, corsHeaders, toClientErrorDetail } from "@convex/cli/shared";
 
 export const listDataItems = httpAction(async (ctx, request) => {
   const userId = await authenticateApiRequest(ctx, request);
@@ -18,7 +18,7 @@ export const listDataItems = httpAction(async (ctx, request) => {
       headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
     });
   } catch (err) {
-    const detail = err instanceof Error ? err.message : "failed to list data items";
+    const detail = toClientErrorDetail(err, "failed to list data items");
     return new Response(JSON.stringify({ detail }), {
       status: 400,
       headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
@@ -60,7 +60,7 @@ export const getDataItem = httpAction(async (ctx, request) => {
       headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
     });
   } catch (err) {
-    const detail = err instanceof Error ? err.message : "failed to load data item";
+    const detail = toClientErrorDetail(err, "failed to load data item");
     return new Response(JSON.stringify({ detail }), {
       status: 400,
       headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),

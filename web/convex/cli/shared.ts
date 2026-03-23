@@ -171,6 +171,44 @@ export async function readJsonBody(request: Request) {
   }
 }
 
+const SAFE_CLIENT_ERROR_PATTERNS: RegExp[] = [
+  /authentication required/i,
+  /access denied/i,
+  /not found/i,
+  /\bis required\b/i,
+  /\bmust be\b/i,
+  /\binvalid\b/i,
+  /\balready\b/i,
+  /\binsufficient credits\b/i,
+  /\bno gpu capacity currently available\b/i,
+  /\binsufficient capacity\b/i,
+  /\bmax gpu count\b/i,
+  /\bgpu type .* is not available\b/i,
+  /\bgpu pricing not configured\b/i,
+  /\benvironment code is not synced\b/i,
+  /\bcancel it before deleting\b/i,
+  /\bcancellation requested\b/i,
+  /\bmanifest\b.*\b(not found|invalid|mismatch)\b/i,
+  /\bblob exceeds limit\b/i,
+  /\bmanifest exceeds limit\b/i,
+];
+
+export function toClientErrorDetail(err: unknown, fallback: string): string {
+  const raw = err instanceof Error ? err.message : "";
+  const line = raw.split("\n")[0]?.trim() || "";
+  if (!line) {
+    return fallback;
+  }
+  const stripped = line.replace(/^uncaught\s+(?:\w+\s+)?error:\s*/i, "").trim();
+  if (!stripped) {
+    return fallback;
+  }
+  if (SAFE_CLIENT_ERROR_PATTERNS.some((pattern) => pattern.test(stripped))) {
+    return stripped;
+  }
+  return fallback;
+}
+
 function isS3NotFoundError(error: unknown) {
   if (!error || typeof error !== "object") {
     return false;

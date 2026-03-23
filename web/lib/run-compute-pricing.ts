@@ -27,7 +27,9 @@ export function resolveRunComputePricing(args: {
   const lookupGpuUnitHourlyRateCents = getRunpodGpuPricePerHourCents(args.gpuType || "");
   if (gpuCount > 0 && typeof lookupGpuUnitHourlyRateCents !== "number") {
     const gpuType = (args.gpuType || "").trim();
-    throw new Error(`gpu pricing not found for gpu_type "${gpuType || "unknown"}"`);
+    throw new Error(
+      `gpu pricing not configured for "${gpuType || "unknown"}"; run \`tahuna gpus list\` and choose a listed GPU`,
+    );
   }
   const resolvedGpuUnitHourlyRateCents = lookupGpuUnitHourlyRateCents ?? 0;
   const gpuUnitHourlyRateCents = gpuCount > 0 ? resolvedGpuUnitHourlyRateCents : 0;
