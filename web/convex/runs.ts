@@ -13,6 +13,12 @@ import {
 import { requireUser } from "@convex/auth";
 import { R2 } from "@convex-dev/r2";
 import { HeadObjectCommand } from "@aws-sdk/client-s3";
+import {
+  buildRuntimeCompatibilityKey,
+  classifyRuntimeIncompatibility,
+  resolveRunpodCloudType,
+  type RuntimeCompatibilityFingerprint,
+} from "@/lib/runtime-incompatibility";
 import { images } from "@convex/catalog";
 import { PYTHON_CONFIG, RUN_CONFIG, SYNC_CONFIG } from "@convex/appConfig";
 import { applyStorageDeltaCredits, USAGE_EVENT_TYPE, upsertLedgerDebitTotal } from "@convex/credits";
@@ -244,6 +250,22 @@ const runtimeBootstrapPlanValidator = v.object({
     entries: v.array(runtimeBootstrapEntryValidator),
   }),
 });
+const runtimeCompatibilityFingerprintValidator = v.object({
+  cloudType: v.string(),
+  framework: v.string(),
+  version: v.string(),
+  pythonVersion: v.string(),
+  gpuType: v.string(),
+  imageName: v.string(),
+});
+const startupTimeoutStateValidator = v.union(
+  v.null(),
+  v.object({
+    status: v.string(),
+    cancellationRequested: v.boolean(),
+    podId: v.optional(v.string()),
+  }),
+);
 
 const r2 = new R2(components.r2);
 
@@ -457,13 +479,6 @@ function blobKeys(
   return [`blobs/${sha256}`];
 }
 
-function summarizeManifest(manifest: SyncManifestPayload) {
-  return {
-    fileCount: manifest.entries.length,
-    totalBytes: manifest.entries.reduce((sum, entry) => sum + entry.size, 0),
-  };
-}
-
 function isS3NotFoundError(error: unknown) {
   if (!error || typeof error !== "object") {
     return false;
@@ -637,8 +652,7 @@ async function createRunpodPod(args: {
   if (!apiKey) {
     throw new Error("RUNPOD_API_KEY is not set");
   }
-  const cloudType = (process.env.RUNPOD_CLOUD_TYPE?.trim().toUpperCase() || "SECURE");
-  const allowedCloudType = cloudType === "COMMUNITY" ? "COMMUNITY" : "SECURE";
+  const allowedCloudType = resolveRunpodCloudType();
   const gpuTypeId = await resolveRunpodGpuTypeId(apiKey, args.gpuType);
   const runtimeApiBase = resolveRuntimeApiBase();
   const wandbBaseURL = resolveWandbBaseURL(runtimeApiBase);
@@ -786,6 +800,19 @@ async function resolveRunpodGpuTypeId(apiKey: string, requestedGpu: string) {
     .filter(Boolean)
     .join(", ");
   throw new Error(`Runpod GPU type not found: "${trimmed}". Available examples: ${sample}`);
+}
+
+function normalizeCompatibilityFingerprint(
+  fingerprint: RuntimeCompatibilityFingerprint,
+): RuntimeCompatibilityFingerprint {
+  return {
+    cloudType: fingerprint.cloudType === "COMMUNITY" ? "COMMUNITY" : "SECURE",
+    framework: fingerprint.framework.trim(),
+    version: fingerprint.version.trim(),
+    pythonVersion: fingerprint.pythonVersion.trim(),
+    gpuType: fingerprint.gpuType.trim(),
+    imageName: fingerprint.imageName.trim(),
+  };
 }
 
 // ---------- public (auth via ctx.auth) ----------
@@ -1398,6 +1425,79 @@ export const internalShouldTerminatePod = internalQuery({
   },
 });
 
+export const internalGetStartupTimeoutState = internalQuery({
+  args: { runId: v.id("runs") },
+  returns: startupTimeoutStateValidator,
+  handler: async (ctx, args) => {
+    const row = await ctx.db.get("runs", args.runId);
+    if (!row) {
+      return null;
+    }
+    return {
+      status: row.status,
+      cancellationRequested: row.cancellationRequested,
+      podId: row.podId,
+    };
+  },
+});
+
+export const upsertRuntimeIncompatibility = internalMutation({
+  args: {
+    runId: v.id("runs"),
+    podId: v.optional(v.string()),
+    fingerprint: runtimeCompatibilityFingerprintValidator,
+    errorCode: v.string(),
+    errorDetail: v.string(),
+    cooldownSeconds: v.number(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const fingerprint = normalizeCompatibilityFingerprint(args.fingerprint as RuntimeCompatibilityFingerprint);
+    if (!fingerprint.framework || !fingerprint.version || !fingerprint.pythonVersion || !fingerprint.gpuType || !fingerprint.imageName) {
+      return null;
+    }
+    const key = buildRuntimeCompatibilityKey(fingerprint);
+    const now = Date.now();
+    const cooldownMs = Math.max(0, Math.floor(args.cooldownSeconds * 1000));
+    const nextCooldownUntil = now + cooldownMs;
+    const normalizedDetail = sanitizeRuntimeMessage(args.errorDetail) || "runtime startup incompatibility";
+    const existing = await ctx.db
+      .query("runtimeIncompatibilities")
+      .withIndex("by_key", (q) => q.eq("compatibilityKey", key))
+      .first();
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        errorCode: args.errorCode.trim() || existing.errorCode,
+        errorDetail: normalizedDetail,
+        lastFailedAt: now,
+        failureCount: Math.max(1, Math.floor(existing.failureCount || 0)) + 1,
+        cooldownUntil: Math.max(existing.cooldownUntil || 0, nextCooldownUntil),
+        lastRunId: args.runId,
+        lastPodId: args.podId?.trim() || existing.lastPodId,
+      });
+      return null;
+    }
+    await ctx.db.insert("runtimeIncompatibilities", {
+      compatibilityKey: key,
+      cloudType: fingerprint.cloudType,
+      framework: fingerprint.framework,
+      version: fingerprint.version,
+      pythonVersion: fingerprint.pythonVersion,
+      gpuType: fingerprint.gpuType,
+      imageName: fingerprint.imageName,
+      errorCode: args.errorCode.trim() || "runtime_incompatibility",
+      errorDetail: normalizedDetail,
+      firstFailedAt: now,
+      lastFailedAt: now,
+      failureCount: 1,
+      cooldownUntil: nextCooldownUntil,
+      lastRunId: args.runId,
+      lastPodId: args.podId?.trim() || undefined,
+    });
+    return null;
+  },
+});
+
 export const setRuntimeTokenHash = internalMutation({
   args: { runId: v.id("runs"), runtimeTokenHash: v.string() },
   returns: v.null(),
@@ -1407,6 +1507,51 @@ export const setRuntimeTokenHash = internalMutation({
       return null;
     }
     await ctx.db.patch("runs", args.runId, { runtimeTokenHash: args.runtimeTokenHash });
+    return null;
+  },
+});
+
+export const enforceProvisioningStartupTimeout = internalAction({
+  args: {
+    runId: v.id("runs"),
+    podId: v.string(),
+    fingerprint: runtimeCompatibilityFingerprintValidator,
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const state = await ctx.runQuery(internal.runs.internalGetStartupTimeoutState, {
+      runId: args.runId,
+    });
+    if (!state || state.cancellationRequested || TERMINAL_STATUSES.has(state.status)) {
+      return null;
+    }
+    if (state.status !== RUN_STATUS.PROVISIONING) {
+      return null;
+    }
+    if ((state.podId || "") !== args.podId) {
+      return null;
+    }
+    const detail = `startup timeout: timed out waiting for runtime startup heartbeat after ${RUN_CONFIG.startupTimeoutSeconds}s`;
+    const incompatibility = classifyRuntimeIncompatibility(detail);
+    if (incompatibility) {
+      await ctx.runMutation(internal.runs.upsertRuntimeIncompatibility, {
+        runId: args.runId,
+        podId: args.podId,
+        fingerprint: args.fingerprint,
+        errorCode: incompatibility.code,
+        errorDetail: detail,
+        cooldownSeconds: incompatibility.cooldownSeconds,
+      });
+    }
+    await ctx.runMutation(internal.runs.markFailed, {
+      runId: args.runId,
+      error: `pod bootstrap failed: ${detail}`,
+    });
+    await ctx.runAction(internal.runs.internalTerminatePod, {
+      runId: args.runId,
+      podId: args.podId,
+      force: true,
+    });
     return null;
   },
 });
@@ -1428,6 +1573,15 @@ export const provisionRun = internalAction({
     if (await ctx.runQuery(internal.runs.internalShouldAbortProvisioning, { runId: args.runId })) {
       return null;
     }
+    const compatibilityFingerprint = normalizeCompatibilityFingerprint({
+      cloudType: resolveRunpodCloudType(),
+      framework: runSpec.framework,
+      version: runSpec.version,
+      pythonVersion: runSpec.python_version,
+      gpuType: runSpec.effective_gpu_type,
+      imageName: resolveImageName(runSpec.framework, runSpec.version, runSpec.python_version),
+    });
+    let provisionedPodId = "";
     try {
       const codeManifestHash = provisioningPayload.code_manifest_hash;
       const dataManifestHash = provisioningPayload.data_manifest_hash;
@@ -1437,12 +1591,9 @@ export const provisionRun = internalAction({
         throw new Error("missing pinned code manifest hash/key in provisioning payload");
       }
 
-      const codeManifest = await fetchManifest(ctx, "code", codeManifestKey, codeManifestHash);
-      const codeStats = summarizeManifest(codeManifest);
-      let dataStats = { fileCount: 0, totalBytes: 0 };
+      await fetchManifest(ctx, "code", codeManifestKey, codeManifestHash);
       if (dataManifestHash && dataManifestKey) {
-        const dataManifest = await fetchManifest(ctx, "data", dataManifestKey, dataManifestHash);
-        dataStats = summarizeManifest(dataManifest);
+        await fetchManifest(ctx, "data", dataManifestKey, dataManifestHash);
       }
       const runtimeToken = generateRuntimeToken();
       const runtimeTokenHash = await sha256Hex(runtimeToken);
@@ -1453,42 +1604,55 @@ export const provisionRun = internalAction({
       if (await ctx.runQuery(internal.runs.internalShouldAbortProvisioning, { runId: args.runId })) {
         return null;
       }
-      const imageName = resolveImageName(runSpec.framework, runSpec.version, runSpec.python_version);
       const provisionResult = await createRunpodPod({
         runId: String(args.runId),
-        imageName,
+        imageName: compatibilityFingerprint.imageName,
         gpuType: runSpec.effective_gpu_type,
         gpuCount: runSpec.effective_gpu_count,
         volumeGb: runSpec.effective_volume_gb,
         runtimeToken,
         payload: provisioningPayload,
       });
+      provisionedPodId = provisionResult.podId;
       await ctx.runMutation(internal.runs.markPodProvisioned, {
         runId: args.runId,
         podId: provisionResult.podId,
         runpodResponse: provisionResult.rawResponse,
       });
-
-      await ctx.runMutation(internal.runs.markRunning, {
-        runId: args.runId,
-        provisioningPayload: {
-          ...provisioningPayload,
-          bootstrap_summary: {
-            code_files: codeStats.fileCount,
-            code_bytes: codeStats.totalBytes,
-            data_files: dataStats.fileCount,
-            data_bytes: dataStats.totalBytes,
-          },
-          runpod_pod_id: provisionResult.podId,
+      await ctx.scheduler.runAfter(
+        RUN_CONFIG.startupTimeoutSeconds * 1000,
+        internal.runs.enforceProvisioningStartupTimeout,
+        {
+          runId: args.runId,
+          podId: provisionResult.podId,
+          fingerprint: compatibilityFingerprint,
         },
-      });
+      );
     } catch (error) {
       const detail = error instanceof Error ? error.message : "pod bootstrap failed";
+      const incompatibility = classifyRuntimeIncompatibility(detail);
+      if (incompatibility) {
+        await ctx.runMutation(internal.runs.upsertRuntimeIncompatibility, {
+          runId: args.runId,
+          podId: provisionedPodId || undefined,
+          fingerprint: compatibilityFingerprint,
+          errorCode: incompatibility.code,
+          errorDetail: detail,
+          cooldownSeconds: incompatibility.cooldownSeconds,
+        });
+      }
       await ctx.runMutation(internal.runs.markFailed, {
         runId: args.runId,
         error: `pod bootstrap failed: ${detail}`,
         provisioningPayload,
       });
+      if (provisionedPodId) {
+        await ctx.runAction(internal.runs.internalTerminatePod, {
+          runId: args.runId,
+          podId: provisionedPodId,
+          force: true,
+        });
+      }
     }
     return null;
   },

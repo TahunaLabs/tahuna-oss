@@ -69,6 +69,26 @@ export default defineSchema({
     .index("by_status", ["status"])
     .index("by_runtime_token_hash", ["runtimeTokenHash"]),
 
+  runtimeIncompatibilities: defineTable({
+    compatibilityKey: v.string(),
+    cloudType: v.string(),
+    framework: v.string(),
+    version: v.string(),
+    pythonVersion: v.string(),
+    gpuType: v.string(),
+    imageName: v.string(),
+    errorCode: v.string(),
+    errorDetail: v.string(),
+    firstFailedAt: v.number(),
+    lastFailedAt: v.number(),
+    failureCount: v.number(),
+    cooldownUntil: v.number(),
+    lastRunId: v.optional(v.id("runs")),
+    lastPodId: v.optional(v.string()),
+  })
+    .index("by_key", ["compatibilityKey"])
+    .index("by_cooldown_until", ["cooldownUntil"]),
+
   storageObjects: defineTable({
     userId: v.string(),
     source: v.union(v.literal("data"), v.literal("run_artifact")),

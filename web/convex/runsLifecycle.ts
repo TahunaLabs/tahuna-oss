@@ -4,7 +4,9 @@ import { components, internal } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import type { MutationCtx } from "@convex/_generated/server";
 import { resolveRunComputePricing } from "@/lib/run-compute-pricing";
-import { RUN_CONFIG } from "@convex/appConfig";
+import { buildRuntimeCompatibilityKey, resolveRunpodCloudType } from "@/lib/runtime-incompatibility";
+import { PYTHON_CONFIG, RUN_CONFIG } from "@convex/appConfig";
+import { images } from "@convex/catalog";
 import { resolveTerminalRunTiming, settleRunComputeCharge } from "@convex/runBilling";
 import { ACTIVE_STATUSES, RUN_DELETE_BATCH_SIZE, RUN_STATUS, TERMINAL_STATUSES } from "@convex/runsConstants";
 import { getAccessibleEnvironment, getAccessibleRun, listRunsForUser } from "@convex/runsAccess";
@@ -32,6 +34,22 @@ async function deleteIndexedStorageKeys(ctx: MutationCtx, userId: string, keys: 
       await ctx.db.delete("storageObjects", row._id);
     }
   }
+}
+
+function resolveImageName(framework: string, version: string, pythonVersion: string) {
+  const frameworkImages = images[framework];
+  if (!frameworkImages) {
+    throw new ConvexError(`unsupported framework for provisioning: ${framework}`);
+  }
+  const versionImages = frameworkImages[version];
+  if (!versionImages) {
+    throw new ConvexError(`unsupported framework version for provisioning: ${framework}:${version}`);
+  }
+  const imageName = versionImages[pythonVersion];
+  if (!imageName) {
+    throw new ConvexError(`unsupported python version for provisioning: ${framework}:${version}:${pythonVersion}`);
+  }
+  return imageName;
 }
 
 export async function createRunForUserId(
@@ -70,6 +88,26 @@ export async function createRunForUserId(
     }
   } else {
     runName = pickUniqueGeneratedRunName(userRuns);
+  }
+
+  const pythonVersion = env.pythonVersion || PYTHON_CONFIG.defaultVersion;
+  const imageName = resolveImageName(env.framework, env.version, pythonVersion);
+  const compatibilityKey = buildRuntimeCompatibilityKey({
+    cloudType: resolveRunpodCloudType(),
+    framework: env.framework,
+    version: env.version,
+    pythonVersion,
+    gpuType: effectiveGpuType,
+    imageName,
+  });
+  const incompatibility = await ctx.db
+    .query("runtimeIncompatibilities")
+    .withIndex("by_key", (q) => q.eq("compatibilityKey", compatibilityKey))
+    .first();
+  if (incompatibility && incompatibility.cooldownUntil > Date.now()) {
+    throw new ConvexError(
+      `runtime launch blocked for this gpu/image combination (${incompatibility.errorCode}); try another gpu or image`,
+    );
   }
 
   const now = Date.now();

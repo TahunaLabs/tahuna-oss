@@ -26,6 +26,7 @@ export const BILLING_CONFIG = {
 export const RUN_CONFIG = {
   statusPollSeconds: 5,
   logsPollSeconds: 2,
+  startupTimeoutSeconds: 300,
   cancellationGraceSeconds: 30,
   terminationRetryMaxAttempts: 5,
   terminationRetryDelaySeconds: 10,
