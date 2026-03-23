@@ -150,3 +150,19 @@
 html {
   scroll-behavior: smooth;
 }
+
+.badge-status-success {
+  @apply border-success/50 bg-success/20 text-success;
+}
+
+.badge-status-warning {
+  @apply border-warning/50 bg-warning/20 text-warning;
+}
+
+.badge-status-info {
+  @apply border-accent/50 bg-accent/20 text-accent;
+}
+
+.badge-status-error {
+  @apply border-destructive/50 bg-destructive/20 text-destructive;
+}

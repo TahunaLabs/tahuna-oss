@@ -8,7 +8,7 @@ function SidebarProvider({
 }: React.ComponentProps<"div">) {
   return (
     <div
-      className={cn("flex min-h-screen w-full bg-background", className)}
+      className={cn("flex h-screen w-full overflow-hidden bg-background", className)}
       {...props}
     />
   )

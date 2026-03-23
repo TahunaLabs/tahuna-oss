@@ -101,13 +101,13 @@ export function SettingsView({
       titleIcon={<Settings size={24} />}
       toolbar={null}
     >
-      <div className="space-y-6">
+      <div className="space-y-5">
         {saveError ? <Notice variant="error">{saveError}</Notice> : null}
         {saveMessage ? <Notice>{saveMessage}</Notice> : null}
 
-        <section className="space-y-2">
+        <Card variant="dashboard" className="p-4">
           <h2 className="text-dashboard-control font-medium text-foreground">Theme</h2>
-          <div className="inline-flex overflow-hidden rounded-lg border border-border bg-card">
+          <div className="mt-3 inline-flex overflow-hidden rounded-lg border border-border bg-card">
             <Button
               type="button"
               variant={theme === "dark" ? "dashboard-tab-compact-active" : "dashboard-tab-compact"}
@@ -129,11 +129,12 @@ export function SettingsView({
               Light
             </Button>
           </div>
-        </section>
+        </Card>
 
-        <section className="space-y-3">
-          <h2 className="text-dashboard-title font-dashboard-title text-foreground">Account information</h2>
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+        <Card variant="dashboard" className="p-4">
+          <h2 className="text-dashboard-control font-medium text-foreground">Account information</h2>
+          <div className="mt-4">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             <div>
               <label className="mb-1.5 block text-sm text-muted-foreground">First name</label>
               <Input
@@ -211,28 +212,29 @@ export function SettingsView({
               <Input variant="dashboard" value={userEmail || "—"} readOnly />
             </div>
           </div>
-          <div className="flex justify-end">
-            <Button
-              type="button"
-              variant="dashboard-primary"
-              size="none"
-              disabled={savingProfile}
-              onClick={() => {
-                void handleSaveProfile()
-              }}
-            >
-              {savingProfile ? "Saving..." : "Save changes"}
-            </Button>
+          <div className="mt-4 flex justify-end">
+              <Button
+                type="button"
+                variant="dashboard-primary"
+                size="none"
+                disabled={savingProfile}
+                onClick={() => {
+                  void handleSaveProfile()
+                }}
+              >
+                {savingProfile ? "Saving..." : "Save changes"}
+              </Button>
+            </div>
           </div>
-        </section>
+        </Card>
 
-        <section className="space-y-2">
+        <Card variant="dashboard" className="p-4">
           <CollapsibleSection
             title="API keys"
             open={apiKeysOpen}
             onToggle={() => setApiKeysOpen((open) => !open)}
           >
-            <Card variant="dashboard" className="space-y-3 p-4">
+            <div className="mt-3 space-y-3">
               <div className="flex items-center justify-between">
                 <p className="text-sm text-muted-foreground">
                   {apiKeys.length} total keys, {activeKeys.length} active
@@ -246,7 +248,7 @@ export function SettingsView({
               ) : (
                 <div className="space-y-2">
                   {apiKeys.slice(0, 8).map((key) => (
-                    <div key={key._id} className="rounded border border-border px-3 py-2">
+                    <div key={key._id} className="rounded border border-border p-3">
                       <div className="flex items-center justify-between gap-3">
                         <div className="flex min-w-0 items-center gap-2">
                           <KeyRound className="h-4 w-4 shrink-0 text-muted-foreground" />
@@ -262,20 +264,22 @@ export function SettingsView({
                   ))}
                 </div>
               )}
-            </Card>
+            </div>
           </CollapsibleSection>
+        </Card>
 
+        <Card variant="dashboard" className="p-4">
           <CollapsibleSection
             title="Active sessions"
             open={sessionsOpen}
             onToggle={() => setSessionsOpen((open) => !open)}
           >
-            <Card variant="dashboard" className="space-y-2 p-4">
+            <div className="mt-3 space-y-2">
               {activeSessions.length === 0 ? (
                 <p className="text-sm text-muted-foreground">No active machine sessions found.</p>
               ) : (
                 activeSessions.map((session) => (
-                  <div key={session._id} className="flex items-center justify-between gap-3 rounded border border-border px-3 py-2">
+                  <div key={session._id} className="flex items-center justify-between gap-3 rounded border border-border p-3">
                     <div>
                       <p className="text-sm text-foreground">{session.machineId}</p>
                       <p className="text-ui-xs text-muted-foreground">{session.name}</p>
@@ -284,15 +288,17 @@ export function SettingsView({
                   </div>
                 ))
               )}
-            </Card>
+            </div>
           </CollapsibleSection>
+        </Card>
 
+        <Card variant="dashboard" className="p-4">
           <CollapsibleSection
             title="Login settings"
             open={loginOpen}
             onToggle={() => setLoginOpen((open) => !open)}
           >
-            <Card variant="dashboard" className="space-y-3 p-4">
+            <div className="mt-3 space-y-3">
               <div className="flex items-center gap-2 text-foreground">
                 <ShieldCheck className="h-4 w-4 text-success" />
                 <p className="text-sm">Email OTP authentication is enabled.</p>
@@ -300,9 +306,9 @@ export function SettingsView({
               <p className="text-sm text-muted-foreground">
                 Password login and social providers are not configured in the current auth schema.
               </p>
-            </Card>
+            </div>
           </CollapsibleSection>
-        </section>
+        </Card>
       </div>
     </DashboardViewLayout>
   )

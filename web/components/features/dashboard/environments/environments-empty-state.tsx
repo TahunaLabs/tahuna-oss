@@ -28,7 +28,7 @@ function EnvironmentsEmptyState() {
           </p>
 
           <Button asChild variant="dashboard-secondary" size="none">
-            <Link href="https://github.com/Pazuzzu/tahuna/tree/develop/docs">
+            <Link href={process.env.NEXT_PUBLIC_DOCS_URL!}>
               Full Documentation
               <ExternalLink className="h-3.5 w-3.5" />
             </Link>
