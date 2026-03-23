@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils"
 const statusDotVariants = cva("rounded-full", {
   variants: {
     variant: {
-      success: "bg-green-400",
+      success: "bg-success",
       muted: "bg-muted-foreground/30",
       queued: "bg-status-queued",
       provisioning: "bg-status-provisioning",

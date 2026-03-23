@@ -1,8 +1,11 @@
 "use client"
 
 import { useMemo, useState } from "react"
-import { CheckCircle2, Clock3, Search, XCircle } from "lucide-react"
+import { CheckCircle2, ClipboardList, Clock3, Search, XCircle } from "lucide-react"
+
+import { DashboardViewLayout } from "@/components/app-shell/dashboard-view-layout"
 import type { RunRow } from "@/components/features/dashboard-model"
+import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Select } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -88,21 +91,19 @@ export function AuditLogsView({ runs, environmentNameById }: AuditLogsViewProps)
   }, [actionFilter, dateFilter, search, sortedRuns])
 
   return (
-    <main className="flex-1 flex flex-col h-full overflow-hidden">
-      <header className="px-6 py-4 border-b border-border">
-        <h1 className="text-sm font-medium text-foreground">Audit logs</h1>
-      </header>
-
-      <div className="px-6 py-3 border-b border-border">
-        <div className="grid grid-cols-1 md:grid-cols-[1fr_200px_170px] gap-2">
-          <div className="relative">
-            <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
+    <DashboardViewLayout
+      sectionLabel="Audit logs"
+      title="Audit logs"
+      titleIcon={<ClipboardList size={24} />}
+      toolbar={(
+        <div className="flex flex-col gap-2 md:flex-row">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
-              variant="dashboard"
+              variant="dashboard-search"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Search logs"
-              className="pl-9"
             />
           </div>
           <Select
@@ -123,23 +124,16 @@ export function AuditLogsView({ runs, environmentNameById }: AuditLogsViewProps)
             onChange={(event) => setDateFilter(event.target.value)}
           />
         </div>
-      </div>
-
-      <div className="flex-1 overflow-y-auto px-6 py-3">
-        {filteredRuns.length === 0 ? (
-          <div className="rounded-lg border border-border bg-card px-4 py-6 text-center text-sm text-muted-foreground">
-            No audit logs match the current filters.
-          </div>
-        ) : (
+      )}
+    >
+      {filteredRuns.length === 0 ? (
+        <Card variant="dashboard" className="px-4 py-6 text-center text-sm text-muted-foreground">
+          No audit logs match the current filters.
+        </Card>
+      ) : (
+        <Card variant="dashboard-surface" className="overflow-hidden">
           <div className="overflow-x-auto">
             <Table variant="dashboard" className="table-fixed">
-              <colgroup>
-                <col className="w-[46%]" />
-                <col className="w-[20%]" />
-                <col className="w-[8%]" />
-                <col className="w-[12%]" />
-                <col className="w-[14%]" />
-              </colgroup>
               <TableHeader variant="dashboard">
                 <TableRow variant="dashboard-head">
                   <TableHead variant="dashboard">Event</TableHead>
@@ -160,26 +154,26 @@ export function AuditLogsView({ runs, environmentNameById }: AuditLogsViewProps)
                   return (
                     <TableRow key={run.run_id} variant="dashboard" className="hover:bg-secondary/20">
                       <TableCell variant="dashboard">
-                        <div className="grid grid-cols-[16px_minmax(0,1fr)] items-start gap-3 min-w-0">
+                        <div className="flex items-start gap-3">
                           {isCompleted ? (
-                            <CheckCircle2 className="w-4 h-4 mt-0.5 text-emerald-400 shrink-0" />
+                            <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-success" />
                           ) : isFailure ? (
-                            <XCircle className="w-4 h-4 mt-0.5 text-red-400 shrink-0" />
+                            <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
                           ) : (
-                            <Clock3 className="w-4 h-4 mt-0.5 text-blue-400 shrink-0" />
+                            <Clock3 className="mt-0.5 h-4 w-4 shrink-0 text-status-provisioning" />
                           )}
                           <div className="min-w-0">
-                            <p className="text-sm text-foreground truncate">
+                            <p className="truncate text-sm text-foreground">
                               <span className="font-semibold">{run.name}</span>{" "}
                               {actionLabel} run
                             </p>
-                            <p className="text-xs text-muted-foreground truncate">
-                              env {environmentName}
+                            <p className="truncate text-ui-xs text-muted-foreground">
+                              {run.run_id} • env {environmentName}
                             </p>
                           </div>
                         </div>
                       </TableCell>
-                      <TableCell variant="dashboard" className="font-mono text-xs md:text-sm">
+                      <TableCell variant="dashboard" className="font-mono text-ui-xs">
                         {run.effective_gpu_type || "—"}
                       </TableCell>
                       <TableCell variant="dashboard" className="text-center">
@@ -188,7 +182,7 @@ export function AuditLogsView({ runs, environmentNameById }: AuditLogsViewProps)
                       <TableCell variant="dashboard" className="text-center">
                         {formatRunUptime(run.uptime_ms)}
                       </TableCell>
-                      <TableCell variant="dashboard" className="text-xs text-muted-foreground">
+                      <TableCell variant="dashboard" className="text-ui-xs text-muted-foreground">
                         {formatAuditTimestamp(run.created_at)}
                       </TableCell>
                     </TableRow>
@@ -197,8 +191,8 @@ export function AuditLogsView({ runs, environmentNameById }: AuditLogsViewProps)
               </TableBody>
             </Table>
           </div>
-        )}
-      </div>
-    </main>
+        </Card>
+      )}
+    </DashboardViewLayout>
   )
 }

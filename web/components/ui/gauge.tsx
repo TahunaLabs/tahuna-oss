@@ -32,10 +32,9 @@ function Gauge({ percentage, size, className, ...props }: GaugeProps) {
       {...props}
     >
       <div
-        className="w-full rounded transition-all duration-300"
+        className="w-full rounded bg-accent transition-all duration-300"
         style={{
           height: `${percentage}%`,
-          backgroundColor: "var(--accent)",
           marginTop: `${100 - percentage}%`,
         }}
       />

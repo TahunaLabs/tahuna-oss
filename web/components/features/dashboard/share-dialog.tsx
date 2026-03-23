@@ -62,7 +62,7 @@ function CopyButton({ text }: { text: string }) {
       onClick={handleCopy}
       title="Copy link"
     >
-      {copied ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
+      {copied ? <Check className="w-3.5 h-3.5 text-success" /> : <Copy className="w-3.5 h-3.5" />}
     </Button>
   )
 }
@@ -146,7 +146,7 @@ export function ShareDialog({
           )}
 
           {error && (
-            <p className="rounded border border-red-400/40 bg-red-500/10 px-2.5 py-2 text-xs text-red-400">
+            <p className="rounded border border-destructive/40 bg-destructive/10 px-2.5 py-2 text-xs text-destructive">
               {error}
             </p>
           )}
@@ -175,7 +175,7 @@ export function ShareDialog({
                         </div>
                         <span className={
                           link.permission === "edit"
-                            ? "mt-1 inline-flex rounded bg-blue-500/20 px-1.5 py-0.5 text-ui-caption text-blue-400"
+                            ? "mt-1 inline-flex rounded bg-accent/20 px-1.5 py-0.5 text-ui-caption text-accent"
                             : "mt-1 inline-flex rounded bg-secondary px-1.5 py-0.5 text-ui-caption text-muted-foreground"
                         }>
                           {link.permission}

@@ -25,28 +25,12 @@
   --ring: #c8a84e;
   --logo: var(--ring);
   --radius: 0.5rem;
-  --dashboard-control-height: 32px;
-  --dashboard-control-font-size: 14px;
-  --dashboard-control-line-height: 1.6;
-  --dashboard-control-font-size-small: 12px;
-  --dashboard-control-line-height-small: 1.5;
-  --dashboard-control-font-weight-medium: 500;
-  --dashboard-table-header-font-size: 12px;
-  --dashboard-table-header-line-height: 1.5;
-  --dashboard-table-header-font-weight: 500;
-  --dashboard-title-size: 24px;
-  --dashboard-title-line-height: 1.333;
-  --dashboard-title-font-weight: 500;
-  --dashboard-table-cell-px: 12px;
-  --dashboard-table-cell-py: 8px;
   --warning: #d97706;
   --success: #16a34a;
   --secondary-dim: color-mix(in srgb, var(--secondary) 70%, var(--background));
   --secondary-hover: color-mix(in srgb, var(--secondary) 50%, var(--background));
   --secondary-subtle: color-mix(in srgb, var(--secondary) 20%, var(--background));
   --secondary-faint: color-mix(in srgb, var(--secondary) 30%, var(--background));
-  --icon-faint: color-mix(in srgb, var(--muted-foreground) 40%, transparent);
-  --kbd-overlay: color-mix(in srgb, var(--accent-foreground) 20%, transparent);
   --status-dot-queued: #ca8a04;
   --status-dot-provisioning: #2563eb;
   --status-dot-running: #16a34a;
@@ -54,8 +38,7 @@
   --status-dot-cancelling: #ea580c;
 }
 
-.dark,
-.landing-theme {
+.dark {
   --warning: #fbbf24;
   --success: #4ade80;
   --status-dot-queued: #facc15;
@@ -63,7 +46,6 @@
   --status-dot-running: #4ade80;
   --status-dot-failed: #f87171;
   --status-dot-cancelling: #fb923c;
-  /* AMP-inspired dark teal palette */
   --background: #0b1d1f;
   --foreground: #e8e0d4;
   --card: #0f2628;
@@ -84,10 +66,6 @@
   --input: #1e3e40;
   --ring: #c8a84e;
   --logo: var(--ring);
-}
-
-.landing-theme {
-  color-scheme: dark;
 }
 
 @theme inline {
@@ -120,23 +98,17 @@
   --color-secondary-hover: var(--secondary-hover);
   --color-secondary-subtle: var(--secondary-subtle);
   --color-secondary-faint: var(--secondary-faint);
-  --color-icon-faint: var(--icon-faint);
-  --color-kbd-overlay: var(--kbd-overlay);
   --color-status-queued: var(--status-dot-queued);
   --color-status-provisioning: var(--status-dot-provisioning);
   --color-status-running: var(--status-dot-running);
   --color-status-failed: var(--status-dot-failed);
   --color-status-cancelling: var(--status-dot-cancelling);
-  --text-dashboard-control: var(--dashboard-control-font-size);
-  --text-dashboard-control--line-height: var(--dashboard-control-line-height);
-  --text-dashboard-control-small: var(--dashboard-control-font-size-small);
-  --text-dashboard-control-small--line-height: var(
-    --dashboard-control-line-height-small
-  );
-  --text-dashboard-table-header: var(--dashboard-table-header-font-size);
-  --text-dashboard-table-header--line-height: var(
-    --dashboard-table-header-line-height
-  );
+  --text-dashboard-control: 14px;
+  --text-dashboard-control--line-height: 1.6;
+  --text-dashboard-control-small: 12px;
+  --text-dashboard-control-small--line-height: 1.5;
+  --text-dashboard-table-header: 12px;
+  --text-dashboard-table-header--line-height: 1.5;
   --text-ui-micro: 10px;
   --text-ui-micro--line-height: 1.4;
   --text-ui-caption: 11px;
@@ -147,20 +119,16 @@
   --text-ui-control--line-height: 1.5;
   --text-ui-tab: 15px;
   --text-ui-tab--line-height: 1.5;
-  --text-display-hero: 5.5rem;
-  --text-display-hero--line-height: 0.95;
+  --text-dashboard-title: 24px;
+  --text-dashboard-title--line-height: 1.333;
   --leading-display-tight: 0.95;
-  --text-dashboard-title: var(--dashboard-title-size);
-  --text-dashboard-title--line-height: var(--dashboard-title-line-height);
   --tracking-ui-eyebrow: 0.22em;
   --tracking-ui-label: 0.01em;
-  --font-weight-dashboard-table-header: var(
-    --dashboard-table-header-font-weight
-  );
-  --font-weight-dashboard-title: var(--dashboard-title-font-weight);
-  --spacing-dashboard-control: var(--dashboard-control-height);
-  --spacing-dashboard-table-cell-x: var(--dashboard-table-cell-px);
-  --spacing-dashboard-table-cell-y: var(--dashboard-table-cell-py);
+  --font-weight-dashboard-table-header: 500;
+  --font-weight-dashboard-title: 500;
+  --spacing-dashboard-control: 32px;
+  --spacing-dashboard-table-cell-x: 12px;
+  --spacing-dashboard-table-cell-y: 8px;
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -177,14 +145,6 @@
     position: relative;
     min-height: 100vh;
   }
-}
-
-.landing-page-bg {
-  background-image: url('/Amp.webp');
-  background-size: cover;
-  background-position: center;
-  background-repeat: no-repeat;
-  background-attachment: fixed;
 }
 
 html {

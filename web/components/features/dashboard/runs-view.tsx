@@ -3,7 +3,7 @@
 import { Play } from "lucide-react"
 import { useMemo, useState } from "react"
 
-import { DashboardViewLayout } from "@/components/app-shell/layout-shell"
+import { DashboardViewLayout } from "@/components/app-shell/dashboard-view-layout"
 import {
   type EnvironmentRow,
   type RunDetail,
@@ -114,12 +114,12 @@ export function RunsView({
             <div className="min-w-0 flex-1 overflow-auto">
               <Table variant="dashboard" className="w-full table-fixed">
                 <colgroup>
-                  <col style={{ width: "300px" }} />
-                  <col style={{ width: "120px" }} />
-                  <col style={{ width: "220px" }} />
-                  <col style={{ width: "140px" }} />
-                  <col style={{ width: "130px" }} />
-                  <col style={{ width: "40px" }} />
+                  <col className="w-72" />
+                  <col className="w-28" />
+                  <col className="w-52" />
+                  <col className="w-36" />
+                  <col className="w-32" />
+                  <col className="w-10" />
                 </colgroup>
                 <TableHeader variant="dashboard" className="sticky top-0 bg-background">
                   <TableRow variant="dashboard-head" className="text-left">

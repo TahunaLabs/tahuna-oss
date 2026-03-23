@@ -19,13 +19,10 @@ const buttonVariants = cva(
         ghost:
           'hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50',
         link: 'text-primary underline-offset-4 hover:underline',
-        pill: 'bg-card border border-border rounded-full text-foreground hover:bg-foreground/5',
         'sidebar-brand':
           'h-auto justify-start gap-2 rounded px-1.5 py-1 text-sm font-medium text-sidebar-foreground hover:bg-secondary-hover',
         'sidebar-icon':
           'rounded p-1.5 text-foreground hover:bg-secondary-hover',
-        'sidebar-workspace':
-          'h-auto w-full justify-start gap-1 px-2 py-1 text-xs font-medium text-muted-foreground hover:bg-transparent hover:text-sidebar-foreground',
         'sidebar-item':
           'h-auto w-full justify-start gap-2 rounded px-2 py-1.5 text-sm font-normal text-foreground hover:bg-secondary-hover',
         'sidebar-item-active':
@@ -38,8 +35,6 @@ const buttonVariants = cva(
           'h-dashboard-control w-full justify-start gap-2 rounded-lg bg-secondary px-2 text-left text-ui-control font-medium text-foreground',
         'dashboard-icon-secondary':
           'h-dashboard-control w-dashboard-control rounded-md p-0 text-muted-foreground hover:bg-secondary hover:text-foreground',
-        'dashboard-icon-secondary-active':
-          'h-dashboard-control w-dashboard-control rounded-md bg-secondary p-0 text-foreground hover:bg-secondary/80',
         'dashboard-primary':
           'h-dashboard-control rounded-lg bg-primary px-3 text-primary-foreground hover:bg-primary/90',
         'dashboard-primary-compact':
@@ -54,14 +49,8 @@ const buttonVariants = cva(
           'h-auto rounded border border-accent bg-accent px-2 py-1 text-xs text-accent-foreground hover:opacity-90',
         'dashboard-outline-compact-muted':
           'h-auto rounded border border-border px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-secondary hover:text-foreground',
-        'dashboard-outline-compact-gap':
-          'h-auto gap-1 rounded border border-border px-2 py-1 text-xs text-foreground hover:bg-secondary',
-        'dashboard-outline-icon':
-          'h-dashboard-control rounded-lg border border-border bg-card px-2 text-foreground shadow-none hover:bg-muted',
         'dashboard-outline-icon-muted':
           'h-6 w-6 rounded p-0 text-muted-foreground hover:bg-secondary hover:text-foreground',
-        'dashboard-outline-icon-danger':
-          'h-6 w-6 rounded p-0 text-muted-foreground hover:bg-secondary hover:text-destructive-foreground',
         'dashboard-tab-compact':
           'h-dashboard-control rounded px-3 text-dashboard-control font-normal tracking-normal text-foreground hover:bg-secondary-hover',
         'dashboard-tab-compact-active':
@@ -74,10 +63,6 @@ const buttonVariants = cva(
           'h-dashboard-control min-w-9 rounded-md border border-transparent px-2 text-muted-foreground hover:bg-secondary hover:text-foreground',
         'dashboard-view-toggle-active':
           'h-dashboard-control min-w-9 rounded-md border border-border bg-background px-2 text-foreground shadow-xs',
-        'dashboard-run-list-item':
-          'h-auto w-full flex-col items-start justify-start gap-0 whitespace-normal rounded-none border-b border-border px-4 py-3 text-left transition-colors hover:bg-secondary/50',
-        'dashboard-run-list-item-active':
-          'h-auto w-full flex-col items-start justify-start gap-0 whitespace-normal rounded-none border-b border-border bg-secondary px-4 py-3 text-left transition-colors hover:bg-secondary/50',
         'dashboard-context-toggle':
           'h-auto w-full items-center justify-between rounded-lg border border-border bg-background/60 px-4 py-3 text-left font-normal hover:bg-secondary/30',
         'dashboard-secondary':

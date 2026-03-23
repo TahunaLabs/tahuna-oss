@@ -2,7 +2,7 @@
 
 import { Monitor } from "lucide-react"
 
-import { DashboardViewLayout } from "@/components/app-shell/layout-shell"
+import { DashboardViewLayout } from "@/components/app-shell/dashboard-view-layout"
 import { type ApiKeyRow } from "@/components/features/dashboard-settings-model"
 import {
   AlertDialog,

@@ -3,7 +3,7 @@
 import { Server } from "lucide-react"
 import { useMemo, useState } from "react"
 
-import { DashboardViewLayout } from "@/components/app-shell/layout-shell"
+import { DashboardViewLayout } from "@/components/app-shell/dashboard-view-layout"
 import {
   type DataBlobRow,
   type EnvironmentRow,
@@ -291,15 +291,15 @@ function EnvironmentTableView({
       <div className="min-w-0 flex-1 overflow-auto">
         <Table variant="dashboard" className="w-full table-fixed">
           <colgroup>
-            <col style={{ width: "36px" }} />
-            <col style={{ width: "22%" }} />
-            <col style={{ width: "10%" }} className="hidden lg:table-column" />
-            <col style={{ width: "24%" }} />
-            <col style={{ width: "18%" }} />
-            <col style={{ width: "16%" }} />
-            <col style={{ width: "10%" }} />
-            <col style={{ width: "10%" }} className="hidden xl:table-column" />
-            <col style={{ width: "75px" }} />
+            <col className="w-9" />
+            <col className="w-2/12" />
+            <col className="hidden w-1/12 lg:table-column" />
+            <col className="w-3/12" />
+            <col className="w-2/12" />
+            <col className="w-2/12" />
+            <col className="w-1/12" />
+            <col className="hidden w-1/12 xl:table-column" />
+            <col className="w-20" />
           </colgroup>
           <TableHeader variant="dashboard" className="sticky top-0 bg-background">
             <TableRow variant="dashboard-head" className="text-left">

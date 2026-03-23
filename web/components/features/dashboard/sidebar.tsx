@@ -1,7 +1,6 @@
 "use client"
 
 import { Search, HardDrive, Server, Play, Monitor, LogOut, Moon, Sun, Wallet, ClipboardList, Settings, Zap } from "lucide-react"
-import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { CreditsGauge } from "@/components/ui/credits-gauge"
 

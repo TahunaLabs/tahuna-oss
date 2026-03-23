@@ -7,7 +7,7 @@ const noticeVariants = cva("rounded-md border px-3 py-2 text-sm", {
   variants: {
     variant: {
       default: "border-border bg-muted/40 text-foreground",
-      error: "border-red-200 bg-red-50 text-red-700",
+      error: "border-destructive/30 bg-destructive/10 text-destructive",
     },
   },
   defaultVariants: {

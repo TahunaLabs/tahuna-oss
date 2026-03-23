@@ -355,7 +355,7 @@ export function SidebarSection({
               variant={isActive ? "dashboard-nav-active" : "dashboard-nav"}
               onClick={() => onSelect(item.section)}
             >
-              <Icon className="h-[15px] w-[15px]" />
+              <Icon className="h-4 w-4" />
               {item.label}
             </Button>
           )

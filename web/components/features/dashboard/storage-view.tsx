@@ -4,7 +4,7 @@ import { HardDrive } from "lucide-react"
 import { useRef, useState } from "react"
 import type { FormEvent } from "react"
 
-import { DashboardViewLayout } from "@/components/app-shell/layout-shell"
+import { DashboardViewLayout } from "@/components/app-shell/dashboard-view-layout"
 import {
   type StorageItem,
   type StorageListResult,
@@ -161,11 +161,11 @@ export function StorageView({
           <div className="min-w-0 flex-1 overflow-auto">
             <Table variant="dashboard" className="w-full table-fixed">
               <colgroup>
-                <col style={{ width: "380px" }} />
-                <col style={{ width: "140px" }} />
-                <col style={{ width: "120px" }} />
-                <col style={{ width: "140px" }} />
-                <col style={{ width: "200px" }} />
+                <col className="w-96" />
+                <col className="w-36" />
+                <col className="w-28" />
+                <col className="w-36" />
+                <col className="w-48" />
               </colgroup>
               <TableHeader variant="dashboard" className="sticky top-0 bg-background">
                 <TableRow variant="dashboard-head" className="text-left">

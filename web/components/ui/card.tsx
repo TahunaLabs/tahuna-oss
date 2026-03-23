@@ -3,10 +3,6 @@ import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
-/* ------------------------------------------------------------------ */
-/*  Card                                                               */
-/* ------------------------------------------------------------------ */
-
 const cardVariants = cva("overflow-hidden", {
   variants: {
     variant: {
@@ -35,64 +31,6 @@ function Card({
   )
 }
 
-/* ------------------------------------------------------------------ */
-/*  CardHeader  — the "traffic-light" title bar from the terminal      */
-/* ------------------------------------------------------------------ */
-
-function CardHeader({
-  className,
-  children,
-  ...props
-}: React.ComponentProps<"div">) {
-  return (
-    <div
-      data-slot="card-header"
-      className={cn(
-        "flex items-center gap-2 px-4 py-3 border-b border-border",
-        className,
-      )}
-      {...props}
-    >
-      {children}
-    </div>
-  )
-}
-
-/* ------------------------------------------------------------------ */
-/*  CardDots  — the three macOS-style window dots                       */
-/* ------------------------------------------------------------------ */
-
-function CardDots({ className }: { className?: string }) {
-  return (
-    <div className={cn("flex gap-1.5", className)}>
-      <div className="w-3 h-3 rounded-full bg-muted-foreground/30" />
-      <div className="w-3 h-3 rounded-full bg-muted-foreground/30" />
-      <div className="w-3 h-3 rounded-full bg-muted-foreground/30" />
-    </div>
-  )
-}
-
-/* ------------------------------------------------------------------ */
-/*  CardTitle  — small mono title used in the header                    */
-/* ------------------------------------------------------------------ */
-
-function CardTitle({
-  className,
-  ...props
-}: React.ComponentProps<"span">) {
-  return (
-    <span
-      data-slot="card-title"
-      className={cn("text-xs font-mono text-muted-foreground", className)}
-      {...props}
-    />
-  )
-}
-
-/* ------------------------------------------------------------------ */
-/*  CardContent                                                        */
-/* ------------------------------------------------------------------ */
-
 function CardContent({
   className,
   ...props
@@ -106,26 +44,6 @@ function CardContent({
   )
 }
 
-/* ------------------------------------------------------------------ */
-/*  CardFooter  — bottom bar with border-t, used in terminal           */
-/* ------------------------------------------------------------------ */
-
-function CardFooter({
-  className,
-  ...props
-}: React.ComponentProps<"div">) {
-  return (
-    <div
-      data-slot="card-footer"
-      className={cn(
-        "flex items-center justify-between border-t border-border px-5 py-3",
-        className,
-      )}
-      {...props}
-    />
-  )
-}
-
 export {
-    Card, CardContent, CardDots, CardFooter, CardHeader, CardTitle, cardVariants
+    Card, CardContent, cardVariants
 }

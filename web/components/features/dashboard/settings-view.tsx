@@ -1,8 +1,10 @@
 "use client"
 
 import { useMemo, useState } from "react"
-import { ChevronDown, ChevronUp, KeyRound, Moon, ShieldCheck, Sun } from "lucide-react"
+import { ChevronDown, ChevronUp, KeyRound, Moon, Settings, ShieldCheck, Sun } from "lucide-react"
 import Link from "next/link"
+
+import { DashboardViewLayout } from "@/components/app-shell/dashboard-view-layout"
 import type { ApiKeyRow, ProfileDraft, ThemeChoice } from "@/components/features/dashboard-settings-model"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -45,14 +47,15 @@ function CollapsibleSection({
 }) {
   return (
     <div>
-      <button
+      <Button
         type="button"
-        className="w-full rounded-lg border border-border bg-card px-4 py-3 text-left flex items-center justify-between hover:bg-secondary/30"
+        variant="dashboard-context-toggle"
+        size="none"
         onClick={onToggle}
       >
         <span className="text-sm text-foreground">{title}</span>
-        {open ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
-      </button>
+        {open ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+      </Button>
       {open ? <div className="mt-2">{children}</div> : null}
     </div>
   )
@@ -92,18 +95,19 @@ export function SettingsView({
   }
 
   return (
-    <main className="flex-1 h-full overflow-y-auto">
-      <header className="px-6 py-4 border-b border-border">
-        <h1 className="text-sm font-medium text-foreground">Settings</h1>
-      </header>
-
-      <div className="px-6 py-5 space-y-6">
+    <DashboardViewLayout
+      sectionLabel="Settings"
+      title="Settings"
+      titleIcon={<Settings size={24} />}
+      toolbar={null}
+    >
+      <div className="space-y-6">
         {saveError ? <Notice variant="error">{saveError}</Notice> : null}
         {saveMessage ? <Notice>{saveMessage}</Notice> : null}
 
         <section className="space-y-2">
-          <h2 className="text-base text-foreground">Theme</h2>
-          <div className="inline-flex rounded-lg border border-border overflow-hidden bg-card">
+          <h2 className="text-dashboard-control font-medium text-foreground">Theme</h2>
+          <div className="inline-flex overflow-hidden rounded-lg border border-border bg-card">
             <Button
               type="button"
               variant={theme === "dark" ? "dashboard-tab-compact-active" : "dashboard-tab-compact"}
@@ -111,7 +115,7 @@ export function SettingsView({
               className="rounded-none"
               onClick={() => onThemeChange("dark")}
             >
-              <Moon className="w-4 h-4" />
+              <Moon className="h-4 w-4" />
               Dark
             </Button>
             <Button
@@ -121,17 +125,17 @@ export function SettingsView({
               className="rounded-none"
               onClick={() => onThemeChange("light")}
             >
-              <Sun className="w-4 h-4" />
+              <Sun className="h-4 w-4" />
               Light
             </Button>
           </div>
         </section>
 
         <section className="space-y-3">
-          <h2 className="text-2xl font-medium text-foreground">Account information</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <h2 className="text-dashboard-title font-dashboard-title text-foreground">Account information</h2>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             <div>
-              <label className="block text-sm text-muted-foreground mb-1.5">First name</label>
+              <label className="mb-1.5 block text-sm text-muted-foreground">First name</label>
               <Input
                 variant="dashboard"
                 value={profile.firstName}
@@ -140,7 +144,7 @@ export function SettingsView({
               />
             </div>
             <div>
-              <label className="block text-sm text-muted-foreground mb-1.5">Last name</label>
+              <label className="mb-1.5 block text-sm text-muted-foreground">Last name</label>
               <Input
                 variant="dashboard"
                 value={profile.lastName}
@@ -149,7 +153,7 @@ export function SettingsView({
               />
             </div>
             <div>
-              <label className="block text-sm text-muted-foreground mb-1.5">Address line 1</label>
+              <label className="mb-1.5 block text-sm text-muted-foreground">Address line 1</label>
               <Input
                 variant="dashboard"
                 value={profile.addressLine1}
@@ -158,7 +162,7 @@ export function SettingsView({
               />
             </div>
             <div>
-              <label className="block text-sm text-muted-foreground mb-1.5">Address line 2</label>
+              <label className="mb-1.5 block text-sm text-muted-foreground">Address line 2</label>
               <Input
                 variant="dashboard"
                 value={profile.addressLine2}
@@ -167,7 +171,7 @@ export function SettingsView({
               />
             </div>
             <div>
-              <label className="block text-sm text-muted-foreground mb-1.5">Country</label>
+              <label className="mb-1.5 block text-sm text-muted-foreground">Country</label>
               <Input
                 variant="dashboard"
                 value={profile.country}
@@ -176,7 +180,7 @@ export function SettingsView({
               />
             </div>
             <div>
-              <label className="block text-sm text-muted-foreground mb-1.5">Company name</label>
+              <label className="mb-1.5 block text-sm text-muted-foreground">Company name</label>
               <Input
                 variant="dashboard"
                 value={profile.companyName}
@@ -185,7 +189,7 @@ export function SettingsView({
               />
             </div>
             <div>
-              <label className="block text-sm text-muted-foreground mb-1.5">Company ID</label>
+              <label className="mb-1.5 block text-sm text-muted-foreground">Company ID</label>
               <Input
                 variant="dashboard"
                 value={profile.companyId}
@@ -194,7 +198,7 @@ export function SettingsView({
               />
             </div>
             <div>
-              <label className="block text-sm text-muted-foreground mb-1.5">Tax ID</label>
+              <label className="mb-1.5 block text-sm text-muted-foreground">Tax ID</label>
               <Input
                 variant="dashboard"
                 value={profile.taxId}
@@ -203,7 +207,7 @@ export function SettingsView({
               />
             </div>
             <div className="md:col-span-2">
-              <label className="block text-sm text-muted-foreground mb-1.5">Account email</label>
+              <label className="mb-1.5 block text-sm text-muted-foreground">Account email</label>
               <Input variant="dashboard" value={userEmail || "—"} readOnly />
             </div>
           </div>
@@ -228,7 +232,7 @@ export function SettingsView({
             open={apiKeysOpen}
             onToggle={() => setApiKeysOpen((open) => !open)}
           >
-            <Card variant="dashboard" className="p-4 space-y-3">
+            <Card variant="dashboard" className="space-y-3 p-4">
               <div className="flex items-center justify-between">
                 <p className="text-sm text-muted-foreground">
                   {apiKeys.length} total keys, {activeKeys.length} active
@@ -244,14 +248,14 @@ export function SettingsView({
                   {apiKeys.slice(0, 8).map((key) => (
                     <div key={key._id} className="rounded border border-border px-3 py-2">
                       <div className="flex items-center justify-between gap-3">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <KeyRound className="w-4 h-4 text-muted-foreground shrink-0" />
-                          <p className="text-sm text-foreground truncate">{key.name}</p>
+                        <div className="flex min-w-0 items-center gap-2">
+                          <KeyRound className="h-4 w-4 shrink-0 text-muted-foreground" />
+                          <p className="truncate text-sm text-foreground">{key.name}</p>
                           <Badge variant={statusVariant(key.status)}>{key.status}</Badge>
                         </div>
-                        <p className="text-xs text-muted-foreground font-mono">{key.keyPrefix}</p>
+                        <p className="font-mono text-ui-xs text-muted-foreground">{key.keyPrefix}</p>
                       </div>
-                      <p className="mt-1 text-xs text-muted-foreground truncate">
+                      <p className="mt-1 truncate text-ui-xs text-muted-foreground">
                         machine: {key.machineId || "n/a"} • last used: {formatDate(key.lastUsedAt)}
                       </p>
                     </div>
@@ -266,17 +270,17 @@ export function SettingsView({
             open={sessionsOpen}
             onToggle={() => setSessionsOpen((open) => !open)}
           >
-            <Card variant="dashboard" className="p-4 space-y-2">
+            <Card variant="dashboard" className="space-y-2 p-4">
               {activeSessions.length === 0 ? (
                 <p className="text-sm text-muted-foreground">No active machine sessions found.</p>
               ) : (
                 activeSessions.map((session) => (
-                  <div key={session._id} className="rounded border border-border px-3 py-2 flex items-center justify-between gap-3">
+                  <div key={session._id} className="flex items-center justify-between gap-3 rounded border border-border px-3 py-2">
                     <div>
                       <p className="text-sm text-foreground">{session.machineId}</p>
-                      <p className="text-xs text-muted-foreground">{session.name}</p>
+                      <p className="text-ui-xs text-muted-foreground">{session.name}</p>
                     </div>
-                    <p className="text-xs text-muted-foreground">{formatDate(session.lastUsedAt)}</p>
+                    <p className="text-ui-xs text-muted-foreground">{formatDate(session.lastUsedAt)}</p>
                   </div>
                 ))
               )}
@@ -288,9 +292,9 @@ export function SettingsView({
             open={loginOpen}
             onToggle={() => setLoginOpen((open) => !open)}
           >
-            <Card variant="dashboard" className="p-4 space-y-3">
+            <Card variant="dashboard" className="space-y-3 p-4">
               <div className="flex items-center gap-2 text-foreground">
-                <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                <ShieldCheck className="h-4 w-4 text-success" />
                 <p className="text-sm">Email OTP authentication is enabled.</p>
               </div>
               <p className="text-sm text-muted-foreground">
@@ -300,6 +304,6 @@ export function SettingsView({
           </CollapsibleSection>
         </section>
       </div>
-    </main>
+    </DashboardViewLayout>
   )
 }
