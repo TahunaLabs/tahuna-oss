@@ -1,5 +1,8 @@
 import { BILLING_CONFIG } from "@/config";
-import { getRunpodGpuPricePerHourCents } from "@/lib/runpod-gpu-pricing";
+import {
+  getRunpodGpuFallbackPricePerHourCents,
+  getRunpodGpuPricePerHourCents,
+} from "@/lib/runpod-gpu-pricing";
 
 export type RunComputePricing = {
   gpuCount: number;
@@ -17,6 +20,14 @@ function safePositiveNumber(value: number | undefined) {
   return Math.max(0, value);
 }
 
+function resolveUnknownGpuFallbackHourlyRateCents() {
+  const configuredPricePerHour = (BILLING_CONFIG as Record<string, unknown>).unknownGpuPricePerHour;
+  if (typeof configuredPricePerHour === "number" && Number.isFinite(configuredPricePerHour) && configuredPricePerHour > 0) {
+    return Math.round(configuredPricePerHour * 100);
+  }
+  return getRunpodGpuFallbackPricePerHourCents();
+}
+
 export function resolveRunComputePricing(args: {
   gpuType: string | undefined;
   gpuCount: number | undefined;
@@ -25,13 +36,10 @@ export function resolveRunComputePricing(args: {
   const gpuCount = safePositiveNumber(args.gpuCount);
   const volumeGb = safePositiveNumber(args.volumeGb);
   const lookupGpuUnitHourlyRateCents = getRunpodGpuPricePerHourCents(args.gpuType || "");
-  if (gpuCount > 0 && typeof lookupGpuUnitHourlyRateCents !== "number") {
-    const gpuType = (args.gpuType || "").trim();
-    throw new Error(
-      `gpu pricing not configured for "${gpuType || "unknown"}"; run \`tahuna gpus list\` and choose a listed GPU`,
-    );
-  }
-  const resolvedGpuUnitHourlyRateCents = lookupGpuUnitHourlyRateCents ?? 0;
+  const resolvedGpuUnitHourlyRateCents =
+    gpuCount > 0
+      ? (lookupGpuUnitHourlyRateCents ?? resolveUnknownGpuFallbackHourlyRateCents())
+      : (lookupGpuUnitHourlyRateCents ?? 0);
   const gpuUnitHourlyRateCents = gpuCount > 0 ? resolvedGpuUnitHourlyRateCents : 0;
   const gpuHourlyRateCents = gpuCount * gpuUnitHourlyRateCents;
   const volumeHourlyRateCents = volumeGb * BILLING_CONFIG.computeVolumeGbHourlyRateCents;

@@ -25,7 +25,7 @@ const RUNPOD_GPU_PRICING_ROWS: RunpodGpuPricingRow[] = [
   { gpuType: "RTX A4000", pricePerHour: 0.25 },
   { gpuType: "RTX A4500", pricePerHour: 0.25 },
   { gpuType: "RTX 3090", pricePerHour: 0.46 },
-  { gpuType: "RTX 3070", pricePerHour: 0.24 },
+  { gpuType: "RTX 3070", pricePerHour: 0.42 }, // Manual
   { gpuType: "RTX A5000", pricePerHour: 0.27 },
   { gpuType: "RTX A6000", pricePerHour: 0.49 },
   { gpuType: "A100 PCIe", pricePerHour: 1.39 },
@@ -46,6 +46,11 @@ const RUNPOD_GPU_PRICING_BY_KEY = new Map<string, number>(
   RUNPOD_GPU_PRICING_ROWS.map((row) => [normalizeGpuKey(row.gpuType), row.pricePerHour]),
 );
 
+const RUNPOD_GPU_FALLBACK_PRICE_PER_HOUR_CENTS = RUNPOD_GPU_PRICING_ROWS.reduce((max, row) => {
+  const cents = Math.round(row.pricePerHour * 100);
+  return cents > max ? cents : max;
+}, 0);
+
 export function getRunpodGpuPricePerHour(gpuType: string) {
   const normalized = normalizeGpuKey(gpuType);
   if (!normalized) {
@@ -60,6 +65,10 @@ export function getRunpodGpuPricePerHourCents(gpuType: string) {
     return undefined;
   }
   return Math.round(pricePerHour * 100);
+}
+
+export function getRunpodGpuFallbackPricePerHourCents() {
+  return RUNPOD_GPU_FALLBACK_PRICE_PER_HOUR_CENTS;
 }
 
 export function listRunpodGpuPricingRows() {
