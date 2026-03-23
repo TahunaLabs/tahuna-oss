@@ -34,7 +34,8 @@ const tableRowVariants = cva("", {
     variant: {
       default:
         "border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted",
-      dashboard: "border-b border-border last:border-0",
+      dashboard:
+        "border-b border-border bg-secondary-faint transition-colors hover:bg-secondary-hover last:border-0",
       "dashboard-head": "",
     },
   },
