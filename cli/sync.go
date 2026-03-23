@@ -256,6 +256,9 @@ func collectManifestEntries(kind string, excludeDirs []string) ([]syncManifestEn
 		if err != nil {
 			return err
 		}
+		if !isUploadableBlobSize(size) {
+			return nil
+		}
 		normalized := filepath.ToSlash(relPath)
 		entries = append(entries, syncManifestEntry{
 			Path:   normalized,
@@ -558,6 +561,9 @@ func collectCodeEntriesWithGitIgnore(
 		if err != nil {
 			return nil, nil, err
 		}
+		if !isUploadableBlobSize(size) {
+			continue
+		}
 		entries = append(entries, syncManifestEntry{
 			Path:   filepath.ToSlash(relPath),
 			SHA256: hash,
@@ -676,7 +682,7 @@ func syncMissingBlobs(
 			return fmt.Errorf("missing local blob for hash %s", hash)
 		}
 		sizeBytes, hasSize := sizeByHash[hash]
-		if !hasSize || sizeBytes <= 0 {
+		if !hasSize || !isUploadableBlobSize(sizeBytes) {
 			return fmt.Errorf("missing local size for hash %s", hash)
 		}
 		tasks = append(tasks, blobUploadTask{
@@ -1013,7 +1019,7 @@ func uniqueSortedHashes(entries []syncManifestEntry) []string {
 func manifestSizesByHash(entries []syncManifestEntry) map[string]int64 {
 	out := make(map[string]int64, len(entries))
 	for _, entry := range entries {
-		if entry.SHA256 == "" || entry.Size <= 0 {
+		if entry.SHA256 == "" || !isUploadableBlobSize(entry.Size) {
 			continue
 		}
 		if _, exists := out[entry.SHA256]; exists {
@@ -1022,6 +1028,10 @@ func manifestSizesByHash(entries []syncManifestEntry) map[string]int64 {
 		out[entry.SHA256] = entry.Size
 	}
 	return out
+}
+
+func isUploadableBlobSize(size int64) bool {
+	return size > 0
 }
 
 func fileSHA256(path string) (string, int64, error) {
