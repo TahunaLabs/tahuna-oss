@@ -20,6 +20,7 @@ import { authClient } from "@/lib/auth-client"
 import { useConvexAuth, useMutation, useQuery } from "convex/react"
 import { useRouter } from "next/navigation"
 import { parseAsStringLiteral, useQueryState } from "nuqs"
+import { toast } from "sonner"
 import { useEffect, useState } from "react"
 
 const DASHBOARD_VIEW_VALUES = ["storage", "environments", "runs", "machines", "billing", "audit_logs", "settings"] as const
@@ -32,8 +33,6 @@ export default function DashboardPage() {
   const [shareDialogOpen, setShareDialogOpen] = useState(false)
   const [shareTarget, setShareTarget] = useState<{ resourceType: "environment" | "run" | "data"; resourceId: string } | null>(null)
   const [shareBusy, setShareBusy] = useState(false)
-  const [shareError, setShareError] = useState("")
-  const [shareMessage, setShareMessage] = useState("")
 
   const [activeView, setActiveView] = useQueryState(
     "view",
@@ -78,8 +77,6 @@ export default function DashboardPage() {
   }
 
   function openShareDialog(resourceType: "environment" | "run" | "data", resourceId: string) {
-    setShareError("")
-    setShareMessage("")
     setShareTarget({ resourceType, resourceId })
     setShareDialogOpen(true)
   }
@@ -87,17 +84,15 @@ export default function DashboardPage() {
   async function handleCreateLink(permission: "read" | "edit") {
     if (!shareTarget) return
     setShareBusy(true)
-    setShareError("")
-    setShareMessage("")
     try {
       await createShareLinkMutation({
         resourceType: shareTarget.resourceType,
         resourceId: shareTarget.resourceId,
         permission,
       })
-      setShareMessage(`Link generated (${permission}).`)
+      toast.success(`Link generated (${permission}).`)
     } catch (e) {
-      setShareError(e instanceof Error ? e.message : "Failed to generate link")
+      toast.error(e instanceof Error ? e.message : "Failed to generate link")
     } finally {
       setShareBusy(false)
     }
@@ -105,13 +100,11 @@ export default function DashboardPage() {
 
   async function handleRevokeLink(shareLinkId: string) {
     setShareBusy(true)
-    setShareError("")
-    setShareMessage("")
     try {
       await revokeShareLinkMutation({ shareLinkId: shareLinkId as Id<"shareLinks"> })
-      setShareMessage("Link revoked.")
+      toast.success("Link revoked.")
     } catch (e) {
-      setShareError(e instanceof Error ? e.message : "Failed to revoke link")
+      toast.error(e instanceof Error ? e.message : "Failed to revoke link")
     } finally {
       setShareBusy(false)
     }
@@ -179,8 +172,6 @@ export default function DashboardPage() {
           open={shareDialogOpen}
           shareLinks={shareLinksForResource?.shareLinks ?? []}
           busy={shareBusy}
-          error={shareError}
-          message={shareMessage}
           onOpenChange={(open) => {
             setShareDialogOpen(open)
             if (!open) setShareTarget(null)

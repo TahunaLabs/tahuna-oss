@@ -5,7 +5,6 @@ import type { FormEvent, RefObject } from "react"
 
 import { formatBytes } from "@/components/features/dashboard-model"
 import { Button } from "@/components/ui/button"
-import { Notice } from "@/components/ui/notice"
 import {
   Sheet,
   SheetContent,
@@ -22,8 +21,6 @@ type StorageUploadDrawerProps = {
   dataFileInputKey: number
   selectedDataFiles: File[]
   uploadingData: boolean
-  uploadError: string
-  uploadMessage: string
   onUploadData: (event: FormEvent<HTMLFormElement>) => void
   onSelectDataFiles: (files: File[]) => void
   onOpenFilePicker: () => void
@@ -36,8 +33,6 @@ function StorageUploadDrawer({
   dataFileInputKey,
   selectedDataFiles,
   uploadingData,
-  uploadError,
-  uploadMessage,
   onUploadData,
   onSelectDataFiles,
   onOpenFilePicker,
@@ -74,17 +69,6 @@ function StorageUploadDrawer({
                   : "No files selected"}
               </p>
 
-              {uploadError ? (
-                <div className="mt-2">
-                  <Notice variant="error">{uploadError}</Notice>
-                </div>
-              ) : null}
-              {!uploadError && uploadMessage ? (
-                <div className="mt-2">
-                  <Notice>{uploadMessage}</Notice>
-                </div>
-              ) : null}
-
               {selectedFileCount > 0 ? (
                 <div className="mt-3 min-h-0 flex-1 rounded border border-border">
                   <ul className="h-full divide-y divide-border overflow-y-auto">
@@ -101,7 +85,7 @@ function StorageUploadDrawer({
                 </div>
               ) : (
                 <p className="mt-3 text-xs text-muted-foreground">
-                  Choose files to start an upload. Errors will stay in this drawer for quick retry.
+                  Choose files to start an upload.
                 </p>
               )}
             </div>

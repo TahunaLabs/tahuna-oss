@@ -3,9 +3,9 @@
 import { useEffect, useState } from "react"
 import { useMutation, useQuery } from "convex/react"
 import { parseAsStringLiteral, useQueryState } from "nuqs"
+import { toast } from "sonner"
 import { api } from "@convex/_generated/api"
 import { RunsView } from "@/components/features/dashboard/runs-view"
-import { Notice } from "@/components/ui/notice"
 import {
   TERMINAL_STATUSES,
   type EnvironmentRow,
@@ -25,8 +25,6 @@ type Props = {
 
 export function RunsContainer({ shouldLoadQueries, onOpenShareDialog }: Props) {
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState("")
-  const [message, setMessage] = useState("")
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null)
   const [terminalLogsCache, setTerminalLogsCache] = useState<{ runId: string; logs: RunLogsOnlyDetail } | null>(null)
   const [terminalMetricsCache, setTerminalMetricsCache] = useState<{
@@ -98,13 +96,11 @@ export function RunsContainer({ shouldLoadQueries, onOpenShareDialog }: Props) {
 
   async function withBusy(task: () => Promise<void>) {
     setBusy(true)
-    setError("")
-    setMessage("")
     try {
       await task()
       return true
     } catch (e) {
-      setError(e instanceof Error ? e.message : "unexpected error")
+      toast.error(e instanceof Error ? e.message : "unexpected error")
       return false
     } finally {
       setBusy(false)
@@ -114,7 +110,7 @@ export function RunsContainer({ shouldLoadQueries, onOpenShareDialog }: Props) {
   async function cancelRun(runId: Id<"runs">) {
     await withBusy(async () => {
       await cancelRunMutation({ runId, force: false })
-      setMessage(`Run ${runId} cancellation requested.`)
+      toast.success(`Run ${runId} cancellation requested.`)
     })
   }
 
@@ -128,18 +124,12 @@ export function RunsContainer({ shouldLoadQueries, onOpenShareDialog }: Props) {
         setSelectedRunId(null)
       }
       const count = runIds.length
-      setMessage(count === 1 ? "Deleted 1 run." : `Deleted ${count} runs.`)
+      toast.success(count === 1 ? "Deleted 1 run." : `Deleted ${count} runs.`)
     })
   }
 
   return (
     <>
-      {(error || message) && (
-        <div className="pt-3">
-          {error ? <Notice variant="error" className="mb-2">{error}</Notice> : null}
-          {message ? <Notice className="mb-2">{message}</Notice> : null}
-        </div>
-      )}
       <RunsView
         environments={environments}
         runs={runs}

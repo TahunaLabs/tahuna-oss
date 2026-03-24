@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { ChevronDown, ChevronUp, KeyRound, Moon, Settings, ShieldCheck, Sun } from "lucide-react"
 import Link from "next/link"
+import { toast } from "sonner"
 
 import { DashboardViewLayout } from "@/components/app-shell/dashboard-view-layout"
 import { RunpodSettingsCard } from "@/components/features/dashboard/runpod-settings-card"
@@ -11,7 +12,6 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { Notice } from "@/components/ui/notice"
 
 type SettingsViewProps = {
   theme: ThemeChoice
@@ -86,20 +86,16 @@ export function SettingsView({
   const [runpodOpen, setRunpodOpen] = useState(false)
   const [sessionsOpen, setSessionsOpen] = useState(false)
   const [loginOpen, setLoginOpen] = useState(false)
-  const [saveError, setSaveError] = useState("")
-  const [saveMessage, setSaveMessage] = useState("")
 
   const activeKeys = apiKeys.filter((key) => key.status === "active")
   const activeSessions = activeKeys.filter((key) => (key.machineId || "").trim().length > 0)
 
   async function handleSaveProfile() {
-    setSaveError("")
-    setSaveMessage("")
     try {
       await onSaveProfile(profile)
-      setSaveMessage("Settings saved.")
+      toast.success("Settings saved.")
     } catch (saveProfileError) {
-      setSaveError(saveProfileError instanceof Error ? saveProfileError.message : "Failed to save settings")
+      toast.error(saveProfileError instanceof Error ? saveProfileError.message : "Failed to save settings")
     }
   }
 
@@ -111,9 +107,6 @@ export function SettingsView({
       toolbar={null}
     >
       <div className="space-y-5">
-        {saveError ? <Notice variant="error">{saveError}</Notice> : null}
-        {saveMessage ? <Notice>{saveMessage}</Notice> : null}
-
         <Card className="p-4">
           <h2 className="text-sm font-medium text-foreground">Theme</h2>
           <div className="mt-3 inline-flex overflow-hidden rounded-lg border border-border bg-card">

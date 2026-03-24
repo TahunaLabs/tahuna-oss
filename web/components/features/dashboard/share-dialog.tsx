@@ -26,8 +26,6 @@ type ShareDialogProps = {
   open: boolean
   shareLinks: ShareLinkItem[]
   busy: boolean
-  error: string
-  message: string
   onOpenChange: (open: boolean) => void
   onCreateLink: (permission: "read" | "edit") => void
   onRevokeLink: (shareLinkId: string) => void
@@ -73,8 +71,6 @@ export function ShareDialog({
   open,
   shareLinks,
   busy,
-  error,
-  message,
   onOpenChange,
   onCreateLink,
   onRevokeLink,
@@ -145,17 +141,6 @@ export function ShareDialog({
                 You have shared access to this {resourceLabel}. Only the owner can manage sharing.
               </p>
             </div>
-          )}
-
-          {error && (
-            <p className="rounded border border-destructive/40 bg-destructive/10 px-2.5 py-2 text-xs text-destructive">
-              {error}
-            </p>
-          )}
-          {!error && message && (
-            <p className="rounded border border-border bg-secondary/40 px-2.5 py-2 text-xs text-muted-foreground">
-              {message}
-            </p>
           )}
 
           {isOwner && shareLinks.length > 0 && (

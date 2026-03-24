@@ -4,9 +4,9 @@ import { useEffect, useState } from "react"
 import { useAction, useMutation } from "convex/react"
 import { parseAsInteger, parseAsString, parseAsStringLiteral, useQueryState } from "nuqs"
 import type { FormEvent } from "react"
+import { toast } from "sonner"
 import { api } from "@convex/_generated/api"
 import { StorageView } from "@/components/features/dashboard/storage-view"
-import { Notice } from "@/components/ui/notice"
 import {
   STORAGE_PAGE_LIMIT,
   validateArtifactRenameName,
@@ -26,11 +26,7 @@ type Props = {
 export function StorageContainer({ shouldLoadQueries, onOpenShareDialog }: Props) {
   const [selectedDataFiles, setSelectedDataFiles] = useState<File[]>([])
   const [uploadingData, setUploadingData] = useState(false)
-  const [uploadError, setUploadError] = useState("")
-  const [uploadMessage, setUploadMessage] = useState("")
   const [dataFileInputKey, setDataFileInputKey] = useState(0)
-  const [error, setError] = useState("")
-  const [message, setMessage] = useState("")
 
   const [storageSourceFilter, setStorageSourceFilter] = useQueryState(
     "storageSource",
@@ -115,8 +111,6 @@ export function StorageContainer({ shouldLoadQueries, onOpenShareDialog }: Props
     event.preventDefault()
     if (selectedDataFiles.length === 0) return
     setUploadingData(true)
-    setUploadError("")
-    setUploadMessage("")
     try {
       for (const file of selectedDataFiles) {
         const upload = await generateDataUploadUrlMutation({ filename: file.name, size_bytes: file.size })
@@ -132,10 +126,10 @@ export function StorageContainer({ shouldLoadQueries, onOpenShareDialog }: Props
       setSelectedDataFiles([])
       setDataFileInputKey((n) => n + 1)
       setStorageReloadToken((n) => n + 1)
-      setUploadMessage(count === 1 ? "Uploaded 1 file." : `Uploaded ${count} files.`)
+      toast.success(count === 1 ? "Uploaded 1 file." : `Uploaded ${count} files.`)
     } catch (e) {
       const msg = e instanceof Error ? e.message : "unexpected error"
-      setUploadError(
+      toast.error(
         msg === "Failed to fetch"
           ? "Upload failed. Check the R2 bucket CORS policy for PUT requests from this app origin."
           : msg,
@@ -146,20 +140,16 @@ export function StorageContainer({ shouldLoadQueries, onOpenShareDialog }: Props
   }
 
   async function setStorageVisibility(item: StorageItem, visibility: "shared" | "private") {
-    setError("")
-    setMessage("")
     try {
       await setStorageVisibilityMutation({ key: item.key, visibility })
       setStorageReloadToken((n) => n + 1)
     } catch (e) {
-      setError(e instanceof Error ? e.message : "failed to update visibility")
+      toast.error(e instanceof Error ? e.message : "failed to update visibility")
     }
   }
 
   function startRenameArtifact(item: StorageItem) {
     if (item.source !== "run_artifact") return
-    setError("")
-    setMessage("")
     setRenamingStorageId(item.id)
     setArtifactRenameDraft(item.name)
   }
@@ -172,22 +162,20 @@ export function StorageContainer({ shouldLoadQueries, onOpenShareDialog }: Props
 
   async function saveRenameArtifact(item: StorageItem) {
     if (item.source !== "run_artifact" || !item.run_id) {
-      setError("only run artifacts can be renamed")
+      toast.error("only run artifacts can be renamed")
       return
     }
     let nextName = ""
     try {
       nextName = validateArtifactRenameName(artifactRenameDraft)
     } catch (e) {
-      setError(e instanceof Error ? e.message : "invalid artifact name")
+      toast.error(e instanceof Error ? e.message : "invalid artifact name")
       return
     }
     if (nextName === item.name) {
-      setError("new artifact name must differ from the current name")
+      toast.error("new artifact name must differ from the current name")
       return
     }
-    setError("")
-    setMessage("")
     setArtifactRenameBusyId(item.id)
     try {
       const renamed = await renameArtifactAction({
@@ -198,47 +186,36 @@ export function StorageContainer({ shouldLoadQueries, onOpenShareDialog }: Props
       setRenamingStorageId(null)
       setArtifactRenameDraft("")
       setStorageReloadToken((n) => n + 1)
-      setMessage(
+      toast.success(
         renamed.cleanup_warning
           ? `Renamed artifact to ${renamed.name}. Old object cleanup needs a retry.`
           : `Renamed artifact to ${renamed.name}.`,
       )
     } catch (e) {
-      setError(e instanceof Error ? e.message : "failed to rename artifact")
+      toast.error(e instanceof Error ? e.message : "failed to rename artifact")
     } finally {
       setArtifactRenameBusyId(null)
     }
   }
 
   return (
-    <>
-      {(error || message) && (
-        <div className="pt-3">
-          {error ? <Notice variant="error" className="mb-2">{error}</Notice> : null}
-          {message ? <Notice className="mb-2">{message}</Notice> : null}
-        </div>
-      )}
-      <StorageView
-        selectedDataFiles={selectedDataFiles}
-        uploadingData={uploadingData}
-        dataFileInputKey={dataFileInputKey}
-        storageSearch={storageSearch}
-        storageSourceFilter={storageSourceFilter}
-        storageSort={storageSort}
-        storageResult={storageResult}
-        storageLoading={storageLoading}
-        storageError={storageError}
-        uploadError={uploadError}
-        uploadMessage={uploadMessage}
-        renamingStorageId={renamingStorageId}
-        artifactRenameDraft={artifactRenameDraft}
-        artifactRenameBusyId={artifactRenameBusyId}
-        onUploadData={uploadData}
-        onSelectDataFiles={(files) => {
-          setUploadError("")
-          setUploadMessage("")
-          setSelectedDataFiles(files)
-        }}
+    <StorageView
+      selectedDataFiles={selectedDataFiles}
+      uploadingData={uploadingData}
+      dataFileInputKey={dataFileInputKey}
+      storageSearch={storageSearch}
+      storageSourceFilter={storageSourceFilter}
+      storageSort={storageSort}
+      storageResult={storageResult}
+      storageLoading={storageLoading}
+      storageError={storageError}
+      renamingStorageId={renamingStorageId}
+      artifactRenameDraft={artifactRenameDraft}
+      artifactRenameBusyId={artifactRenameBusyId}
+      onUploadData={uploadData}
+      onSelectDataFiles={(files) => {
+        setSelectedDataFiles(files)
+      }}
         onStorageSearchChange={(value) => {
           void setStorageSearch(value)
           void setStorageOffset(0)
@@ -262,6 +239,5 @@ export function StorageContainer({ shouldLoadQueries, onOpenShareDialog }: Props
         }}
         onSetVisibility={(item, visibility) => { void setStorageVisibility(item, visibility) }}
       />
-    </>
   )
 }

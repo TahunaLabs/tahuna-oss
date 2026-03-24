@@ -20,8 +20,6 @@ import { Spinner } from "@/components/ui/spinner"
 type StorageViewProps = {
   selectedDataFiles: File[]
   uploadingData: boolean
-  uploadError: string
-  uploadMessage: string
   dataFileInputKey: number
   storageSearch: string
   storageSourceFilter: StorageSourceFilter
@@ -50,8 +48,6 @@ type StorageViewProps = {
 export function StorageView({
   selectedDataFiles,
   uploadingData,
-  uploadError,
-  uploadMessage,
   dataFileInputKey,
   storageSearch,
   storageSourceFilter,
@@ -129,8 +125,6 @@ export function StorageView({
         dataFileInputKey={dataFileInputKey}
         selectedDataFiles={selectedDataFiles}
         uploadingData={uploadingData}
-        uploadError={uploadError}
-        uploadMessage={uploadMessage}
         onUploadData={onUploadData}
         onSelectDataFiles={onSelectDataFiles}
         onOpenFilePicker={openFilePicker}

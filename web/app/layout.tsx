@@ -1,5 +1,6 @@
 import { ConvexClientProvider } from "@/components/convex-client-provider"
 import { ThemeProvider } from "@/components/theme-provider"
+import { Toaster } from "@/components/ui/toaster"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { getToken } from "@/lib/auth-server"
 import { Analytics } from "@vercel/analytics/next"
@@ -41,6 +42,7 @@ export default async function RootLayout({
               <ConvexClientProvider initialToken={token}>{children}</ConvexClientProvider>
             </NuqsAdapter>
           </TooltipProvider>
+          <Toaster />
         </ThemeProvider>
         <Analytics />
       </body>

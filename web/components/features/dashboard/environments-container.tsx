@@ -2,9 +2,9 @@
 
 import { useEffect, useState } from "react"
 import { useMutation, useQuery } from "convex/react"
+import { toast } from "sonner"
 import { api } from "@convex/_generated/api"
 import { EnvironmentsView } from "@/components/features/dashboard/environments-view"
-import { Notice } from "@/components/ui/notice"
 import {
   type DataBlobRow,
   type EnvironmentConfigDetail,
@@ -21,8 +21,6 @@ type Props = {
 
 export function EnvironmentsContainer({ shouldLoadQueries, onOpenShareDialog }: Props) {
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState("")
-  const [message, setMessage] = useState("")
   const [bindSelectionByEnvironment, setBindSelectionByEnvironment] = useState<Record<string, string>>({})
   const [configEditorEnvironmentId, setConfigEditorEnvironmentId] = useState<string | null>(null)
   const [configDraft, setConfigDraft] = useState("")
@@ -86,13 +84,11 @@ export function EnvironmentsContainer({ shouldLoadQueries, onOpenShareDialog }: 
 
   async function withBusy(task: () => Promise<void>) {
     setBusy(true)
-    setError("")
-    setMessage("")
     try {
       await task()
       return true
     } catch (e) {
-      setError(e instanceof Error ? e.message : "unexpected error")
+      toast.error(e instanceof Error ? e.message : "unexpected error")
       return false
     } finally {
       setBusy(false)
@@ -106,26 +102,25 @@ export function EnvironmentsContainer({ shouldLoadQueries, onOpenShareDialog }: 
         await removeEnvMutation({ environmentId })
       }
       const count = environmentIds.length
-      setMessage(count === 1 ? "Deleted 1 environment." : `Deleted ${count} environments.`)
+      toast.success(count === 1 ? "Deleted 1 environment." : `Deleted ${count} environments.`)
     })
   }
 
   async function launchRun(environmentId: Id<"environments">) {
     if (runpodCredentialStatus?.configured === false) {
-      setError("Runpod API key is not configured. Open Settings to add one.")
-      setMessage("")
+      toast.error("Runpod API key is not configured. Open Settings to add one.")
       return
     }
     await withBusy(async () => {
       await createRunMutation({ environmentId })
-      setMessage("Run launched.")
+      toast.success("Run launched.")
     })
   }
 
   async function bindSelectedData(environmentId: Id<"environments">, selectedDataId: string) {
     const trimmedDataId = selectedDataId.trim()
     if (!trimmedDataId) {
-      setError("Select a dataset to bind.")
+      toast.error("Select a dataset to bind.")
       return
     }
     if (busy) return
@@ -133,14 +128,14 @@ export function EnvironmentsContainer({ shouldLoadQueries, onOpenShareDialog }: 
     await withBusy(async () => {
       await bindDataMutation({ environmentId, data_ids: [trimmedDataId] })
       setBindSelectionByEnvironment((current) => ({ ...current, [environmentId]: "" }))
-      setMessage(`Bound ${trimmedDataId} to environment ${environmentId}.`)
+      toast.success(`Bound ${trimmedDataId} to environment ${environmentId}.`)
     })
   }
 
   async function unbindDataFromEnvironment(environmentId: Id<"environments">, dataId: string) {
     await withBusy(async () => {
       await unbindDataMutation({ environmentId, data_ids: [dataId] })
-      setMessage(`Unbound ${dataId} from environment ${environmentId}.`)
+      toast.success(`Unbound ${dataId} from environment ${environmentId}.`)
     })
   }
 
@@ -154,8 +149,6 @@ export function EnvironmentsContainer({ shouldLoadQueries, onOpenShareDialog }: 
       gpu_count: environment.gpu_count,
       volume_gb: environment.volume_gb,
     })
-    setError("")
-    setMessage("")
     setConfigError("")
     setConfigEditorEnvironmentId(environment.environment_id)
     setConfigSourceText(nextConfig)
@@ -173,13 +166,11 @@ export function EnvironmentsContainer({ shouldLoadQueries, onOpenShareDialog }: 
   async function saveEnvironmentConfig(environmentId: Id<"environments">) {
     setConfigSaving(true)
     setConfigError("")
-    setError("")
-    setMessage("")
     try {
       const saved = await updateEnvironmentConfigMutation({ environmentId, config_text: configDraft })
       setConfigSourceText(saved.config_text)
       setConfigDraft(saved.config_text)
-      setMessage(`Saved config for environment ${environmentId}.`)
+      toast.success(`Saved config for environment ${environmentId}.`)
     } catch (e) {
       setConfigError(e instanceof Error ? e.message : "failed to save environment config")
     } finally {
@@ -189,12 +180,6 @@ export function EnvironmentsContainer({ shouldLoadQueries, onOpenShareDialog }: 
 
   return (
     <>
-      {(error || message) && (
-        <div className="pt-3">
-          {error ? <Notice variant="error" className="mb-2">{error}</Notice> : null}
-          {message ? <Notice className="mb-2">{message}</Notice> : null}
-        </div>
-      )}
       <EnvironmentsView
         environments={environments}
         uniqueDataBlobs={uniqueDataBlobs}

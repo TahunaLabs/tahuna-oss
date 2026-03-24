@@ -2,12 +2,12 @@
 
 import { useState } from "react"
 import { ShieldCheck } from "lucide-react"
+import { toast } from "sonner"
 
 import type { RunpodCredentialStatus } from "@/components/features/dashboard-settings-model"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Notice } from "@/components/ui/notice"
 
 type RunpodSettingsCardProps = {
   status?: RunpodCredentialStatus
@@ -32,36 +32,29 @@ export function RunpodSettingsCard({
   onRevoke,
 }: RunpodSettingsCardProps) {
   const [apiKey, setApiKey] = useState("")
-  const [error, setError] = useState("")
-  const [message, setMessage] = useState("")
 
   async function handleSave() {
     const trimmed = apiKey.trim()
     if (!trimmed) {
-      setError("Runpod API key is required.")
-      setMessage("")
+      toast.error("Runpod API key is required.")
       return
     }
-    setError("")
-    setMessage("")
     try {
       await onSave(trimmed)
       setApiKey("")
-      setMessage(status?.configured ? "Runpod API key replaced." : "Runpod API key saved.")
+      toast.success(status?.configured ? "Runpod API key replaced." : "Runpod API key saved.")
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : "Failed to save Runpod API key.")
+      toast.error(saveError instanceof Error ? saveError.message : "Failed to save Runpod API key.")
     }
   }
 
   async function handleRevoke() {
-    setError("")
-    setMessage("")
     try {
       await onRevoke()
       setApiKey("")
-      setMessage("Runpod API key disabled for new launches.")
+      toast.success("Runpod API key disabled for new launches.")
     } catch (revokeError) {
-      setError(revokeError instanceof Error ? revokeError.message : "Failed to remove Runpod API key.")
+      toast.error(revokeError instanceof Error ? revokeError.message : "Failed to remove Runpod API key.")
     }
   }
 
@@ -80,9 +73,6 @@ export function RunpodSettingsCard({
           {status?.configured ? "configured" : "not configured"}
         </Badge>
       </div>
-
-      {error ? <Notice variant="error">{error}</Notice> : null}
-      {message ? <Notice>{message}</Notice> : null}
 
       {status?.configured ? (
         <div className="rounded border border-border p-3">
