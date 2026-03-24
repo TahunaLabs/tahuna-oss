@@ -3,40 +3,18 @@ import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
-const tableVariants = cva("w-full caption-bottom text-sm", {
-  variants: {
-    variant: {
-      default: "",
-      dashboard:
-        "w-full border-separate border-spacing-0 text-left text-dashboard-control text-foreground",
-    },
-  },
-  defaultVariants: {
-    variant: "default",
-  },
-})
+const tableVariants = cva(
+  "w-full border-separate border-spacing-0 text-left text-sm text-foreground",
+)
 
-const tableHeaderVariants = cva("", {
-  variants: {
-    variant: {
-      default: "[&_tr]:border-b text-ui-xs text-muted-foreground",
-      dashboard:
-        "border-b border-border text-dashboard-table-header",
-    },
-  },
-  defaultVariants: {
-    variant: "default",
-  },
-})
+const tableHeaderVariants = cva("border-b border-border text-xs")
 
 const tableRowVariants = cva("", {
   variants: {
     variant: {
       default:
-        "border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted",
-      dashboard:
         "border-b border-border bg-secondary-faint transition-colors hover:bg-secondary-hover last:border-0",
-      "dashboard-head": "",
+      head: "",
     },
   },
   defaultVariants: {
@@ -45,44 +23,22 @@ const tableRowVariants = cva("", {
 })
 
 const tableHeadVariants = cva(
-  "h-10 px-2 text-left align-middle text-ui-xs font-medium",
-  {
-    variants: {
-      variant: {
-        default: "text-muted-foreground",
-        dashboard:
-          "h-auto px-dashboard-table-cell-x py-dashboard-table-cell-y text-dashboard-table-header font-dashboard-table-header text-foreground",
-      },
-    },
-    defaultVariants: {
-      variant: "default",
-    },
-  },
+  "h-auto px-3 py-2 text-left align-middle text-xs font-medium text-foreground",
 )
 
-const tableCellVariants = cva("p-2 align-middle", {
-  variants: {
-    variant: {
-      default: "",
-      dashboard:
-        "px-dashboard-table-cell-x py-dashboard-table-cell-y text-dashboard-control [&.text-muted-foreground]:text-dashboard-control-small",
-    },
-  },
-  defaultVariants: {
-    variant: "default",
-  },
-})
+const tableCellVariants = cva(
+  "px-3 py-2 align-middle text-sm [&.text-muted-foreground]:text-xs",
+)
 
 function Table({
   className,
-  variant,
   ...props
-}: React.ComponentProps<"table"> & VariantProps<typeof tableVariants>) {
+}: React.ComponentProps<"table">) {
   return (
     <div data-slot="table-container" className="relative w-full overflow-x-auto">
       <table
         data-slot="table"
-        className={cn(tableVariants({ variant, className }))}
+        className={cn(tableVariants({ className }))}
         {...props}
       />
     </div>
@@ -91,13 +47,12 @@ function Table({
 
 function TableHeader({
   className,
-  variant,
   ...props
-}: React.ComponentProps<"thead"> & VariantProps<typeof tableHeaderVariants>) {
+}: React.ComponentProps<"thead">) {
   return (
     <thead
       data-slot="table-header"
-      className={cn(tableHeaderVariants({ variant, className }))}
+      className={cn(tableHeaderVariants({ className }))}
       {...props}
     />
   )
@@ -129,13 +84,12 @@ function TableRow({
 
 function TableHead({
   className,
-  variant,
   ...props
-}: React.ComponentProps<"th"> & VariantProps<typeof tableHeadVariants>) {
+}: React.ComponentProps<"th">) {
   return (
     <th
       data-slot="table-head"
-      className={cn(tableHeadVariants({ variant, className }))}
+      className={cn(tableHeadVariants({ className }))}
       {...props}
     />
   )
@@ -143,13 +97,12 @@ function TableHead({
 
 function TableCell({
   className,
-  variant,
   ...props
-}: React.ComponentProps<"td"> & VariantProps<typeof tableCellVariants>) {
+}: React.ComponentProps<"td">) {
   return (
     <td
       data-slot="table-cell"
-      className={cn(tableCellVariants({ variant, className }))}
+      className={cn(tableCellVariants({ className }))}
       {...props}
     />
   )

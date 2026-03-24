@@ -3,15 +3,12 @@ import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
-const cardVariants = cva("overflow-hidden", {
+const cardVariants = cva("overflow-hidden rounded-lg border border-border text-foreground", {
   variants: {
     variant: {
-      default: "bg-card border border-border rounded-lg",
-      elevated:
-        "bg-card/80 backdrop-blur-sm border border-border rounded-xl",
-      dashboard: "rounded-lg border border-border bg-card text-foreground",
-      "dashboard-surface": "rounded-lg border border-border bg-background text-foreground",
-      "dashboard-panel": "rounded-xl border border-border bg-background/80 text-foreground",
+      default: "bg-card",
+      surface: "bg-background",
+      panel: "rounded-xl bg-background/80",
     },
   },
   defaultVariants: { variant: "default" },

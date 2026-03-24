@@ -157,9 +157,9 @@ export function StorageView({
       ) : storageItems.length === 0 ? (
         <StorageEmptyState hasFilters={hasFilters} onUpload={openUploadDrawer} />
       ) : (
-        <Card variant="dashboard-surface" className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <Card variant="surface" className="flex min-h-0 flex-1 flex-col overflow-hidden">
           <div className="min-w-0 flex-1 overflow-auto">
-            <Table variant="dashboard" className="w-full table-fixed">
+            <Table className="w-full table-fixed">
               <colgroup>
                 <col className="w-96" />
                 <col className="w-36" />
@@ -167,13 +167,13 @@ export function StorageView({
                 <col className="w-36" />
                 <col className="w-48" />
               </colgroup>
-              <TableHeader variant="dashboard" className="sticky top-0 bg-background">
-                <TableRow variant="dashboard-head" className="text-left">
-                  <TableHead variant="dashboard">Name</TableHead>
-                  <TableHead variant="dashboard">Visibility</TableHead>
-                  <TableHead variant="dashboard">Size</TableHead>
-                  <TableHead variant="dashboard">Created</TableHead>
-                  <TableHead variant="dashboard">Source</TableHead>
+              <TableHeader className="sticky top-0 bg-background">
+                <TableRow variant="head" className="text-left">
+                  <TableHead>Name</TableHead>
+                  <TableHead>Visibility</TableHead>
+                  <TableHead>Size</TableHead>
+                  <TableHead>Created</TableHead>
+                  <TableHead>Source</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>

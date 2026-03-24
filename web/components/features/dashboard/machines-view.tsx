@@ -48,21 +48,21 @@ export function MachinesView({ keys, message, error, revokingId, onRevoke, onCle
       {message ? <Notice className="mb-4">{message}</Notice> : null}
 
       {keys.length === 0 ? (
-        <Card variant="dashboard-surface" className="p-6">
+        <Card variant="surface" className="p-6">
           <p className="text-sm text-muted-foreground">No machine sessions found yet.</p>
         </Card>
       ) : (
-        <Card variant="dashboard-surface" className="overflow-hidden">
-          <Table variant="dashboard">
-            <TableHeader variant="dashboard">
-              <TableRow variant="dashboard-head">
-                <TableHead variant="dashboard">Name</TableHead>
-                <TableHead variant="dashboard">Machine</TableHead>
-                <TableHead variant="dashboard">Prefix</TableHead>
-                <TableHead variant="dashboard">Created</TableHead>
-                <TableHead variant="dashboard">Last Used</TableHead>
-                <TableHead variant="dashboard">Status</TableHead>
-                <TableHead variant="dashboard">Actions</TableHead>
+        <Card variant="surface" className="overflow-hidden">
+          <Table>
+            <TableHeader>
+              <TableRow variant="head">
+                <TableHead>Name</TableHead>
+                <TableHead>Machine</TableHead>
+                <TableHead>Prefix</TableHead>
+                <TableHead>Created</TableHead>
+                <TableHead>Last Used</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -70,29 +70,29 @@ export function MachinesView({ keys, message, error, revokingId, onRevoke, onCle
                 const isActive = key.status === "active"
                 const isBusy = revokingId === key._id
                 return (
-                  <TableRow key={key._id} variant="dashboard">
-                    <TableCell variant="dashboard" className="font-medium">
+                  <TableRow key={key._id}>
+                    <TableCell className="font-medium">
                       {key.name}
                     </TableCell>
-                    <TableCell variant="dashboard" className="text-muted-foreground">
+                    <TableCell className="text-muted-foreground">
                       {key.machineId || "Unknown machine"}
                     </TableCell>
-                    <TableCell variant="dashboard" className="font-mono text-xs text-muted-foreground">
+                    <TableCell className="font-mono text-xs text-muted-foreground">
                       {key.keyPrefix}
                     </TableCell>
-                    <TableCell variant="dashboard" className="text-muted-foreground">
+                    <TableCell className="text-muted-foreground">
                       {formatDate(key._creationTime)}
                     </TableCell>
-                    <TableCell variant="dashboard" className="text-muted-foreground">
+                    <TableCell className="text-muted-foreground">
                       {formatDate(key.lastUsedAt)}
                     </TableCell>
-                    <TableCell variant="dashboard">
+                    <TableCell>
                       <div className="flex items-center gap-2 text-sm capitalize">
                         <StatusDot variant={isActive ? "success" : "muted"} size="xs" />
                         <span>{key.status}</span>
                       </div>
                     </TableCell>
-                    <TableCell variant="dashboard">
+                    <TableCell>
                       {isActive ? (
                         <AlertDialog>
                           <AlertDialogTrigger asChild>

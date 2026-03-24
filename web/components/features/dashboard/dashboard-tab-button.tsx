@@ -24,7 +24,7 @@ function DashboardTabButton({ label, active, onClick, count }: DashboardTabButto
       {label}
       <ChevronDown className="h-3.5 w-3.5" />
       {count !== undefined && count > 0 ? (
-        <span className="text-dashboard-control-small text-muted-foreground">{count}</span>
+        <span className="text-xs text-muted-foreground">{count}</span>
       ) : null}
     </Button>
   )

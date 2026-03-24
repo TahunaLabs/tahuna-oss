@@ -21,9 +21,9 @@ const badgeVariants = cva("inline-flex items-center font-mono", {
         "rounded px-2 py-0.5 text-ui-micro uppercase tracking-wider badge-status-info",
       "status-error":
         "rounded px-2 py-0.5 text-ui-micro uppercase tracking-wider badge-status-error",
-      "dashboard-run-status":
+      "run-status":
         "rounded-full border border-border px-2.5 py-1 text-ui-caption capitalize tracking-normal text-muted-foreground",
-      "dashboard-data":
+      data:
         "max-w-full truncate rounded bg-secondary px-2 py-0.5 text-xs font-sans normal-case tracking-normal text-foreground",
     },
   },

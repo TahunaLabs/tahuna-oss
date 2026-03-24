@@ -46,14 +46,14 @@ function RunTableRow({
 
   return (
     <TableRow
-      variant="dashboard"
+     
       className={cn(
         "group cursor-pointer align-middle hover:bg-muted",
         selected ? "bg-secondary-faint" : "",
       )}
       onClick={() => onSelectRun(selected ? null : run.run_id)}
     >
-      <TableCell variant="dashboard" className="text-foreground">
+      <TableCell className="text-foreground">
         <div className="flex min-w-0 items-center gap-2">
           <p className="truncate">{runLabel}</p>
           {sharedByMeResourceIds?.has(run.run_id) ? (
@@ -62,27 +62,27 @@ function RunTableRow({
         </div>
       </TableCell>
 
-      <TableCell variant="dashboard" className="text-muted-foreground">
+      <TableCell className="text-muted-foreground">
         <span className="inline-flex items-center gap-2 capitalize">
           <StatusDot variant={run.status as StatusDotVariant} size="sm" />
           {run.status}
         </span>
       </TableCell>
 
-      <TableCell variant="dashboard" className="text-muted-foreground">
+      <TableCell className="text-muted-foreground">
         <p className="truncate">{environmentLabel}</p>
       </TableCell>
 
-      <TableCell variant="dashboard" className="text-muted-foreground">
+      <TableCell className="text-muted-foreground">
         {run.created_at > 0 ? relativeTime(run.created_at) : "—"}
       </TableCell>
 
-      <TableCell variant="dashboard" className="text-muted-foreground">
+      <TableCell className="text-muted-foreground">
         {formatRunUptime(run.uptime_ms)}
       </TableCell>
 
       <TableCell
-        variant="dashboard"
+       
         className="px-0 align-middle"
         onClick={(event) => event.stopPropagation()}
       >

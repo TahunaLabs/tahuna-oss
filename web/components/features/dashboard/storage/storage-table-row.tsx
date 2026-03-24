@@ -41,8 +41,8 @@ function StorageTableRow({
   const isBusy = artifactRenameBusyId === item.id
 
   return (
-    <TableRow variant="dashboard" className="group hover:bg-muted">
-      <TableCell variant="dashboard">
+    <TableRow className="group hover:bg-muted">
+      <TableCell>
         {isRenaming ? (
           <form
             className="flex items-center gap-1.5"
@@ -50,12 +50,12 @@ function StorageTableRow({
           >
             <Input
               type="text"
-              variant="dashboard"
+             
               value={artifactRenameDraft}
               onChange={(e) => onArtifactRenameDraftChange(e.target.value)}
               disabled={isBusy}
               maxLength={MAX_ARTIFACT_NAME_CHARS}
-              className="h-7 w-40 bg-muted px-2 text-dashboard-control-small"
+              className="h-7 w-40 bg-muted px-2 text-xs"
             />
             <Button type="submit" variant="compact-toggle" size="compact-xs" disabled={isBusy}>
               {isBusy ? "..." : "Save"}
@@ -120,7 +120,7 @@ function StorageTableRow({
         )}
       </TableCell>
 
-      <TableCell variant="dashboard">
+      <TableCell>
         <Button
           type="button"
           variant="compact-toggle"
@@ -133,15 +133,15 @@ function StorageTableRow({
         </Button>
       </TableCell>
 
-      <TableCell variant="dashboard" className="text-muted-foreground">
+      <TableCell className="text-muted-foreground">
         {formatBytes(item.size)}
       </TableCell>
 
-      <TableCell variant="dashboard" className="text-muted-foreground">
+      <TableCell className="text-muted-foreground">
         {new Date(item.created_at).toLocaleDateString()}
       </TableCell>
 
-      <TableCell variant="dashboard" className="text-muted-foreground">
+      <TableCell className="text-muted-foreground">
         {item.source === "data" ? "Data upload" : "Run artifact"}
       </TableCell>
     </TableRow>

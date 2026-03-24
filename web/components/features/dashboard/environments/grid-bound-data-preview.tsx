@@ -17,20 +17,20 @@ function GridBoundDataPreview({
   return (
     <div className="mt-3 flex flex-wrap items-center gap-1">
       {hasPrimaryData ? (
-        <Badge variant="dashboard-data">Primary synced data</Badge>
+        <Badge variant="data">Primary synced data</Badge>
       ) : null}
 
       {environment.bound_data_ids.slice(0, 2).map((dataId) => {
         const blob = dataBlobsById.get(dataId)
         return (
-          <Badge key={`${environment.environment_id}-grid-${dataId}`} variant="dashboard-data">
+          <Badge key={`${environment.environment_id}-grid-${dataId}`} variant="data">
             {blob?.filename || "Unnamed dataset"}
           </Badge>
         )
       })}
 
       {environment.bound_data_ids.length > 2 ? (
-        <Badge variant="dashboard-data" className="text-muted-foreground">
+        <Badge variant="data" className="text-muted-foreground">
           +{environment.bound_data_ids.length - 2}
         </Badge>
       ) : null}

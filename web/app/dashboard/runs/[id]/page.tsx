@@ -85,8 +85,8 @@ export default function RunDetailPage() {
         <div className="space-y-1">
           <div className="flex items-center gap-2">
             <h1 className="text-xl font-semibold">Run {run.run_id}</h1>
-            <Badge variant="dashboard-run-status">{run.status}</Badge>
-            <Badge variant="dashboard-run-status">Live</Badge>
+            <Badge variant="run-status">{run.status}</Badge>
+            <Badge variant="run-status">Live</Badge>
           </div>
           <p className="text-sm text-muted-foreground">
             {run.name} · created {new Date(run.created_at).toLocaleString()}
@@ -100,7 +100,7 @@ export default function RunDetailPage() {
       {run.error ? <Notice variant="error">{run.error}</Notice> : null}
 
       <section className="grid gap-3 md:grid-cols-2">
-        <Card variant="dashboard" className="p-4">
+        <Card className="p-4">
           <h2 className="text-sm font-semibold">Diagnostics</h2>
           <dl className="mt-3 space-y-2 text-sm">
             <div className="flex justify-between gap-3">
@@ -128,7 +128,7 @@ export default function RunDetailPage() {
           </dl>
         </Card>
 
-        <Card variant="dashboard" className="p-4">
+        <Card className="p-4">
           <h2 className="text-sm font-semibold">Paths</h2>
           <dl className="mt-3 space-y-2 text-sm">
             <div>
@@ -148,7 +148,7 @@ export default function RunDetailPage() {
       </section>
 
       <section className="grid gap-3 lg:grid-cols-2">
-        <Card variant="dashboard" className="min-h-0 p-4">
+        <Card className="min-h-0 p-4">
           <h2 className="text-sm font-semibold">Live logs</h2>
           <p className="mt-1 text-xs text-muted-foreground">{logs.note}</p>
           <p className="mt-1 text-ui-caption text-muted-foreground">
@@ -173,7 +173,7 @@ export default function RunDetailPage() {
           </div>
         </Card>
 
-        <Card variant="dashboard" className="p-4">
+        <Card className="p-4">
           <h2 className="text-sm font-semibold">Live metrics</h2>
           <p className="mt-1 text-ui-caption text-muted-foreground">
             Showing {metrics.metrics_window.returned_points} points across {metrics.metrics_window.returned_series} series

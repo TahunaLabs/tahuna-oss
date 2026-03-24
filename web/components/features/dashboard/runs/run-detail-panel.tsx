@@ -45,7 +45,7 @@ function RunDetailPanel({
   const systemSeries = series.filter((m) => m.category === "system")
 
   return (
-    <Card variant="dashboard-surface" className="overflow-hidden">
+    <Card variant="surface" className="overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between border-b border-border px-6 py-3">
         <div className="flex min-w-0 items-center gap-3">

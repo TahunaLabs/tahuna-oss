@@ -20,11 +20,11 @@ const buttonVariants = cva(
           'text-muted-foreground hover:bg-secondary hover:text-foreground',
         link: 'text-primary underline-offset-4 hover:underline',
         nav:
-          'h-dashboard-control w-full justify-start gap-2 rounded-lg px-2 text-ui-control font-normal text-muted-foreground hover:bg-muted hover:text-foreground data-[active=true]:bg-secondary data-[active=true]:font-medium data-[active=true]:text-foreground',
+          'h-8 w-full justify-start gap-2 rounded-lg px-2 text-sm font-normal text-muted-foreground hover:bg-muted hover:text-foreground data-[active=true]:bg-secondary data-[active=true]:font-medium data-[active=true]:text-foreground',
         tab:
-          'h-dashboard-control rounded px-3 text-dashboard-control font-normal tracking-normal text-foreground hover:bg-secondary-hover data-[active=true]:bg-secondary',
+          'h-8 rounded px-3 text-sm font-normal tracking-normal text-foreground hover:bg-secondary-hover data-[active=true]:bg-secondary',
         toggle:
-          'h-dashboard-control min-w-9 rounded-md border border-transparent px-2 text-muted-foreground hover:bg-secondary hover:text-foreground data-[active=true]:border-border data-[active=true]:bg-background data-[active=true]:text-foreground data-[active=true]:shadow-xs',
+          'h-8 min-w-9 rounded-md border border-transparent px-2 text-muted-foreground hover:bg-secondary hover:text-foreground data-[active=true]:border-border data-[active=true]:bg-background data-[active=true]:text-foreground data-[active=true]:shadow-xs',
         'compact-toggle':
           'border border-border text-foreground hover:bg-secondary data-[active=true]:border-accent data-[active=true]:bg-accent data-[active=true]:text-accent-foreground',
         'context-toggle':
@@ -42,11 +42,11 @@ const buttonVariants = cva(
         lg: 'h-10 px-6 has-[>svg]:px-4',
         icon: 'size-9',
         none: '',
-        control: 'h-dashboard-control rounded-lg px-3 text-dashboard-control',
+        control: 'h-8 rounded-lg px-3 text-sm',
         compact: 'h-auto rounded px-4 py-2 text-sm',
         'compact-sm': 'h-auto rounded px-3 py-1.5 text-sm',
         'compact-xs': 'h-auto rounded px-2 py-1 text-xs',
-        'icon-control': 'h-dashboard-control w-dashboard-control rounded-md p-0',
+        'icon-control': 'h-8 w-8 rounded-md p-0',
         'icon-sm': 'h-6 w-6 rounded p-0',
       },
     },

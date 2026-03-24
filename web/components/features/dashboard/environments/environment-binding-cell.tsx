@@ -37,14 +37,14 @@ function EnvironmentBindingCell({
       {hasAnyData ? (
         <div className="flex flex-wrap items-center gap-1">
           {hasPrimaryData ? (
-            <Badge variant="dashboard-data">Primary synced data</Badge>
+            <Badge variant="data">Primary synced data</Badge>
           ) : null}
 
           {environment.bound_data_ids.map((dataId) => {
             const blob = dataBlobsById.get(dataId)
             return (
               <div key={`${environment.environment_id}-${dataId}`} className="flex max-w-full items-center gap-1">
-                <Badge variant="dashboard-data">{blob?.filename || "Unnamed dataset"}</Badge>
+                <Badge variant="data">{blob?.filename || "Unnamed dataset"}</Badge>
                 <Button
                   type="button"
                   variant="ghost"
@@ -62,7 +62,7 @@ function EnvironmentBindingCell({
       ) : (
         <div className="flex min-w-0 items-center gap-1.5">
           <Select
-            variant="dashboard-binding"
+            variant="binding"
             value={bindSelectionByEnvironment[environment.environment_id] || ""}
             onChange={(event) => {
               const nextValue = event.target.value.trim()

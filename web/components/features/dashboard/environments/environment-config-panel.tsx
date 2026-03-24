@@ -36,7 +36,7 @@ function EnvironmentConfigPanel({
   const configDirty = configDraft !== configSourceText
 
   return (
-    <Card variant="dashboard-panel" className="p-4">
+    <Card variant="panel" className="p-4">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <h3 className="text-sm font-medium text-foreground">Environment config</h3>

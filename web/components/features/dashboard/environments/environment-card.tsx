@@ -72,7 +72,7 @@ function EnvironmentCard({
   onSaveConfig,
 }: EnvironmentCardProps) {
   return (
-    <Card variant="dashboard-surface" className="p-4">
+    <Card variant="surface" className="p-4">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex min-w-0 items-center gap-1.5">

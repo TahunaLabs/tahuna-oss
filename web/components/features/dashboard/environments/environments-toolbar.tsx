@@ -49,7 +49,7 @@ function EnvironmentsToolbar({
           />
           <Input
             type="text"
-            variant="dashboard-search"
+            variant="search"
             value={searchQuery}
             onChange={(event) => onSearchChange(event.target.value)}
             placeholder="Search"

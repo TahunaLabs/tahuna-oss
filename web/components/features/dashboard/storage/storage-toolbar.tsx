@@ -53,7 +53,7 @@ function StorageToolbar({
           />
           <Input
             type="text"
-            variant="dashboard-search"
+            variant="search"
             value={storageSearch}
             onChange={(event) => onStorageSearchChange(event.target.value)}
             placeholder="Search"

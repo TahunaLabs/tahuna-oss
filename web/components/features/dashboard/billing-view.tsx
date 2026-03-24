@@ -120,23 +120,23 @@ export function BillingView({ balanceCents, bootstrapCreditCents, currency, init
       toolbar={null}
     >
       <div className="space-y-5">
-        <Card variant="dashboard" className="p-4">
+        <Card className="p-4">
           <p className="text-sm text-muted-foreground">Account balance</p>
-          <p className="mt-1 text-dashboard-title font-dashboard-title text-foreground">
+          <p className="mt-1 text-2xl font-medium text-foreground">
             {initialized ? formatMoney(balanceCents, currency) : "Initializing..."}
           </p>
           <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
             <div className="rounded border border-border p-3">
-              <p className="text-ui-xs text-muted-foreground">Bootstrap credit</p>
-              <p className="mt-1 text-dashboard-control text-foreground">{formatMoney(bootstrapCreditCents, currency)}</p>
+              <p className="text-xs text-muted-foreground">Bootstrap credit</p>
+              <p className="mt-1 text-sm text-foreground">{formatMoney(bootstrapCreditCents, currency)}</p>
             </div>
             <div className="rounded border border-border p-3">
-              <p className="text-ui-xs text-muted-foreground">Manual top-up</p>
-              <p className="mt-1 text-dashboard-control text-foreground">Disabled</p>
+              <p className="text-xs text-muted-foreground">Manual top-up</p>
+              <p className="mt-1 text-sm text-foreground">Disabled</p>
             </div>
             <div className="rounded border border-border p-3">
-              <p className="text-ui-xs text-muted-foreground">Payment checkout</p>
-              <p className="mt-1 text-dashboard-control text-foreground">Coming soon</p>
+              <p className="text-xs text-muted-foreground">Payment checkout</p>
+              <p className="mt-1 text-sm text-foreground">Coming soon</p>
             </div>
           </div>
           <div className="mt-4 flex justify-end">
@@ -146,10 +146,10 @@ export function BillingView({ balanceCents, bootstrapCreditCents, currency, init
           </div>
         </Card>
 
-        <Card variant="dashboard" className="p-4">
+        <Card className="p-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-dashboard-control font-medium text-foreground">Ledger history</h2>
-            <span className="text-ui-xs text-muted-foreground">{usageEvents.length} events</span>
+            <h2 className="text-sm font-medium text-foreground">Ledger history</h2>
+            <span className="text-xs text-muted-foreground">{usageEvents.length} events</span>
           </div>
           {!initialized ? (
             <p className="mt-3 text-sm text-muted-foreground">Persisting bootstrap ledger entry...</p>
@@ -157,14 +157,14 @@ export function BillingView({ balanceCents, bootstrapCreditCents, currency, init
             <p className="mt-3 text-sm text-muted-foreground">No usage events yet.</p>
           ) : (
             <div className="mt-3 overflow-x-auto">
-              <Table variant="dashboard">
-                <TableHeader variant="dashboard">
-                  <TableRow variant="dashboard-head">
-                    <TableHead variant="dashboard">Date</TableHead>
-                    <TableHead variant="dashboard">Event</TableHead>
-                    <TableHead variant="dashboard">Reference</TableHead>
-                    <TableHead variant="dashboard" className="text-right">Delta</TableHead>
-                    <TableHead variant="dashboard" className="text-right">Balance after</TableHead>
+              <Table>
+                <TableHeader>
+                  <TableRow variant="head">
+                    <TableHead>Date</TableHead>
+                    <TableHead>Event</TableHead>
+                    <TableHead>Reference</TableHead>
+                    <TableHead className="text-right">Delta</TableHead>
+                    <TableHead className="text-right">Balance after</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -177,35 +177,35 @@ export function BillingView({ balanceCents, bootstrapCreditCents, currency, init
                         ].filter((value): value is string => Boolean(value)).join(" • ")
                       : null
                     return (
-                      <TableRow key={`${event.created_at}-${index}`} variant="dashboard">
-                        <TableCell variant="dashboard" className="text-muted-foreground">
+                      <TableRow key={`${event.created_at}-${index}`}>
+                        <TableCell className="text-muted-foreground">
                           {new Date(event.created_at).toLocaleString()}
                         </TableCell>
-                        <TableCell variant="dashboard">
+                        <TableCell>
                           <div>{eventLabel(event.event_type)}</div>
                           {computeEventDetails ? (
-                            <div className="text-ui-xs text-muted-foreground">
+                            <div className="text-xs text-muted-foreground">
                               {computeEventDetails}
                             </div>
                           ) : null}
                           {runContext ? (
-                            <div className="text-ui-xs text-muted-foreground">
+                            <div className="text-xs text-muted-foreground">
                               {runContext}
                             </div>
                           ) : null}
                         </TableCell>
-                        <TableCell variant="dashboard" className="text-muted-foreground">
+                        <TableCell className="text-muted-foreground">
                           {event.reference_type && event.reference_id
                             ? `${event.reference_type}:${event.reference_id}`
                             : "—"}
                         </TableCell>
                         <TableCell
-                          variant="dashboard"
+                         
                           className={`text-right ${event.credits_delta_cents < 0 ? "text-destructive" : "text-success"}`}
                         >
                           {formatSignedMoney(event.credits_delta_cents, currency)}
                         </TableCell>
-                        <TableCell variant="dashboard" className="text-right">
+                        <TableCell className="text-right">
                           {formatMoney(event.balance_after_cents, currency)}
                         </TableCell>
                       </TableRow>

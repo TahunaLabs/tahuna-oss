@@ -27,7 +27,7 @@ function EnvironmentsEmptyState() {
             set up your own using <code className="rounded bg-secondary px-1 py-0.5">tahuna init</code>.
           </p>
 
-          <Button asChild variant="secondary" size="compact" className="w-full justify-center rounded-lg text-dashboard-control">
+          <Button asChild variant="secondary" size="compact" className="w-full justify-center rounded-lg text-sm">
             <Link href={process.env.NEXT_PUBLIC_DOCS_URL!}>
               Full Documentation
               <ExternalLink className="h-3.5 w-3.5" />

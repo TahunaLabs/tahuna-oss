@@ -100,14 +100,14 @@ export function AuditLogsView({ runs, environmentNameById }: AuditLogsViewProps)
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
-              variant="dashboard-search"
+              variant="search"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Search logs"
             />
           </div>
           <Select
-            variant="dashboard"
+           
             value={actionFilter}
             onChange={(event) => setActionFilter(event.target.value as AuditActionFilter)}
           >
@@ -118,7 +118,7 @@ export function AuditLogsView({ runs, environmentNameById }: AuditLogsViewProps)
             <option value="cancelled">Cancelled</option>
           </Select>
           <Input
-            variant="dashboard"
+           
             type="date"
             value={dateFilter}
             onChange={(event) => setDateFilter(event.target.value)}
@@ -127,20 +127,20 @@ export function AuditLogsView({ runs, environmentNameById }: AuditLogsViewProps)
       )}
     >
       {filteredRuns.length === 0 ? (
-        <Card variant="dashboard" className="px-4 py-6 text-center text-sm text-muted-foreground">
+        <Card className="px-4 py-6 text-center text-sm text-muted-foreground">
           No audit logs match the current filters.
         </Card>
       ) : (
-        <Card variant="dashboard-surface" className="overflow-hidden">
+        <Card variant="surface" className="overflow-hidden">
           <div className="overflow-x-auto">
-            <Table variant="dashboard" className="table-fixed">
-              <TableHeader variant="dashboard">
-                <TableRow variant="dashboard-head">
-                  <TableHead variant="dashboard">Event</TableHead>
-                  <TableHead variant="dashboard">GPU type</TableHead>
-                  <TableHead variant="dashboard" className="text-center">GPUs</TableHead>
-                  <TableHead variant="dashboard" className="text-center">Uptime</TableHead>
-                  <TableHead variant="dashboard">Timestamp</TableHead>
+            <Table className="table-fixed">
+              <TableHeader>
+                <TableRow variant="head">
+                  <TableHead>Event</TableHead>
+                  <TableHead>GPU type</TableHead>
+                  <TableHead className="text-center">GPUs</TableHead>
+                  <TableHead className="text-center">Uptime</TableHead>
+                  <TableHead>Timestamp</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -152,8 +152,8 @@ export function AuditLogsView({ runs, environmentNameById }: AuditLogsViewProps)
                   const environmentName = environmentNameById.get(run.environment_id) || "Unknown environment"
 
                   return (
-                    <TableRow key={run.run_id} variant="dashboard" className="hover:bg-secondary/20">
-                      <TableCell variant="dashboard">
+                    <TableRow key={run.run_id} className="hover:bg-secondary/20">
+                      <TableCell>
                         <div className="flex items-start gap-3">
                           {isCompleted ? (
                             <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-success" />
@@ -167,22 +167,22 @@ export function AuditLogsView({ runs, environmentNameById }: AuditLogsViewProps)
                               <span className="font-semibold">{run.name}</span>{" "}
                               {actionLabel} run
                             </p>
-                            <p className="truncate text-ui-xs text-muted-foreground">
+                            <p className="truncate text-xs text-muted-foreground">
                               {run.run_id} • env {environmentName}
                             </p>
                           </div>
                         </div>
                       </TableCell>
-                      <TableCell variant="dashboard" className="font-mono text-ui-xs">
+                      <TableCell className="font-mono text-xs">
                         {run.effective_gpu_type || "—"}
                       </TableCell>
-                      <TableCell variant="dashboard" className="text-center">
+                      <TableCell className="text-center">
                         {run.effective_gpu_count > 0 ? run.effective_gpu_count : "—"}
                       </TableCell>
-                      <TableCell variant="dashboard" className="text-center">
+                      <TableCell className="text-center">
                         {formatRunUptime(run.uptime_ms)}
                       </TableCell>
-                      <TableCell variant="dashboard" className="text-ui-xs text-muted-foreground">
+                      <TableCell className="text-xs text-muted-foreground">
                         {formatAuditTimestamp(run.created_at)}
                       </TableCell>
                     </TableRow>

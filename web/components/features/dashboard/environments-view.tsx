@@ -287,9 +287,9 @@ function EnvironmentTableView({
   ...rowProps
 }: TableViewProps) {
   return (
-    <Card variant="dashboard-surface" className="flex min-h-0 flex-1 overflow-hidden">
+    <Card variant="surface" className="flex min-h-0 flex-1 overflow-hidden">
       <div className="min-w-0 flex-1 overflow-auto">
-        <Table variant="dashboard" className="w-full table-fixed">
+        <Table className="w-full table-fixed">
           <colgroup>
             <col className="w-9" />
             <col className="w-2/12" />
@@ -301,17 +301,17 @@ function EnvironmentTableView({
             <col className="hidden w-1/12 xl:table-column" />
             <col className="w-20" />
           </colgroup>
-          <TableHeader variant="dashboard" className="sticky top-0 bg-background">
-            <TableRow variant="dashboard-head" className="text-left">
-              <TableHead variant="dashboard" className="px-0" />
-              <TableHead variant="dashboard" className="min-w-36">Name</TableHead>
-              <TableHead variant="dashboard" className="hidden min-w-24 lg:table-cell">Access</TableHead>
-              <TableHead variant="dashboard" className="min-w-44">Data</TableHead>
-              <TableHead variant="dashboard" className="min-w-36">Device</TableHead>
-              <TableHead variant="dashboard" className="min-w-32">Runtime</TableHead>
-              <TableHead variant="dashboard" className="min-w-24">Last updated</TableHead>
-              <TableHead variant="dashboard" className="hidden min-w-24 xl:table-cell">Created</TableHead>
-              <TableHead variant="dashboard" className="px-0" />
+          <TableHeader className="sticky top-0 bg-background">
+            <TableRow variant="head" className="text-left">
+              <TableHead className="px-0" />
+              <TableHead className="min-w-36">Name</TableHead>
+              <TableHead className="hidden min-w-24 lg:table-cell">Access</TableHead>
+              <TableHead className="min-w-44">Data</TableHead>
+              <TableHead className="min-w-36">Device</TableHead>
+              <TableHead className="min-w-32">Runtime</TableHead>
+              <TableHead className="min-w-24">Last updated</TableHead>
+              <TableHead className="hidden min-w-24 xl:table-cell">Created</TableHead>
+              <TableHead className="px-0" />
             </TableRow>
           </TableHeader>
 

@@ -105,8 +105,8 @@ export function SettingsView({
         {saveError ? <Notice variant="error">{saveError}</Notice> : null}
         {saveMessage ? <Notice>{saveMessage}</Notice> : null}
 
-        <Card variant="dashboard" className="p-4">
-          <h2 className="text-dashboard-control font-medium text-foreground">Theme</h2>
+        <Card className="p-4">
+          <h2 className="text-sm font-medium text-foreground">Theme</h2>
           <div className="mt-3 inline-flex overflow-hidden rounded-lg border border-border bg-card">
             <Button
               type="button"
@@ -133,14 +133,14 @@ export function SettingsView({
           </div>
         </Card>
 
-        <Card variant="dashboard" className="p-4">
-          <h2 className="text-dashboard-control font-medium text-foreground">Account information</h2>
+        <Card className="p-4">
+          <h2 className="text-sm font-medium text-foreground">Account information</h2>
           <div className="mt-4">
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             <div>
               <label className="mb-1.5 block text-sm text-muted-foreground">First name</label>
               <Input
-                variant="dashboard"
+               
                 value={profile.firstName}
                 onChange={(event) => onProfileChange({ ...profile, firstName: event.target.value })}
                 placeholder="First name"
@@ -149,7 +149,7 @@ export function SettingsView({
             <div>
               <label className="mb-1.5 block text-sm text-muted-foreground">Last name</label>
               <Input
-                variant="dashboard"
+               
                 value={profile.lastName}
                 onChange={(event) => onProfileChange({ ...profile, lastName: event.target.value })}
                 placeholder="Last name"
@@ -158,7 +158,7 @@ export function SettingsView({
             <div>
               <label className="mb-1.5 block text-sm text-muted-foreground">Address line 1</label>
               <Input
-                variant="dashboard"
+               
                 value={profile.addressLine1}
                 onChange={(event) => onProfileChange({ ...profile, addressLine1: event.target.value })}
                 placeholder="Street address"
@@ -167,7 +167,7 @@ export function SettingsView({
             <div>
               <label className="mb-1.5 block text-sm text-muted-foreground">Address line 2</label>
               <Input
-                variant="dashboard"
+               
                 value={profile.addressLine2}
                 onChange={(event) => onProfileChange({ ...profile, addressLine2: event.target.value })}
                 placeholder="Suite, floor, etc. (optional)"
@@ -176,7 +176,7 @@ export function SettingsView({
             <div>
               <label className="mb-1.5 block text-sm text-muted-foreground">Country</label>
               <Input
-                variant="dashboard"
+               
                 value={profile.country}
                 onChange={(event) => onProfileChange({ ...profile, country: event.target.value })}
                 placeholder="Country"
@@ -185,7 +185,7 @@ export function SettingsView({
             <div>
               <label className="mb-1.5 block text-sm text-muted-foreground">Company name</label>
               <Input
-                variant="dashboard"
+               
                 value={profile.companyName}
                 onChange={(event) => onProfileChange({ ...profile, companyName: event.target.value })}
                 placeholder="Company name"
@@ -194,7 +194,7 @@ export function SettingsView({
             <div>
               <label className="mb-1.5 block text-sm text-muted-foreground">Company ID</label>
               <Input
-                variant="dashboard"
+               
                 value={profile.companyId}
                 onChange={(event) => onProfileChange({ ...profile, companyId: event.target.value })}
                 placeholder="Company registration ID"
@@ -203,7 +203,7 @@ export function SettingsView({
             <div>
               <label className="mb-1.5 block text-sm text-muted-foreground">Tax ID</label>
               <Input
-                variant="dashboard"
+               
                 value={profile.taxId}
                 onChange={(event) => onProfileChange({ ...profile, taxId: event.target.value })}
                 placeholder="Tax ID"
@@ -211,7 +211,7 @@ export function SettingsView({
             </div>
             <div className="md:col-span-2">
               <label className="mb-1.5 block text-sm text-muted-foreground">Account email</label>
-              <Input variant="dashboard" value={userEmail || "—"} readOnly />
+              <Input value={userEmail || "—"} readOnly />
             </div>
           </div>
           <div className="mt-4 flex justify-end">
@@ -230,7 +230,7 @@ export function SettingsView({
           </div>
         </Card>
 
-        <Card variant="dashboard" className="p-4">
+        <Card className="p-4">
           <CollapsibleSection
             title="API keys"
             open={apiKeysOpen}
@@ -257,9 +257,9 @@ export function SettingsView({
                           <p className="truncate text-sm text-foreground">{key.name}</p>
                           <Badge variant={statusVariant(key.status)}>{key.status}</Badge>
                         </div>
-                        <p className="font-mono text-ui-xs text-muted-foreground">{key.keyPrefix}</p>
+                        <p className="font-mono text-xs text-muted-foreground">{key.keyPrefix}</p>
                       </div>
-                      <p className="mt-1 truncate text-ui-xs text-muted-foreground">
+                      <p className="mt-1 truncate text-xs text-muted-foreground">
                         machine: {key.machineId || "n/a"} • last used: {formatDate(key.lastUsedAt)}
                       </p>
                     </div>
@@ -270,7 +270,7 @@ export function SettingsView({
           </CollapsibleSection>
         </Card>
 
-        <Card variant="dashboard" className="p-4">
+        <Card className="p-4">
           <CollapsibleSection
             title="Active sessions"
             open={sessionsOpen}
@@ -284,9 +284,9 @@ export function SettingsView({
                   <div key={session._id} className="flex items-center justify-between gap-3 rounded border border-border p-3">
                     <div>
                       <p className="text-sm text-foreground">{session.machineId}</p>
-                      <p className="text-ui-xs text-muted-foreground">{session.name}</p>
+                      <p className="text-xs text-muted-foreground">{session.name}</p>
                     </div>
-                    <p className="text-ui-xs text-muted-foreground">{formatDate(session.lastUsedAt)}</p>
+                    <p className="text-xs text-muted-foreground">{formatDate(session.lastUsedAt)}</p>
                   </div>
                 ))
               )}
@@ -294,7 +294,7 @@ export function SettingsView({
           </CollapsibleSection>
         </Card>
 
-        <Card variant="dashboard" className="p-4">
+        <Card className="p-4">
           <CollapsibleSection
             title="Login settings"
             open={loginOpen}

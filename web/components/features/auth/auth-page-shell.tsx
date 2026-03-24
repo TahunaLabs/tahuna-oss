@@ -27,7 +27,7 @@ export function AuthPageShell({ eyebrow, title, subtitle, children }: AuthPageSh
           <h1 className="mb-6 font-serif text-4xl leading-display-tight tracking-tight text-foreground md:text-6xl">{title}</h1>
           <p className="text-lg text-foreground/80 max-w-2xl">{subtitle}</p>
 
-          <Card variant="elevated" className="mt-10">
+          <Card className="mt-10">
             <CardContent className="p-6 md:p-8">{children}</CardContent>
           </Card>
         </div>

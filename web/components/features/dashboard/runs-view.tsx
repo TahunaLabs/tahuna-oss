@@ -110,9 +110,9 @@ export function RunsView({
         <RunsEmptyState activeTab={activeTab} />
       ) : (
         <div className="space-y-3">
-          <Card variant="dashboard-surface" className="flex min-h-0 flex-1 overflow-hidden">
+          <Card variant="surface" className="flex min-h-0 flex-1 overflow-hidden">
             <div className="min-w-0 flex-1 overflow-auto">
-              <Table variant="dashboard" className="w-full table-fixed">
+              <Table className="w-full table-fixed">
                 <colgroup>
                   <col className="w-72" />
                   <col className="w-28" />
@@ -121,14 +121,14 @@ export function RunsView({
                   <col className="w-32" />
                   <col className="w-10" />
                 </colgroup>
-                <TableHeader variant="dashboard" className="sticky top-0 bg-background">
-                  <TableRow variant="dashboard-head" className="text-left">
-                    <TableHead variant="dashboard">Name</TableHead>
-                    <TableHead variant="dashboard">Status</TableHead>
-                    <TableHead variant="dashboard">Environment</TableHead>
-                    <TableHead variant="dashboard">Started</TableHead>
-                    <TableHead variant="dashboard">Runtime</TableHead>
-                    <TableHead variant="dashboard" className="px-0" />
+                <TableHeader className="sticky top-0 bg-background">
+                  <TableRow variant="head" className="text-left">
+                    <TableHead>Name</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Environment</TableHead>
+                    <TableHead>Started</TableHead>
+                    <TableHead>Runtime</TableHead>
+                    <TableHead className="px-0" />
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -164,7 +164,7 @@ export function RunsView({
                 onShareRun={onShareRun}
               />
             ) : (
-              <Card variant="dashboard-surface" className="px-6 py-10">
+              <Card variant="surface" className="px-6 py-10">
                 <p className="text-sm text-muted-foreground">Loading run details…</p>
               </Card>
             )

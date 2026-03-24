@@ -68,18 +68,18 @@ function EnvironmentTableRow({
 }: EnvironmentTableRowProps) {
   return (
     <Fragment>
-      <TableRow variant="dashboard" className="group align-middle hover:bg-muted">
-        <TableCell variant="dashboard" className="px-0" />
+      <TableRow className="group align-middle hover:bg-muted">
+        <TableCell className="px-0" />
 
-        <TableCell variant="dashboard" className="text-foreground">
+        <TableCell className="text-foreground">
           <p className="truncate">{environment.name}</p>
         </TableCell>
 
-        <TableCell variant="dashboard" className="hidden text-muted-foreground lg:table-cell">
+        <TableCell className="hidden text-muted-foreground lg:table-cell">
           <p className="truncate">{isShared ? "Shared" : "Private"}</p>
         </TableCell>
 
-        <TableCell variant="dashboard" className="overflow-hidden pl-3 pr-1">
+        <TableCell className="overflow-hidden pl-3 pr-1">
           <EnvironmentBindingCell
             environment={environment}
             uniqueDataBlobs={uniqueDataBlobs}
@@ -92,7 +92,7 @@ function EnvironmentTableRow({
           />
         </TableCell>
 
-        <TableCell variant="dashboard" className="text-muted-foreground">
+        <TableCell className="text-muted-foreground">
           <p
             className="truncate"
             title={`${environment.gpu_type} x${environment.gpu_count} · ${environment.volume_gb}GB`}
@@ -101,21 +101,21 @@ function EnvironmentTableRow({
           </p>
         </TableCell>
 
-        <TableCell variant="dashboard" className="text-muted-foreground">
+        <TableCell className="text-muted-foreground">
           <p className="truncate" title={`${environment.framework}:${environment.version}`}>
             {environment.framework}:{environment.version}
           </p>
         </TableCell>
 
-        <TableCell variant="dashboard" className="text-muted-foreground">
+        <TableCell className="text-muted-foreground">
           <p className="truncate">{relativeTime(environment.last_updated_at)}</p>
         </TableCell>
 
-        <TableCell variant="dashboard" className="hidden text-muted-foreground xl:table-cell">
+        <TableCell className="hidden text-muted-foreground xl:table-cell">
           <p className="truncate">{relativeTime(environment.created_at)}</p>
         </TableCell>
 
-        <TableCell variant="dashboard" className="px-0 align-middle">
+        <TableCell className="px-0 align-middle">
           <div className="flex items-center justify-center">
             <EnvironmentActionsMenu
               environment={environment}
@@ -133,7 +133,7 @@ function EnvironmentTableRow({
       </TableRow>
 
       {configOpen ? (
-        <TableRow variant="dashboard" className="bg-secondary-subtle">
+        <TableRow className="bg-secondary-subtle">
           <TableCell colSpan={9} className="px-6 pb-4 pt-1">
             <EnvironmentConfigPanel
               environmentId={environment.environment_id}
