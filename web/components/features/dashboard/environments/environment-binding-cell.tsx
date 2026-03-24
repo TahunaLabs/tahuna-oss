@@ -70,7 +70,7 @@ function EnvironmentBindingCell({
         <div className="flex min-w-0 items-center gap-1.5">
           {availableDataBlobs.length === 0 ? (
             <TruncatedTooltip
-              className="block max-w-full rounded bg-muted px-2 py-0.5 text-clip text-xs font-sans normal-case tracking-normal text-muted-foreground opacity-70"
+              className="block max-w-full rounded bg-muted px-2 py-0.5 text-xs font-sans normal-case tracking-normal text-muted-foreground opacity-70"
             >
               No datasets available
             </TruncatedTooltip>
