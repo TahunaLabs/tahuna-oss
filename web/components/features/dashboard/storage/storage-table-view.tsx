@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useState } from "react"
 
 import {
   type StorageItem,
@@ -47,22 +47,19 @@ function StorageTableView({
   onSetVisibility,
 }: StorageTableViewProps) {
   const [selectedStorageIds, setSelectedStorageIds] = useState<Set<string>>(() => new Set())
-  const visibleStorageIds = useMemo(() => items.map((item) => item.id), [items])
-  const visibleStorageIdSet = useMemo(() => new Set(visibleStorageIds), [visibleStorageIds])
-  const selectedVisibleCount = useMemo(
-    () => visibleStorageIds.filter((id) => selectedStorageIds.has(id)).length,
-    [selectedStorageIds, visibleStorageIds],
-  )
+  const visibleStorageIds = items.map((item) => item.id)
+  const selectedVisibleCount = visibleStorageIds.filter((id) => selectedStorageIds.has(id)).length
   const allVisibleSelected = visibleStorageIds.length > 0 && selectedVisibleCount === visibleStorageIds.length
   const someVisibleSelected = selectedVisibleCount > 0 && !allVisibleSelected
 
   useEffect(() => {
     setSelectedStorageIds((previous) => {
+      const visibleStorageIdSet = new Set(items.map((item) => item.id))
       const next = new Set(Array.from(previous).filter((id) => visibleStorageIdSet.has(id)))
       if (next.size === previous.size) return previous
       return next
     })
-  }, [visibleStorageIdSet])
+  }, [items])
 
   function toggleSelected(storageId: string) {
     setSelectedStorageIds((previous) => {
