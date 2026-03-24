@@ -4,6 +4,7 @@ import type { DataBlobRow, EnvironmentRow } from "@/components/features/dashboar
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Select } from "@/components/ui/select"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 
 type EnvironmentBindingCellProps = {
   environment: EnvironmentRow
@@ -42,9 +43,15 @@ function EnvironmentBindingCell({
 
           {environment.bound_data_ids.map((dataId) => {
             const blob = dataBlobsById.get(dataId)
+            const filename = blob?.filename || "Unnamed dataset"
             return (
               <div key={`${environment.environment_id}-${dataId}`} className="flex max-w-full items-center gap-1">
-                <Badge variant="data">{blob?.filename || "Unnamed dataset"}</Badge>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Badge variant="data">{filename}</Badge>
+                  </TooltipTrigger>
+                  <TooltipContent>{filename}</TooltipContent>
+                </Tooltip>
                 <Button
                   type="button"
                   variant="ghost"

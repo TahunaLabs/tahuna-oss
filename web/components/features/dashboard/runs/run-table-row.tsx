@@ -7,7 +7,7 @@ import { RunActionsMenu } from "@/components/features/dashboard/runs/run-actions
 import { TableActionsCell } from "@/components/features/dashboard/table-actions-cell"
 import { StatusDot, type StatusDotVariant } from "@/components/ui/status-dot"
 import { TableCell, TableRow } from "@/components/ui/table"
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import { TruncatedTooltip } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 
 type RunTableRowProps = {
@@ -56,12 +56,7 @@ function RunTableRow({
     >
       <TableCell className="text-foreground">
         <div className="flex min-w-0 items-center gap-2">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <p className="truncate">{runLabel}</p>
-            </TooltipTrigger>
-            <TooltipContent>{runLabel}</TooltipContent>
-          </Tooltip>
+          <TruncatedTooltip>{runLabel}</TruncatedTooltip>
           {sharedByMeResourceIds?.has(run.run_id) ? (
             <Users className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
           ) : null}
@@ -76,12 +71,7 @@ function RunTableRow({
       </TableCell>
 
       <TableCell className="text-muted-foreground">
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <p className="truncate">{environmentLabel}</p>
-          </TooltipTrigger>
-          <TooltipContent>{environmentLabel}</TooltipContent>
-        </Tooltip>
+        <TruncatedTooltip>{environmentLabel}</TruncatedTooltip>
       </TableCell>
 
       <TableCell className="text-muted-foreground">
