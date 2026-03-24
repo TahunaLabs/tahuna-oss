@@ -13,6 +13,7 @@ import { TableSelectCell } from "@/components/features/dashboard/table-select-ce
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { TableCell, TableRow } from "@/components/ui/table"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 
 type StorageTableRowProps = {
@@ -88,7 +89,12 @@ function StorageTableRow({
             </Button>
           </form>
         ) : (
-          <p className="min-w-0 truncate text-foreground">{item.name}</p>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <p className="min-w-0 truncate text-foreground">{item.name}</p>
+            </TooltipTrigger>
+            <TooltipContent>{item.name}</TooltipContent>
+          </Tooltip>
         )}
       </TableCell>
 

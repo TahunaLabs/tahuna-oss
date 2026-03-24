@@ -1,5 +1,6 @@
 import { ConvexClientProvider } from "@/components/convex-client-provider"
 import { ThemeProvider } from "@/components/theme-provider"
+import { TooltipProvider } from "@/components/ui/tooltip"
 import { getToken } from "@/lib/auth-server"
 import { Analytics } from "@vercel/analytics/next"
 import type { Metadata } from "next"
@@ -35,9 +36,11 @@ export default async function RootLayout({
     <html lang="en" className={`${geist.variable} ${geistMono.variable} ${cormorant.variable} ${initialTheme}`}>
       <body className="font-sans antialiased">
         <ThemeProvider initialTheme={initialTheme}>
-          <NuqsAdapter>
-            <ConvexClientProvider initialToken={token}>{children}</ConvexClientProvider>
-          </NuqsAdapter>
+          <TooltipProvider>
+            <NuqsAdapter>
+              <ConvexClientProvider initialToken={token}>{children}</ConvexClientProvider>
+            </NuqsAdapter>
+          </TooltipProvider>
         </ThemeProvider>
         <Analytics />
       </body>

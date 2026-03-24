@@ -14,6 +14,7 @@ import { EnvironmentBindingCell } from "@/components/features/dashboard/environm
 import { EnvironmentConfigPanel } from "@/components/features/dashboard/environments/environment-config-panel"
 import { deviceLabel } from "@/components/features/dashboard/environments/environment-card"
 import { TableCell, TableRow } from "@/components/ui/table"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 
 type EnvironmentTableRowProps = {
@@ -88,7 +89,12 @@ function EnvironmentTableRow({
         />
 
         <TableCell className="text-foreground">
-          <p className="truncate">{environment.name}</p>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <p className="truncate">{environment.name}</p>
+            </TooltipTrigger>
+            <TooltipContent>{environment.name}</TooltipContent>
+          </Tooltip>
         </TableCell>
 
         <TableCell className="text-muted-foreground">
@@ -109,18 +115,29 @@ function EnvironmentTableRow({
         </TableCell>
 
         <TableCell className="text-muted-foreground">
-          <p
-            className="truncate"
-            title={`${environment.gpu_type} x${environment.gpu_count} · ${environment.volume_gb}GB`}
-          >
-            {deviceLabel(environment)}
-          </p>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <p className="truncate">
+                {deviceLabel(environment)}
+              </p>
+            </TooltipTrigger>
+            <TooltipContent>
+              {environment.gpu_type} x{environment.gpu_count} · {environment.volume_gb}GB
+            </TooltipContent>
+          </Tooltip>
         </TableCell>
 
         <TableCell className="text-muted-foreground">
-          <p className="truncate" title={`${environment.framework}:${environment.version}`}>
-            {environment.framework}:{environment.version}
-          </p>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <p className="truncate">
+                {environment.framework}:{environment.version}
+              </p>
+            </TooltipTrigger>
+            <TooltipContent>
+              {environment.framework}:{environment.version}
+            </TooltipContent>
+          </Tooltip>
         </TableCell>
 
         <TableCell className="text-muted-foreground">
