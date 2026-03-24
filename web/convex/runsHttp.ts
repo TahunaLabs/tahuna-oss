@@ -232,7 +232,7 @@ export async function handleRuntimePost(ctx: ActionCtx, request: Request, route:
         headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
       });
     }
-    const result = await ctx.runMutation(internal.runs.ingestRuntimeArtifacts, { runId, keys });
+    const result = await ctx.runAction(internal.runs.ingestRuntimeArtifacts, { runId, keys });
     return new Response(JSON.stringify({ ok: true, accepted: result.accepted }), {
       status: 200,
       headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),

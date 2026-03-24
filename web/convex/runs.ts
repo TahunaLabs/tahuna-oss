@@ -218,6 +218,11 @@ const runtimeLogLineValidator = v.object({
   source: v.optional(v.string()),
   timestamp: v.optional(v.number()),
 });
+const runtimeArtifactRowValidator = v.object({
+  key: v.string(),
+  size: v.number(),
+  createdAt: v.number(),
+});
 const runtimeMetricSampleValidator = v.object({
   name: v.string(),
   value: v.number(),
@@ -2015,18 +2020,19 @@ export const ingestRuntimeStatus = internalMutation({
   },
 });
 
-export const ingestRuntimeArtifacts = internalMutation({
+export const ingestRuntimeArtifacts = internalAction({
   args: {
     runId: v.id("runs"),
     keys: v.array(v.string()),
   },
   returns: v.object({ accepted: v.number() }),
-  handler: async (ctx, args) => {
-    const row = await ctx.db.get("runs", args.runId);
-    if (!row) {
+  handler: async (ctx, args): Promise<{ accepted: number }> => {
+    const commitContext = await ctx.runQuery(internal.runs.internalGetRunArtifactCommitContext, {
+      runId: args.runId,
+    });
+    if (!commitContext) {
       return { accepted: 0 };
     }
-    const outputPath = row.output || "";
     const validArtifacts: Array<{ key: string; size: number; createdAt: number }> = [];
     const inputSeen = new Set<string>();
     for (const rawKey of args.keys) {
@@ -2035,7 +2041,7 @@ export const ingestRuntimeArtifacts = internalMutation({
         continue;
       }
       inputSeen.add(key);
-      if (!isRunArtifactKey(outputPath, key)) {
+      if (!isRunArtifactKey(commitContext.outputPath, key)) {
         continue;
       }
       const metadata = await r2.getMetadata(ctx, key);
@@ -2052,10 +2058,43 @@ export const ingestRuntimeArtifacts = internalMutation({
       });
     }
 
+    try {
+      return await ctx.runMutation(internal.runs.commitRuntimeArtifacts, {
+        runId: args.runId,
+        artifacts: validArtifacts,
+      });
+    } catch (error) {
+      for (const artifact of validArtifacts) {
+        try {
+          await r2.deleteObject(ctx, artifact.key);
+        } catch {
+          // Best-effort cleanup when artifact billing/indexing fails.
+        }
+      }
+      throw error;
+    }
+  },
+});
+
+export const commitRuntimeArtifacts = internalMutation({
+  args: {
+    runId: v.id("runs"),
+    artifacts: v.array(runtimeArtifactRowValidator),
+  },
+  returns: v.object({ accepted: v.number() }),
+  handler: async (ctx, args): Promise<{ accepted: number }> => {
+    const row = await ctx.db.get("runs", args.runId);
+    if (!row) {
+      return { accepted: 0 };
+    }
+
     const existing = row.artifactKeys || [];
     const seen = new Set(existing);
     const newKeys: string[] = [];
-    for (const artifact of validArtifacts) {
+    for (const artifact of args.artifacts) {
+      if (!isRunArtifactKey(row.output || "", artifact.key)) {
+        continue;
+      }
       if (!seen.has(artifact.key)) {
         seen.add(artifact.key);
         newKeys.push(artifact.key);
@@ -2069,11 +2108,6 @@ export const ingestRuntimeArtifacts = internalMutation({
           createdAt: artifact.createdAt,
         });
       } catch (error) {
-        try {
-          await r2.deleteObject(ctx, artifact.key);
-        } catch {
-          // Best-effort cleanup when artifact billing/indexing fails.
-        }
         throw error;
       }
     }
@@ -2083,6 +2117,25 @@ export const ingestRuntimeArtifacts = internalMutation({
       });
     }
     return { accepted: newKeys.length };
+  },
+});
+
+export const internalGetRunArtifactCommitContext = internalQuery({
+  args: { runId: v.id("runs") },
+  returns: v.union(
+    v.null(),
+    v.object({
+      outputPath: v.string(),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    const row = await ctx.db.get("runs", args.runId);
+    if (!row) {
+      return null;
+    }
+    return {
+      outputPath: row.output || "",
+    };
   },
 });
 
