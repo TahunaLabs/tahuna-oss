@@ -359,10 +359,11 @@ func (r *Runner) failWithError(ctx context.Context, reason error) error {
 }
 
 func (r *Runner) syncArtifacts(ctx context.Context, hooks train.Hooks) {
+	outputDir := filepath.Clean(filepath.Join(r.cfg.WorkspaceRoot, r.cfg.OutputDir))
 	result := artifacts.Sync(
 		ctx,
 		r.api,
-		r.cfg.WorkspaceRoot,
+		outputDir,
 		r.cfg.RequestTimeout(),
 		hooks.EmitLog,
 	)

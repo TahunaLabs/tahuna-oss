@@ -174,6 +174,7 @@ const provisioningPayloadValidator = v.object({
   run_id: v.string(),
   environment_id: v.string(),
   user_id: v.string(),
+  output_dir: v.string(),
   input_path: v.string(),
   output_path: v.string(),
   logs_path: v.string(),
@@ -276,6 +277,7 @@ type ProvisioningPayload = {
   run_id: string;
   environment_id: string;
   user_id: string;
+  output_dir: string;
   input_path: string;
   output_path: string;
   logs_path: string;
@@ -426,6 +428,7 @@ function toProvisioningPayload(row: Doc<"runs">): ProvisioningPayload {
     run_id: String(row._id),
     environment_id: String(row.environmentId),
     user_id: row.userId,
+    output_dir: typeof row.outputDir === "string" && row.outputDir.trim() !== "" ? row.outputDir.trim() : "outputs",
     input_path: row.input,
     output_path: row.output,
     logs_path: row.logs,
@@ -680,6 +683,7 @@ async function createRunpodPod(args: {
         TAHUNA_ENVIRONMENT_ID: args.payload.environment_id,
         TAHUNA_CONTRACT_VERSION: args.payload.contract_version,
         TAHUNA_INPUT_PATH: args.payload.input_path,
+        TAHUNA_OUTPUT_DIR: args.payload.output_dir,
         TAHUNA_OUTPUT_PATH: args.payload.output_path,
         TAHUNA_LOGS_PATH: args.payload.logs_path,
         TAHUNA_CODE_MANIFEST_HASH: args.payload.code_manifest_hash || "",
@@ -860,6 +864,7 @@ export const create = mutation({
   args: {
     environmentId: v.id("environments"),
     name: v.optional(v.string()),
+    output_dir: v.optional(v.string()),
     gpu_type: v.optional(v.string()),
     gpu_count: v.optional(v.number()),
     volume_gb: v.optional(v.number()),
@@ -871,6 +876,7 @@ export const create = mutation({
       userId: String(user._id),
       environmentId: args.environmentId,
       name: args.name,
+      output_dir: args.output_dir,
       gpu_type: args.gpu_type,
       gpu_count: args.gpu_count,
       volume_gb: args.volume_gb,
@@ -951,6 +957,7 @@ export const internalCreate = internalMutation({
     userId: v.string(),
     environmentId: v.id("environments"),
     name: v.optional(v.string()),
+    output_dir: v.optional(v.string()),
     gpu_type: v.optional(v.string()),
     gpu_count: v.optional(v.number()),
     volume_gb: v.optional(v.number()),

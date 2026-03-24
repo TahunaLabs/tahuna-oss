@@ -75,6 +75,9 @@ func TestRunCreateDetached_WithNamePayload(t *testing.T) {
 	if got := strings.TrimSpace(asString(runCreatePayload["name"])); got != "warm-river-fox" {
 		t.Fatalf("expected run create payload name=warm-river-fox, got %q", got)
 	}
+	if got := strings.TrimSpace(asString(runCreatePayload["output_dir"])); got != "outputs" {
+		t.Fatalf("expected run create payload output_dir=outputs, got %q", got)
+	}
 	if !strings.Contains(output, "run created: warm-river-fox (run-created)") {
 		t.Fatalf("expected run name and id in output, got: %s", output)
 	}

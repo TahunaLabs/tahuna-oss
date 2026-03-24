@@ -404,6 +404,7 @@ export const createRunFromEnvironment = httpAction(async (ctx, request) => {
       userId,
       environmentId: environmentId as Id<"environments">,
       name: typeof body?.name === "string" ? body.name : undefined,
+      output_dir: typeof body?.output_dir === "string" ? body.output_dir : undefined,
       gpu_type: body?.gpu_type,
       gpu_count: body?.gpu_count,
       volume_gb: body?.volume_gb,

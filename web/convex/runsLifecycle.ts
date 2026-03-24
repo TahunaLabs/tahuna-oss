@@ -59,6 +59,7 @@ export async function createRunForUserId(
     userId: string;
     environmentId: Id<"environments">;
     name?: string;
+    output_dir?: string;
     gpu_type?: string;
     gpu_count?: number;
     volume_gb?: number;
@@ -81,6 +82,9 @@ export async function createRunForUserId(
     throw new ConvexError("environment code is not synced; run `tahuna sync` before creating a run");
   }
   const userRuns = await listRunsForUser(ctx, args.userId);
+  const outputDir = typeof args.output_dir === "string" && args.output_dir.trim() !== ""
+    ? args.output_dir.trim()
+    : "outputs";
   let runName = "";
   if (typeof args.name === "string" && args.name.trim() !== "") {
     runName = validateRunName(args.name);
@@ -105,7 +109,11 @@ export async function createRunForUserId(
     .query("runtimeIncompatibilities")
     .withIndex("by_key", (q) => q.eq("compatibilityKey", compatibilityKey))
     .first();
-  if (incompatibility && incompatibility.cooldownUntil > Date.now()) {
+  if (
+    incompatibility &&
+    incompatibility.errorCode !== "startup_timeout" &&
+    incompatibility.cooldownUntil > Date.now()
+  ) {
     throw new ConvexError(
       `runtime launch blocked for this gpu/image combination (${incompatibility.errorCode}); try another gpu or image`,
     );
@@ -121,6 +129,7 @@ export async function createRunForUserId(
     environmentId: args.environmentId,
     name: runName,
     dataId,
+    outputDir,
     input: `runs/${args.environmentId}/${now}/input`,
     output: `runs/${args.environmentId}/${now}/output`,
     logs: `runs/${args.environmentId}/${now}/logs`,

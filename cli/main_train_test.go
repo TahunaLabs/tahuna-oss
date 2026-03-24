@@ -80,6 +80,9 @@ func TestTrainDetached_EndToEndPreflightAndRunCreation(t *testing.T) {
 	if asString(runCreatePayload["gpu_type"]) != "nvidia-a100" {
 		t.Fatalf("expected gpu_type override in run payload, got %v", runCreatePayload["gpu_type"])
 	}
+	if asString(runCreatePayload["output_dir"]) != "outputs" {
+		t.Fatalf("expected output_dir=outputs in run payload, got %v", runCreatePayload["output_dir"])
+	}
 	if asInt64(runCreatePayload["gpu_count"]) != 2 {
 		t.Fatalf("expected gpu_count=2 in run payload, got %v", runCreatePayload["gpu_count"])
 	}

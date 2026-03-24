@@ -886,6 +886,7 @@ func runCreate(args []string) {
 	must(preRunSync(environmentID))
 
 	payload := map[string]any{}
+	payload["output_dir"] = mustLoadRunOutputDir()
 	if strings.TrimSpace(*name) != "" {
 		payload["name"] = strings.TrimSpace(*name)
 	}
@@ -1024,6 +1025,7 @@ func train(args []string) {
 	must(preRunSync(resolvedEnvironmentID))
 
 	payload := map[string]any{}
+	payload["output_dir"] = mustLoadRunOutputDir()
 	if *gpuType != "" {
 		payload["gpu_type"] = *gpuType
 	}
@@ -1236,4 +1238,14 @@ func preRunSync(environmentID string) error {
 		return fmt.Errorf("project preflight validation failed: %w", err)
 	}
 	return nil
+}
+
+func mustLoadRunOutputDir() string {
+	cfg, err := loadProjectConfig()
+	must(err)
+	outputDir := strings.TrimSpace(cfg.OutputDir)
+	if outputDir == "" {
+		return "outputs"
+	}
+	return outputDir
 }

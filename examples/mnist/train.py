@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import json
 from pathlib import Path
 
 import torch
@@ -112,8 +113,27 @@ def main() -> None:
 
     print(f"device={device}")
     print(f"train_samples={len(train_dataset)} eval_samples={len(test_dataset)} logging_steps={logging_steps}")
-    trainer.train()
-    print(trainer.evaluate())
+    train_result = trainer.train()
+    eval_metrics = trainer.evaluate()
+
+    print(f"Writing artifacts to {output_dir.resolve()}")
+    torch.save(model.state_dict(), output_dir / "model.pt")
+    (output_dir / "metrics.json").write_text(
+        json.dumps(
+            {
+                "device": str(device),
+                "epochs": epochs,
+                "batch_size": batch_size,
+                "learning_rate": learning_rate,
+                "train_metrics": train_result.metrics,
+                "eval_metrics": eval_metrics,
+            },
+            indent=2,
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
+    print(eval_metrics)
 
 
 if __name__ == "__main__":

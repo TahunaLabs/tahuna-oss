@@ -32,24 +32,23 @@ type fileEntry struct {
 func Sync(
 	ctx context.Context,
 	api API,
-	workspaceRoot string,
+	outputDir string,
 	putTimeout time.Duration,
 	emitLog func(level, source, message string),
 ) SyncResult {
-	outputDir := filepath.Join(workspaceRoot, "outputs")
 	info, err := os.Stat(outputDir)
 	if err != nil || info == nil || !info.IsDir() {
-		log(emitLog, "info", "bootstrap", "artifacts: no outputs directory found at "+outputDir+" (skipping upload)")
+		log(emitLog, "info", "bootstrap", "artifacts: no output directory found at "+outputDir+" (skipping upload)")
 		return SyncResult{}
 	}
 
 	files, collectErr := collectFiles(outputDir)
 	if collectErr != nil {
-		log(emitLog, "warn", "bootstrap", "artifacts: failed to enumerate outputs: "+collectErr.Error())
+		log(emitLog, "warn", "bootstrap", "artifacts: failed to enumerate output directory: "+collectErr.Error())
 		return SyncResult{}
 	}
 	if len(files) == 0 {
-		log(emitLog, "info", "bootstrap", "artifacts: outputs directory is empty (skipping upload)")
+		log(emitLog, "info", "bootstrap", "artifacts: output directory is empty (skipping upload)")
 		return SyncResult{}
 	}
 	log(emitLog, "info", "bootstrap", fmt.Sprintf("artifacts: found %d output file(s) to upload", len(files)))

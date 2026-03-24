@@ -13,6 +13,7 @@ type Config struct {
 	APIBase              string
 	RuntimeToken         string
 	WorkspaceRoot        string
+	OutputDir            string
 	RequestTimeoutSec    int
 	CancellationGraceSec int
 }
@@ -43,11 +44,15 @@ func LoadFromEnv() (Config, error) {
 		APIBase:              strings.TrimRight(strings.TrimSpace(os.Getenv("TAHUNA_API_BASE")), "/"),
 		RuntimeToken:         strings.TrimSpace(os.Getenv("TAHUNA_RUNTIME_TOKEN")),
 		WorkspaceRoot:        strings.TrimSpace(os.Getenv("TAHUNA_WORKSPACE_ROOT")),
+		OutputDir:            strings.TrimSpace(os.Getenv("TAHUNA_OUTPUT_DIR")),
 		RequestTimeoutSec:    requestTimeoutSec,
 		CancellationGraceSec: cancellationGraceSec,
 	}
 	if cfg.WorkspaceRoot == "" {
 		cfg.WorkspaceRoot = "/workspace"
+	}
+	if cfg.OutputDir == "" {
+		cfg.OutputDir = "outputs"
 	}
 	if cfg.RunID == "" || cfg.APIBase == "" || cfg.RuntimeToken == "" {
 		return Config{}, fmt.Errorf("missing required env vars: TAHUNA_RUN_ID / TAHUNA_API_BASE / TAHUNA_RUNTIME_TOKEN")

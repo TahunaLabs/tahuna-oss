@@ -55,7 +55,7 @@ func TestSyncUploadsAndCommitsArtifacts(t *testing.T) {
 			},
 		},
 	}
-	result := Sync(context.Background(), api, workspace, 5*time.Second, nil)
+	result := Sync(context.Background(), api, outputs, 5*time.Second, nil)
 	if result.Uploaded != 1 {
 		t.Fatalf("expected uploaded=1, got %d", result.Uploaded)
 	}
@@ -69,7 +69,7 @@ func TestSyncUploadsAndCommitsArtifacts(t *testing.T) {
 
 func TestSyncSkipsMissingOutputsDir(t *testing.T) {
 	api := &fakeAPI{}
-	result := Sync(context.Background(), api, t.TempDir(), 5*time.Second, nil)
+	result := Sync(context.Background(), api, filepath.Join(t.TempDir(), "outputs"), 5*time.Second, nil)
 	if result.Uploaded != 0 {
 		t.Fatalf("expected uploaded=0, got %d", result.Uploaded)
 	}
