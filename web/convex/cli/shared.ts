@@ -102,19 +102,14 @@ function normalizeGpuType(value: string) {
   return value.trim().toLowerCase();
 }
 
-export async function loadDynamicGpuRows(ctx: ActionCtx): Promise<GpuRow[]> {
-  let dynamicGpus: Array<{
+export async function loadDynamicGpuRows(ctx: ActionCtx, userId: string): Promise<GpuRow[]> {
+  const dynamicGpus = await ctx.runAction(internal.catalog.getDynamicGpus, { userId }) as Array<{
     id: string;
     displayName: string;
     memoryInGb: number;
     maxGpuCount: number;
     pricePerHour?: number;
-  }> = [];
-  try {
-    dynamicGpus = await ctx.runAction(api.catalog.getDynamicGpus);
-  } catch {
-    dynamicGpus = [];
-  }
+  }>;
   return dynamicGpus
     .map((gpu) => ({
       id: gpu.id,
@@ -127,8 +122,8 @@ export async function loadDynamicGpuRows(ctx: ActionCtx): Promise<GpuRow[]> {
     .filter((gpu) => gpu.id);
 }
 
-async function loadGpuMaxCounts(ctx: ActionCtx) {
-  const dynamicGpus = await loadDynamicGpuRows(ctx);
+async function loadGpuMaxCounts(ctx: ActionCtx, userId: string) {
+  const dynamicGpus = await loadDynamicGpuRows(ctx, userId);
   const out = new Map<string, number>();
   for (const gpu of dynamicGpus) {
     const id = normalizeGpuType(gpu.id || "");
@@ -139,11 +134,11 @@ async function loadGpuMaxCounts(ctx: ActionCtx) {
   return out;
 }
 
-export async function validateGpuCountLimit(ctx: ActionCtx, gpuType: string, gpuCount: number) {
+export async function validateGpuCountLimit(ctx: ActionCtx, userId: string, gpuType: string, gpuCount: number) {
   if (!gpuType.trim() || !Number.isFinite(gpuCount) || gpuCount <= 0) {
     return;
   }
-  const maxByType = await loadGpuMaxCounts(ctx);
+  const maxByType = await loadGpuMaxCounts(ctx, userId);
   if (maxByType.size === 0) {
     return;
   }
@@ -185,6 +180,8 @@ const SAFE_CLIENT_ERROR_PATTERNS: RegExp[] = [
   /\bmax gpu count\b/i,
   /\bgpu type .* is not available\b/i,
   /\bgpu pricing not configured\b/i,
+  /\brunpod api key is not configured\b/i,
+  /\bdisable or replace it in settings\b/i,
   /\benvironment code is not synced\b/i,
   /\bcancel it before deleting\b/i,
   /\bcancellation requested\b/i,

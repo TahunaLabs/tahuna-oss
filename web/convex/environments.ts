@@ -756,7 +756,7 @@ async function removeEnvironmentForUserId(ctx: MutationCtx, userId: string, envi
     .collect();
   const otherRuns = allRunsForUser.filter((run) => run.environmentId !== environmentId);
   const runIdsToDelete = runs.map((run) => run._id);
-  const podsToTerminate: Array<{ runId: Id<"runs">; podId: string }> = [];
+  const podsToTerminate: Array<{ runId: Id<"runs">; podId: string; runpodCredentialId?: Id<"runpodCredentials"> }> = [];
 
   addManifestRef(deleteRefs, "code", env.latestCodeManifestHash, envIdString, envDataId);
   addManifestRef(deleteRefs, "data", env.latestDataManifestHash, envIdString, envDataId);
@@ -774,7 +774,11 @@ async function removeEnvironmentForUserId(ctx: MutationCtx, userId: string, envi
 
     // Terminate Runpod pod if active
     if (run.podId) {
-      podsToTerminate.push({ runId: run._id, podId: run.podId });
+      podsToTerminate.push({
+        runId: run._id,
+        podId: run.podId,
+        runpodCredentialId: run.runpodCredentialId,
+      });
     }
     for (const key of run.artifactKeys || []) {
       artifactKeys.add(key);
@@ -787,6 +791,7 @@ async function removeEnvironmentForUserId(ctx: MutationCtx, userId: string, envi
         ctx.scheduler.runAfter(0, internal.runs.internalTerminatePod, {
           runId: pod.runId,
           podId: pod.podId,
+          runpodCredentialId: pod.runpodCredentialId,
           force: true,
         }),
       ),

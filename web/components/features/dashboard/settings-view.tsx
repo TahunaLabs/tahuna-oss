@@ -5,7 +5,8 @@ import { ChevronDown, ChevronUp, KeyRound, Moon, Settings, ShieldCheck, Sun } fr
 import Link from "next/link"
 
 import { DashboardViewLayout } from "@/components/app-shell/dashboard-view-layout"
-import type { ApiKeyRow, ProfileDraft, ThemeChoice } from "@/components/features/dashboard-settings-model"
+import { RunpodSettingsCard } from "@/components/features/dashboard/runpod-settings-card"
+import type { ApiKeyRow, ProfileDraft, RunpodCredentialStatus, ThemeChoice } from "@/components/features/dashboard-settings-model"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -17,10 +18,15 @@ type SettingsViewProps = {
   onThemeChange: (theme: ThemeChoice) => void
   userEmail: string
   apiKeys: ApiKeyRow[]
+  runpodCredentialStatus?: RunpodCredentialStatus
   profile: ProfileDraft
   onProfileChange: (profile: ProfileDraft) => void
   savingProfile: boolean
   onSaveProfile: (profile: ProfileDraft) => Promise<void>
+  savingRunpodCredential: boolean
+  revokingRunpodCredential: boolean
+  onSaveRunpodCredential: (apiKey: string) => Promise<void>
+  onRevokeRunpodCredential: () => Promise<void>
 }
 
 function formatDate(timestamp?: number) {
@@ -66,10 +72,15 @@ export function SettingsView({
   onThemeChange,
   userEmail,
   apiKeys,
+  runpodCredentialStatus,
   profile,
   onProfileChange,
   savingProfile,
   onSaveProfile,
+  savingRunpodCredential,
+  revokingRunpodCredential,
+  onSaveRunpodCredential,
+  onRevokeRunpodCredential,
 }: SettingsViewProps) {
   const [apiKeysOpen, setApiKeysOpen] = useState(false)
   const [sessionsOpen, setSessionsOpen] = useState(false)
@@ -132,6 +143,14 @@ export function SettingsView({
             </Button>
           </div>
         </Card>
+
+        <RunpodSettingsCard
+          status={runpodCredentialStatus}
+          saving={savingRunpodCredential}
+          revoking={revokingRunpodCredential}
+          onSave={onSaveRunpodCredential}
+          onRevoke={onRevokeRunpodCredential}
+        />
 
         <Card className="p-4">
           <h2 className="text-sm font-medium text-foreground">Account information</h2>

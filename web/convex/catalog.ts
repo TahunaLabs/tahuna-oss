@@ -1,7 +1,8 @@
-import { action, query } from "@convex/_generated/server";
+import { internalAction, query } from "@convex/_generated/server";
 import { v } from "convex/values";
 import runtimeImageBases from "@/convex/runtime-images.json";
 import { getRunpodGpuPricePerHour } from "@/lib/runpod-gpu-pricing";
+import { fetchRunpodGpuTypes, resolveActiveRunpodApiKeyForUserId } from "@convex/runpodCredentials";
 
 const MANAGED_RUNTIME_IMAGE_REPO = (
   process.env.TAHUNA_RUNTIME_IMAGE_REPO?.trim() ||
@@ -36,24 +37,10 @@ export const getCatalog = query({
   handler: async () => ({ images }),
 });
 
-type RunpodGpuType = {
-  id: string;
-  displayName: string;
-  memoryInGb: number;
-  maxGpuCount?: number | null;
-  secureCloud?: Record<string, unknown> | null;
-  communityCloud?: Record<string, unknown> | null;
-};
-
-type RunpodGraphqlResponse = {
-  data?: {
-    gpuTypes?: RunpodGpuType[];
-  };
-  errors?: unknown;
-};
-
-export const getDynamicGpus = action({
-  args: {},
+export const getDynamicGpus = internalAction({
+  args: {
+    userId: v.string(),
+  },
   returns: v.array(
     v.object({
       id: v.string(),
@@ -63,60 +50,27 @@ export const getDynamicGpus = action({
       pricePerHour: v.optional(v.number()),
     }),
   ),
-  handler: async () => {
-    const apiKey = process.env.RUNPOD_API_KEY;
-    if (!apiKey) {
-      return [];
-    }
+  handler: async (ctx, args) => {
+    const { apiKey } = await resolveActiveRunpodApiKeyForUserId(ctx, args.userId);
+    const gpuTypes = await fetchRunpodGpuTypes(apiKey);
+    const remoteGpus = gpuTypes
+      .filter((g) => g.id && g.id !== "unknown" && (g.secureCloud || g.communityCloud))
+      .map((g) => ({
+        id: g.id || "",
+        displayName: g.displayName || g.id || "",
+        memoryInGb: Number.isFinite(g.memoryInGb) ? g.memoryInGb || 0 : 0,
+        maxGpuCount: g.maxGpuCount || 1,
+        pricePerHour: getRunpodGpuPricePerHour(g.displayName || "") ?? getRunpodGpuPricePerHour(g.id || ""),
+      }));
 
-    try {
-      // The runpod-sdk graphql implementation might be tricky if not documented well.
-      // We can directly call the GraphQL endpoint via native fetch using the key to be perfectly safe,
-      // as we know exactly what we need from our earlier curl test.
-      const res = await fetch("https://api.runpod.io/graphql", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          query: "query { gpuTypes { id displayName memoryInGb maxGpuCount secureCloud communityCloud } }"
-        }),
-      });
-
-      if (!res.ok) {
-         return [];
+    // Sort by memory size descending, then alphabetically by name to present nice options.
+    remoteGpus.sort((a, b) => {
+      if (b.memoryInGb !== a.memoryInGb) {
+        return b.memoryInGb - a.memoryInGb;
       }
+      return a.displayName.localeCompare(b.displayName);
+    });
 
-      const json = (await res.json()) as RunpodGraphqlResponse;
-      if (json.errors) {
-        return [];
-      }
-
-      // Filter to only include GPUs that actually have stock and aren't 'unknown'
-      const gpuTypes = json.data?.gpuTypes ?? [];
-      const remoteGpus = gpuTypes
-        .filter((g) => g.id !== "unknown" && (g.secureCloud || g.communityCloud))
-        .map((g) => ({
-          id: g.id,
-          displayName: g.displayName,
-          memoryInGb: g.memoryInGb,
-          maxGpuCount: g.maxGpuCount || 1,
-          pricePerHour: getRunpodGpuPricePerHour(g.displayName) ?? getRunpodGpuPricePerHour(g.id),
-        }));
-
-      // Sort by memory size descending, then alphabetically by name to present nice options
-      remoteGpus.sort((a, b) => {
-        if (b.memoryInGb !== a.memoryInGb) {
-          return b.memoryInGb - a.memoryInGb;
-        }
-        return a.displayName.localeCompare(b.displayName);
-      });
-
-      return remoteGpus;
-
-    } catch {
-       return [];
-    }
+    return remoteGpus;
   },
 });

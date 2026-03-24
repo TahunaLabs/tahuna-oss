@@ -44,6 +44,7 @@ export default defineSchema({
     status: v.string(),
     error: v.optional(v.string()),
     podId: v.optional(v.string()),
+    runpodCredentialId: v.optional(v.id("runpodCredentials")),
     effectiveGpuType: v.optional(v.string()),
     effectiveGpuCount: v.optional(v.number()),
     effectiveVolumeGb: v.optional(v.number()),
@@ -68,6 +69,18 @@ export default defineSchema({
     .index("by_user_and_environment", ["userId", "environmentId"])
     .index("by_status", ["status"])
     .index("by_runtime_token_hash", ["runtimeTokenHash"]),
+
+  runpodCredentials: defineTable({
+    userId: v.string(),
+    keyCiphertext: v.string(),
+    keyIv: v.string(),
+    keyVersion: v.number(),
+    keyPrefix: v.string(),
+    fingerprint: v.string(),
+    validatedAt: v.number(),
+    revokedAt: v.optional(v.number()),
+    updatedAt: v.number(),
+  }).index("by_user", ["userId"]),
 
   runtimeIncompatibilities: defineTable({
     compatibilityKey: v.string(),

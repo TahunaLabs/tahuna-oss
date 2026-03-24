@@ -302,7 +302,7 @@ The OSS environment layout should be explicit and grouped by subsystem.
 ### Compute
 
 - `TAHUNA_COMPUTE_PROVIDER`
-- `TAHUNA_RUNPOD_API_KEY`
+- `TAHUNA_RUNPOD_CREDENTIALS_KEY`
 - `TAHUNA_GCP_PROJECT_ID`
 - `TAHUNA_GCP_REGION`
 - `TAHUNA_GCP_ZONE`

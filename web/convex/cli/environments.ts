@@ -45,7 +45,7 @@ export const createEnvironment = httpAction(async (ctx, request) => {
   try {
     const gpuType = body?.gpu_type?.trim() || "";
     const gpuCount = typeof body?.gpu_count === "number" ? body.gpu_count : 0;
-    await validateGpuCountLimit(ctx, gpuType, gpuCount);
+    await validateGpuCountLimit(ctx, userId, gpuType, gpuCount);
     const data = await ctx.runMutation(internal.environments.internalCreate, {
       userId,
       name: body?.name?.trim() || "",
@@ -217,7 +217,7 @@ export const updateEnvironmentSpecs = httpAction(async (ctx, request) => {
         });
         effectiveGpuType = current.gpu_type;
       }
-      await validateGpuCountLimit(ctx, effectiveGpuType, gpuCount);
+      await validateGpuCountLimit(ctx, userId, effectiveGpuType, gpuCount);
     }
     const data = await ctx.runMutation(internal.environments.internalUpdateSpecs, {
       userId,
@@ -398,7 +398,7 @@ export const createRunFromEnvironment = httpAction(async (ctx, request) => {
         });
         effectiveGpuType = current.gpu_type;
       }
-      await validateGpuCountLimit(ctx, effectiveGpuType, requestedGpuCount);
+      await validateGpuCountLimit(ctx, userId, effectiveGpuType, requestedGpuCount);
     }
     const data = await createAndProvisionRunStrict(ctx, {
       userId,

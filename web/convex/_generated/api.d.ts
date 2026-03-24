@@ -29,6 +29,8 @@ import type * as monitoring_wandb from "../monitoring/wandb.js";
 import type * as profile from "../profile.js";
 import type * as resend from "../resend.js";
 import type * as runBilling from "../runBilling.js";
+import type * as runpodCredentials from "../runpodCredentials.js";
+import type * as runpodCredentialsStore from "../runpodCredentialsStore.js";
 import type * as runs from "../runs.js";
 import type * as runsAccess from "../runsAccess.js";
 import type * as runsConstants from "../runsConstants.js";
@@ -71,6 +73,8 @@ declare const fullApi: ApiFromModules<{
   profile: typeof profile;
   resend: typeof resend;
   runBilling: typeof runBilling;
+  runpodCredentials: typeof runpodCredentials;
+  runpodCredentialsStore: typeof runpodCredentialsStore;
   runs: typeof runs;
   runsAccess: typeof runsAccess;
   runsConstants: typeof runsConstants;

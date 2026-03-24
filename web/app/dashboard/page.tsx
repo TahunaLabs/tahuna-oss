@@ -11,7 +11,14 @@ import { SettingsView } from "@/components/features/dashboard/settings-view"
 import { ShareDialog } from "@/components/features/dashboard/share-dialog"
 import { DashboardAppLayout } from "@/components/app-shell/dashboard-app-layout"
 import { DashboardContentShell } from "@/components/app-shell/dashboard-content-shell"
-import { EMPTY_PROFILE_DRAFT, toProfileDraft, type ApiKeyRow, type ProfileDraft, type UserProfileResponse } from "@/components/features/dashboard-settings-model"
+import {
+  EMPTY_PROFILE_DRAFT,
+  toProfileDraft,
+  type ApiKeyRow,
+  type ProfileDraft,
+  type RunpodCredentialStatus,
+  type UserProfileResponse,
+} from "@/components/features/dashboard-settings-model"
 import { useTheme } from "@/components/theme-provider"
 import { Notice } from "@/components/ui/notice"
 import { PageLoader } from "@/components/ui/spinner"
@@ -104,6 +111,8 @@ export default function DashboardPage() {
   const [shareError, setShareError] = useState("")
   const [shareMessage, setShareMessage] = useState("")
   const [savingSettingsProfile, setSavingSettingsProfile] = useState(false)
+  const [savingRunpodCredential, setSavingRunpodCredential] = useState(false)
+  const [revokingRunpodCredential, setRevokingRunpodCredential] = useState(false)
   const [settingsProfileDraft, setSettingsProfileDraft] = useState<ProfileDraft>(EMPTY_PROFILE_DRAFT)
   const shouldLoadQueries = !authLoading && isAuthenticated && !loggingOut
   const shouldLoadBillingQueries = shouldLoadQueries && activeView === "billing"
@@ -113,6 +122,9 @@ export default function DashboardPage() {
     | { balance_cents: number; currency: string; initialized: boolean }
     | undefined
   const myProfile = useQuery(api.profile.getMyProfile, shouldLoadQueries ? {} : "skip") as UserProfileResponse | undefined
+  const runpodCredentialStatus = useQuery(api.runpodCredentials.getMyRunpodCredentialStatus, shouldLoadQueries ? {} : "skip") as
+    | RunpodCredentialStatus
+    | undefined
   const envResult = useQuery(api.environments.list, shouldLoadQueries ? {} : "skip") as
     | { environments: EnvironmentRow[] }
     | undefined
@@ -228,6 +240,7 @@ export default function DashboardPage() {
   const removeEnvMutation = useMutation(api.environments.remove)
   const updateEnvironmentConfigMutation = useMutation(api.environments.updateConfig)
   const saveMyProfileMutation = useMutation(api.profile.saveMyProfile)
+  const revokeMyRunpodCredentialMutation = useMutation(api.runpodCredentials.revokeMyRunpodCredential)
   const createRunMutation = useMutation(api.runs.create)
   const cancelRunMutation = useMutation(api.runs.cancel)
   const removeRunMutation = useMutation(api.runs.remove)
@@ -260,6 +273,7 @@ export default function DashboardPage() {
     }
   }, [ensureMyLedgerMutation, ensuringLedger, myCredits?.initialized, shouldLoadQueries])
   const listStorageAction = useAction(api.storage.list)
+  const saveMyRunpodCredentialAction = useAction(api.runpodCredentials.saveMyRunpodCredential)
   const renameArtifactAction = useAction(api.storage.renameArtifact)
   const setStorageVisibilityMutation = useMutation(api.storage.setVisibility)
   const createShareLinkMutation = useMutation(api.sharing.createShareLink)
@@ -528,6 +542,11 @@ export default function DashboardPage() {
   }
 
   async function launchRun(environmentId: Id<"environments">) {
+    if (runpodCredentialStatus?.configured === false) {
+      setError("Runpod API key is not configured. Open Settings to add one.")
+      setMessage("")
+      return
+    }
     await withBusy(async () => {
       await createRunMutation({ environmentId })
       setMessage("Run launched.")
@@ -739,6 +758,28 @@ export default function DashboardPage() {
     }
   }
 
+  async function saveRunpodCredential(apiKey: string) {
+    setSavingRunpodCredential(true)
+    try {
+      await saveMyRunpodCredentialAction({ api_key: apiKey })
+    } catch (runpodError) {
+      throw runpodError instanceof Error ? runpodError : new Error("Failed to save Runpod API key")
+    } finally {
+      setSavingRunpodCredential(false)
+    }
+  }
+
+  async function revokeRunpodCredential() {
+    setRevokingRunpodCredential(true)
+    try {
+      await revokeMyRunpodCredentialMutation({})
+    } catch (runpodError) {
+      throw runpodError instanceof Error ? runpodError : new Error("Failed to remove Runpod API key")
+    } finally {
+      setRevokingRunpodCredential(false)
+    }
+  }
+
   async function revokeKey(id: Id<"apiKeys">, name: string) {
     setRevokingId(id)
     setMachinesMessage("")
@@ -912,10 +953,15 @@ export default function DashboardPage() {
             onThemeChange={(theme) => setTheme(theme)}
             userEmail={currentUser?.email ?? ""}
             apiKeys={apiKeys ?? []}
+            runpodCredentialStatus={runpodCredentialStatus}
             profile={settingsProfileDraft}
             onProfileChange={setSettingsProfileDraft}
             savingProfile={savingSettingsProfile}
             onSaveProfile={saveSettingsProfile}
+            savingRunpodCredential={savingRunpodCredential}
+            revokingRunpodCredential={revokingRunpodCredential}
+            onSaveRunpodCredential={saveRunpodCredential}
+            onRevokeRunpodCredential={revokeRunpodCredential}
           />
         )
       default:

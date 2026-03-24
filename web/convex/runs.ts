@@ -50,6 +50,7 @@ import {
 } from "@convex/syncManifest";
 import { sleepMs } from "@convex/sleep";
 import { ACTIVE_STATUSES, RUN_STATUS, TERMINAL_STATUSES } from "@convex/runsConstants";
+import { fetchRunpodGpuTypes, resolveRunpodApiKeyByCredentialId } from "@convex/runpodCredentials";
 const runResponseValidator = v.object({
   run_id: v.string(),
   name: v.string(),
@@ -193,6 +194,7 @@ const provisioningPayloadValidator = v.object({
 });
 const runProvisionSpecValidator = v.object({
   run_id: v.string(),
+  runpod_credential_id: v.id("runpodCredentials"),
   effective_gpu_type: v.string(),
   effective_gpu_count: v.number(),
   effective_volume_gb: v.number(),
@@ -640,7 +642,9 @@ function runtimeEntrypoint() {
 }
 
 async function createRunpodPod(args: {
+  ctx: ActionCtx;
   runId: string;
+  runpodCredentialId: Id<"runpodCredentials">;
   imageName: string;
   gpuType: string;
   gpuCount: number;
@@ -648,10 +652,7 @@ async function createRunpodPod(args: {
   runtimeToken: string;
   payload: ProvisioningPayload;
 }) {
-  const apiKey = process.env.RUNPOD_API_KEY?.trim();
-  if (!apiKey) {
-    throw new Error("RUNPOD_API_KEY is not set");
-  }
+  const { apiKey } = await resolveRunpodApiKeyByCredentialId(args.ctx, args.runpodCredentialId);
   const allowedCloudType = resolveRunpodCloudType();
   const gpuTypeId = await resolveRunpodGpuTypeId(apiKey, args.gpuType);
   const runtimeApiBase = resolveRuntimeApiBase();
@@ -721,15 +722,18 @@ async function createRunpodPod(args: {
   };
 }
 
-async function terminateRunpodPod(podId: string) {
-  const apiKey = process.env.RUNPOD_API_KEY?.trim();
-  if (!podId) {
+async function terminateRunpodPod(
+  ctx: ActionCtx,
+  args: {
+    podId: string;
+    runpodCredentialId: Id<"runpodCredentials">;
+  },
+) {
+  if (!args.podId) {
     return;
   }
-  if (!apiKey) {
-    throw new Error("RUNPOD_API_KEY is not set; cannot terminate pod");
-  }
-  const response = await fetch(`https://rest.runpod.io/v1/pods/${podId}`, {
+  const { apiKey } = await resolveRunpodApiKeyByCredentialId(ctx, args.runpodCredentialId);
+  const response = await fetch(`https://rest.runpod.io/v1/pods/${args.podId}`, {
     method: "DELETE",
     headers: {
       Authorization: `Bearer ${apiKey}`,
@@ -754,30 +758,7 @@ async function resolveRunpodGpuTypeId(apiKey: string, requestedGpu: string) {
   if (!trimmed) {
     throw new Error("GPU type is empty");
   }
-  const res = await fetch("https://api.runpod.io/graphql", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      query: "query { gpuTypes { id displayName } }",
-    }),
-  });
-  if (!res.ok) {
-    throw new Error(`failed to fetch Runpod GPU catalog: http ${res.status}`);
-  }
-  let json: unknown;
-  try {
-    json = await res.json();
-  } catch {
-    throw new Error("failed to parse Runpod GPU catalog response");
-  }
-  const typesRaw =
-    json && typeof json === "object" && "data" in json
-      ? (json as { data?: { gpuTypes?: Array<{ id?: string; displayName?: string }> } }).data?.gpuTypes
-      : undefined;
-  const gpuTypes = Array.isArray(typesRaw) ? typesRaw : [];
+  const gpuTypes = await fetchRunpodGpuTypes(apiKey);
   if (gpuTypes.length === 0) {
     throw new Error("Runpod GPU catalog is empty");
   }
@@ -1224,6 +1205,7 @@ export const scheduleTerminationRetry = internalMutation({
   args: {
     runId: v.id("runs"),
     podId: v.string(),
+    runpodCredentialId: v.optional(v.id("runpodCredentials")),
     force: v.optional(v.boolean()),
     attempt: v.number(),
     error: v.string(),
@@ -1248,6 +1230,7 @@ export const scheduleTerminationRetry = internalMutation({
       {
         runId: args.runId,
         podId: args.podId,
+        runpodCredentialId: args.runpodCredentialId,
         force: args.force === true,
         attempt: args.attempt,
       },
@@ -1265,7 +1248,13 @@ export const internalRename = internalMutation({
 });
 
 export const internalTerminatePod = internalAction({
-  args: { runId: v.id("runs"), podId: v.string(), force: v.optional(v.boolean()), attempt: v.optional(v.number()) },
+  args: {
+    runId: v.id("runs"),
+    podId: v.string(),
+    runpodCredentialId: v.optional(v.id("runpodCredentials")),
+    force: v.optional(v.boolean()),
+    attempt: v.optional(v.number()),
+  },
   handler: async (ctx, args) => {
     const shouldTerminate = await ctx.runQuery(internal.runs.internalShouldTerminatePod, {
       runId: args.runId,
@@ -1275,8 +1264,17 @@ export const internalTerminatePod = internalAction({
       return;
     }
     const attempt = args.attempt ?? 0;
+    let runpodCredentialId: Id<"runpodCredentials"> | null = args.runpodCredentialId ?? null;
     try {
-      await terminateRunpodPod(args.podId);
+      runpodCredentialId = runpodCredentialId
+        ?? await ctx.runQuery(internal.runs.internalGetRunpodCredentialId, { runId: args.runId });
+      if (!runpodCredentialId) {
+        throw new Error("Runpod credential is missing for pod termination");
+      }
+      await terminateRunpodPod(ctx, {
+        podId: args.podId,
+        runpodCredentialId,
+      });
       await ctx.runMutation(internal.runs.markCancelledAfterTermination, {
         runId: args.runId,
         force: args.force === true,
@@ -1288,6 +1286,7 @@ export const internalTerminatePod = internalAction({
         await ctx.runMutation(internal.runs.scheduleTerminationRetry, {
           runId: args.runId,
           podId: args.podId,
+          runpodCredentialId: runpodCredentialId ?? undefined,
           force: args.force === true,
           attempt: nextAttempt,
           error: detail,
@@ -1328,8 +1327,12 @@ export const internalGetRunProvisionSpec = internalQuery({
     if (!env) {
       throw new ConvexError("environment not found");
     }
+    if (!row.runpodCredentialId) {
+      throw new ConvexError("run is missing its Runpod credential");
+    }
     return {
       run_id: String(row._id),
+      runpod_credential_id: row.runpodCredentialId,
       effective_gpu_type: row.effectiveGpuType || env.gpuType,
       effective_gpu_count: row.effectiveGpuCount || env.gpuCount,
       effective_volume_gb: row.effectiveVolumeGb || env.volumeGb,
@@ -1337,6 +1340,15 @@ export const internalGetRunProvisionSpec = internalQuery({
       version: env.version,
       python_version: env.pythonVersion || PYTHON_CONFIG.defaultVersion,
     };
+  },
+});
+
+export const internalGetRunpodCredentialId = internalQuery({
+  args: { runId: v.id("runs") },
+  returns: v.union(v.id("runpodCredentials"), v.null()),
+  handler: async (ctx, args) => {
+    const row = await ctx.db.get("runs", args.runId);
+    return row?.runpodCredentialId ?? null;
   },
 });
 
@@ -1515,6 +1527,7 @@ export const enforceProvisioningStartupTimeout = internalAction({
   args: {
     runId: v.id("runs"),
     podId: v.string(),
+    runpodCredentialId: v.id("runpodCredentials"),
     fingerprint: runtimeCompatibilityFingerprintValidator,
   },
   returns: v.null(),
@@ -1550,6 +1563,7 @@ export const enforceProvisioningStartupTimeout = internalAction({
     await ctx.runAction(internal.runs.internalTerminatePod, {
       runId: args.runId,
       podId: args.podId,
+      runpodCredentialId: args.runpodCredentialId,
       force: true,
     });
     return null;
@@ -1605,7 +1619,9 @@ export const provisionRun = internalAction({
         return null;
       }
       const provisionResult = await createRunpodPod({
+        ctx,
         runId: String(args.runId),
+        runpodCredentialId: runSpec.runpod_credential_id,
         imageName: compatibilityFingerprint.imageName,
         gpuType: runSpec.effective_gpu_type,
         gpuCount: runSpec.effective_gpu_count,
@@ -1625,6 +1641,7 @@ export const provisionRun = internalAction({
         {
           runId: args.runId,
           podId: provisionResult.podId,
+          runpodCredentialId: runSpec.runpod_credential_id,
           fingerprint: compatibilityFingerprint,
         },
       );
@@ -1650,6 +1667,7 @@ export const provisionRun = internalAction({
         await ctx.runAction(internal.runs.internalTerminatePod, {
           runId: args.runId,
           podId: provisionedPodId,
+          runpodCredentialId: runSpec.runpod_credential_id,
           force: true,
         });
       }
@@ -1808,7 +1826,7 @@ export const markFailed = internalMutation({
           : {}),
       },
     });
-    await scheduleForcedPodTermination(ctx, args.runId, row.podId);
+    await scheduleForcedPodTermination(ctx, args.runId, row.podId, row.runpodCredentialId);
     return null;
   },
 });
@@ -1932,7 +1950,7 @@ export const ingestRuntimeStatus = internalMutation({
           balance_after_cents: settlement.balanceAfterCents,
         },
       });
-      await scheduleForcedPodTermination(ctx, args.runId, row.podId);
+      await scheduleForcedPodTermination(ctx, args.runId, row.podId, row.runpodCredentialId);
       return { status: RUN_STATUS.FAILED };
     }
 
@@ -1984,7 +2002,7 @@ export const ingestRuntimeStatus = internalMutation({
       },
     });
     if (status === RUN_STATUS.COMPLETED || status === RUN_STATUS.CANCELLED) {
-      await scheduleForcedPodTermination(ctx, args.runId, row.podId);
+      await scheduleForcedPodTermination(ctx, args.runId, row.podId, row.runpodCredentialId);
     }
     return { status };
   },

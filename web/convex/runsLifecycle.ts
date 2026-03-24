@@ -7,6 +7,7 @@ import { resolveRunComputePricing } from "@/lib/run-compute-pricing";
 import { buildRuntimeCompatibilityKey, resolveRunpodCloudType } from "@/lib/runtime-incompatibility";
 import { PYTHON_CONFIG, RUN_CONFIG } from "@convex/appConfig";
 import { images } from "@convex/catalog";
+import { getLatestActiveRunpodCredentialForUserId } from "@convex/runpodCredentialsStore";
 import { resolveTerminalRunTiming, settleRunComputeCharge } from "@convex/runBilling";
 import { ACTIVE_STATUSES, RUN_DELETE_BATCH_SIZE, RUN_STATUS, TERMINAL_STATUSES } from "@convex/runsConstants";
 import { getAccessibleEnvironment, getAccessibleRun, listRunsForUser } from "@convex/runsAccess";
@@ -109,6 +110,10 @@ export async function createRunForUserId(
       `runtime launch blocked for this gpu/image combination (${incompatibility.errorCode}); try another gpu or image`,
     );
   }
+  const runpodCredential = await getLatestActiveRunpodCredentialForUserId(ctx, args.userId);
+  if (!runpodCredential) {
+    throw new ConvexError("Runpod API key is not configured");
+  }
 
   const now = Date.now();
   const runId = await ctx.db.insert("runs", {
@@ -121,6 +126,7 @@ export async function createRunForUserId(
     logs: `runs/${args.environmentId}/${now}/logs`,
     status: RUN_STATUS.QUEUED,
     cancellationRequested: false,
+    runpodCredentialId: runpodCredential.credentialId,
     effectiveGpuType,
     effectiveGpuCount,
     effectiveVolumeGb,
@@ -204,6 +210,7 @@ export async function cancelRunForUserId(
   await ctx.scheduler.runAfter(terminationDelayMs, internal.runs.internalTerminatePod, {
     runId,
     podId: row.podId,
+    runpodCredentialId: row.runpodCredentialId,
     force,
   });
 
@@ -225,6 +232,7 @@ export async function scheduleForcedPodTermination(
   ctx: MutationCtx,
   runId: Id<"runs">,
   podId: string | undefined,
+  runpodCredentialId: Id<"runpodCredentials"> | undefined,
 ) {
   const podIdValue = podId?.trim() || "";
   if (!podIdValue) {
@@ -233,6 +241,7 @@ export async function scheduleForcedPodTermination(
   await ctx.scheduler.runAfter(0, internal.runs.internalTerminatePod, {
     runId,
     podId: podIdValue,
+    runpodCredentialId,
     force: true,
   });
 }
@@ -278,7 +287,7 @@ export async function deleteRunForUserId(
 
     if (shouldForceDelete) {
       if (row.podId) {
-        await scheduleForcedPodTermination(ctx, runId, row.podId);
+        await scheduleForcedPodTermination(ctx, runId, row.podId, row.runpodCredentialId);
         forcedTerminationQueued = true;
       }
     } else {
@@ -291,7 +300,7 @@ export async function deleteRunForUserId(
   }
 
   if (row.podId && !forcedTerminationQueued) {
-    await scheduleForcedPodTermination(ctx, runId, row.podId);
+    await scheduleForcedPodTermination(ctx, runId, row.podId, row.runpodCredentialId);
   }
   await deleteIndexedStorageKeys(ctx, userId, row.artifactKeys || []);
 

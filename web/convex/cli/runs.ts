@@ -71,7 +71,7 @@ export const createRun = httpAction(async (ctx, request) => {
         });
         effectiveGpuType = current.gpu_type;
       }
-      await validateGpuCountLimit(ctx, effectiveGpuType, requestedGpuCount);
+      await validateGpuCountLimit(ctx, userId, effectiveGpuType, requestedGpuCount);
     }
     const data = await createAndProvisionRunStrict(ctx, {
       userId,
