@@ -9,6 +9,7 @@ import {
 import { DashboardTable } from "@/components/features/dashboard/dashboard-table"
 import { EnvironmentTableRow } from "@/components/features/dashboard/environments/environment-table-row"
 import type { EnvironmentsGridViewProps } from "@/components/features/dashboard/environments/environments-grid-view"
+import { useTableSelection } from "@/components/features/dashboard/use-table-selection"
 import { TableSelectHeadCell } from "@/components/features/dashboard/table-select-head-cell"
 import { TableSelectionBar } from "@/components/features/dashboard/table-selection-bar"
 import { TableHead } from "@/components/ui/table"
@@ -33,40 +34,17 @@ function EnvironmentsTableView({
   onUnbindData,
   ...rowProps
 }: EnvironmentsTableViewProps) {
-  const [selectedEnvironmentIds, setSelectedEnvironmentIds] = useState<Set<EnvironmentRow["environment_id"]>>(
-    () => new Set(),
-  )
   const [deletingSelected, setDeletingSelected] = useState(false)
-  const [prevEnvironments, setPrevEnvironments] = useState(environments)
   const visibleEnvironmentIds = environments.map((environment) => environment.environment_id)
-
-  if (prevEnvironments !== environments) {
-    setPrevEnvironments(environments)
-    const visibleSet = new Set(visibleEnvironmentIds)
-    setSelectedEnvironmentIds((previous) => {
-      const next = new Set(Array.from(previous).filter((id) => visibleSet.has(id)))
-      return next.size === previous.size ? previous : next
-    })
-  }
-
-  const selectedVisibleCount = visibleEnvironmentIds.filter((id) => selectedEnvironmentIds.has(id)).length
-  const allVisibleSelected = visibleEnvironmentIds.length > 0 && selectedVisibleCount === visibleEnvironmentIds.length
-  const someVisibleSelected = selectedVisibleCount > 0 && !allVisibleSelected
-
-  function toggleSelected(environmentId: EnvironmentRow["environment_id"]) {
-    setSelectedEnvironmentIds((previous) => {
-      const next = new Set(previous)
-      if (next.has(environmentId)) next.delete(environmentId)
-      else next.add(environmentId)
-      return next
-    })
-  }
-
-  function toggleSelectAllVisible(checked: boolean) {
-    setSelectedEnvironmentIds(() => (
-      checked ? new Set(visibleEnvironmentIds) : new Set()
-    ))
-  }
+  const {
+    selectedIds: selectedEnvironmentIds,
+    selectedVisibleCount,
+    allVisibleSelected,
+    someVisibleSelected,
+    toggleSelected,
+    toggleSelectAllVisible,
+    clearSelection,
+  } = useTableSelection(visibleEnvironmentIds)
 
   async function deleteSelectedEnvironments() {
     const ids = visibleEnvironmentIds.filter((id) => selectedEnvironmentIds.has(id))
@@ -74,9 +52,7 @@ function EnvironmentsTableView({
     setDeletingSelected(true)
     try {
       const deleted = await rowProps.onDeleteEnvironments(ids)
-      if (deleted) {
-        setSelectedEnvironmentIds(new Set())
-      }
+      if (deleted) clearSelection()
     } finally {
       setDeletingSelected(false)
     }
@@ -87,7 +63,7 @@ function EnvironmentsTableView({
       <TableSelectionBar
         selectedCount={selectedVisibleCount}
         itemLabel="environment"
-        onClearSelection={() => setSelectedEnvironmentIds(new Set())}
+        onClearSelection={clearSelection}
         onDeleteSelected={() => { void deleteSelectedEnvironments() }}
         deleteBusy={deletingSelected}
       />

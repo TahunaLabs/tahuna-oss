@@ -1,12 +1,11 @@
 "use client"
 
-import { useState } from "react"
-
 import {
   type StorageItem,
 } from "@/components/features/dashboard-model"
 import { DashboardTable } from "@/components/features/dashboard/dashboard-table"
 import { StorageTableRow } from "@/components/features/dashboard/storage/storage-table-row"
+import { useTableSelection } from "@/components/features/dashboard/use-table-selection"
 import { TableSelectHeadCell } from "@/components/features/dashboard/table-select-head-cell"
 import { TableSelectionBar } from "@/components/features/dashboard/table-selection-bar"
 import { TableHead } from "@/components/ui/table"
@@ -46,45 +45,24 @@ function StorageTableView({
   onShareStorageItem,
   onSetVisibility,
 }: StorageTableViewProps) {
-  const [selectedStorageIds, setSelectedStorageIds] = useState<Set<string>>(() => new Set())
-  const [prevItems, setPrevItems] = useState(items)
   const visibleStorageIds = items.map((item) => item.id)
-
-  if (prevItems !== items) {
-    setPrevItems(items)
-    const visibleSet = new Set(visibleStorageIds)
-    setSelectedStorageIds((previous) => {
-      const next = new Set(Array.from(previous).filter((id) => visibleSet.has(id)))
-      return next.size === previous.size ? previous : next
-    })
-  }
-
-  const selectedVisibleCount = visibleStorageIds.filter((id) => selectedStorageIds.has(id)).length
-  const allVisibleSelected = visibleStorageIds.length > 0 && selectedVisibleCount === visibleStorageIds.length
-  const someVisibleSelected = selectedVisibleCount > 0 && !allVisibleSelected
-
-  function toggleSelected(storageId: string) {
-    setSelectedStorageIds((previous) => {
-      const next = new Set(previous)
-      if (next.has(storageId)) next.delete(storageId)
-      else next.add(storageId)
-      return next
-    })
-  }
-
-  function toggleSelectAllVisible(checked: boolean) {
-    setSelectedStorageIds(() => (
-      checked ? new Set(visibleStorageIds) : new Set()
-    ))
-  }
+  const {
+    selectedIds: selectedStorageIds,
+    selectedVisibleCount,
+    allVisibleSelected,
+    someVisibleSelected,
+    toggleSelected,
+    toggleSelectAllVisible,
+    clearSelection,
+  } = useTableSelection(visibleStorageIds)
 
   return (
     <>
       <TableSelectionBar
         selectedCount={selectedVisibleCount}
         itemLabel="storage item"
-        onClearSelection={() => setSelectedStorageIds(new Set())}
-        onDeleteSelected={() => setSelectedStorageIds(new Set())}
+        onClearSelection={clearSelection}
+        onDeleteSelected={clearSelection}
       />
       <DashboardTable
         columns={[
