@@ -77,8 +77,8 @@ function StorageToolbar({
       <div className="flex w-full items-center gap-2 md:w-auto md:shrink-0">
         <Button
           type="button"
-          variant="dashboard-folder-filter"
-          size="none"
+          variant="outline"
+          size="control"
           className="flex-1 md:flex-none"
           onClick={onOpenUploadDrawer}
           disabled={uploadingData}

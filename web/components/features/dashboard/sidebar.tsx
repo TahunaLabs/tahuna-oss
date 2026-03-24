@@ -34,7 +34,7 @@ export function Sidebar({ activeView, onViewChange, userInitial, isDark, onTheme
 
       {/* Create Environment CTA */}
       <div className="px-2 py-1.5">
-        <Button type="button" variant="dashboard-primary-compact" size="none" className="w-full justify-center">
+        <Button type="button" variant="default" size="compact" className="w-full justify-center">
           <span>+ New environment</span>
         </Button>
       </div>
@@ -146,7 +146,8 @@ function SidebarItem({ icon, label, badge, active, onClick }: SidebarItemProps) 
   return (
     <Button
       type="button"
-      variant={active ? "sidebar-item-active" : "sidebar-item"}
+      variant="nav"
+      data-active={active || undefined}
       size="none"
       onClick={onClick}
     >

@@ -49,7 +49,7 @@ function CollapsibleSection({
     <div>
       <Button
         type="button"
-        variant="dashboard-context-toggle"
+        variant="context-toggle"
         size="none"
         onClick={onToggle}
       >
@@ -110,7 +110,8 @@ export function SettingsView({
           <div className="mt-3 inline-flex overflow-hidden rounded-lg border border-border bg-card">
             <Button
               type="button"
-              variant={theme === "dark" ? "dashboard-tab-compact-active" : "dashboard-tab-compact"}
+              variant="tab"
+              data-active={theme === "dark" || undefined}
               size="none"
               className="rounded-none"
               onClick={() => onThemeChange("dark")}
@@ -120,7 +121,8 @@ export function SettingsView({
             </Button>
             <Button
               type="button"
-              variant={theme === "light" ? "dashboard-tab-compact-active" : "dashboard-tab-compact"}
+              variant="tab"
+              data-active={theme === "light" || undefined}
               size="none"
               className="rounded-none"
               onClick={() => onThemeChange("light")}
@@ -215,8 +217,8 @@ export function SettingsView({
           <div className="mt-4 flex justify-end">
               <Button
                 type="button"
-                variant="dashboard-primary"
-                size="none"
+                variant="default"
+                size="control"
                 disabled={savingProfile}
                 onClick={() => {
                   void handleSaveProfile()
@@ -239,7 +241,7 @@ export function SettingsView({
                 <p className="text-sm text-muted-foreground">
                   {apiKeys.length} total keys, {activeKeys.length} active
                 </p>
-                <Button asChild type="button" variant="dashboard-outline" size="none">
+                <Button asChild type="button" variant="outline" size="control">
                   <Link href="/machines">Manage sessions</Link>
                 </Button>
               </div>

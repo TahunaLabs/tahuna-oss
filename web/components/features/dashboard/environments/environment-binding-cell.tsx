@@ -47,8 +47,9 @@ function EnvironmentBindingCell({
                 <Badge variant="dashboard-data">{blob?.filename || "Unnamed dataset"}</Badge>
                 <Button
                   type="button"
-                  variant="dashboard-outline-compact-muted"
-                  size="none"
+                  variant="ghost"
+                  size="compact-xs"
+                  className="border border-border"
                   onClick={() => onUnbindData(environment.environment_id, dataId)}
                   disabled={busy}
                 >

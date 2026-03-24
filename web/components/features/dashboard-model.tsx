@@ -352,7 +352,8 @@ export function SidebarSection({
               key={item.id}
               type="button"
               size="none"
-              variant={isActive ? "dashboard-nav-active" : "dashboard-nav"}
+              variant="nav"
+              data-active={isActive || undefined}
               onClick={() => onSelect(item.section)}
             >
               <Icon className="h-4 w-4" />

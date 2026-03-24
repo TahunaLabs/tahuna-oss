@@ -110,8 +110,8 @@ function StorageUploadDrawer({
               <div className="flex items-center gap-2">
                 <Button
                   type="button"
-                  variant="dashboard-outline-compact"
-                  size="none"
+                  variant="compact-toggle"
+                  size="compact-xs"
                   onClick={onOpenFilePicker}
                   disabled={uploadingData}
                 >
@@ -119,8 +119,8 @@ function StorageUploadDrawer({
                 </Button>
                 <Button
                   type="button"
-                  variant="dashboard-outline-icon-muted"
-                  size="none"
+                  variant="ghost"
+                  size="icon-sm"
                   onClick={() => onSelectDataFiles([])}
                   disabled={uploadingData || selectedFileCount === 0}
                 >
@@ -129,8 +129,8 @@ function StorageUploadDrawer({
               </div>
               <Button
                 type="submit"
-                variant="dashboard-primary-compact-sm"
-                size="none"
+                variant="default"
+                size="compact-sm"
                 className="min-w-20"
                 disabled={selectedFileCount === 0 || uploadingData}
               >

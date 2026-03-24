@@ -21,7 +21,7 @@ function RunsEmptyState({ noEnvironments, activeTab, onTriggerRun }: RunsEmptySt
         <p className="mb-6 text-sm leading-relaxed text-muted-foreground">{message}</p>
         {!noEnvironments && activeTab === "all" && onTriggerRun ? (
           <div className="flex items-center justify-center gap-3">
-            <Button type="button" variant="dashboard-primary-compact" size="none" onClick={onTriggerRun}>
+            <Button type="button" variant="default" size="compact" onClick={onTriggerRun}>
               Trigger run
             </Button>
           </div>

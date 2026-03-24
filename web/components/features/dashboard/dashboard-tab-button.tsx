@@ -15,7 +15,8 @@ function DashboardTabButton({ label, active, onClick, count }: DashboardTabButto
   return (
     <Button
       type="button"
-      variant={active ? "dashboard-tab-compact-active" : "dashboard-tab-compact"}
+      variant="tab"
+      data-active={active || undefined}
       size="none"
       className="text-ui-tab"
       onClick={onClick}

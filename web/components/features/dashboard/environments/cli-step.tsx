@@ -30,8 +30,8 @@ function CliStep({ number, label, command }: CliStepProps) {
         <code className="font-mono text-sm text-foreground">{command}</code>
         <Button
           type="button"
-          variant="dashboard-outline-icon-muted"
-          size="none"
+          variant="ghost"
+          size="icon-sm"
           onClick={copyCommand}
         >
           {copied ? <Check className="h-3.5 w-3.5 text-success" /> : <Copy className="h-3.5 w-3.5" />}

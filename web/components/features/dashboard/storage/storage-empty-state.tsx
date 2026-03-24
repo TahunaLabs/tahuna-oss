@@ -18,7 +18,7 @@ function StorageEmptyState({ hasFilters, onUpload }: StorageEmptyStateProps) {
         <p className="mb-6 text-sm leading-relaxed text-muted-foreground">{message}</p>
         {!hasFilters && onUpload ? (
           <div className="flex items-center justify-center">
-            <Button type="button" variant="dashboard-primary-compact" size="none" onClick={onUpload}>
+            <Button type="button" variant="default" size="compact" onClick={onUpload}>
               Upload data
             </Button>
           </div>

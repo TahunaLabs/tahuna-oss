@@ -53,7 +53,7 @@ function EnvironmentConfigPanel({
             <span className="text-xs text-muted-foreground">Saved</span>
           )}
           <Button
-            variant="dashboard-outline"
+            variant="outline"
             size="sm"
             onClick={onClose}
             disabled={configSaving}
@@ -86,7 +86,7 @@ function EnvironmentConfigPanel({
 
           <div className="flex items-center gap-2">
             <Button
-              variant="dashboard-outline"
+              variant="outline"
               size="sm"
               onClick={onCancel}
               disabled={configSaving || !configDirty}
@@ -94,7 +94,7 @@ function EnvironmentConfigPanel({
               Cancel
             </Button>
             <Button
-              variant="dashboard-primary"
+              variant="default"
               size="sm"
               onClick={() => onSave(environmentId)}
               disabled={configSaving || !configDirty}

@@ -67,7 +67,7 @@ function RunDetailPanel({
           <RunActionsMenu
             run={runDetail}
             busy={busy}
-            triggerVariant="dashboard-icon-secondary"
+            triggerVariant="ghost"
             onSelectRun={onSelectRun}
             onCancelRun={onCancelRun}
             onDeleteRuns={onDeleteRuns}
@@ -75,8 +75,8 @@ function RunDetailPanel({
           />
           <Button
             type="button"
-            variant="dashboard-icon-secondary"
-            size="none"
+            variant="ghost"
+            size="icon-control"
             onClick={() => onSelectRun(null)}
           >
             <X className="h-4 w-4" />
@@ -95,7 +95,7 @@ function RunDetailPanel({
       <div className="px-6 py-4">
         <Button
           type="button"
-          variant="dashboard-context-toggle"
+          variant="context-toggle"
           size="none"
           onClick={() => setShowContext((prev) => !prev)}
         >

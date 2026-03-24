@@ -20,7 +20,8 @@ function ViewToggleButton({
   return (
     <Button
       type="button"
-      variant={active ? "dashboard-view-toggle-active" : "dashboard-view-toggle"}
+      variant="toggle"
+      data-active={active || undefined}
       size="none"
       aria-label={label}
       aria-pressed={active}

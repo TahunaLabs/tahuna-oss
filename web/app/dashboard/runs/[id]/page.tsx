@@ -92,7 +92,7 @@ export default function RunDetailPage() {
             {run.name} · created {new Date(run.created_at).toLocaleString()}
           </p>
         </div>
-        <Button asChild type="button" variant="dashboard-outline" size="none">
+        <Button asChild type="button" variant="outline" size="control">
           <Link href="/dashboard">Back to dashboard</Link>
         </Button>
       </div>

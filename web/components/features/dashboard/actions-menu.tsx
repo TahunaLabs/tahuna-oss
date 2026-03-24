@@ -24,7 +24,7 @@ export function ActionsMenu({
   triggerLabel,
   align = "right",
   menuClassName,
-  triggerVariant = "dashboard-outline-icon-muted",
+  triggerVariant = "ghost",
   triggerClassName,
   triggerContent,
   children,

@@ -98,8 +98,8 @@ export function MachinesView({ keys, message, error, revokingId, onRevoke, onCle
                           <AlertDialogTrigger asChild>
                             <Button
                               type="button"
-                              variant="dashboard-outline"
-                              size="none"
+                              variant="outline"
+                              size="control"
                               disabled={isBusy}
                               onClick={onClearFeedback}
                             >

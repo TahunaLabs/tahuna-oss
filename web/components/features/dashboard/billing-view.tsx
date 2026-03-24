@@ -140,7 +140,7 @@ export function BillingView({ balanceCents, bootstrapCreditCents, currency, init
             </div>
           </div>
           <div className="mt-4 flex justify-end">
-            <Button type="button" variant="dashboard-outline" size="none" disabled>
+            <Button type="button" variant="outline" size="control" disabled>
               Add payment method (soon)
             </Button>
           </div>

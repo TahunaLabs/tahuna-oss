@@ -35,8 +35,8 @@ function FilterDropdown({
       <DropdownMenuTrigger asChild>
         <Button
           type="button"
-          variant="dashboard-filter"
-          size="none"
+          variant="ghost"
+          size="control"
           aria-label={ariaLabel}
           className="w-full justify-between md:w-auto md:justify-center"
         >

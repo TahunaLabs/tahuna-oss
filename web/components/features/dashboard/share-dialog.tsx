@@ -57,8 +57,8 @@ function CopyButton({ text }: { text: string }) {
   return (
     <Button
       type="button"
-      variant="dashboard-outline-icon-muted"
-      size="none"
+      variant="ghost"
+      size="icon-sm"
       onClick={handleCopy}
       title="Copy link"
     >
@@ -108,8 +108,9 @@ export function ShareDialog({
                 <div className="flex items-center gap-2">
                   <Button
                     type="button"
-                    variant={permission === "read" ? "dashboard-outline-compact-active" : "dashboard-outline-compact"}
-                    size="none"
+                    variant="compact-toggle"
+                    data-active={permission === "read" || undefined}
+                    size="compact-xs"
                     onClick={() => setPermission("read")}
                     disabled={busy}
                   >
@@ -117,8 +118,9 @@ export function ShareDialog({
                   </Button>
                   <Button
                     type="button"
-                    variant={permission === "edit" ? "dashboard-outline-compact-active" : "dashboard-outline-compact"}
-                    size="none"
+                    variant="compact-toggle"
+                    data-active={permission === "edit" || undefined}
+                    size="compact-xs"
                     onClick={() => setPermission("edit")}
                     disabled={busy}
                   >
@@ -128,8 +130,8 @@ export function ShareDialog({
               </div>
               <Button
                 type="button"
-                variant="dashboard-primary-compact"
-                size="none"
+                variant="default"
+                size="compact"
                 onClick={() => onCreateLink(permission)}
                 disabled={busy}
               >
@@ -183,8 +185,8 @@ export function ShareDialog({
                       </div>
                       <Button
                         type="button"
-                        variant="dashboard-outline-icon-muted"
-                        size="none"
+                        variant="ghost"
+                        size="icon-sm"
                         onClick={() => onRevokeLink(link.share_link_id)}
                         disabled={busy}
                       >

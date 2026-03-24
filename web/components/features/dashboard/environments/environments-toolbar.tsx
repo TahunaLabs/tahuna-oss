@@ -77,7 +77,7 @@ function EnvironmentsToolbar({
       </div>
 
       <div className="flex w-full items-center gap-2 md:w-auto md:shrink-0">
-        <Button type="button" variant="dashboard-folder-filter" size="none" className="flex-1 md:flex-none">
+        <Button type="button" variant="outline" size="control" className="flex-1 md:flex-none">
           <Folder className="h-4 w-4" />
           All environments
           <ChevronDown className="h-4 w-4" />

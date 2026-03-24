@@ -11,62 +11,30 @@ const buttonVariants = cva(
       variant: {
         default: 'bg-primary text-primary-foreground hover:bg-primary/90',
         destructive:
-          'bg-destructive text-white hover:bg-destructive/90 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40 dark:bg-destructive/60',
+          'bg-destructive text-destructive-foreground hover:bg-destructive/90 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40 dark:bg-destructive/60',
         outline:
-          'border bg-background shadow-xs hover:bg-accent hover:text-accent-foreground dark:bg-input/30 dark:border-input dark:hover:bg-input/50',
+          'border border-border bg-card text-foreground shadow-none hover:bg-muted',
         secondary:
-          'bg-secondary text-secondary-foreground hover:bg-secondary/80',
+          'bg-secondary text-foreground hover:bg-muted',
         ghost:
-          'hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50',
+          'text-muted-foreground hover:bg-secondary hover:text-foreground',
         link: 'text-primary underline-offset-4 hover:underline',
+        nav:
+          'h-dashboard-control w-full justify-start gap-2 rounded-lg px-2 text-ui-control font-normal text-muted-foreground hover:bg-muted hover:text-foreground data-[active=true]:bg-secondary data-[active=true]:font-medium data-[active=true]:text-foreground',
+        tab:
+          'h-dashboard-control rounded px-3 text-dashboard-control font-normal tracking-normal text-foreground hover:bg-secondary-hover data-[active=true]:bg-secondary',
+        toggle:
+          'h-dashboard-control min-w-9 rounded-md border border-transparent px-2 text-muted-foreground hover:bg-secondary hover:text-foreground data-[active=true]:border-border data-[active=true]:bg-background data-[active=true]:text-foreground data-[active=true]:shadow-xs',
+        'compact-toggle':
+          'border border-border text-foreground hover:bg-secondary data-[active=true]:border-accent data-[active=true]:bg-accent data-[active=true]:text-accent-foreground',
+        'context-toggle':
+          'h-auto w-full items-center justify-between rounded-lg border border-border bg-background/60 px-4 py-3 text-left font-normal hover:bg-secondary/30',
         'sidebar-brand':
           'h-auto justify-start gap-2 rounded px-1.5 py-1 text-sm font-medium text-sidebar-foreground hover:bg-secondary-hover',
         'sidebar-icon':
           'rounded p-1.5 text-foreground hover:bg-secondary-hover',
-        'sidebar-item':
-          'h-auto w-full justify-start gap-2 rounded px-2 py-1.5 text-sm font-normal text-foreground hover:bg-secondary-hover',
-        'sidebar-item-active':
-          'h-auto w-full justify-start gap-2 rounded px-2 py-1.5 text-sm font-normal bg-secondary text-foreground',
         'sidebar-menu-item':
           'h-auto w-full justify-start gap-2 rounded-none px-3 py-2 text-sm font-normal text-foreground hover:bg-secondary',
-        'dashboard-nav':
-          'h-dashboard-control w-full justify-start gap-2 rounded-lg px-2 text-ui-control font-normal text-muted-foreground hover:bg-muted hover:text-foreground',
-        'dashboard-nav-active':
-          'h-dashboard-control w-full justify-start gap-2 rounded-lg bg-secondary px-2 text-left text-ui-control font-medium text-foreground',
-        'dashboard-icon-secondary':
-          'h-dashboard-control w-dashboard-control rounded-md p-0 text-muted-foreground hover:bg-secondary hover:text-foreground',
-        'dashboard-primary':
-          'h-dashboard-control rounded-lg bg-primary px-3 text-primary-foreground hover:bg-primary/90',
-        'dashboard-primary-compact':
-          'h-auto rounded bg-accent px-4 py-2 text-sm text-accent-foreground hover:opacity-90',
-        'dashboard-primary-compact-sm':
-          'h-auto rounded bg-accent px-3 py-1.5 text-sm text-accent-foreground hover:opacity-90',
-        'dashboard-outline':
-          'h-dashboard-control rounded-lg border border-border bg-card px-3 text-dashboard-control text-foreground shadow-none hover:bg-muted',
-        'dashboard-outline-compact':
-          'h-auto rounded border border-border px-2 py-1 text-xs text-foreground hover:bg-secondary',
-        'dashboard-outline-compact-active':
-          'h-auto rounded border border-accent bg-accent px-2 py-1 text-xs text-accent-foreground hover:opacity-90',
-        'dashboard-outline-compact-muted':
-          'h-auto rounded border border-border px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-secondary hover:text-foreground',
-        'dashboard-outline-icon-muted':
-          'h-6 w-6 rounded p-0 text-muted-foreground hover:bg-secondary hover:text-foreground',
-        'dashboard-tab-compact':
-          'h-dashboard-control rounded px-3 text-dashboard-control font-normal tracking-normal text-foreground hover:bg-secondary-hover',
-        'dashboard-tab-compact-active':
-          'h-dashboard-control rounded bg-secondary px-3 text-dashboard-control font-normal tracking-normal text-foreground',
-        'dashboard-filter':
-          'h-dashboard-control rounded-md px-3 text-dashboard-control font-normal text-foreground hover:bg-secondary',
-        'dashboard-folder-filter':
-          'h-dashboard-control rounded-md border border-border bg-card px-3 text-dashboard-control font-normal text-foreground hover:bg-secondary',
-        'dashboard-view-toggle':
-          'h-dashboard-control min-w-9 rounded-md border border-transparent px-2 text-muted-foreground hover:bg-secondary hover:text-foreground',
-        'dashboard-view-toggle-active':
-          'h-dashboard-control min-w-9 rounded-md border border-border bg-background px-2 text-foreground shadow-xs',
-        'dashboard-context-toggle':
-          'h-auto w-full items-center justify-between rounded-lg border border-border bg-background/60 px-4 py-3 text-left font-normal hover:bg-secondary/30',
-        'dashboard-secondary':
-          'w-full justify-center rounded-lg bg-secondary px-4 py-2.5 text-dashboard-control text-foreground hover:bg-muted',
       },
       size: {
         default: 'h-9 px-4 py-2 has-[>svg]:px-3',
@@ -74,6 +42,12 @@ const buttonVariants = cva(
         lg: 'h-10 px-6 has-[>svg]:px-4',
         icon: 'size-9',
         none: '',
+        control: 'h-dashboard-control rounded-lg px-3 text-dashboard-control',
+        compact: 'h-auto rounded px-4 py-2 text-sm',
+        'compact-sm': 'h-auto rounded px-3 py-1.5 text-sm',
+        'compact-xs': 'h-auto rounded px-2 py-1 text-xs',
+        'icon-control': 'h-dashboard-control w-dashboard-control rounded-md p-0',
+        'icon-sm': 'h-6 w-6 rounded p-0',
       },
     },
     defaultVariants: {

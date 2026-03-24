@@ -57,13 +57,13 @@ function StorageTableRow({
               maxLength={MAX_ARTIFACT_NAME_CHARS}
               className="h-7 w-40 bg-muted px-2 text-dashboard-control-small"
             />
-            <Button type="submit" variant="dashboard-outline-compact" size="none" disabled={isBusy}>
+            <Button type="submit" variant="compact-toggle" size="compact-xs" disabled={isBusy}>
               {isBusy ? "..." : "Save"}
             </Button>
             <Button
               type="button"
-              variant="dashboard-outline-icon-muted"
-              size="none"
+              variant="ghost"
+              size="icon-sm"
               disabled={isBusy}
               onClick={onCancelRenameArtifact}
             >
@@ -123,8 +123,9 @@ function StorageTableRow({
       <TableCell variant="dashboard">
         <Button
           type="button"
-          variant={item.visibility === "shared" ? "dashboard-outline-compact-active" : "dashboard-outline-compact"}
-          size="none"
+          variant="compact-toggle"
+          data-active={item.visibility === "shared" || undefined}
+          size="compact-xs"
           onClick={() => onSetVisibility?.(item, item.visibility === "shared" ? "private" : "shared")}
           disabled={!onSetVisibility}
         >

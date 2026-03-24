@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button"
 type RunActionsMenuProps = {
   run: { run_id: RunRow["run_id"] | string; status: string; name?: string | null }
   busy: boolean
-  triggerVariant?: "dashboard-icon-secondary"
+  triggerVariant?: "ghost"
   onSelectRun?: (id: string | null) => void
   onCancelRun: (id: RunRow["run_id"]) => void
   onDeleteRuns: (ids: RunRow["run_id"][]) => Promise<void>

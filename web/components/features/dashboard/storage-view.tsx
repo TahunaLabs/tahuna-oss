@@ -203,8 +203,8 @@ export function StorageView({
             <div className="flex items-center gap-1.5">
               <Button
                 type="button"
-                variant="dashboard-outline-icon-muted"
-                size="none"
+                variant="ghost"
+                size="icon-sm"
                 onClick={onPreviousStoragePage}
                 disabled={storageOffset === 0}
               >
@@ -212,8 +212,8 @@ export function StorageView({
               </Button>
               <Button
                 type="button"
-                variant="dashboard-outline-icon-muted"
-                size="none"
+                variant="ghost"
+                size="icon-sm"
                 onClick={onNextStoragePage}
                 disabled={!storageHasMore}
               >
