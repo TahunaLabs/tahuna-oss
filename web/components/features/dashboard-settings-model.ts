@@ -41,7 +41,6 @@ export type RunpodCredentialStatus = {
   configured: boolean
   credential_id: Id<"runpodCredentials"> | null
   key_prefix: string
-  fingerprint: string
   validated_at?: number
   updated_at?: number
 }

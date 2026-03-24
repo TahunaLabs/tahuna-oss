@@ -11,7 +11,6 @@ export const runpodCredentialStatusValidator = v.object({
   configured: v.boolean(),
   credential_id: v.union(v.id("runpodCredentials"), v.null()),
   key_prefix: v.string(),
-  fingerprint: v.string(),
   validated_at: v.optional(v.number()),
   updated_at: v.optional(v.number()),
 });
@@ -34,7 +33,6 @@ export const runpodCredentialEnvelopeValidator = v.union(
 export function toRunpodCredentialStatus(row: {
   credentialId: Id<"runpodCredentials">;
   keyPrefix: string;
-  fingerprint: string;
   validatedAt: number;
   updatedAt: number;
 } | null) {
@@ -43,14 +41,12 @@ export function toRunpodCredentialStatus(row: {
       configured: false,
       credential_id: null,
       key_prefix: "",
-      fingerprint: "",
     };
   }
   return {
     configured: true,
     credential_id: row.credentialId,
     key_prefix: row.keyPrefix,
-    fingerprint: row.fingerprint,
     validated_at: row.validatedAt,
     updated_at: row.updatedAt,
   };
@@ -157,7 +153,6 @@ export const internalReplaceActiveRunpodCredential = internalMutation({
     return toRunpodCredentialStatus({
       credentialId,
       keyPrefix: args.keyPrefix,
-      fingerprint: args.fingerprint,
       validatedAt: args.validatedAt,
       updatedAt: now,
     });

@@ -6,7 +6,6 @@ import { ShieldCheck } from "lucide-react"
 import type { RunpodCredentialStatus } from "@/components/features/dashboard-settings-model"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Notice } from "@/components/ui/notice"
 
@@ -23,13 +22,6 @@ function formatDate(timestamp?: number) {
     return "—"
   }
   return new Date(timestamp).toLocaleString()
-}
-
-function shortenFingerprint(fingerprint: string) {
-  if (!fingerprint) {
-    return "—"
-  }
-  return fingerprint.slice(0, 12)
 }
 
 export function RunpodSettingsCard({
@@ -74,11 +66,10 @@ export function RunpodSettingsCard({
   }
 
   return (
-    <Card className="space-y-4 p-4">
+    <div className="space-y-4">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h2 className="text-sm font-medium text-foreground">Runpod</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
+          <p className="text-sm text-muted-foreground">
             Stored encrypted server-side and used for GPU catalog lookups, pod provisioning, and pod termination.
           </p>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -101,7 +92,6 @@ export function RunpodSettingsCard({
           </div>
           <div className="mt-2 grid grid-cols-1 gap-2 text-sm text-muted-foreground md:grid-cols-3">
             <p>prefix: {status.key_prefix || "—"}</p>
-            <p>fingerprint: {shortenFingerprint(status.fingerprint)}</p>
             <p>validated: {formatDate(status.validated_at)}</p>
           </div>
         </div>
@@ -145,6 +135,6 @@ export function RunpodSettingsCard({
           {saving ? "Saving..." : status?.configured ? "Replace key" : "Save key"}
         </Button>
       </div>
-    </Card>
+    </div>
   )
 }

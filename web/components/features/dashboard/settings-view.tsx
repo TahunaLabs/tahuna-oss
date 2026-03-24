@@ -83,6 +83,7 @@ export function SettingsView({
   onRevokeRunpodCredential,
 }: SettingsViewProps) {
   const [apiKeysOpen, setApiKeysOpen] = useState(false)
+  const [runpodOpen, setRunpodOpen] = useState(false)
   const [sessionsOpen, setSessionsOpen] = useState(false)
   const [loginOpen, setLoginOpen] = useState(false)
   const [saveError, setSaveError] = useState("")
@@ -241,17 +242,9 @@ export function SettingsView({
           </div>
         </Card>
 
-        <RunpodSettingsCard
-          status={runpodCredentialStatus}
-          saving={savingRunpodCredential}
-          revoking={revokingRunpodCredential}
-          onSave={onSaveRunpodCredential}
-          onRevoke={onRevokeRunpodCredential}
-        />
-
         <Card className="p-4">
           <CollapsibleSection
-            title="API keys"
+            title="Tahuna API keys"
             open={apiKeysOpen}
             onToggle={() => setApiKeysOpen((open) => !open)}
           >
@@ -291,6 +284,24 @@ export function SettingsView({
 
         <Card className="p-4">
           <CollapsibleSection
+            title="GPU provider API keys"
+            open={runpodOpen}
+            onToggle={() => setRunpodOpen((open) => !open)}
+          >
+            <div className="mt-3">
+              <RunpodSettingsCard
+                status={runpodCredentialStatus}
+                saving={savingRunpodCredential}
+                revoking={revokingRunpodCredential}
+                onSave={onSaveRunpodCredential}
+                onRevoke={onRevokeRunpodCredential}
+              />
+            </div>
+          </CollapsibleSection>
+        </Card>
+
+        <Card className="p-4">
+          <CollapsibleSection
             title="Active sessions"
             open={sessionsOpen}
             onToggle={() => setSessionsOpen((open) => !open)}
@@ -322,10 +333,10 @@ export function SettingsView({
             <div className="mt-3 space-y-3">
               <div className="flex items-center gap-2 text-foreground">
                 <ShieldCheck className="h-4 w-4 text-success" />
-                <p className="text-sm">Email OTP authentication is enabled.</p>
+                <p className="text-sm">Sign in with a one-time code sent to your email.</p>
               </div>
               <p className="text-sm text-muted-foreground">
-                Password login and social providers are not configured in the current auth schema.
+                We will email you a fresh code each time you sign in.
               </p>
             </div>
           </CollapsibleSection>

@@ -57,7 +57,7 @@ The Runpod settings card supports:
 - save key
 - replace key
 - disable key for new launches
-- masked status display
+- configured status display
 
 The key is never returned to the client after save.
 
@@ -80,7 +80,7 @@ Stored fields:
 Notes:
 
 - `keyCiphertext` and `keyIv` are used for reversible AES-GCM decryption on the server
-- `keyPrefix` and `fingerprint` are metadata only and can be shown safely in the UI
+- `keyPrefix` and `fingerprint` are metadata only; the current UI exposes the key prefix but not the fingerprint
 - `revokedAt` is a logical disable flag for new launches, not a hard delete of provider history
 
 ## Security Model
