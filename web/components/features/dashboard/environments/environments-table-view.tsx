@@ -96,7 +96,7 @@ function EnvironmentsTableView({
           { role: "select" },
           { role: "main" },
           { role: "meta" },
-          { role: "meta", className: "w-64" },
+          { role: "meta" },
           { role: "meta" },
           { role: "meta" },
           { role: "meta" },
