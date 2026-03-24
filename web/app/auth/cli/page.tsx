@@ -5,7 +5,7 @@ import { Card } from "@/components/ui/card"
 import { api } from "@convex/_generated/api"
 import { useConvexAuth, useMutation } from "convex/react"
 import { useRouter, useSearchParams } from "next/navigation"
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useState } from "react"
 
 function isLocalCallback(rawCallback: string) {
   try {
@@ -26,9 +26,9 @@ export default function CliAuthPage() {
   const [status, setStatus] = useState<"idle" | "creating" | "redirecting" | "error">("idle")
   const [error, setError] = useState("")
 
-  const state = useMemo(() => searchParams.get("state")?.trim() ?? "", [searchParams])
-  const callback = useMemo(() => searchParams.get("callback")?.trim() ?? "", [searchParams])
-  const machine = useMemo(() => searchParams.get("machine")?.trim() ?? "", [searchParams])
+  const state = searchParams.get("state")?.trim() ?? ""
+  const callback = searchParams.get("callback")?.trim() ?? ""
+  const machine = searchParams.get("machine")?.trim() ?? ""
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {

@@ -3,6 +3,12 @@
 import { Server } from "lucide-react"
 import { useMemo, useState } from "react"
 
+const ACCESS_FILTER_OPTIONS: FilterDropdownOption[] = [
+  { value: "all", label: "Any access" },
+  { value: "private", label: "Private" },
+  { value: "shared", label: "Shared" },
+]
+
 import { DashboardViewLayout } from "@/components/app-shell/dashboard-view-layout"
 import {
   type DataBlobRow,
@@ -77,11 +83,7 @@ export function EnvironmentsView({
   const [runtimeFilter, setRuntimeFilter] = useState("all")
   const [deviceFilter, setDeviceFilter] = useState("all")
 
-  const accessFilterOptions = useMemo<FilterDropdownOption[]>(() => [
-    { value: "all", label: "Any access" },
-    { value: "private", label: "Private" },
-    { value: "shared", label: "Shared" },
-  ], [])
+  const accessFilterOptions = ACCESS_FILTER_OPTIONS
 
   const runtimeFilterOptions = useMemo<FilterDropdownOption[]>(() => {
     const options = new Set<string>()

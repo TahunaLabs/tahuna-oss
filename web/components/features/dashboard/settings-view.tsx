@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useState } from "react"
 import { ChevronDown, ChevronUp, KeyRound, Moon, Settings, ShieldCheck, Sun } from "lucide-react"
 import Link from "next/link"
 
@@ -89,11 +89,8 @@ export function SettingsView({
   const [saveError, setSaveError] = useState("")
   const [saveMessage, setSaveMessage] = useState("")
 
-  const activeKeys = useMemo(() => apiKeys.filter((key) => key.status === "active"), [apiKeys])
-  const activeSessions = useMemo(
-    () => activeKeys.filter((key) => (key.machineId || "").trim().length > 0),
-    [activeKeys],
-  )
+  const activeKeys = apiKeys.filter((key) => key.status === "active")
+  const activeSessions = activeKeys.filter((key) => (key.machineId || "").trim().length > 0)
 
   async function handleSaveProfile() {
     setSaveError("")
