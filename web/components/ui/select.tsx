@@ -9,8 +9,9 @@ const selectVariants = cva(
     variants: {
       variant: {
         default: '',
+        // Binding selects should size like badges/chips and not stretch across table cells.
         binding:
-          'h-auto flex-1 rounded border-border bg-muted px-2 py-1 text-xs text-foreground',
+          'h-auto w-fit max-w-full min-w-0 rounded border-border bg-muted px-2 py-1 text-xs text-foreground',
       },
     },
     defaultVariants: { variant: 'default' },

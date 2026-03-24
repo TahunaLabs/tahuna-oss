@@ -11,20 +11,11 @@ import {
   type StorageSort,
   type StorageSourceFilter,
 } from "@/components/features/dashboard-model"
+import { StorageTableView } from "@/components/features/dashboard/storage/storage-table-view"
 import { StorageEmptyState } from "@/components/features/dashboard/storage/storage-empty-state"
-import { StorageTableRow } from "@/components/features/dashboard/storage/storage-table-row"
 import { StorageToolbar } from "@/components/features/dashboard/storage/storage-toolbar"
 import { StorageUploadDrawer } from "@/components/features/dashboard/storage/storage-upload-drawer"
-import { Button } from "@/components/ui/button"
-import { Card } from "@/components/ui/card"
 import { Spinner } from "@/components/ui/spinner"
-import {
-  Table,
-  TableBody,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
 
 type StorageViewProps = {
   selectedDataFiles: File[]
@@ -157,71 +148,23 @@ export function StorageView({
       ) : storageItems.length === 0 ? (
         <StorageEmptyState hasFilters={hasFilters} onUpload={openUploadDrawer} />
       ) : (
-        <Card variant="surface" className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          <div className="min-w-0 flex-1 overflow-auto">
-            <Table className="w-full table-fixed">
-              <colgroup>
-                <col className="w-96" />
-                <col className="w-36" />
-                <col className="w-28" />
-                <col className="w-36" />
-                <col className="w-48" />
-              </colgroup>
-              <TableHeader className="sticky top-0 bg-background">
-                <TableRow variant="head" className="text-left">
-                  <TableHead>Name</TableHead>
-                  <TableHead>Visibility</TableHead>
-                  <TableHead>Size</TableHead>
-                  <TableHead>Created</TableHead>
-                  <TableHead>Source</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {storageItems.map((item) => (
-                  <StorageTableRow
-                    key={item.id}
-                    item={item}
-                    renamingStorageId={renamingStorageId}
-                    artifactRenameDraft={artifactRenameDraft}
-                    artifactRenameBusyId={artifactRenameBusyId}
-                    onArtifactRenameDraftChange={onArtifactRenameDraftChange}
-                    onSaveRenameArtifact={onSaveRenameArtifact}
-                    onCancelRenameArtifact={onCancelRenameArtifact}
-                    onStartRenameArtifact={onStartRenameArtifact}
-                    onShareStorageItem={onShareStorageItem}
-                    onSetVisibility={onSetVisibility}
-                  />
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-
-          <div className="flex h-11 shrink-0 items-center justify-between border-t border-border px-4 text-sm text-muted-foreground">
-            <span>
-              {storageTotal === 0 ? 0 : storageOffset + 1}–{storageOffset + storageItems.length} of {storageTotal}
-            </span>
-            <div className="flex items-center gap-1.5">
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                onClick={onPreviousStoragePage}
-                disabled={storageOffset === 0}
-              >
-                <span className="-rotate-90 text-lg leading-none">‹</span>
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                onClick={onNextStoragePage}
-                disabled={!storageHasMore}
-              >
-                <span className="rotate-90 text-lg leading-none">‹</span>
-              </Button>
-            </div>
-          </div>
-        </Card>
+        <StorageTableView
+          items={storageItems}
+          total={storageTotal}
+          offset={storageOffset}
+          hasMore={storageHasMore}
+          renamingStorageId={renamingStorageId}
+          artifactRenameDraft={artifactRenameDraft}
+          artifactRenameBusyId={artifactRenameBusyId}
+          onArtifactRenameDraftChange={onArtifactRenameDraftChange}
+          onSaveRenameArtifact={onSaveRenameArtifact}
+          onCancelRenameArtifact={onCancelRenameArtifact}
+          onStartRenameArtifact={onStartRenameArtifact}
+          onPreviousPage={onPreviousStoragePage}
+          onNextPage={onNextStoragePage}
+          onShareStorageItem={onShareStorageItem}
+          onSetVisibility={onSetVisibility}
+        />
       )}
     </DashboardViewLayout>
   )

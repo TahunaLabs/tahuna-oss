@@ -4,6 +4,7 @@ import { Play } from "lucide-react"
 import { useMemo, useState } from "react"
 
 import { DashboardViewLayout } from "@/components/app-shell/dashboard-view-layout"
+import { DashboardTable } from "@/components/features/dashboard/dashboard-table"
 import {
   type EnvironmentRow,
   type RunDetail,
@@ -16,13 +17,7 @@ import { RunsToolbar } from "@/components/features/dashboard/runs/runs-toolbar"
 import { RunTableRow } from "@/components/features/dashboard/runs/run-table-row"
 import { RunsEmptyState } from "@/components/features/dashboard/runs/runs-empty-state"
 import { Card } from "@/components/ui/card"
-import {
-  Table,
-  TableBody,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
+import { TableHead } from "@/components/ui/table"
 
 export type RunTab = "all" | "active" | "completed"
 
@@ -110,46 +105,48 @@ export function RunsView({
         <RunsEmptyState activeTab={activeTab} />
       ) : (
         <div className="space-y-3">
-          <Card variant="surface" className="flex min-h-0 flex-1 overflow-hidden">
-            <div className="min-w-0 flex-1 overflow-auto">
-              <Table className="w-full table-fixed">
-                <colgroup>
-                  <col className="w-72" />
-                  <col className="w-28" />
-                  <col className="w-52" />
-                  <col className="w-36" />
-                  <col className="w-32" />
-                  <col className="w-10" />
-                </colgroup>
-                <TableHeader className="sticky top-0 bg-background">
-                  <TableRow variant="head" className="text-left">
-                    <TableHead>Name</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Environment</TableHead>
-                    <TableHead>Started</TableHead>
-                    <TableHead>Runtime</TableHead>
-                    <TableHead className="px-0" />
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredRuns.map((run) => (
-                    <RunTableRow
-                      key={run.run_id}
-                      run={run}
-                      environmentLabel={environmentNameById.get(run.environment_id) ?? "Unknown environment"}
-                      selected={selectedRunId === run.run_id}
-                      busy={busy}
-                      sharedByMeResourceIds={sharedByMeResourceIds}
-                      onSelectRun={onSelectRun}
-                      onCancelRun={onCancelRun}
-                      onDeleteRuns={onDeleteRuns}
-                      onShareRun={onShareRun}
-                    />
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          </Card>
+          <DashboardTable
+            columns={[
+              { role: "main" },
+              { role: "meta" },
+              { role: "meta" },
+              { role: "meta" },
+              { role: "meta" },
+              { role: "actions" },
+            ]}
+            headerCells={(
+              <>
+                <TableHead>Name</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Environment</TableHead>
+                <TableHead>Started</TableHead>
+                <TableHead>Runtime</TableHead>
+                <TableHead className="px-0" />
+              </>
+            )}
+            pagination={{
+              total: filteredRuns.length,
+              offset: 0,
+              count: filteredRuns.length,
+              hasPrevious: false,
+              hasNext: false,
+            }}
+          >
+            {filteredRuns.map((run) => (
+              <RunTableRow
+                key={run.run_id}
+                run={run}
+                environmentLabel={environmentNameById.get(run.environment_id) ?? "Unknown environment"}
+                selected={selectedRunId === run.run_id}
+                busy={busy}
+                sharedByMeResourceIds={sharedByMeResourceIds}
+                onSelectRun={onSelectRun}
+                onCancelRun={onCancelRun}
+                onDeleteRuns={onDeleteRuns}
+                onShareRun={onShareRun}
+              />
+            ))}
+          </DashboardTable>
 
           {selectedRunId !== null ? (
             runDetail ? (

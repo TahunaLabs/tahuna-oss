@@ -4,6 +4,7 @@ import { Users } from "lucide-react"
 
 import { relativeTime, type RunRow } from "@/components/features/dashboard-model"
 import { RunActionsMenu } from "@/components/features/dashboard/runs/run-actions-menu"
+import { TableActionsCell } from "@/components/features/dashboard/table-actions-cell"
 import { StatusDot, type StatusDotVariant } from "@/components/ui/status-dot"
 import { TableCell, TableRow } from "@/components/ui/table"
 import { cn } from "@/lib/utils"
@@ -46,7 +47,6 @@ function RunTableRow({
 
   return (
     <TableRow
-     
       className={cn(
         "group cursor-pointer align-middle hover:bg-muted",
         selected ? "bg-secondary-faint" : "",
@@ -81,22 +81,16 @@ function RunTableRow({
         {formatRunUptime(run.uptime_ms)}
       </TableCell>
 
-      <TableCell
-       
-        className="px-0 align-middle"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <div className="flex items-center justify-center">
-          <RunActionsMenu
-            run={run}
-            busy={busy}
-            onSelectRun={onSelectRun}
-            onCancelRun={onCancelRun}
-            onDeleteRuns={onDeleteRuns}
-            onShareRun={onShareRun}
-          />
-        </div>
-      </TableCell>
+      <TableActionsCell stopRowClick>
+        <RunActionsMenu
+          run={run}
+          busy={busy}
+          onSelectRun={onSelectRun}
+          onCancelRun={onCancelRun}
+          onDeleteRuns={onDeleteRuns}
+          onShareRun={onShareRun}
+        />
+      </TableActionsCell>
     </TableRow>
   )
 }

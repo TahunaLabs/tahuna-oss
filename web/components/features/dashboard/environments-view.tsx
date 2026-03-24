@@ -8,20 +8,13 @@ import {
   type DataBlobRow,
   type EnvironmentRow,
 } from "@/components/features/dashboard-model"
-import { EnvironmentCard, formatGpuLabel } from "@/components/features/dashboard/environments/environment-card"
-import { EnvironmentTableRow } from "@/components/features/dashboard/environments/environment-table-row"
+import { formatGpuLabel } from "@/components/features/dashboard/environments/environment-card"
 import { EnvironmentsEmptyState } from "@/components/features/dashboard/environments/environments-empty-state"
+import { EnvironmentsGridView } from "@/components/features/dashboard/environments/environments-grid-view"
+import { EnvironmentsTableView } from "@/components/features/dashboard/environments/environments-table-view"
 import { EnvironmentsToolbar } from "@/components/features/dashboard/environments/environments-toolbar"
 import { type FilterDropdownOption } from "@/components/features/dashboard/environments/filter-dropdown"
-import { Card } from "@/components/ui/card"
 import { Spinner } from "@/components/ui/spinner"
-import {
-  Table,
-  TableBody,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
 
 type EnvironmentsViewProps = {
   environments: EnvironmentRow[]
@@ -185,7 +178,7 @@ export function EnvironmentsView({
       ) : (
         <>
           <div className="md:hidden">
-            <EnvironmentGridView
+            <EnvironmentsGridView
               environments={visibleEnvironments}
               dataBlobsById={dataBlobsById}
               configEditorEnvironmentId={configEditorEnvironmentId}
@@ -195,7 +188,7 @@ export function EnvironmentsView({
           </div>
           <div className="hidden md:block">
             {viewMode === "grid" ? (
-              <EnvironmentGridView
+              <EnvironmentsGridView
                 environments={visibleEnvironments}
                 dataBlobsById={dataBlobsById}
                 configEditorEnvironmentId={configEditorEnvironmentId}
@@ -203,7 +196,7 @@ export function EnvironmentsView({
                 {...sharedConfigProps}
               />
             ) : (
-              <EnvironmentTableView
+              <EnvironmentsTableView
                 environments={visibleEnvironments}
                 uniqueDataBlobs={uniqueDataBlobs}
                 dataBlobsById={dataBlobsById}
@@ -220,120 +213,5 @@ export function EnvironmentsView({
         </>
       )}
     </DashboardViewLayout>
-  )
-}
-
-// ─── Grid view ────────────────────────────────────────────────────────────────
-
-type GridViewProps = {
-  environments: EnvironmentRow[]
-  dataBlobsById: ReadonlyMap<string, DataBlobRow>
-  configEditorEnvironmentId: string | null
-  sharedByMeResourceIds?: ReadonlySet<string>
-  configName: string
-  configDraft: string
-  configSourceText: string
-  configError: string
-  configLoading: boolean
-  configSaving: boolean
-  busy: boolean
-  onCloseConfigEditor: () => void
-  onDeleteEnvironments: (ids: EnvironmentRow["environment_id"][]) => Promise<boolean>
-  onLaunchRun: (id: EnvironmentRow["environment_id"]) => void
-  onOpenConfigEditor: (environment: EnvironmentRow) => void
-  onShareEnvironment?: (id: string) => void
-  onConfigDraftChange: (value: string) => void
-  onCancelConfigEdit: () => void
-  onSaveConfig: (id: EnvironmentRow["environment_id"]) => void
-}
-
-function EnvironmentGridView({ environments, dataBlobsById, configEditorEnvironmentId, sharedByMeResourceIds, ...cardProps }: GridViewProps) {
-  return (
-    <div className="grid grid-cols-1 gap-3 lg:grid-cols-2 2xl:grid-cols-3">
-      {environments.map((environment) => (
-        <EnvironmentCard
-          key={environment.environment_id}
-          environment={environment}
-          dataBlobsById={dataBlobsById}
-          isShared={environment.access === "shared" || Boolean(sharedByMeResourceIds?.has(environment.environment_id))}
-          configOpen={configEditorEnvironmentId === environment.environment_id}
-          {...cardProps}
-        />
-      ))}
-    </div>
-  )
-}
-
-// ─── Table view ───────────────────────────────────────────────────────────────
-
-type TableViewProps = GridViewProps & {
-  uniqueDataBlobs: DataBlobRow[]
-  bindSelectionByEnvironment: Record<string, string>
-  onBindSelectionChange: (environmentId: string, value: string) => void
-  onBindSelectedData: (environment: EnvironmentRow, dataId: string) => void
-  onUnbindData: (environmentId: EnvironmentRow["environment_id"], dataId: string) => void
-}
-
-function EnvironmentTableView({
-  environments,
-  uniqueDataBlobs,
-  dataBlobsById,
-  bindSelectionByEnvironment,
-  configEditorEnvironmentId,
-  sharedByMeResourceIds,
-  onBindSelectionChange,
-  onBindSelectedData,
-  onUnbindData,
-  ...rowProps
-}: TableViewProps) {
-  return (
-    <Card variant="surface" className="flex min-h-0 flex-1 overflow-hidden">
-      <div className="min-w-0 flex-1 overflow-auto">
-        <Table className="w-full table-fixed">
-          <colgroup>
-            <col className="w-9" />
-            <col className="w-2/12" />
-            <col className="hidden w-1/12 lg:table-column" />
-            <col className="w-3/12" />
-            <col className="w-2/12" />
-            <col className="w-2/12" />
-            <col className="w-1/12" />
-            <col className="hidden w-1/12 xl:table-column" />
-            <col className="w-20" />
-          </colgroup>
-          <TableHeader className="sticky top-0 bg-background">
-            <TableRow variant="head" className="text-left">
-              <TableHead className="px-0" />
-              <TableHead className="min-w-36">Name</TableHead>
-              <TableHead className="hidden min-w-24 lg:table-cell">Access</TableHead>
-              <TableHead className="min-w-44">Data</TableHead>
-              <TableHead className="min-w-36">Device</TableHead>
-              <TableHead className="min-w-32">Runtime</TableHead>
-              <TableHead className="min-w-24">Last updated</TableHead>
-              <TableHead className="hidden min-w-24 xl:table-cell">Created</TableHead>
-              <TableHead className="px-0" />
-            </TableRow>
-          </TableHeader>
-
-          <TableBody>
-            {environments.map((environment) => (
-              <EnvironmentTableRow
-                key={environment.environment_id}
-                environment={environment}
-                uniqueDataBlobs={uniqueDataBlobs}
-                dataBlobsById={dataBlobsById}
-                bindSelectionByEnvironment={bindSelectionByEnvironment}
-                isShared={environment.access === "shared" || Boolean(sharedByMeResourceIds?.has(environment.environment_id))}
-                configOpen={configEditorEnvironmentId === environment.environment_id}
-                onBindSelectionChange={onBindSelectionChange}
-                onBindSelectedData={onBindSelectedData}
-                onUnbindData={onUnbindData}
-                {...rowProps}
-              />
-            ))}
-          </TableBody>
-        </Table>
-      </div>
-    </Card>
   )
 }

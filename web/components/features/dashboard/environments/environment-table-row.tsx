@@ -7,11 +7,14 @@ import {
   type EnvironmentRow,
   relativeTime,
 } from "@/components/features/dashboard-model"
+import { TableActionsCell } from "@/components/features/dashboard/table-actions-cell"
+import { TableSelectCell } from "@/components/features/dashboard/table-select-cell"
 import { EnvironmentActionsMenu } from "@/components/features/dashboard/environments/environment-actions-menu"
 import { EnvironmentBindingCell } from "@/components/features/dashboard/environments/environment-binding-cell"
 import { EnvironmentConfigPanel } from "@/components/features/dashboard/environments/environment-config-panel"
 import { deviceLabel } from "@/components/features/dashboard/environments/environment-card"
 import { TableCell, TableRow } from "@/components/ui/table"
+import { cn } from "@/lib/utils"
 
 type EnvironmentTableRowProps = {
   environment: EnvironmentRow
@@ -38,6 +41,8 @@ type EnvironmentTableRowProps = {
   onBindSelectionChange: (environmentId: string, value: string) => void
   onBindSelectedData: (environment: EnvironmentRow, dataId: string) => void
   onUnbindData: (environmentId: EnvironmentRow["environment_id"], dataId: string) => void
+  selected: boolean
+  onToggleSelected: (environmentId: string) => void
 }
 
 function EnvironmentTableRow({
@@ -65,17 +70,28 @@ function EnvironmentTableRow({
   onBindSelectionChange,
   onBindSelectedData,
   onUnbindData,
+  selected,
+  onToggleSelected,
 }: EnvironmentTableRowProps) {
   return (
     <Fragment>
-      <TableRow className="group align-middle hover:bg-muted">
-        <TableCell className="px-0" />
+      <TableRow
+        className={cn(
+          "group align-middle hover:bg-muted",
+          selected ? "bg-secondary-faint" : "",
+        )}
+      >
+        <TableSelectCell
+          checked={selected}
+          ariaLabel={`Select environment ${environment.name}`}
+          onCheckedChange={() => onToggleSelected(environment.environment_id)}
+        />
 
         <TableCell className="text-foreground">
           <p className="truncate">{environment.name}</p>
         </TableCell>
 
-        <TableCell className="hidden text-muted-foreground lg:table-cell">
+        <TableCell className="text-muted-foreground">
           <p className="truncate">{isShared ? "Shared" : "Private"}</p>
         </TableCell>
 
@@ -115,21 +131,19 @@ function EnvironmentTableRow({
           <p className="truncate">{relativeTime(environment.created_at)}</p>
         </TableCell>
 
-        <TableCell className="px-0 align-middle">
-          <div className="flex items-center justify-center">
-            <EnvironmentActionsMenu
-              environment={environment}
-              busy={busy}
-              configOpen={configOpen}
-              configSaving={configSaving}
-              onCloseConfigEditor={onCloseConfigEditor}
-              onDeleteEnvironments={onDeleteEnvironments}
-              onLaunchRun={onLaunchRun}
-              onOpenConfigEditor={onOpenConfigEditor}
-              onShareEnvironment={onShareEnvironment}
-            />
-          </div>
-        </TableCell>
+        <TableActionsCell>
+          <EnvironmentActionsMenu
+            environment={environment}
+            busy={busy}
+            configOpen={configOpen}
+            configSaving={configSaving}
+            onCloseConfigEditor={onCloseConfigEditor}
+            onDeleteEnvironments={onDeleteEnvironments}
+            onLaunchRun={onLaunchRun}
+            onOpenConfigEditor={onOpenConfigEditor}
+            onShareEnvironment={onShareEnvironment}
+          />
+        </TableActionsCell>
       </TableRow>
 
       {configOpen ? (

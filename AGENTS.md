@@ -3,6 +3,8 @@
 ## General (Mandatory)
 
 - Execute tasks in agreed order. One logical unit per commit.
+- Change code only when the user explicitly asks for implementation.
+- Discussion-first default: if the user asks a question like "can you make sure ...?", treat it as analysis/discussion and do not edit files unless the user explicitly asks to proceed with code changes.
 - For every change: check if it's in linear, if it does ask user to update it if not log to Linear (issue, recommendation, commit hash, validation commands) using the Linear tool.
 - For any Linear issue the agent creates or updates, set `delegate` to the agent's own name and include a short signature line (`Agent: <agent-name>`) in the issue body or update comment.
 - Linear state hygiene is mandatory:

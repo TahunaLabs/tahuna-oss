@@ -1,6 +1,6 @@
 "use client"
 
-import { Download, ExternalLink, Pencil, Share2, X } from "lucide-react"
+import { Download, ExternalLink, Lock, Pencil, Share2, Unlock, X } from "lucide-react"
 
 import {
   formatBytes,
@@ -8,9 +8,12 @@ import {
   type StorageItem,
 } from "@/components/features/dashboard-model"
 import { ActionsMenu } from "@/components/features/dashboard/actions-menu"
+import { TableActionsCell } from "@/components/features/dashboard/table-actions-cell"
+import { TableSelectCell } from "@/components/features/dashboard/table-select-cell"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { TableCell, TableRow } from "@/components/ui/table"
+import { cn } from "@/lib/utils"
 
 type StorageTableRowProps = {
   item: StorageItem
@@ -23,6 +26,8 @@ type StorageTableRowProps = {
   onStartRenameArtifact: (item: StorageItem) => void
   onShareStorageItem?: (item: StorageItem) => void
   onSetVisibility?: (item: StorageItem, visibility: "shared" | "private") => void
+  selected: boolean
+  onToggleSelected: (itemId: string) => void
 }
 
 function StorageTableRow({
@@ -36,12 +41,25 @@ function StorageTableRow({
   onStartRenameArtifact,
   onShareStorageItem,
   onSetVisibility,
+  selected,
+  onToggleSelected,
 }: StorageTableRowProps) {
   const isRenaming = renamingStorageId === item.id
   const isBusy = artifactRenameBusyId === item.id
 
   return (
-    <TableRow className="group hover:bg-muted">
+    <TableRow
+      className={cn(
+        "group hover:bg-muted",
+        selected ? "bg-secondary-faint" : "",
+      )}
+    >
+      <TableSelectCell
+        checked={selected}
+        ariaLabel={`Select storage item ${item.name}`}
+        onCheckedChange={() => onToggleSelected(item.id)}
+      />
+
       <TableCell>
         {isRenaming ? (
           <form
@@ -50,7 +68,6 @@ function StorageTableRow({
           >
             <Input
               type="text"
-             
               value={artifactRenameDraft}
               onChange={(e) => onArtifactRenameDraftChange(e.target.value)}
               disabled={isBusy}
@@ -71,66 +88,12 @@ function StorageTableRow({
             </Button>
           </form>
         ) : (
-          <div className="flex items-center justify-between gap-2">
-            <p className="min-w-0 truncate text-foreground">{item.name}</p>
-            <div className="shrink-0">
-              <ActionsMenu triggerLabel={`Open actions for ${item.name}`}>
-                {(close) => (
-                  <>
-                    <Button asChild type="button" variant="sidebar-menu-item" size="none">
-                      <a href={item.download_url} target="_blank" rel="noreferrer" onClick={() => close()}>
-                        <ExternalLink className="h-3.5 w-3.5" />
-                        Open
-                      </a>
-                    </Button>
-                    <Button asChild type="button" variant="sidebar-menu-item" size="none">
-                      <a href={item.download_url} download={item.name} onClick={() => close()}>
-                        <Download className="h-3.5 w-3.5" />
-                        Download
-                      </a>
-                    </Button>
-                    {item.source === "run_artifact" ? (
-                      <Button
-                        type="button"
-                        variant="sidebar-menu-item"
-                        size="none"
-                        onClick={() => { close(); onStartRenameArtifact(item) }}
-                        disabled={artifactRenameBusyId !== null}
-                      >
-                        <Pencil className="h-3.5 w-3.5" />
-                        Rename
-                      </Button>
-                    ) : null}
-                    {item.source === "data" && onShareStorageItem ? (
-                      <Button
-                        type="button"
-                        variant="sidebar-menu-item"
-                        size="none"
-                        onClick={() => { close(); onShareStorageItem(item) }}
-                      >
-                        <Share2 className="h-3.5 w-3.5" />
-                        Share
-                      </Button>
-                    ) : null}
-                  </>
-                )}
-              </ActionsMenu>
-            </div>
-          </div>
+          <p className="min-w-0 truncate text-foreground">{item.name}</p>
         )}
       </TableCell>
 
-      <TableCell>
-        <Button
-          type="button"
-          variant="compact-toggle"
-          data-active={item.visibility === "shared" || undefined}
-          size="compact-xs"
-          onClick={() => onSetVisibility?.(item, item.visibility === "shared" ? "private" : "shared")}
-          disabled={!onSetVisibility}
-        >
-          {item.visibility === "shared" ? "Shared" : "Private"}
-        </Button>
+      <TableCell className="text-muted-foreground">
+        <p className="truncate">{item.visibility === "shared" ? "Shared" : "Private"}</p>
       </TableCell>
 
       <TableCell className="text-muted-foreground">
@@ -144,6 +107,70 @@ function StorageTableRow({
       <TableCell className="text-muted-foreground">
         {item.source === "data" ? "Data upload" : "Run artifact"}
       </TableCell>
+
+      <TableActionsCell>
+        {!isRenaming ? (
+          <ActionsMenu triggerLabel={`Open actions for ${item.name}`}>
+            {(close) => (
+              <>
+                <Button asChild type="button" variant="sidebar-menu-item" size="none">
+                  <a href={item.download_url} target="_blank" rel="noreferrer" onClick={() => close()}>
+                    <ExternalLink className="h-3.5 w-3.5" />
+                    Open
+                  </a>
+                </Button>
+                <Button asChild type="button" variant="sidebar-menu-item" size="none">
+                  <a href={item.download_url} download={item.name} onClick={() => close()}>
+                    <Download className="h-3.5 w-3.5" />
+                    Download
+                  </a>
+                </Button>
+                {item.source === "run_artifact" ? (
+                  <Button
+                    type="button"
+                    variant="sidebar-menu-item"
+                    size="none"
+                    onClick={() => { close(); onStartRenameArtifact(item) }}
+                    disabled={artifactRenameBusyId !== null}
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                    Rename
+                  </Button>
+                ) : null}
+                {item.source === "data" && onShareStorageItem ? (
+                  <Button
+                    type="button"
+                    variant="sidebar-menu-item"
+                    size="none"
+                    onClick={() => { close(); onShareStorageItem(item) }}
+                  >
+                    <Share2 className="h-3.5 w-3.5" />
+                    Share
+                  </Button>
+                ) : null}
+                {onSetVisibility ? (
+                  <Button
+                    type="button"
+                    variant="sidebar-menu-item"
+                    size="none"
+                    onClick={() => {
+                      close()
+                      onSetVisibility(item, item.visibility === "shared" ? "private" : "shared")
+                    }}
+                  >
+                    {item.visibility === "shared" ? (
+                      <Lock className="h-3.5 w-3.5" />
+                    ) : (
+                      <Unlock className="h-3.5 w-3.5" />
+                    )}
+                    {item.visibility === "shared" ? "Make private" : "Make shared"}
+                  </Button>
+                ) : null}
+              </>
+            )}
+          </ActionsMenu>
+        ) : null}
+      </TableActionsCell>
     </TableRow>
   )
 }
