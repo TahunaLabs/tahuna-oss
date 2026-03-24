@@ -4,7 +4,7 @@ import type { DataBlobRow, EnvironmentRow } from "@/components/features/dashboar
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Select } from "@/components/ui/select"
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import { Tooltip, TooltipContent, TooltipTrigger, TruncatedTooltip } from "@/components/ui/tooltip"
 
 type EnvironmentBindingCellProps = {
   environment: EnvironmentRow
@@ -68,28 +68,34 @@ function EnvironmentBindingCell({
         </div>
       ) : (
         <div className="flex min-w-0 items-center gap-1.5">
-          <Select
-            variant="binding"
-            value={bindSelectionByEnvironment[environment.environment_id] || ""}
-            onChange={(event) => {
-              const nextValue = event.target.value.trim()
-              onBindSelectionChange(environment.environment_id, nextValue)
-              if (!nextValue) {
-                return
-              }
-              onBindSelectedData(environment, nextValue)
-            }}
-            disabled={busy || availableDataBlobs.length === 0}
-          >
-            <option value="">
-              {availableDataBlobs.length === 0 ? "No datasets available" : "Select dataset"}
-            </option>
-            {availableDataBlobs.map((blob) => (
-              <option key={`${environment.environment_id}-opt-${blob.blob_id}`} value={blob.blob_id}>
-                {blob.filename}
-              </option>
-            ))}
-          </Select>
+          {availableDataBlobs.length === 0 ? (
+            <TruncatedTooltip
+              className="block max-w-full rounded bg-secondary px-2 py-0.5 text-xs font-sans normal-case tracking-normal text-foreground"
+            >
+              No datasets available
+            </TruncatedTooltip>
+          ) : (
+            <Select
+              variant="binding"
+              value={bindSelectionByEnvironment[environment.environment_id] || ""}
+              onChange={(event) => {
+                const nextValue = event.target.value.trim()
+                onBindSelectionChange(environment.environment_id, nextValue)
+                if (!nextValue) {
+                  return
+                }
+                onBindSelectedData(environment, nextValue)
+              }}
+              disabled={busy}
+            >
+              <option value="">Select dataset</option>
+              {availableDataBlobs.map((blob) => (
+                <option key={`${environment.environment_id}-opt-${blob.blob_id}`} value={blob.blob_id}>
+                  {blob.filename}
+                </option>
+              ))}
+            </Select>
+          )}
         </div>
       )}
     </div>
