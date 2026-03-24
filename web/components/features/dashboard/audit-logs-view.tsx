@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useState } from "react"
 import { CheckCircle2, ClipboardList, Clock3, Search, XCircle } from "lucide-react"
 
 import { DashboardViewLayout } from "@/components/app-shell/dashboard-view-layout"
@@ -62,24 +62,14 @@ export function AuditLogsView({ runs, environmentNameById }: AuditLogsViewProps)
   const [actionFilter, setActionFilter] = useState<AuditActionFilter>("all")
   const [dateFilter, setDateFilter] = useState("")
 
-  const sortedRuns = useMemo(
-    () => [...runs].sort((a, b) => b.created_at - a.created_at),
-    [runs],
-  )
-
-  const filteredRuns = useMemo(() => {
-    const searchTerm = search.trim().toLowerCase()
-    return sortedRuns.filter((run) => {
+  const searchTerm = search.trim().toLowerCase()
+  const filteredRuns = [...runs]
+    .sort((a, b) => b.created_at - a.created_at)
+    .filter((run) => {
       const action = toAuditAction(run.status)
-      if (actionFilter !== "all" && actionFilter !== action) {
-        return false
-      }
-      if (dateFilter && toLocalDateInputValue(run.created_at) !== dateFilter) {
-        return false
-      }
-      if (!searchTerm) {
-        return true
-      }
+      if (actionFilter !== "all" && actionFilter !== action) return false
+      if (dateFilter && toLocalDateInputValue(run.created_at) !== dateFilter) return false
+      if (!searchTerm) return true
       return (
         run.name.toLowerCase().includes(searchTerm) ||
         (environmentNameById.get(run.environment_id) || "").toLowerCase().includes(searchTerm) ||
@@ -88,7 +78,6 @@ export function AuditLogsView({ runs, environmentNameById }: AuditLogsViewProps)
         String(run.effective_gpu_count).includes(searchTerm)
       )
     })
-  }, [actionFilter, dateFilter, search, sortedRuns])
 
   return (
     <DashboardViewLayout

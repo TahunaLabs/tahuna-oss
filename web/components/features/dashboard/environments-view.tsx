@@ -1,7 +1,7 @@
 "use client"
 
 import { Server } from "lucide-react"
-import { useMemo, useState } from "react"
+import { useState } from "react"
 
 const ACCESS_FILTER_OPTIONS: FilterDropdownOption[] = [
   { value: "all", label: "Any access" },
@@ -67,44 +67,38 @@ export function EnvironmentsView({
 
   const accessFilterOptions = ACCESS_FILTER_OPTIONS
 
-  const runtimeFilterOptions = useMemo<FilterDropdownOption[]>(() => {
-    const options = new Set<string>()
-    for (const environment of environments) {
-      options.add(`${environment.framework}:${environment.version}`)
-    }
-    return [
-      { value: "all", label: "Any runtime" },
-      ...Array.from(options).sort((a, b) => a.localeCompare(b)).map((value) => ({ value, label: value })),
-    ]
-  }, [environments])
+  const runtimeOptions = new Set<string>()
+  for (const environment of environments) {
+    runtimeOptions.add(`${environment.framework}:${environment.version}`)
+  }
+  const runtimeFilterOptions: FilterDropdownOption[] = [
+    { value: "all", label: "Any runtime" },
+    ...Array.from(runtimeOptions).sort((a, b) => a.localeCompare(b)).map((value) => ({ value, label: value })),
+  ]
 
-  const deviceFilterOptions = useMemo<FilterDropdownOption[]>(() => {
-    const options = new Set<string>()
-    for (const environment of environments) {
-      options.add(environment.gpu_type)
-    }
-    return [
-      { value: "all", label: "Any device" },
-      ...Array.from(options)
-        .sort((a, b) => a.localeCompare(b))
-        .map((value) => ({ value, label: formatGpuLabel(value) })),
-    ]
-  }, [environments])
+  const deviceOptions = new Set<string>()
+  for (const environment of environments) {
+    deviceOptions.add(environment.gpu_type)
+  }
+  const deviceFilterOptions: FilterDropdownOption[] = [
+    { value: "all", label: "Any device" },
+    ...Array.from(deviceOptions)
+      .sort((a, b) => a.localeCompare(b))
+      .map((value) => ({ value, label: formatGpuLabel(value) })),
+  ]
 
-  const visibleEnvironments = useMemo(() => {
-    const query = searchQuery.trim().toLowerCase()
-    return environments.filter((environment) => {
-      const runtimeLabel = `${environment.framework}:${environment.version}`
-      const searchTarget = [environment.name, runtimeLabel, environment.gpu_type, environment.access]
-        .join(" ")
-        .toLowerCase()
-      if (query && !searchTarget.includes(query)) return false
-      if (accessFilter !== "all" && environment.access !== accessFilter) return false
-      if (runtimeFilter !== "all" && runtimeLabel !== runtimeFilter) return false
-      if (deviceFilter !== "all" && environment.gpu_type !== deviceFilter) return false
-      return true
-    })
-  }, [accessFilter, deviceFilter, environments, runtimeFilter, searchQuery])
+  const query = searchQuery.trim().toLowerCase()
+  const visibleEnvironments = environments.filter((environment) => {
+    const runtimeLabel = `${environment.framework}:${environment.version}`
+    const searchTarget = [environment.name, runtimeLabel, environment.gpu_type, environment.access]
+      .join(" ")
+      .toLowerCase()
+    if (query && !searchTarget.includes(query)) return false
+    if (accessFilter !== "all" && environment.access !== accessFilter) return false
+    if (runtimeFilter !== "all" && runtimeLabel !== runtimeFilter) return false
+    if (deviceFilter !== "all" && environment.gpu_type !== deviceFilter) return false
+    return true
+  })
 
   const sharedProps = {
     configEditor,

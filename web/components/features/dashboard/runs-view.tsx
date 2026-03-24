@@ -1,7 +1,7 @@
 "use client"
 
 import { Play } from "lucide-react"
-import { useMemo, useState } from "react"
+import { useState } from "react"
 
 import { DashboardViewLayout } from "@/components/app-shell/dashboard-view-layout"
 import { DashboardTable } from "@/components/features/dashboard/dashboard-table"
@@ -59,26 +59,21 @@ export function RunsView({
 }: RunsViewProps) {
   const [searchQuery, setSearchQuery] = useState("")
 
-  const environmentNameById = useMemo(
-    () => new Map(environments.map((e) => [String(e.environment_id), e.name])),
-    [environments],
-  )
+  const environmentNameById = new Map(environments.map((e) => [String(e.environment_id), e.name]))
 
   const activeCount = runs.filter((r) => ACTIVE_STATUSES.has(r.status)).length
 
-  const filteredRuns = useMemo(() => {
-    const query = searchQuery.trim().toLowerCase()
-    return runs.filter((run) => {
-      if (activeTab === "active" && !ACTIVE_STATUSES.has(run.status)) return false
-      if (activeTab === "completed" && !COMPLETED_STATUSES.has(run.status)) return false
-      if (query) {
-        const envName = environmentNameById.get(run.environment_id) ?? ""
-        const target = [run.name ?? "", run.status, envName].join(" ").toLowerCase()
-        if (!target.includes(query)) return false
-      }
-      return true
-    })
-  }, [activeTab, environmentNameById, runs, searchQuery])
+  const query = searchQuery.trim().toLowerCase()
+  const filteredRuns = runs.filter((run) => {
+    if (activeTab === "active" && !ACTIVE_STATUSES.has(run.status)) return false
+    if (activeTab === "completed" && !COMPLETED_STATUSES.has(run.status)) return false
+    if (query) {
+      const envName = environmentNameById.get(run.environment_id) ?? ""
+      const target = [run.name ?? "", run.status, envName].join(" ").toLowerCase()
+      if (!target.includes(query)) return false
+    }
+    return true
+  })
 
   const noEnvironments = environments.length === 0
   const hasData = filteredRuns.length > 0
