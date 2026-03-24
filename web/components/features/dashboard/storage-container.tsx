@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { useDebounce } from "@/lib/use-debounce"
 import { useAction, useMutation } from "convex/react"
 import { parseAsInteger, parseAsString, parseAsStringLiteral, useQueryState } from "nuqs"
 import type { FormEvent } from "react"
@@ -38,7 +39,7 @@ export function StorageContainer({ shouldLoadQueries, onOpenShareDialog }: Props
   )
   const [storageSearch, setStorageSearch] = useQueryState("storageQ", parseAsString.withDefault(""))
   const [storageOffset, setStorageOffset] = useQueryState("storageOffset", parseAsInteger.withDefault(0))
-  const [storageSearchDebounced, setStorageSearchDebounced] = useState(storageSearch)
+  const storageSearchDebounced = useDebounce(storageSearch, 250)
   const [storageResult, setStorageResult] = useState<StorageListResult | undefined>(undefined)
   const [storageLoading, setStorageLoading] = useState(false)
   const [storageError, setStorageError] = useState("")
@@ -55,12 +56,6 @@ export function StorageContainer({ shouldLoadQueries, onOpenShareDialog }: Props
 
   const storageItems = storageResult?.items ?? []
   const storageTotal = storageResult?.total ?? 0
-
-  // Debounce search to avoid hammering the action on every keystroke
-  useEffect(() => {
-    const timeout = setTimeout(() => setStorageSearchDebounced(storageSearch), 250)
-    return () => clearTimeout(timeout)
-  }, [storageSearch])
 
   // Fetch storage list whenever filters, sort, search, or offset changes
   useEffect(() => {
