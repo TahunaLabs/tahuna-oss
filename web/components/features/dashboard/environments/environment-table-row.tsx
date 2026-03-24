@@ -96,7 +96,7 @@ function EnvironmentTableRow({
           <p className="truncate">{isShared ? "Shared" : "Private"}</p>
         </TableCell>
 
-        <TableCell className="overflow-hidden pl-3 pr-1">
+        <TableCell className="min-w-0 pl-3 pr-1">
           <EnvironmentBindingCell
             environment={environment}
             uniqueDataBlobs={uniqueDataBlobs}

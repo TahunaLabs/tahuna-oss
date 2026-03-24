@@ -45,10 +45,12 @@ function EnvironmentBindingCell({
             const blob = dataBlobsById.get(dataId)
             const filename = blob?.filename || "Unnamed dataset"
             return (
-              <div key={`${environment.environment_id}-${dataId}`} className="flex max-w-full items-center gap-1">
+              <div key={`${environment.environment_id}-${dataId}`} className="flex min-w-0 max-w-full items-center gap-1">
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Badge variant="data">{filename}</Badge>
+                    <Badge variant="data" className="min-w-0 max-w-40">
+                      {filename}
+                    </Badge>
                   </TooltipTrigger>
                   <TooltipContent>{filename}</TooltipContent>
                 </Tooltip>
@@ -56,7 +58,7 @@ function EnvironmentBindingCell({
                   type="button"
                   variant="ghost"
                   size="compact-xs"
-                  className="border border-border"
+                  className="shrink-0 border border-border"
                   onClick={() => onUnbindData(environment.environment_id, dataId)}
                   disabled={busy}
                 >
