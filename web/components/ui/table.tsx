@@ -23,11 +23,11 @@ const tableRowVariants = cva("", {
 })
 
 const tableHeadVariants = cva(
-  "h-auto px-3 py-2 text-left align-middle text-xs font-medium text-foreground",
+  "h-auto px-3 py-2 text-left align-middle text-xs font-medium text-foreground last:sticky last:right-0 last:bg-background",
 )
 
 const tableCellVariants = cva(
-  "px-3 py-2 align-middle text-sm [&.text-muted-foreground]:text-xs",
+  "px-3 py-2 align-middle text-sm last:sticky last:right-0 last:bg-inherit [&.text-muted-foreground]:text-xs",
 )
 
 function Table({
