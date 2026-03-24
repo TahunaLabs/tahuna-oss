@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useState } from "react"
 
 import {
   type DataBlobRow,
@@ -37,19 +37,21 @@ function EnvironmentsTableView({
     () => new Set(),
   )
   const [deletingSelected, setDeletingSelected] = useState(false)
+  const [prevEnvironments, setPrevEnvironments] = useState(environments)
   const visibleEnvironmentIds = environments.map((environment) => environment.environment_id)
+
+  if (prevEnvironments !== environments) {
+    setPrevEnvironments(environments)
+    const visibleSet = new Set(visibleEnvironmentIds)
+    setSelectedEnvironmentIds((previous) => {
+      const next = new Set(Array.from(previous).filter((id) => visibleSet.has(id)))
+      return next.size === previous.size ? previous : next
+    })
+  }
+
   const selectedVisibleCount = visibleEnvironmentIds.filter((id) => selectedEnvironmentIds.has(id)).length
   const allVisibleSelected = visibleEnvironmentIds.length > 0 && selectedVisibleCount === visibleEnvironmentIds.length
   const someVisibleSelected = selectedVisibleCount > 0 && !allVisibleSelected
-
-  useEffect(() => {
-    setSelectedEnvironmentIds((previous) => {
-      const visibleEnvironmentIdSet = new Set(environments.map((environment) => environment.environment_id))
-      const next = new Set(Array.from(previous).filter((id) => visibleEnvironmentIdSet.has(id)))
-      if (next.size === previous.size) return previous
-      return next
-    })
-  }, [environments])
 
   function toggleSelected(environmentId: EnvironmentRow["environment_id"]) {
     setSelectedEnvironmentIds((previous) => {
