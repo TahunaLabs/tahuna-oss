@@ -16,7 +16,7 @@ type ResourceType = "environment" | "run" | "data"
 type ShareLinkItem = {
   share_link_id: string
   token: string
-  permission: string
+  permission: "read" | "edit"
 }
 
 type ShareDialogProps = {
