@@ -56,12 +56,6 @@ export function Sidebar({ activeView, onViewChange, userInitial, isDark, onTheme
           active={activeView === "runs"}
           onClick={() => onViewChange("runs")}
         />
-        <SidebarItem
-          icon={<Settings className="w-4 h-4" />}
-          label="Settings"
-          active={activeView === "settings"}
-          onClick={() => onViewChange("settings")}
-        />
       </nav>
 
       {/* Spacer */}
@@ -80,6 +74,12 @@ export function Sidebar({ activeView, onViewChange, userInitial, isDark, onTheme
           label="Audit logs"
           active={activeView === "audit_logs"}
           onClick={() => onViewChange("audit_logs")}
+        />
+        <SidebarItem
+          icon={<Settings className="w-4 h-4" />}
+          label="Settings"
+          active={activeView === "settings"}
+          onClick={() => onViewChange("settings")}
         />
       </nav>
 
