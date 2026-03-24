@@ -44,4 +44,13 @@ function StatusDot({
 
 type StatusDotVariant = VariantProps<typeof statusDotVariants>["variant"]
 
-export { StatusDot, statusDotVariants, type StatusDotVariant }
+const STATUS_DOT_VARIANT_SET = new Set<string>([
+  "success", "muted", "queued", "provisioning", "running",
+  "completed", "failed", "cancelled", "cancelling",
+])
+
+function toStatusDotVariant(status: string): StatusDotVariant {
+  return STATUS_DOT_VARIANT_SET.has(status) ? (status as StatusDotVariant) : "muted"
+}
+
+export { StatusDot, statusDotVariants, toStatusDotVariant, type StatusDotVariant }

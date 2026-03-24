@@ -16,7 +16,7 @@ import { Badge, statusVariant } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Notice } from "@/components/ui/notice"
-import { StatusDot, type StatusDotVariant } from "@/components/ui/status-dot"
+import { StatusDot, toStatusDotVariant } from "@/components/ui/status-dot"
 
 type RunDetailPanelProps = {
   runDetail: RunDetail
@@ -49,7 +49,7 @@ function RunDetailPanel({
       {/* Header */}
       <div className="flex items-center justify-between border-b border-border px-6 py-3">
         <div className="flex min-w-0 items-center gap-3">
-          <StatusDot variant={runDetail.status as StatusDotVariant} size="md" />
+          <StatusDot variant={toStatusDotVariant(runDetail.status)} size="md" />
           <div className="min-w-0">
             <h2 className="truncate text-sm font-medium text-foreground">
               {runDetail.name || "Untitled run"}

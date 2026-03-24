@@ -5,7 +5,7 @@ import { Users } from "lucide-react"
 import { relativeTime, type RunRow } from "@/components/features/dashboard-model"
 import { RunActionsMenu } from "@/components/features/dashboard/runs/run-actions-menu"
 import { TableActionsCell } from "@/components/features/dashboard/table-actions-cell"
-import { StatusDot, type StatusDotVariant } from "@/components/ui/status-dot"
+import { StatusDot, toStatusDotVariant } from "@/components/ui/status-dot"
 import { TableCell, TableRow } from "@/components/ui/table"
 import { TruncatedTooltip } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
@@ -65,7 +65,7 @@ function RunTableRow({
 
       <TableCell className="text-muted-foreground">
         <span className="inline-flex items-center gap-2 capitalize">
-          <StatusDot variant={run.status as StatusDotVariant} size="sm" />
+          <StatusDot variant={toStatusDotVariant(run.status)} size="sm" />
           {run.status}
         </span>
       </TableCell>
