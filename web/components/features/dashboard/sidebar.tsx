@@ -1,21 +1,18 @@
 "use client"
 
-import { Search, HardDrive, Server, Play, Monitor, LogOut, Moon, Sun, Wallet, ClipboardList, Settings, Zap } from "lucide-react"
+import { Search, HardDrive, Server, Play, Monitor, LogOut, Moon, Sun, ClipboardList, Settings } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { CreditsGauge } from "@/components/ui/credits-gauge"
 
 interface SidebarProps {
-  activeView: "storage" | "environments" | "runs" | "machines" | "billing" | "audit_logs" | "settings"
-  onViewChange: (view: "storage" | "environments" | "runs" | "machines" | "billing" | "audit_logs" | "settings") => void
+  activeView: "storage" | "environments" | "runs" | "machines" | "audit_logs" | "settings"
+  onViewChange: (view: "storage" | "environments" | "runs" | "machines" | "audit_logs" | "settings") => void
   userInitial: string
   isDark: boolean
   onThemeToggle: () => void
   onLogout: () => void
-  balanceCents?: number
-  maxCents?: number
 }
 
-export function Sidebar({ activeView, onViewChange, userInitial, isDark, onThemeToggle, onLogout, balanceCents, maxCents }: SidebarProps) {
+export function Sidebar({ activeView, onViewChange, userInitial, isDark, onThemeToggle, onLogout }: SidebarProps) {
   return (
     <aside className="h-full w-full bg-sidebar flex flex-col">
       {/* Header */}
@@ -72,29 +69,11 @@ export function Sidebar({ activeView, onViewChange, userInitial, isDark, onTheme
 
       {/* Bottom Navigation */}
       <nav className="px-2 py-1 space-y-0.5">
-        {balanceCents !== undefined && maxCents !== undefined && (
-          <div className="mb-1 h-auto w-full rounded px-2 py-1.5 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Zap className="w-4 h-4 text-foreground" />
-              <span className="text-sm font-normal text-foreground">Credits</span>
-            </div>
-            <CreditsGauge
-              balanceCents={balanceCents}
-              maxCents={maxCents}
-            />
-          </div>
-        )}
         <SidebarItem
           icon={<Monitor className="w-4 h-4" />}
           label="Machines"
           active={activeView === "machines"}
           onClick={() => onViewChange("machines")}
-        />
-        <SidebarItem
-          icon={<Wallet className="w-4 h-4" />}
-          label="Billing"
-          active={activeView === "billing"}
-          onClick={() => onViewChange("billing")}
         />
         <SidebarItem
           icon={<ClipboardList className="w-4 h-4" />}

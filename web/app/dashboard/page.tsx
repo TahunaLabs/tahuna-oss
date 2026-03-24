@@ -4,7 +4,6 @@ import { Sidebar } from "@/components/features/dashboard/sidebar"
 import { StorageView } from "@/components/features/dashboard/storage-view"
 import { EnvironmentsView } from "@/components/features/dashboard/environments-view"
 import { RunsView } from "@/components/features/dashboard/runs-view"
-import { BillingView } from "@/components/features/dashboard/billing-view"
 import { AuditLogsView } from "@/components/features/dashboard/audit-logs-view"
 import { MachinesView } from "@/components/features/dashboard/machines-view"
 import { SettingsView } from "@/components/features/dashboard/settings-view"
@@ -44,9 +43,8 @@ import { useAction, useConvexAuth, useMutation, useQuery } from "convex/react"
 import { useRouter } from "next/navigation"
 import { parseAsInteger, parseAsString, parseAsStringLiteral, useQueryState } from "nuqs"
 import { useEffect, useMemo, useState, type FormEvent } from "react"
-import { BILLING_CONFIG } from "@/config"
 
-const DASHBOARD_VIEW_VALUES = ["storage", "environments", "runs", "machines", "billing", "audit_logs", "settings"] as const
+const DASHBOARD_VIEW_VALUES = ["storage", "environments", "runs", "machines", "audit_logs", "settings"] as const
 const STORAGE_SOURCE_FILTER_VALUES = ["all", "shared", "private"] as const
 const STORAGE_SORT_VALUES = [
   "created_desc",
@@ -115,8 +113,6 @@ export default function DashboardPage() {
   const [revokingRunpodCredential, setRevokingRunpodCredential] = useState(false)
   const [settingsProfileDraft, setSettingsProfileDraft] = useState<ProfileDraft>(EMPTY_PROFILE_DRAFT)
   const shouldLoadQueries = !authLoading && isAuthenticated && !loggingOut
-  const shouldLoadBillingQueries = shouldLoadQueries && activeView === "billing"
-
   const currentUser = useQuery(api.auth.getCurrentUser, shouldLoadQueries ? {} : "skip")
   const myCredits = useQuery(api.auth.getMyCredits, shouldLoadQueries ? {} : "skip") as
     | { balance_cents: number; currency: string; initialized: boolean }
@@ -135,17 +131,6 @@ export default function DashboardPage() {
     | { runs: RunRow[] }
     | undefined
   const apiKeys = useQuery(api.auth.listApiKeys, shouldLoadQueries ? {} : "skip") as ApiKeyRow[] | undefined
-  const usageEvents = useQuery(api.auth.listMyUsageEvents, shouldLoadBillingQueries ? { limit: 100 } : "skip") as
-    | Array<{
-        event_type: string
-        credits_delta_cents: number
-        balance_after_cents: number
-        reference_type: string | null
-        reference_id: string | null
-        metadata: unknown | null
-        created_at: number
-      }>
-    | undefined
 
   const selectedRunFromList = runResult?.runs.find((r) => r.run_id === selectedRunId)
   const shouldLoadRunDetail = shouldLoadQueries && selectedRunId !== null && selectedRunFromList !== undefined
@@ -189,33 +174,6 @@ export default function DashboardPage() {
     }
     return byId
   }, [environments])
-  const runContextById = useMemo(() => {
-    const byId = new Map<string, { run_name: string; environment_name: string | null }>()
-    for (const run of runs) {
-      byId.set(String(run.run_id), {
-        run_name: run.name,
-        environment_name: environmentNameById.get(run.environment_id) ?? null,
-      })
-    }
-    return byId
-  }, [environmentNameById, runs])
-  const usageEventsWithContext = useMemo(() => {
-    return (usageEvents ?? []).map((event) => {
-      if (event.reference_type !== "run" || !event.reference_id) {
-        return {
-          ...event,
-          run_name: null,
-          environment_name: null,
-        }
-      }
-      const runContext = runContextById.get(event.reference_id)
-      return {
-        ...event,
-        run_name: runContext?.run_name ?? null,
-        environment_name: runContext?.environment_name ?? null,
-      }
-    })
-  }, [runContextById, usageEvents])
   const environmentsLoading = shouldLoadQueries && envResult === undefined
 
   useEffect(() => {
@@ -920,16 +878,6 @@ export default function DashboardPage() {
             onShareRun={(runId) => openShareDialog("run", runId)}
           />
         )
-      case "billing":
-        return (
-          <BillingView
-            balanceCents={myCredits?.balance_cents ?? 0}
-            bootstrapCreditCents={BILLING_CONFIG.initialCreditCents}
-            currency={myCredits?.currency ?? "USD"}
-            initialized={myCredits?.initialized === true}
-            usageEvents={usageEventsWithContext}
-          />
-        )
       case "machines":
         return (
           <MachinesView
@@ -982,8 +930,6 @@ export default function DashboardPage() {
             isDark={isDark}
             onThemeToggle={() => setTheme(isDark ? "light" : "dark")}
             onLogout={logout}
-            balanceCents={myCredits?.balance_cents}
-            maxCents={BILLING_CONFIG.initialCreditCents}
           />
         )}
       >
