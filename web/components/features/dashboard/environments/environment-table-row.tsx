@@ -42,7 +42,7 @@ type EnvironmentTableRowProps = {
   onBindSelectedData: (environment: EnvironmentRow, dataId: string) => void
   onUnbindData: (environmentId: EnvironmentRow["environment_id"], dataId: string) => void
   selected: boolean
-  onToggleSelected: (environmentId: string) => void
+  onToggleSelected: (environmentId: EnvironmentRow["environment_id"]) => void
 }
 
 function EnvironmentTableRow({
