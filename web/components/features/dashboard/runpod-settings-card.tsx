@@ -70,10 +70,10 @@ export function RunpodSettingsCard({
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-sm text-muted-foreground">
-            Stored encrypted server-side and used for GPU catalog lookups, pod provisioning, and pod termination.
+            Add your Runpod API key to use Runpod GPUs in Tahuna.
           </p>
           <p className="mt-1 text-sm text-muted-foreground">
-            Replacing or disabling the active key only affects new launches. Existing runs keep the credential snapshot they were created with.
+            Changes apply to new launches only.
           </p>
         </div>
         <Badge variant={status?.configured ? "status-success" : "status-warning"}>
