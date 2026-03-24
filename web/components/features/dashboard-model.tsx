@@ -2,12 +2,17 @@
 
 import { Button } from "@/components/ui/button"
 import type { Id } from "@convex/_generated/dataModel"
+import { ACTIVE_STATUSES, TERMINAL_STATUSES as _TERMINAL_STATUSES } from "@convex/runsConstants"
 import { Database, Play, Server, type LucideIcon } from "lucide-react"
 import type { ReactNode } from "react"
 
 export type MainSection = "data" | "environments" | "runs"
 
-export type StorageSourceFilter = "all" | "shared" | "private"
+export const DASHBOARD_VIEW_VALUES = ["storage", "environments", "runs", "machines", "billing", "audit_logs", "settings"] as const
+export type DashboardView = (typeof DASHBOARD_VIEW_VALUES)[number]
+
+export const STORAGE_SOURCE_FILTER_VALUES = ["all", "shared", "private"] as const
+export type StorageSourceFilter = (typeof STORAGE_SOURCE_FILTER_VALUES)[number]
 
 export type StorageItem = {
   id: string
@@ -23,13 +28,11 @@ export type StorageItem = {
   data_blob_id?: string
 }
 
-export type StorageSort =
-  | "created_desc"
-  | "created_asc"
-  | "name_asc"
-  | "name_desc"
-  | "size_desc"
-  | "size_asc"
+export const STORAGE_SORT_VALUES = ["created_desc", "created_asc", "name_asc", "name_desc", "size_desc", "size_asc"] as const
+export type StorageSort = (typeof STORAGE_SORT_VALUES)[number]
+
+export const RUN_TAB_VALUES = ["all", "active", "completed"] as const
+export type RunTab = (typeof RUN_TAB_VALUES)[number]
 
 export type StorageListResult = {
   items: StorageItem[]
@@ -287,8 +290,8 @@ export const FEATURE_ITEMS: SidebarItem[] = [
   { id: "runs", label: "Runs", icon: Play, section: "runs" },
 ]
 
-export const CANCELLABLE_STATUSES = new Set(["queued", "provisioning", "running", "cancelling"])
-export const TERMINAL_STATUSES = new Set(["completed", "failed", "cancelled"])
+export { ACTIVE_STATUSES as CANCELLABLE_STATUSES }
+export const TERMINAL_STATUSES = _TERMINAL_STATUSES
 export const STORAGE_PAGE_LIMIT = 25
 export const MAX_ARTIFACT_NAME_CHARS = 255
 

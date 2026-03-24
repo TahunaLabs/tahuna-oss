@@ -2,10 +2,12 @@
 
 import { Search, HardDrive, Server, Play, Monitor, LogOut, Moon, Sun, ClipboardList, Settings } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { CreditsGauge } from "@/components/ui/credits-gauge"
+import { type DashboardView } from "@/components/features/dashboard-model"
 
 interface SidebarProps {
-  activeView: "storage" | "environments" | "runs" | "machines" | "audit_logs" | "settings"
-  onViewChange: (view: "storage" | "environments" | "runs" | "machines" | "audit_logs" | "settings") => void
+  activeView: DashboardView
+  onViewChange: (view: DashboardView) => void
   userInitial: string
   isDark: boolean
   onThemeToggle: () => void

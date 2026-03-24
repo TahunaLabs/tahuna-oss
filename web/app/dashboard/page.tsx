@@ -14,6 +14,7 @@ import { DashboardContentShell } from "@/components/app-shell/dashboard-content-
 import { useTheme } from "@/components/theme-provider"
 import { PageLoader } from "@/components/ui/spinner"
 import { BILLING_CONFIG } from "@/config"
+import { DASHBOARD_VIEW_VALUES } from "@/components/features/dashboard-model"
 import { api } from "@convex/_generated/api"
 import type { Id } from "@convex/_generated/dataModel"
 import { authClient } from "@/lib/auth-client"
@@ -22,8 +23,6 @@ import { useRouter } from "next/navigation"
 import { parseAsStringLiteral, useQueryState } from "nuqs"
 import { toast } from "sonner"
 import { useEffect, useState } from "react"
-
-const DASHBOARD_VIEW_VALUES = ["storage", "environments", "runs", "machines", "billing", "audit_logs", "settings"] as const
 
 export default function DashboardPage() {
   const router = useRouter()
