@@ -17,26 +17,18 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
-import { Notice } from "@/components/ui/notice"
 import { StatusDot } from "@/components/ui/status-dot"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { formatDate } from "@/lib/utils"
 import type { Id } from "@convex/_generated/dataModel"
 
 type MachinesViewProps = {
   keys: ApiKeyRow[]
-  message: string
-  error: string
   revokingId: Id<"apiKeys"> | null
   onRevoke: (id: Id<"apiKeys">, name: string) => void
-  onClearFeedback: () => void
 }
 
-function formatDate(timestamp?: number) {
-  if (!timestamp) return "—"
-  return new Date(timestamp).toLocaleString()
-}
-
-export function MachinesView({ keys, message, error, revokingId, onRevoke, onClearFeedback }: MachinesViewProps) {
+export function MachinesView({ keys, revokingId, onRevoke }: MachinesViewProps) {
   return (
     <DashboardViewLayout
       sectionLabel="Machines"
@@ -44,9 +36,6 @@ export function MachinesView({ keys, message, error, revokingId, onRevoke, onCle
       titleIcon={<Monitor size={24} />}
       toolbar={null}
     >
-      {error ? <Notice variant="error" className="mb-4">{error}</Notice> : null}
-      {message ? <Notice className="mb-4">{message}</Notice> : null}
-
       {keys.length === 0 ? (
         <Card variant="surface" className="p-6">
           <p className="text-sm text-muted-foreground">No machine sessions found yet.</p>
@@ -101,7 +90,6 @@ export function MachinesView({ keys, message, error, revokingId, onRevoke, onCle
                               variant="outline"
                               size="control"
                               disabled={isBusy}
-                              onClick={onClearFeedback}
                             >
                               Revoke
                             </Button>

@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { formatDate } from "@/lib/utils"
 
 type SettingsViewProps = {
   theme: ThemeChoice
@@ -27,11 +28,6 @@ type SettingsViewProps = {
   revokingRunpodCredential: boolean
   onSaveRunpodCredential: (apiKey: string) => Promise<void>
   onRevokeRunpodCredential: () => Promise<void>
-}
-
-function formatDate(timestamp?: number) {
-  if (!timestamp) return "—"
-  return new Date(timestamp).toLocaleString()
 }
 
 function statusVariant(status: ApiKeyRow["status"]) {

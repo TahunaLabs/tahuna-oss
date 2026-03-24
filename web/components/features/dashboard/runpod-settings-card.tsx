@@ -8,6 +8,7 @@ import type { RunpodCredentialStatus } from "@/components/features/dashboard-set
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { formatDate } from "@/lib/utils"
 
 type RunpodSettingsCardProps = {
   status?: RunpodCredentialStatus
@@ -15,13 +16,6 @@ type RunpodSettingsCardProps = {
   revoking: boolean
   onSave: (apiKey: string) => Promise<void>
   onRevoke: () => Promise<void>
-}
-
-function formatDate(timestamp?: number) {
-  if (!timestamp) {
-    return "—"
-  }
-  return new Date(timestamp).toLocaleString()
 }
 
 export function RunpodSettingsCard({
