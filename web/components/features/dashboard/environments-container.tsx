@@ -188,12 +188,18 @@ export function EnvironmentsContainer({ shouldLoadQueries, onOpenShareDialog }: 
         busy={busy}
         environmentsLoading={shouldLoadQueries && envResult === undefined}
         configEditorEnvironmentId={configEditorEnvironmentId}
-        configName={environmentConfig?.config_name || ENVIRONMENT_CONFIG_FILE_NAME}
-        configDraft={configDraft}
-        configSourceText={configSourceText}
-        configError={configError}
-        configLoading={shouldLoadEnvironmentConfig && !environmentConfig}
-        configSaving={configSaving}
+        configEditor={{
+          configName: environmentConfig?.config_name || ENVIRONMENT_CONFIG_FILE_NAME,
+          configDraft,
+          configSourceText,
+          configError,
+          configLoading: shouldLoadEnvironmentConfig && !environmentConfig,
+          configSaving,
+          onClose: closeEnvironmentConfigEditor,
+          onDraftChange: setConfigDraft,
+          onCancel: () => { setConfigDraft(configSourceText); setConfigError("") },
+          onSave: (environmentId) => { void saveEnvironmentConfig(environmentId) },
+        }}
         onBindSelectionChange={(environmentId, value) =>
           setBindSelectionByEnvironment((current) => ({ ...current, [environmentId]: value }))
         }
@@ -201,10 +207,6 @@ export function EnvironmentsContainer({ shouldLoadQueries, onOpenShareDialog }: 
         onUnbindData={(environmentId, dataId) => { void unbindDataFromEnvironment(environmentId, dataId) }}
         onLaunchRun={(environmentId) => { void launchRun(environmentId) }}
         onOpenConfigEditor={openEnvironmentConfigEditor}
-        onCloseConfigEditor={closeEnvironmentConfigEditor}
-        onConfigDraftChange={setConfigDraft}
-        onCancelConfigEdit={() => { setConfigDraft(configSourceText); setConfigError("") }}
-        onSaveConfig={(environmentId) => { void saveEnvironmentConfig(environmentId) }}
         onDeleteEnvironments={deleteEnvironments}
         onShareEnvironment={(environmentId) => onOpenShareDialog("environment", environmentId)}
       />

@@ -4,14 +4,14 @@ import { FileCode2, Play, Share2, Trash2 } from "lucide-react"
 
 import type { EnvironmentRow } from "@/components/features/dashboard-model"
 import { ActionsMenu } from "@/components/features/dashboard/actions-menu"
+import type { EnvironmentConfigEditor } from "@/components/features/dashboard/environments/environments-grid-view"
 import { Button } from "@/components/ui/button"
 
 type EnvironmentActionsMenuProps = {
   environment: EnvironmentRow
   busy: boolean
   configOpen: boolean
-  configSaving: boolean
-  onCloseConfigEditor: () => void
+  configEditor: EnvironmentConfigEditor
   onDeleteEnvironments: (environmentIds: EnvironmentRow["environment_id"][]) => Promise<boolean>
   onLaunchRun: (environmentId: EnvironmentRow["environment_id"]) => void
   onOpenConfigEditor: (environment: EnvironmentRow) => void
@@ -22,13 +22,13 @@ function EnvironmentActionsMenu({
   environment,
   busy,
   configOpen,
-  configSaving,
-  onCloseConfigEditor,
+  configEditor,
   onDeleteEnvironments,
   onLaunchRun,
   onOpenConfigEditor,
   onShareEnvironment,
 }: EnvironmentActionsMenuProps) {
+  const { configSaving, onClose: onCloseConfigEditor } = configEditor
   return (
     <ActionsMenu triggerLabel={`Open actions for ${environment.name}`}>
       {(close) => (

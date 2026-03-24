@@ -16,7 +16,7 @@ import {
 } from "@/components/features/dashboard-model"
 import { formatGpuLabel } from "@/components/features/dashboard/environments/environment-card"
 import { EnvironmentsEmptyState } from "@/components/features/dashboard/environments/environments-empty-state"
-import { EnvironmentsGridView } from "@/components/features/dashboard/environments/environments-grid-view"
+import { type EnvironmentConfigEditor, EnvironmentsGridView } from "@/components/features/dashboard/environments/environments-grid-view"
 import { EnvironmentsTableView } from "@/components/features/dashboard/environments/environments-table-view"
 import { EnvironmentsToolbar } from "@/components/features/dashboard/environments/environments-toolbar"
 import { type FilterDropdownOption } from "@/components/features/dashboard/environments/filter-dropdown"
@@ -30,21 +30,12 @@ type EnvironmentsViewProps = {
   busy: boolean
   environmentsLoading: boolean
   configEditorEnvironmentId: string | null
-  configName: string
-  configDraft: string
-  configSourceText: string
-  configError: string
-  configLoading: boolean
-  configSaving: boolean
+  configEditor: EnvironmentConfigEditor
   onBindSelectionChange: (environmentId: string, value: string) => void
   onBindSelectedData: (environment: EnvironmentRow, dataId: string) => void
   onUnbindData: (environmentId: EnvironmentRow["environment_id"], dataId: string) => void
   onLaunchRun: (environmentId: EnvironmentRow["environment_id"]) => void
   onOpenConfigEditor: (environment: EnvironmentRow) => void
-  onCloseConfigEditor: () => void
-  onConfigDraftChange: (value: string) => void
-  onCancelConfigEdit: () => void
-  onSaveConfig: (environmentId: EnvironmentRow["environment_id"]) => void
   onDeleteEnvironments: (environmentIds: EnvironmentRow["environment_id"][]) => Promise<boolean>
   sharedByMeResourceIds?: ReadonlySet<string>
   onShareEnvironment?: (environmentId: string) => void
@@ -58,21 +49,12 @@ export function EnvironmentsView({
   busy,
   environmentsLoading,
   configEditorEnvironmentId,
-  configName,
-  configDraft,
-  configSourceText,
-  configError,
-  configLoading,
-  configSaving,
+  configEditor,
   onBindSelectionChange,
   onBindSelectedData,
   onUnbindData,
   onLaunchRun,
   onOpenConfigEditor,
-  onCloseConfigEditor,
-  onConfigDraftChange,
-  onCancelConfigEdit,
-  onSaveConfig,
   onDeleteEnvironments,
   sharedByMeResourceIds,
   onShareEnvironment,
@@ -124,22 +106,13 @@ export function EnvironmentsView({
     })
   }, [accessFilter, deviceFilter, environments, runtimeFilter, searchQuery])
 
-  const sharedConfigProps = {
-    configName,
-    configDraft,
-    configSourceText,
-    configError,
-    configLoading,
-    configSaving,
+  const sharedProps = {
+    configEditor,
     busy,
-    onCloseConfigEditor,
     onDeleteEnvironments,
     onLaunchRun,
     onOpenConfigEditor,
     onShareEnvironment,
-    onConfigDraftChange,
-    onCancelConfigEdit,
-    onSaveConfig,
   }
 
   return (
@@ -185,7 +158,7 @@ export function EnvironmentsView({
               dataBlobsById={dataBlobsById}
               configEditorEnvironmentId={configEditorEnvironmentId}
               sharedByMeResourceIds={sharedByMeResourceIds}
-              {...sharedConfigProps}
+              {...sharedProps}
             />
           </div>
           <div className="hidden md:block">
@@ -195,7 +168,7 @@ export function EnvironmentsView({
                 dataBlobsById={dataBlobsById}
                 configEditorEnvironmentId={configEditorEnvironmentId}
                 sharedByMeResourceIds={sharedByMeResourceIds}
-                {...sharedConfigProps}
+                {...sharedProps}
               />
             ) : (
               <EnvironmentsTableView
@@ -208,7 +181,7 @@ export function EnvironmentsView({
                 onBindSelectionChange={onBindSelectionChange}
                 onBindSelectedData={onBindSelectedData}
                 onUnbindData={onUnbindData}
-                {...sharedConfigProps}
+                {...sharedProps}
               />
             )}
           </div>

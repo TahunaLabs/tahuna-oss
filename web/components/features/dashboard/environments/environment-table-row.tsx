@@ -13,6 +13,7 @@ import { EnvironmentActionsMenu } from "@/components/features/dashboard/environm
 import { EnvironmentBindingCell } from "@/components/features/dashboard/environments/environment-binding-cell"
 import { EnvironmentConfigPanel } from "@/components/features/dashboard/environments/environment-config-panel"
 import { deviceLabel } from "@/components/features/dashboard/environments/environment-card"
+import type { EnvironmentConfigEditor } from "@/components/features/dashboard/environments/environments-grid-view"
 import { TableCell, TableRow } from "@/components/ui/table"
 import { TruncatedTooltip } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
@@ -24,21 +25,12 @@ type EnvironmentTableRowProps = {
   bindSelectionByEnvironment: Record<string, string>
   isShared: boolean
   configOpen: boolean
-  configName: string
-  configDraft: string
-  configSourceText: string
-  configError: string
-  configLoading: boolean
-  configSaving: boolean
+  configEditor: EnvironmentConfigEditor
   busy: boolean
-  onCloseConfigEditor: () => void
   onDeleteEnvironments: (ids: EnvironmentRow["environment_id"][]) => Promise<boolean>
   onLaunchRun: (id: EnvironmentRow["environment_id"]) => void
   onOpenConfigEditor: (environment: EnvironmentRow) => void
   onShareEnvironment?: (id: string) => void
-  onConfigDraftChange: (value: string) => void
-  onCancelConfigEdit: () => void
-  onSaveConfig: (id: EnvironmentRow["environment_id"]) => void
   onBindSelectionChange: (environmentId: string, value: string) => void
   onBindSelectedData: (environment: EnvironmentRow, dataId: string) => void
   onUnbindData: (environmentId: EnvironmentRow["environment_id"], dataId: string) => void
@@ -53,21 +45,12 @@ function EnvironmentTableRow({
   bindSelectionByEnvironment,
   isShared,
   configOpen,
-  configName,
-  configDraft,
-  configSourceText,
-  configError,
-  configLoading,
-  configSaving,
+  configEditor,
   busy,
-  onCloseConfigEditor,
   onDeleteEnvironments,
   onLaunchRun,
   onOpenConfigEditor,
   onShareEnvironment,
-  onConfigDraftChange,
-  onCancelConfigEdit,
-  onSaveConfig,
   onBindSelectionChange,
   onBindSelectedData,
   onUnbindData,
@@ -132,8 +115,7 @@ function EnvironmentTableRow({
             environment={environment}
             busy={busy}
             configOpen={configOpen}
-            configSaving={configSaving}
-            onCloseConfigEditor={onCloseConfigEditor}
+            configEditor={configEditor}
             onDeleteEnvironments={onDeleteEnvironments}
             onLaunchRun={onLaunchRun}
             onOpenConfigEditor={onOpenConfigEditor}
@@ -145,19 +127,7 @@ function EnvironmentTableRow({
       {configOpen ? (
         <TableRow className="bg-secondary-subtle">
           <TableCell colSpan={9} className="px-6 pb-4 pt-1">
-            <EnvironmentConfigPanel
-              environmentId={environment.environment_id}
-              configName={configName}
-              configDraft={configDraft}
-              configSourceText={configSourceText}
-              configError={configError}
-              configLoading={configLoading}
-              configSaving={configSaving}
-              onClose={onCloseConfigEditor}
-              onDraftChange={onConfigDraftChange}
-              onCancel={onCancelConfigEdit}
-              onSave={onSaveConfig}
-            />
+            <EnvironmentConfigPanel environmentId={environment.environment_id} {...configEditor} />
           </TableCell>
         </TableRow>
       ) : null}

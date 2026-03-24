@@ -6,26 +6,30 @@ import {
 } from "@/components/features/dashboard-model"
 import { EnvironmentCard } from "@/components/features/dashboard/environments/environment-card"
 
-type EnvironmentsGridViewProps = {
-  environments: EnvironmentRow[]
-  dataBlobsById: ReadonlyMap<string, DataBlobRow>
-  configEditorEnvironmentId: string | null
-  sharedByMeResourceIds?: ReadonlySet<string>
+type EnvironmentConfigEditor = {
   configName: string
   configDraft: string
   configSourceText: string
   configError: string
   configLoading: boolean
   configSaving: boolean
+  onClose: () => void
+  onDraftChange: (value: string) => void
+  onCancel: () => void
+  onSave: (environmentId: EnvironmentRow["environment_id"]) => void
+}
+
+type EnvironmentsGridViewProps = {
+  environments: EnvironmentRow[]
+  dataBlobsById: ReadonlyMap<string, DataBlobRow>
+  configEditorEnvironmentId: string | null
+  configEditor: EnvironmentConfigEditor
+  sharedByMeResourceIds?: ReadonlySet<string>
   busy: boolean
-  onCloseConfigEditor: () => void
   onDeleteEnvironments: (ids: EnvironmentRow["environment_id"][]) => Promise<boolean>
   onLaunchRun: (id: EnvironmentRow["environment_id"]) => void
   onOpenConfigEditor: (environment: EnvironmentRow) => void
   onShareEnvironment?: (id: string) => void
-  onConfigDraftChange: (value: string) => void
-  onCancelConfigEdit: () => void
-  onSaveConfig: (id: EnvironmentRow["environment_id"]) => void
 }
 
 function EnvironmentsGridView({
@@ -52,4 +56,4 @@ function EnvironmentsGridView({
 }
 
 export { EnvironmentsGridView }
-export type { EnvironmentsGridViewProps }
+export type { EnvironmentConfigEditor, EnvironmentsGridViewProps }
