@@ -1,17 +1,16 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import { useMutation, useQuery } from "convex/react"
 import { toast } from "sonner"
 import { api } from "@convex/_generated/api"
 import { EnvironmentsView } from "@/components/features/dashboard/environments-view"
+import { useEnvironmentConfigEditor } from "@/components/features/dashboard/environments/use-environment-config-editor"
 import {
   type DataBlobRow,
-  type EnvironmentConfigDetail,
   type EnvironmentRow,
 } from "@/components/features/dashboard-model"
 import type { RunpodCredentialStatus } from "@/components/features/dashboard-settings-model"
-import { ENVIRONMENT_CONFIG_FILE_NAME, renderEnvironmentConfig } from "@/lib/environment-config"
 import type { Id } from "@convex/_generated/dataModel"
 
 type Props = {
@@ -22,11 +21,6 @@ type Props = {
 export function EnvironmentsContainer({ shouldLoadQueries, onOpenShareDialog }: Props) {
   const [busy, setBusy] = useState(false)
   const [bindSelectionByEnvironment, setBindSelectionByEnvironment] = useState<Record<string, string>>({})
-  const [configEditorEnvironmentId, setConfigEditorEnvironmentId] = useState<string | null>(null)
-  const [configDraft, setConfigDraft] = useState("")
-  const [configSourceText, setConfigSourceText] = useState("")
-  const [configError, setConfigError] = useState("")
-  const [configSaving, setConfigSaving] = useState(false)
 
   const envResult = useQuery(api.environments.list, shouldLoadQueries ? {} : "skip") as
     | { environments: EnvironmentRow[] }
@@ -38,11 +32,6 @@ export function EnvironmentsContainer({ shouldLoadQueries, onOpenShareDialog }: 
     api.runpodCredentials.getMyRunpodCredentialStatus,
     shouldLoadQueries ? {} : "skip",
   ) as RunpodCredentialStatus | undefined
-  const shouldLoadEnvironmentConfig = shouldLoadQueries && configEditorEnvironmentId !== null
-  const environmentConfig = useQuery(
-    api.environments.getConfig,
-    shouldLoadEnvironmentConfig ? { environmentId: configEditorEnvironmentId as Id<"environments"> } : "skip",
-  ) as EnvironmentConfigDetail | undefined
 
   const environments = envResult?.environments ?? []
   const dataBlobs = dataResult?.blobs ?? []
@@ -58,29 +47,15 @@ export function EnvironmentsContainer({ shouldLoadQueries, onOpenShareDialog }: 
   })()
   const dataBlobsById = new Map(uniqueDataBlobs.map((blob) => [blob.blob_id, blob]))
 
+  const { configEditorEnvironmentId, configEditor, openConfigEditor } = useEnvironmentConfigEditor({
+    environments,
+    shouldLoadQueries,
+  })
+
   const removeEnvMutation = useMutation(api.environments.remove)
-  const updateEnvironmentConfigMutation = useMutation(api.environments.updateConfig)
   const createRunMutation = useMutation(api.runs.create)
   const bindDataMutation = useMutation(api.environments.bindData)
   const unbindDataMutation = useMutation(api.environments.unbindData)
-
-  // Close config editor if its environment is deleted
-  useEffect(() => {
-    if (!configEditorEnvironmentId) return
-    if (environments.some((e) => e.environment_id === configEditorEnvironmentId)) return
-    setConfigEditorEnvironmentId(null)
-    setConfigDraft("")
-    setConfigSourceText("")
-    setConfigError("")
-  }, [configEditorEnvironmentId, environments])
-
-  // Sync config editor with server data (only when user hasn't made changes)
-  useEffect(() => {
-    if (!environmentConfig || environmentConfig.environment.environment_id !== configEditorEnvironmentId) return
-    if (configDraft && configDraft !== configSourceText) return
-    setConfigSourceText(environmentConfig.config_text)
-    setConfigDraft(environmentConfig.config_text)
-  }, [configDraft, configEditorEnvironmentId, configSourceText, environmentConfig])
 
   async function withBusy(task: () => Promise<void>) {
     setBusy(true)
@@ -139,45 +114,6 @@ export function EnvironmentsContainer({ shouldLoadQueries, onOpenShareDialog }: 
     })
   }
 
-  function openEnvironmentConfigEditor(environment: EnvironmentRow) {
-    const nextConfig = renderEnvironmentConfig({
-      name: environment.name,
-      framework: environment.framework,
-      version: environment.version,
-      python_version: environment.python_version,
-      gpu_type: environment.gpu_type,
-      gpu_count: environment.gpu_count,
-      volume_gb: environment.volume_gb,
-    })
-    setConfigError("")
-    setConfigEditorEnvironmentId(environment.environment_id)
-    setConfigSourceText(nextConfig)
-    setConfigDraft(nextConfig)
-  }
-
-  function closeEnvironmentConfigEditor() {
-    if (configSaving) return
-    setConfigEditorEnvironmentId(null)
-    setConfigDraft("")
-    setConfigSourceText("")
-    setConfigError("")
-  }
-
-  async function saveEnvironmentConfig(environmentId: Id<"environments">) {
-    setConfigSaving(true)
-    setConfigError("")
-    try {
-      const saved = await updateEnvironmentConfigMutation({ environmentId, config_text: configDraft })
-      setConfigSourceText(saved.config_text)
-      setConfigDraft(saved.config_text)
-      toast.success(`Saved config for environment ${environmentId}.`)
-    } catch (e) {
-      setConfigError(e instanceof Error ? e.message : "failed to save environment config")
-    } finally {
-      setConfigSaving(false)
-    }
-  }
-
   return (
     <>
       <EnvironmentsView
@@ -188,25 +124,14 @@ export function EnvironmentsContainer({ shouldLoadQueries, onOpenShareDialog }: 
         busy={busy}
         environmentsLoading={shouldLoadQueries && envResult === undefined}
         configEditorEnvironmentId={configEditorEnvironmentId}
-        configEditor={{
-          configName: environmentConfig?.config_name || ENVIRONMENT_CONFIG_FILE_NAME,
-          configDraft,
-          configSourceText,
-          configError,
-          configLoading: shouldLoadEnvironmentConfig && !environmentConfig,
-          configSaving,
-          onClose: closeEnvironmentConfigEditor,
-          onDraftChange: setConfigDraft,
-          onCancel: () => { setConfigDraft(configSourceText); setConfigError("") },
-          onSave: (environmentId) => { void saveEnvironmentConfig(environmentId) },
-        }}
+        configEditor={configEditor}
         onBindSelectionChange={(environmentId, value) =>
           setBindSelectionByEnvironment((current) => ({ ...current, [environmentId]: value }))
         }
         onBindSelectedData={(environment, dataId) => { void bindSelectedData(environment.environment_id, dataId) }}
         onUnbindData={(environmentId, dataId) => { void unbindDataFromEnvironment(environmentId, dataId) }}
         onLaunchRun={(environmentId) => { void launchRun(environmentId) }}
-        onOpenConfigEditor={openEnvironmentConfigEditor}
+        onOpenConfigEditor={openConfigEditor}
         onDeleteEnvironments={deleteEnvironments}
         onShareEnvironment={(environmentId) => onOpenShareDialog("environment", environmentId)}
       />
