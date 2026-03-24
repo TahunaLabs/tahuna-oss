@@ -1969,6 +1969,7 @@ export const ingestRuntimeStatus = internalMutation({
     const patch: {
       status: string;
       runtimeTokenHash?: string;
+      computeStartedAt?: number;
       computeEndedAt?: number;
       computeChargeCents?: number;
       computeCollectedCents?: number;
@@ -1976,6 +1977,9 @@ export const ingestRuntimeStatus = internalMutation({
       computeChargeStatus?: "charged" | "owed";
       computeChargeError?: string;
     } = { status };
+    if (status === RUN_STATUS.RUNNING) {
+      patch.computeStartedAt = row.computeStartedAt ?? Date.now();
+    }
     const isTerminalStatus = status === RUN_STATUS.COMPLETED || status === RUN_STATUS.CANCELLED;
     let terminalTiming: { computeEndedAt?: number; durationMs: number } | undefined;
     let settlement: ComputeSettlementResult | undefined;
