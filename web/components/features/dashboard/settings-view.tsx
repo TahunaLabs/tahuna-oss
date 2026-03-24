@@ -144,6 +144,14 @@ export function SettingsView({
           </div>
         </Card>
 
+        <RunpodSettingsCard
+          status={runpodCredentialStatus}
+          saving={savingRunpodCredential}
+          revoking={revokingRunpodCredential}
+          onSave={onSaveRunpodCredential}
+          onRevoke={onRevokeRunpodCredential}
+        />
+
         <Card className="p-4">
           <h2 className="text-sm font-medium text-foreground">Account information</h2>
           <div className="mt-4">
