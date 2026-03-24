@@ -144,14 +144,6 @@ export function SettingsView({
           </div>
         </Card>
 
-        <RunpodSettingsCard
-          status={runpodCredentialStatus}
-          saving={savingRunpodCredential}
-          revoking={revokingRunpodCredential}
-          onSave={onSaveRunpodCredential}
-          onRevoke={onRevokeRunpodCredential}
-        />
-
         <Card className="p-4">
           <h2 className="text-sm font-medium text-foreground">Account information</h2>
           <div className="mt-4">
@@ -249,6 +241,14 @@ export function SettingsView({
           </div>
         </Card>
 
+        <RunpodSettingsCard
+          status={runpodCredentialStatus}
+          saving={savingRunpodCredential}
+          revoking={revokingRunpodCredential}
+          onSave={onSaveRunpodCredential}
+          onRevoke={onRevokeRunpodCredential}
+        />
+
         <Card className="p-4">
           <CollapsibleSection
             title="API keys"
@@ -261,7 +261,7 @@ export function SettingsView({
                   {apiKeys.length} total keys, {activeKeys.length} active
                 </p>
                 <Button asChild type="button" variant="outline" size="control">
-                  <Link href="/machines">Manage sessions</Link>
+                  <Link href="/dashboard?view=machines">Manage sessions</Link>
                 </Button>
               </div>
               {apiKeys.length === 0 ? (
