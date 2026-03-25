@@ -14,6 +14,9 @@ export type DashboardView = (typeof DASHBOARD_VIEW_VALUES)[number]
 export const STORAGE_SOURCE_FILTER_VALUES = ["all", "shared", "private"] as const
 export type StorageSourceFilter = (typeof STORAGE_SOURCE_FILTER_VALUES)[number]
 
+export const ENVIRONMENT_ACCESS_FILTER_VALUES = ["all", "private", "shared"] as const
+export type EnvironmentAccessFilter = (typeof ENVIRONMENT_ACCESS_FILTER_VALUES)[number]
+
 export type StorageItem = {
   id: string
   source: "data" | "run_artifact"

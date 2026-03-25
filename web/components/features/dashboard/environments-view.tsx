@@ -3,15 +3,11 @@
 import { Server } from "lucide-react"
 import { useState } from "react"
 
-const ACCESS_FILTER_OPTIONS: FilterDropdownOption[] = [
-  { value: "all", label: "Any access" },
-  { value: "private", label: "Private" },
-  { value: "shared", label: "Shared" },
-]
-
 import { DashboardViewLayout } from "@/components/app-shell/dashboard-view-layout"
 import {
+  ENVIRONMENT_ACCESS_FILTER_VALUES,
   type DataBlobRow,
+  type EnvironmentAccessFilter,
   type EnvironmentRow,
 } from "@/components/features/dashboard-model"
 import { formatGpuLabel } from "@/components/features/dashboard/environments/environment-card"
@@ -20,6 +16,16 @@ import { type EnvironmentConfigEditor, EnvironmentsGridView } from "@/components
 import { EnvironmentsTableView } from "@/components/features/dashboard/environments/environments-table-view"
 import { EnvironmentsToolbar } from "@/components/features/dashboard/environments/environments-toolbar"
 import { type FilterDropdownOption } from "@/components/features/dashboard/environments/filter-dropdown"
+
+const ACCESS_FILTER_LABELS: Record<EnvironmentAccessFilter, string> = {
+  all: "Any access",
+  private: "Private",
+  shared: "Shared",
+}
+const ACCESS_FILTER_OPTIONS: FilterDropdownOption[] = ENVIRONMENT_ACCESS_FILTER_VALUES.map((value) => ({
+  value,
+  label: ACCESS_FILTER_LABELS[value],
+}))
 import { Spinner } from "@/components/ui/spinner"
 
 type EnvironmentsViewProps = {
@@ -61,7 +67,7 @@ export function EnvironmentsView({
 }: EnvironmentsViewProps) {
   const [searchQuery, setSearchQuery] = useState("")
   const [viewMode, setViewMode] = useState<"grid" | "table">("table")
-  const [accessFilter, setAccessFilter] = useState<"all" | "private" | "shared">("all")
+  const [accessFilter, setAccessFilter] = useState<EnvironmentAccessFilter>("all")
   const [runtimeFilter, setRuntimeFilter] = useState("all")
   const [deviceFilter, setDeviceFilter] = useState("all")
 
@@ -121,7 +127,7 @@ export function EnvironmentsView({
           onSearchChange={setSearchQuery}
           accessFilter={accessFilter}
           accessFilterOptions={accessFilterOptions}
-          onAccessFilterChange={(v) => setAccessFilter(v as "all" | "private" | "shared")}
+          onAccessFilterChange={(v) => setAccessFilter(v as EnvironmentAccessFilter)}
           runtimeFilter={runtimeFilter}
           runtimeFilterOptions={runtimeFilterOptions}
           onRuntimeFilterChange={setRuntimeFilter}
