@@ -25,6 +25,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { CreditsGauge } from "@/components/ui/credits-gauge"
+import { Skeleton } from "@/components/ui/skeleton"
 import { type DashboardView } from "@/components/features/dashboard-model"
 import { Logo } from "@/components/logo"
 import { LINKS_CONFIG } from "@/config"
@@ -45,6 +46,7 @@ interface SidebarProps {
   activeView: DashboardView
   onViewChange: (view: DashboardView) => void
   userInitial: string
+  userLoading?: boolean
   onLogout: () => void
   navPlatform?: NavItem[]
   navAdmin?: NavItem[]
@@ -76,6 +78,7 @@ export function Sidebar({
   activeView,
   onViewChange,
   userInitial,
+  userLoading = false,
   onLogout,
   navPlatform = DEFAULT_NAV_PLATFORM,
   navAdmin = DEFAULT_NAV_ADMIN,
@@ -140,10 +143,17 @@ export function Sidebar({
       </SidebarContent>
 
       <SidebarFooter>
-        {balanceCents !== undefined && maxCents !== undefined && (
+        {userLoading || (balanceCents !== undefined && maxCents !== undefined) ? (
           <>
             <div className="rounded border border-sidebar-border bg-sidebar-accent/30 p-2.5 group-data-[collapsible=icon]:hidden">
-              <CreditsGauge balanceCents={balanceCents} maxCents={maxCents} />
+              {userLoading ? (
+                <div className="flex w-full items-center justify-between gap-3">
+                  <p className="text-xs font-medium text-sidebar-foreground">Credits</p>
+                  <Skeleton className="h-2 w-24 rounded-sm" />
+                </div>
+              ) : (
+                <CreditsGauge balanceCents={balanceCents!} maxCents={maxCents!} />
+              )}
             </div>
             <SidebarMenu className="hidden group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:flex-col group-data-[collapsible=icon]:items-center">
               <SidebarMenuItem>
@@ -153,7 +163,7 @@ export function Sidebar({
               </SidebarMenuItem>
             </SidebarMenu>
           </>
-        )}
+        ) : null}
         <SidebarGroup>
           <SidebarGroupLabel>Help</SidebarGroupLabel>
           <SidebarGroupContent>
@@ -174,28 +184,36 @@ export function Sidebar({
 
         <SidebarMenu>
           <SidebarMenuItem>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <SidebarMenuButton>
-                  <div className="flex size-5 shrink-0 items-center justify-center rounded-full bg-secondary text-xs font-semibold text-secondary-foreground">
-                    {userInitial}
-                  </div>
-                  <span className="truncate">My account</span>
-                  <ChevronsUpDown className="ml-auto size-4" />
-                </SidebarMenuButton>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent side="top" align="start" className="w-56">
-                <DropdownMenuItem onClick={() => onViewChange("settings")}>
-                  <Settings className="size-4" />
-                  <span>Settings</span>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={onLogout}>
-                  <LogOut className="size-4" />
-                  <span>Log out</span>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            {userLoading ? (
+              <SidebarMenuButton disabled>
+                <Skeleton className="size-5 rounded-full" />
+                <Skeleton className="h-4 w-20" />
+                <ChevronsUpDown className="ml-auto size-4 opacity-40" />
+              </SidebarMenuButton>
+            ) : (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <SidebarMenuButton>
+                    <div className="flex size-5 shrink-0 items-center justify-center rounded-full bg-secondary text-xs font-semibold text-secondary-foreground">
+                      {userInitial}
+                    </div>
+                    <span className="truncate">My account</span>
+                    <ChevronsUpDown className="ml-auto size-4" />
+                  </SidebarMenuButton>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent side="top" align="start" className="w-56">
+                  <DropdownMenuItem onClick={() => onViewChange("settings")}>
+                    <Settings className="size-4" />
+                    <span>Settings</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={onLogout}>
+                    <LogOut className="size-4" />
+                    <span>Log out</span>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarFooter>

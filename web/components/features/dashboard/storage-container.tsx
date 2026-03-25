@@ -97,6 +97,7 @@ export function StorageContainer({ shouldLoadQueries, onOpenShareDialog }: Props
 
   return (
     <StorageView
+      bootstrapping={!shouldLoadQueries}
       selectedDataFiles={upload.selectedFiles}
       uploadingData={upload.uploading}
       dataFileInputKey={upload.fileInputKey}

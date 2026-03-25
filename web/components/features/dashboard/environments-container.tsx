@@ -122,7 +122,7 @@ export function EnvironmentsContainer({ shouldLoadQueries, onOpenShareDialog }: 
         dataBlobsById={dataBlobsById}
         bindSelectionByEnvironment={bindSelectionByEnvironment}
         busy={busy}
-        environmentsLoading={shouldLoadQueries && envResult === undefined}
+        environmentsLoading={!shouldLoadQueries || envResult === undefined}
         configEditorEnvironmentId={configEditorEnvironmentId}
         configEditor={configEditor}
         onBindSelectionChange={(environmentId, value) =>

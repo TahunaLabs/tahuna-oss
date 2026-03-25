@@ -18,6 +18,7 @@ import { StorageUploadDrawer } from "@/components/features/dashboard/storage/sto
 import { Spinner } from "@/components/ui/spinner"
 
 type StorageViewProps = {
+  bootstrapping: boolean
   selectedDataFiles: File[]
   uploadingData: boolean
   dataFileInputKey: number
@@ -46,6 +47,7 @@ type StorageViewProps = {
 }
 
 export function StorageView({
+  bootstrapping,
   selectedDataFiles,
   uploadingData,
   dataFileInputKey,
@@ -130,7 +132,7 @@ export function StorageView({
         onOpenFilePicker={openFilePicker}
       />
 
-      {storageResult === undefined && storageLoading ? (
+      {bootstrapping || (storageResult === undefined && storageLoading) ? (
         <div className="flex h-full flex-col items-center justify-center gap-3">
           <Spinner />
           <p className="text-sm text-muted-foreground">Loading storage…</p>

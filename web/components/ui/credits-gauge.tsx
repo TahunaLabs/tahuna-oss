@@ -11,7 +11,7 @@ function CreditsGauge({ balanceCents, maxCents }: CreditsGaugeProps) {
   return (
     <div className="flex w-full items-center justify-between gap-3">
       <p className="text-xs font-medium text-sidebar-foreground">Credits</p>
-      <Gauge percentage={percentage} size="sm" />
+      <Gauge percentage={percentage} size="sm" className="w-24" />
     </div>
   )
 }

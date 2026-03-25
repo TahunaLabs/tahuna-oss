@@ -12,7 +12,6 @@ import { ShareDialog } from "@/components/features/dashboard/share-dialog"
 import { Sidebar } from "@/components/features/dashboard/sidebar"
 import { DashboardAppLayout } from "@/components/app-shell/dashboard-app-layout"
 import { DashboardContentShell } from "@/components/app-shell/dashboard-content-shell"
-import { PageLoader } from "@/components/loader"
 import { DASHBOARD_VIEW_VALUES, type ResourceType } from "@/components/features/dashboard-model"
 import { api } from "@convex/_generated/api"
 import type { Id } from "@convex/_generated/dataModel"
@@ -39,6 +38,7 @@ export default function DashboardPage() {
   const shouldLoadQueries = !authLoading && isAuthenticated && !loggingOut
 
   const currentUser = useQuery(api.auth.getCurrentUser, shouldLoadQueries ? {} : "skip")
+  const userMenuLoading = authLoading || loggingOut || (shouldLoadQueries && currentUser === undefined)
   const myCredits = useQuery(api.auth.getMyCredits, shouldLoadQueries ? {} : "skip") as
     | { balance_cents: number; currency: string; initialized: boolean }
     | undefined
@@ -62,6 +62,11 @@ export default function DashboardPage() {
       // Ignore — subsequent renders will retry
     })
   }, [ensureMyLedgerMutation, myCredits?.initialized, shouldLoadQueries])
+
+  useEffect(() => {
+    if (authLoading || isAuthenticated) return
+    router.replace("/login")
+  }, [authLoading, isAuthenticated, router])
 
   async function logout() {
     setLoggingOut(true)
@@ -107,10 +112,6 @@ export default function DashboardPage() {
     }
   }
 
-  if (authLoading || loggingOut || !isAuthenticated) {
-    return <PageLoader message="Loading dashboard…" />
-  }
-
   const userEmail = currentUser?.email ?? ""
   const userInitial = userEmail.trim().charAt(0).toUpperCase() || "U"
 
@@ -150,6 +151,7 @@ export default function DashboardPage() {
             activeView={activeView}
             onViewChange={(view) => { void setActiveView(view) }}
             userInitial={userInitial}
+            userLoading={userMenuLoading}
             onLogout={logout}
             balanceCents={myCredits?.balance_cents}
             maxCents={100 * 100}
