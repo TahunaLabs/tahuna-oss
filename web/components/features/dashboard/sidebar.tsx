@@ -131,7 +131,7 @@ export function Sidebar({
             </SidebarGroupLabel>
             <CollapsibleContent>
               <SidebarGroupContent>
-                <SidebarMenuSub>
+                <SidebarMenuSub className="mx-2 border-l-0 px-2">
                   {navAdmin.map(({ icon: Icon, label, view }) => (
                     <SidebarMenuSubItem key={view}>
                       <SidebarMenuSubButton isActive={activeView === view} onClick={() => onViewChange(view)}>
