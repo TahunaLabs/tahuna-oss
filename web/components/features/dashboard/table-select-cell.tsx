@@ -20,7 +20,10 @@ function TableSelectCell({
           checked={checked}
           aria-label={ariaLabel}
           onCheckedChange={(value) => onCheckedChange(value === true)}
-          className={cn("transition-opacity group-hover:opacity-100", checked ? "opacity-100" : "opacity-0")}
+          className={cn(
+            "border-sidebar-border/60 bg-sidebar-accent/20 transition-[opacity,background-color,border-color,box-shadow] group-hover:border-sidebar-border group-hover:bg-sidebar-accent/50 group-hover:shadow-xs group-hover:opacity-100",
+            checked ? "opacity-100" : "opacity-0"
+          )}
         />
       </div>
     </TableCell>

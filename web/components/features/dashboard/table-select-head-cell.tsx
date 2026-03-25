@@ -21,6 +21,7 @@ function TableSelectHeadCell({
           checked={indeterminate ? "indeterminate" : checked}
           aria-label={ariaLabel}
           onCheckedChange={(value) => onCheckedChange(value === true)}
+          className="border-sidebar-border/60 bg-sidebar-accent/20 hover:border-sidebar-border hover:bg-sidebar-accent/50 hover:shadow-xs"
         />
       </div>
     </TableHead>
