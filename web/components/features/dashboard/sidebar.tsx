@@ -14,7 +14,6 @@ import {
   SidebarMenuSub,
   SidebarMenuSubButton,
   SidebarMenuSubItem,
-  SidebarTrigger,
 } from "@/components/ui/sidebar"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import {
@@ -87,7 +86,7 @@ export function Sidebar({
 }: SidebarProps) {
   return (
     <>
-      <SidebarHeader className="flex flex-row items-center justify-between">
+      <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild>
@@ -103,7 +102,6 @@ export function Sidebar({
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
-        <SidebarTrigger />
       </SidebarHeader>
 
       <SidebarContent>
@@ -151,16 +149,16 @@ export function Sidebar({
 
       <SidebarFooter>
         {balanceCents !== undefined && maxCents !== undefined && (
-          <SidebarGroup className="group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:flex-col group-data-[collapsible=icon]:items-center">
+          <div className="rounded border border-sidebar-border bg-sidebar-accent/30 p-2 flex flex-col items-center group-data-[collapsible=icon]:gap-2">
             <CreditsGauge balanceCents={balanceCents} maxCents={maxCents} />
-          </SidebarGroup>
+          </div>
         )}
-        <SidebarGroup className="group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:flex-col group-data-[collapsible=icon]:items-center">
-          <SidebarGroupLabel className="group-data-[collapsible=icon]:hidden">Help</SidebarGroupLabel>
+        <SidebarGroup>
+          <SidebarGroupLabel>Help</SidebarGroupLabel>
           <SidebarGroupContent>
-            <SidebarMenu className="group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:flex-col group-data-[collapsible=icon]:gap-2">
+            <SidebarMenu className="group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:flex-col group-data-[collapsible=icon]:items-center group-data-[collapsible=icon]:gap-2">
               {navDocs.map(({ icon: Icon, label, href }) => (
-                <SidebarMenuItem key={label} className="group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:justify-center">
+                <SidebarMenuItem key={label}>
                   <SidebarMenuButton asChild tooltip={label}>
                     <a href={href} target="_blank" rel="noopener noreferrer">
                       <Icon className="size-4" />
