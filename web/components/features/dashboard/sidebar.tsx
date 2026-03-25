@@ -119,7 +119,7 @@ export function Sidebar({
         <Collapsible defaultOpen className="group/collapsible">
           <SidebarGroup>
             <SidebarGroupLabel asChild>
-              <CollapsibleTrigger className="hover:bg-sidebar-accent rounded-md px-2 -mx-2">
+              <CollapsibleTrigger className="hover:text-sidebar-foreground/80 focus-visible:outline-hidden cursor-pointer">
                 Administration
                 <ChevronRight className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
               </CollapsibleTrigger>
