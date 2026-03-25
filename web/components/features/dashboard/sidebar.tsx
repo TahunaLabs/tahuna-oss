@@ -1,6 +1,6 @@
 "use client"
 
-import { HardDrive, Server, Play, Monitor, LogOut, Moon, Sun, ClipboardList, Settings, BookOpen, FileText, Layers, ChevronsUpDown, ChevronRight } from "lucide-react"
+import { HardDrive, Server, Play, Monitor, LogOut, Moon, Sun, ClipboardList, Settings, BookOpen, FileText, Layers, ChevronsUpDown, ChevronRight, Wallet } from "lucide-react"
 import {
   SidebarContent,
   SidebarFooter,
@@ -23,7 +23,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { CreditsGauge } from "@/components/ui/credits-gauge"
+import { Gauge } from "@/components/ui/gauge"
 import { type DashboardView } from "@/components/features/dashboard-model"
 import { LINKS_CONFIG } from "@/config"
 
@@ -148,28 +148,31 @@ export function Sidebar({
       </SidebarContent>
 
       <SidebarFooter>
-        {balanceCents !== undefined && maxCents !== undefined && (
-          <div className="rounded border border-sidebar-border bg-sidebar-accent/30 p-2.5 group-data-[collapsible=icon]:hidden">
-            <CreditsGauge balanceCents={balanceCents} maxCents={maxCents} />
-          </div>
-        )}
-        <SidebarGroup>
-          <SidebarGroupLabel>Help</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {navDocs.map(({ icon: Icon, label, href }) => (
-                <SidebarMenuItem key={label}>
-                  <SidebarMenuButton asChild tooltip={label}>
-                    <a href={href} target="_blank" rel="noopener noreferrer">
-                      <Icon className="size-4" />
-                      <span>{label}</span>
-                    </a>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        <SidebarMenu>
+          {balanceCents !== undefined && maxCents !== undefined && (
+            <SidebarMenuItem>
+              <SidebarMenuButton tooltip="Credits" onClick={() => onViewChange("billing")}>
+                <Wallet />
+                <span>Credits</span>
+                <Gauge
+                  percentage={maxCents > 0 ? Math.min(100, (balanceCents / maxCents) * 100) : 0}
+                  size="sm"
+                  className="ml-auto"
+                />
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          )}
+          {navDocs.map(({ icon: Icon, label, href }) => (
+            <SidebarMenuItem key={label}>
+              <SidebarMenuButton asChild tooltip={label}>
+                <a href={href} target="_blank" rel="noopener noreferrer">
+                  <Icon />
+                  <span>{label}</span>
+                </a>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          ))}
+        </SidebarMenu>
 
         <SidebarMenu>
           <SidebarMenuItem>
