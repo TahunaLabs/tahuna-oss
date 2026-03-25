@@ -11,7 +11,6 @@ import { ShareDialog } from "@/components/features/dashboard/share-dialog"
 import { Sidebar } from "@/components/features/dashboard/sidebar"
 import { DashboardAppLayout } from "@/components/app-shell/dashboard-app-layout"
 import { DashboardContentShell } from "@/components/app-shell/dashboard-content-shell"
-import { useTheme } from "@/components/theme-provider"
 import { PageLoader } from "@/components/ui/spinner"
 import { DASHBOARD_VIEW_VALUES, type ResourceType } from "@/components/features/dashboard-model"
 import { api } from "@convex/_generated/api"
@@ -25,7 +24,6 @@ import { useEffect, useState } from "react"
 
 export default function DashboardPage() {
   const router = useRouter()
-  const { resolvedTheme, setTheme } = useTheme()
   const { isAuthenticated, isLoading: authLoading } = useConvexAuth()
   const [loggingOut, setLoggingOut] = useState(false)
   const [shareDialogOpen, setShareDialogOpen] = useState(false)
@@ -114,7 +112,6 @@ export default function DashboardPage() {
 
   const userEmail = currentUser?.email ?? ""
   const userInitial = userEmail.trim().charAt(0).toUpperCase() || "U"
-  const isDark = resolvedTheme === "dark"
 
   function renderActiveView() {
     switch (activeView) {
@@ -134,8 +131,6 @@ export default function DashboardPage() {
         return (
           <SettingsContainer
             shouldLoadQueries={shouldLoadQueries}
-            theme={resolvedTheme}
-            onThemeChange={setTheme}
             userEmail={userEmail}
           />
         )
@@ -152,8 +147,6 @@ export default function DashboardPage() {
             activeView={activeView}
             onViewChange={(view) => { void setActiveView(view) }}
             userInitial={userInitial}
-            isDark={isDark}
-            onThemeToggle={() => setTheme(isDark ? "light" : "dark")}
             onLogout={logout}
             balanceCents={myCredits?.balance_cents}
             maxCents={100 * 100}

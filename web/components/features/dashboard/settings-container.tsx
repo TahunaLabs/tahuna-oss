@@ -10,18 +10,15 @@ import {
   type ApiKeyRow,
   type ProfileDraft,
   type RunpodCredentialStatus,
-  type ThemeChoice,
   type UserProfileResponse,
 } from "@/components/features/dashboard-settings-model"
 
 type Props = {
   shouldLoadQueries: boolean
-  theme: ThemeChoice
-  onThemeChange: (theme: ThemeChoice) => void
   userEmail: string
 }
 
-export function SettingsContainer({ shouldLoadQueries, theme, onThemeChange, userEmail }: Props) {
+export function SettingsContainer({ shouldLoadQueries, userEmail }: Props) {
   const [savingProfile, setSavingProfile] = useState(false)
   const [savingRunpod, setSavingRunpod] = useState(false)
   const [revokingRunpod, setRevokingRunpod] = useState(false)
@@ -93,8 +90,6 @@ export function SettingsContainer({ shouldLoadQueries, theme, onThemeChange, use
 
   return (
     <SettingsView
-      theme={theme}
-      onThemeChange={onThemeChange}
       userEmail={userEmail}
       apiKeys={apiKeys ?? []}
       runpodCredentialStatus={runpodStatus}

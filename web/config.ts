@@ -75,4 +75,5 @@ export const LINKS_CONFIG = {
   gettingStartedUrl: "https://docs.tahuna.io/getting-started",
   apiReferenceUrl: "https://docs.tahuna.io/api",
   changelogUrl: "https://github.com/Pazuzzu/tahuna/releases",
+  repoUrl: "https://github.com/Pazuzzu/tahuna",
 } as const;

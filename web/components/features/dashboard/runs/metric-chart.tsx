@@ -10,7 +10,7 @@ import {
   YAxis,
 } from "recharts"
 
-import { metricSeries } from "@/components/features/dashboard-model"
+import { type metricSeries } from "@/components/features/dashboard-model"
 import { Badge } from "@/components/ui/badge"
 
 type MetricChartProps = {

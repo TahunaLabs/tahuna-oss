@@ -1,13 +1,13 @@
 "use client"
 
 import { useState } from "react"
-import { ChevronDown, ChevronUp, KeyRound, Moon, Settings, ShieldCheck, Sun } from "lucide-react"
+import { ChevronDown, ChevronUp, KeyRound, Settings, ShieldCheck } from "lucide-react"
 import Link from "next/link"
 import { toast } from "sonner"
 
 import { DashboardViewLayout } from "@/components/app-shell/dashboard-view-layout"
 import { RunpodSettingsCard } from "@/components/features/dashboard/runpod-settings-card"
-import type { ApiKeyRow, ProfileDraft, RunpodCredentialStatus, ThemeChoice } from "@/components/features/dashboard-settings-model"
+import type { ApiKeyRow, ProfileDraft, RunpodCredentialStatus } from "@/components/features/dashboard-settings-model"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -15,8 +15,6 @@ import { Input } from "@/components/ui/input"
 import { formatDate } from "@/lib/utils"
 
 type SettingsViewProps = {
-  theme: ThemeChoice
-  onThemeChange: (theme: ThemeChoice) => void
   userEmail: string
   apiKeys: ApiKeyRow[]
   runpodCredentialStatus?: RunpodCredentialStatus
@@ -64,8 +62,6 @@ function CollapsibleSection({
 }
 
 export function SettingsView({
-  theme,
-  onThemeChange,
   userEmail,
   apiKeys,
   runpodCredentialStatus,
@@ -103,34 +99,6 @@ export function SettingsView({
       toolbar={null}
     >
       <div className="space-y-5">
-        <Card className="p-4">
-          <h2 className="text-sm font-medium text-foreground">Theme</h2>
-          <div className="mt-3 inline-flex overflow-hidden rounded-lg border border-border bg-card">
-            <Button
-              type="button"
-              variant="tab"
-              data-active={theme === "dark" || undefined}
-              size="none"
-              className="rounded-none"
-              onClick={() => onThemeChange("dark")}
-            >
-              <Moon className="h-4 w-4" />
-              Dark
-            </Button>
-            <Button
-              type="button"
-              variant="tab"
-              data-active={theme === "light" || undefined}
-              size="none"
-              className="rounded-none"
-              onClick={() => onThemeChange("light")}
-            >
-              <Sun className="h-4 w-4" />
-              Light
-            </Button>
-          </div>
-        </Card>
-
         <Card className="p-4">
           <h2 className="text-sm font-medium text-foreground">Account information</h2>
           <div className="mt-4">

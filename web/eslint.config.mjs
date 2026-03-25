@@ -1,4 +1,5 @@
 import tsParser from "@typescript-eslint/parser";
+import tsPlugin from "@typescript-eslint/eslint-plugin";
 import unusedImports from "eslint-plugin-unused-imports";
 
 const appCodeFiles = ["app/**/*.{ts,tsx,js,mjs,cjs}", "components/**/*.{ts,tsx,js,mjs,cjs}", "lib/**/*.{ts,tsx,js,mjs,cjs}", "config.ts"];
@@ -31,9 +32,11 @@ export default [
     },
     plugins: {
       "unused-imports": unusedImports,
+      "@typescript-eslint": tsPlugin,
     },
     rules: {
       "unused-imports/no-unused-imports": "error",
+      "@typescript-eslint/consistent-type-imports": ["error", { prefer: "type-imports", fixStyle: "inline-type-imports" }],
     },
   },
   {

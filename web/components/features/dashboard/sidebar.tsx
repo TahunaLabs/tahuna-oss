@@ -1,6 +1,6 @@
 "use client"
 
-import { HardDrive, Server, Play, Monitor, LogOut, Moon, Sun, ClipboardList, Settings, BookOpen, FileText, Layers, ChevronsUpDown, ChevronRight, Wallet } from "lucide-react"
+import { HardDrive, Server, Play, Monitor, LogOut, ClipboardList, Settings, BookOpen, FileText, Layers, ChevronsUpDown, ChevronRight, Wallet } from "lucide-react"
 import {
   SidebarContent,
   SidebarFooter,
@@ -43,8 +43,6 @@ interface SidebarProps {
   activeView: DashboardView
   onViewChange: (view: DashboardView) => void
   userInitial: string
-  isDark: boolean
-  onThemeToggle: () => void
   onLogout: () => void
   navPlatform?: NavItem[]
   navAdmin?: NavItem[]
@@ -75,8 +73,6 @@ export function Sidebar({
   activeView,
   onViewChange,
   userInitial,
-  isDark,
-  onThemeToggle,
   onLogout,
   navPlatform = DEFAULT_NAV_PLATFORM,
   navAdmin = DEFAULT_NAV_ADMIN,
@@ -193,9 +189,9 @@ export function Sidebar({
                 </SidebarMenuButton>
               </DropdownMenuTrigger>
               <DropdownMenuContent side="top" align="start" className="w-56">
-                <DropdownMenuItem onClick={onThemeToggle}>
-                  {isDark ? <Moon className="size-4" /> : <Sun className="size-4" />}
-                  <span>{isDark ? "Switch to light" : "Switch to dark"}</span>
+                <DropdownMenuItem onClick={() => onViewChange("settings")}>
+                  <Settings className="size-4" />
+                  <span>Settings</span>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={onLogout}>

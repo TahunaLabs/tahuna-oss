@@ -1,6 +1,6 @@
 "use client"
 
-import { metricSeries } from "@/components/features/dashboard-model"
+import { type metricSeries } from "@/components/features/dashboard-model"
 
 import { MetricChart } from "@/components/features/dashboard/runs/metric-chart"
 
