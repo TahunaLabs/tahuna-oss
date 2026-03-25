@@ -1,6 +1,6 @@
 "use client"
 
-import { HardDrive, Server, Play, Monitor, LogOut, Moon, Sun, ClipboardList, Settings, BookOpen, FileText, Layers, ChevronsUpDown } from "lucide-react"
+import { HardDrive, Server, Play, Monitor, LogOut, Moon, Sun, ClipboardList, Settings, BookOpen, FileText, Layers, ChevronsUpDown, ChevronRight } from "lucide-react"
 import {
   SidebarContent,
   SidebarFooter,
@@ -11,8 +11,12 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMenuSub,
+  SidebarMenuSubButton,
+  SidebarMenuSubItem,
   SidebarRail,
 } from "@/components/ui/sidebar"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -87,39 +91,55 @@ export function Sidebar({ activeView, onViewChange, userInitial, isDark, onTheme
           </SidebarGroupContent>
         </SidebarGroup>
 
-        <SidebarGroup>
-          <SidebarGroupLabel>Administration</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {navAdmin.map(({ icon: Icon, label, view }) => (
-                <SidebarMenuItem key={view}>
-                  <SidebarMenuButton isActive={activeView === view} onClick={() => onViewChange(view)}>
-                    <Icon />
-                    <span>{label}</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        <Collapsible defaultOpen className="group/collapsible">
+          <SidebarGroup>
+            <SidebarGroupLabel asChild>
+              <CollapsibleTrigger>
+                Administration
+                <ChevronRight className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
+              </CollapsibleTrigger>
+            </SidebarGroupLabel>
+            <CollapsibleContent>
+              <SidebarGroupContent>
+                <SidebarMenuSub>
+                  {navAdmin.map(({ label, view }) => (
+                    <SidebarMenuSubItem key={view}>
+                      <SidebarMenuSubButton isActive={activeView === view} onClick={() => onViewChange(view)}>
+                        {label}
+                      </SidebarMenuSubButton>
+                    </SidebarMenuSubItem>
+                  ))}
+                </SidebarMenuSub>
+              </SidebarGroupContent>
+            </CollapsibleContent>
+          </SidebarGroup>
+        </Collapsible>
 
-        <SidebarGroup className="mt-auto">
-          <SidebarGroupLabel>Docs</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {navDocs.map(({ icon: Icon, label, href }) => (
-                <SidebarMenuItem key={label}>
-                  <SidebarMenuButton asChild>
-                    <a href={href} target="_blank" rel="noopener noreferrer">
-                      <Icon />
-                      <span>{label}</span>
-                    </a>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        <Collapsible defaultOpen className="group/collapsible mt-auto">
+          <SidebarGroup>
+            <SidebarGroupLabel asChild>
+              <CollapsibleTrigger>
+                Docs
+                <ChevronRight className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
+              </CollapsibleTrigger>
+            </SidebarGroupLabel>
+            <CollapsibleContent>
+              <SidebarGroupContent>
+                <SidebarMenuSub>
+                  {navDocs.map(({ label, href }) => (
+                    <SidebarMenuSubItem key={label}>
+                      <SidebarMenuSubButton asChild>
+                        <a href={href} target="_blank" rel="noopener noreferrer">
+                          {label}
+                        </a>
+                      </SidebarMenuSubButton>
+                    </SidebarMenuSubItem>
+                  ))}
+                </SidebarMenuSub>
+              </SidebarGroupContent>
+            </CollapsibleContent>
+          </SidebarGroup>
+        </Collapsible>
       </SidebarContent>
 
       <SidebarRail />
