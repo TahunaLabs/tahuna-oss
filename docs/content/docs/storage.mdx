@@ -3,7 +3,9 @@ title: Storage
 description: Manage data uploads and run artifacts.
 ---
 
-Tahuna provides unified cloud storage for your training data and run-produced artifacts. All files are stored in Cloudflare R2 and accessible from the CLI.
+Tahuna provides unified cloud storage for your training data and run-produced artifacts. All files are stored in Cloudflare R2 and accessible from the CLI. Compute is ephemeral, so persisted data and artifacts live outside the runtime pod rather than on long-lived machine disks.
+
+Tahuna uses encrypted transport for service communication, and managed provider credentials are encrypted at rest.
 
 ## Data uploads
 

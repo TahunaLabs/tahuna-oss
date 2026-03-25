@@ -18,6 +18,10 @@ Tahuna turns a local project into a reproducible remote run:
 - Tahuna provisions compute, materializes the workspace, and executes your entrypoint.
 - Logs, metrics, and output artifacts are captured automatically.
 
+# Ephemeral compute 
+
+Tahuna's runtime compute is ephemeral: runs execute on temporary pods rather than long-lived machines, and persistent state is reconstructed from pinned snapshots and stored outside the pod. Transport to Tahuna services uses encrypted connections, and managed provider credentials are encrypted at rest.
+
 That makes Tahuna a good fit for researchers, agent builders, and small teams who need custom workflows but do not want to spend their time on GPU operations.
 
 ## Key Concepts
