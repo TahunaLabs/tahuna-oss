@@ -11,7 +11,7 @@ export type ProviderId = "runpod" | "gcp" | "azure" | "aws"
 export type ProviderDef = {
   id: ProviderId
   label: string
-  logo: string   // path relative to web/public — used with next/image
+  logo: string
   supported: boolean
 }
 

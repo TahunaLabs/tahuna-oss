@@ -2,9 +2,9 @@ import { ConvexClientProvider } from "@/components/convex-client-provider"
 import { ThemeProvider } from "@/components/theme-provider"
 import { Toaster } from "@/components/ui/toaster"
 import { TooltipProvider } from "@/components/ui/tooltip"
+import { siteMetadata } from "@/app/site-metadata"
 import { getToken } from "@/lib/auth-server"
 import { Analytics } from "@vercel/analytics/next"
-import type { Metadata } from "next"
 import { cookies } from "next/headers"
 import { Cormorant_Garamond, Geist, Geist_Mono } from "next/font/google"
 import { NuqsAdapter } from "nuqs/adapters/next/app"
@@ -19,11 +19,7 @@ const cormorant = Cormorant_Garamond({
   variable: "--font-serif",
 })
 
-export const metadata: Metadata = {
-  title: "Tahuna | The RL Training Substrate",
-  description:
-    "The RL training substrate. Where AI agents practice, adapt, and improve through experience — no research lab required.",
-}
+export const metadata = siteMetadata
 
 export default async function RootLayout({
   children,
