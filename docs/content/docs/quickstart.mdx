@@ -13,23 +13,24 @@ Navigate to your ML project directory and run:
 tahuna init .
 ```
 
-This creates a `tahuna.toml` configuration file in your project root. It defines the environment spec — framework, GPU type, GPU count, and volume size.
+This initializes the project locally by writing `.tahuna/project.yaml` and scaffolding the project files Tahuna needs, including `config.yaml`, `pyproject.toml`, `uv.lock`, and `train.py` when they do not already exist.
 
 ## 2. Review the configuration
 
-Open `tahuna.toml` to inspect and customize your environment:
+Tahuna keeps local project bindings in `.tahuna/project.yaml`:
 
-```toml
-[environment]
-name = "my-project"
-framework = "pytorch"
-version = "2.4"
-gpu_type = "A100"
-gpu_count = 1
-volume_gb = 50
+```yaml
+entrypoint: train.py
+data_dir: data
+output_dir: outputs
+config_file: config.yaml
+python_project_file: pyproject.toml
+uv_lock_file: uv.lock
+framework: pt
+python_version: "3.11"
 ```
 
-Adjust these values to match your workload requirements.
+You can also review the scaffolded project files directly, especially `config.yaml` for your training config and `train.py` for your entrypoint.
 
 ## 3. Upload training data
 

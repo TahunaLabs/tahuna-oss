@@ -13,32 +13,35 @@ Initialize an environment in your project:
 tahuna init .
 ```
 
-This generates a `tahuna.toml` file with your environment configuration.
+This initializes the current project, writes local project state to `.tahuna/project.yaml`, and creates any missing project files needed for a run.
 
 ## Configuration
 
-The `tahuna.toml` file defines your environment:
+The local project file `.tahuna/project.yaml` records the paths and bindings Tahuna uses for the project:
 
-```toml
-[environment]
-name = "training-env"
-framework = "pytorch"
-version = "2.4"
-gpu_type = "A100"
-gpu_count = 1
-volume_gb = 50
+```yaml
+entrypoint: train.py
+data_dir: data
+output_dir: outputs
+config_file: config.yaml
+python_project_file: pyproject.toml
+uv_lock_file: uv.lock
+framework: pt
+python_version: "3.11"
 ```
 
 ### Fields
 
 | Field | Description | Example |
 | --- | --- | --- |
-| `name` | Human-readable name for the environment | `"training-env"` |
-| `framework` | ML framework to use | `"pytorch"`, `"jax"` |
-| `version` | Framework version | `"2.4"` |
-| `gpu_type` | GPU model | `"A100"`, `"H100"`, `"L40S"` |
-| `gpu_count` | Number of GPUs | `1`, `2`, `4`, `8` |
-| `volume_gb` | Persistent volume size in GB | `50`, `100`, `500` |
+| `entrypoint` | Training script Tahuna executes for the project | `train.py` |
+| `data_dir` | Directory synced as project input data | `data` |
+| `output_dir` | Directory collected for run outputs and artifacts | `outputs` |
+| `config_file` | Project config file path used by your training code | `config.yaml` |
+| `python_project_file` | Python project metadata used for dependency resolution | `pyproject.toml` |
+| `uv_lock_file` | Lockfile used to install pinned dependencies in the runtime | `uv.lock` |
+| `framework` | Detected framework key stored for the project | `pt`, `tf` |
+| `python_version` | Detected Python version for the environment setup | `"3.11"` |
 
 ## Data bindings
 
@@ -63,4 +66,3 @@ tahuna env delete <environment-id>
 ```
 
 This permanently removes the environment, all its runs, and associated logs, metrics, and artifacts.
-
