@@ -6,7 +6,6 @@ import { DashboardViewLayout } from "@/components/app-shell/dashboard-view-layou
 import { type ApiKeyRow } from "@/components/features/dashboard-settings-model"
 import { MachinesEmptyState } from "@/components/features/dashboard/machines/machines-empty-state"
 import { MachinesTableView } from "@/components/features/dashboard/machines/machines-table-view"
-import { Card } from "@/components/ui/card"
 import type { Id } from "@convex/_generated/dataModel"
 
 type MachinesViewProps = {
@@ -26,13 +25,11 @@ export function MachinesView({ keys, revokingId, onRevoke }: MachinesViewProps) 
       {keys.length === 0 ? (
         <MachinesEmptyState />
       ) : (
-        <Card variant="surface" className="overflow-hidden">
-          <MachinesTableView
-            keys={keys}
-            revokingId={revokingId}
-            onRevoke={onRevoke}
-          />
-        </Card>
+        <MachinesTableView
+          keys={keys}
+          revokingId={revokingId}
+          onRevoke={onRevoke}
+        />
       )}
     </DashboardViewLayout>
   )
