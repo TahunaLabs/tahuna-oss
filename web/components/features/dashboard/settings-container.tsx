@@ -1,52 +1,73 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { useMutation, useQuery } from "convex/react"
-import { api } from "@convex/_generated/api"
+import { zodResolver } from "@hookform/resolvers/zod"
+import { useForm } from "react-hook-form"
 
 import { SettingsView } from "@/components/features/dashboard/settings-view"
 import {
-  EMPTY_PROFILE_DRAFT,
-  toProfileDraft,
-  type ProfileDraft,
-  type UserProfileResponse,
+  EMPTY_SETTINGS_NAME_FORM_VALUES,
+  settingsNameFormSchema,
+  type SettingsNameFormValues,
 } from "@/components/features/dashboard-settings-model"
+import { authClient } from "@/lib/auth-client"
 
 type Props = {
   shouldLoadQueries: boolean
+  userName: string
+  username: string
   userEmail: string
 }
 
-export function SettingsContainer({ shouldLoadQueries, userEmail }: Props) {
+export function SettingsContainer({ shouldLoadQueries, userName, username, userEmail }: Props) {
   const [savingProfile, setSavingProfile] = useState(false)
-  const [profileDraft, setProfileDraft] = useState<ProfileDraft>(EMPTY_PROFILE_DRAFT)
-
-  const myProfile = useQuery(api.profile.getMyProfile, shouldLoadQueries ? {} : "skip") as
-    | UserProfileResponse
-    | undefined
-
-  const saveMyProfileMutation = useMutation(api.profile.saveMyProfile)
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors },
+  } = useForm<SettingsNameFormValues>({
+    resolver: zodResolver(settingsNameFormSchema),
+    defaultValues: EMPTY_SETTINGS_NAME_FORM_VALUES,
+  })
 
   useEffect(() => {
     if (!shouldLoadQueries) {
-      setProfileDraft(EMPTY_PROFILE_DRAFT)
+      reset(EMPTY_SETTINGS_NAME_FORM_VALUES)
       return
     }
-    setProfileDraft(toProfileDraft(myProfile))
-  }, [myProfile, shouldLoadQueries])
+    reset({
+      username,
+      name: userName,
+    })
+  }, [reset, shouldLoadQueries, userName, username])
 
-  async function saveProfile(profile: ProfileDraft) {
+  async function saveProfile(values: SettingsNameFormValues) {
     setSavingProfile(true)
     try {
-      await saveMyProfileMutation({
-        first_name: profile.firstName,
-        last_name: profile.lastName,
-        address_line_1: profile.addressLine1,
-        address_line_2: profile.addressLine2,
-        country: profile.country,
-        company_name: profile.companyName,
-        company_id: profile.companyId,
-        tax_id: profile.taxId,
+      const nextUsername = values.username.trim()
+      const currentUsername = username.trim()
+
+      if (nextUsername !== currentUsername) {
+        const availability = await authClient.isUsernameAvailable({ username: nextUsername })
+        if (availability.error) {
+          throw new Error(availability.error.message || "Failed to validate username")
+        }
+        if (availability.data?.available !== true) {
+          throw new Error("Username is unavailable")
+        }
+      }
+
+      const result = await authClient.updateUser({
+        username: nextUsername,
+        name: values.name.trim(),
+      })
+      if (result.error) {
+        throw new Error(result.error.message || "Failed to save settings")
+      }
+      reset({
+        username: nextUsername,
+        name: values.name.trim(),
       })
     } catch (e) {
       throw e instanceof Error ? e : new Error("Failed to save settings")
@@ -55,13 +76,15 @@ export function SettingsContainer({ shouldLoadQueries, userEmail }: Props) {
     }
   }
 
+  const submitProfile = handleSubmit(saveProfile)
+
   return (
     <SettingsView
       userEmail={userEmail}
-      profile={profileDraft}
-      onProfileChange={setProfileDraft}
+      register={register}
+      errors={errors}
       savingProfile={savingProfile}
-      onSaveProfile={saveProfile}
+      onSaveProfile={submitProfile}
     />
   )
 }

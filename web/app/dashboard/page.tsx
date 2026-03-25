@@ -113,7 +113,9 @@ export default function DashboardPage() {
   }
 
   const userEmail = currentUser?.email ?? ""
-  const username = typeof currentUser?.username === "string" ? currentUser.username.trim() : ""
+  const usernameFromUser = typeof currentUser?.username === "string" ? currentUser.username.trim() : ""
+  const username = usernameFromUser
+  const userName = typeof currentUser?.name === "string" ? currentUser.name.trim() : ""
   const userAccountLabel = username || userEmail || "My account"
   const userInitial = userEmail.trim().charAt(0).toUpperCase() || "U"
 
@@ -137,6 +139,8 @@ export default function DashboardPage() {
         return (
           <SettingsContainer
             shouldLoadQueries={shouldLoadQueries}
+            userName={userName}
+            username={username}
             userEmail={userEmail}
           />
         )

@@ -128,20 +128,6 @@ export default defineSchema({
     updatedAt: v.number(),
   }).index("by_user", ["userId"]),
 
-  userProfiles: defineTable({
-    userId: v.string(),
-    firstName: v.optional(v.string()),
-    lastName: v.optional(v.string()),
-    addressLine1: v.optional(v.string()),
-    addressLine2: v.optional(v.string()),
-    country: v.optional(v.string()),
-    companyName: v.optional(v.string()),
-    companyId: v.optional(v.string()),
-    taxId: v.optional(v.string()),
-    createdAt: v.number(),
-    updatedAt: v.number(),
-  }).index("by_user", ["userId"]),
-
   usageEvents: defineTable({
     userId: v.string(),
     eventType: v.string(),

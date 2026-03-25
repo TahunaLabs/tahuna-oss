@@ -1,32 +1,33 @@
 "use client"
 
 import { Settings } from "lucide-react"
+import type { FieldErrors, UseFormRegister } from "react-hook-form"
 import { toast } from "sonner"
 
 import { DashboardViewLayout } from "@/components/app-shell/dashboard-view-layout"
-import type { ProfileDraft } from "@/components/features/dashboard-settings-model"
+import type { SettingsNameFormValues } from "@/components/features/dashboard-settings-model"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 
 type SettingsViewProps = {
   userEmail: string
-  profile: ProfileDraft
-  onProfileChange: (profile: ProfileDraft) => void
+  register: UseFormRegister<SettingsNameFormValues>
+  errors: FieldErrors<SettingsNameFormValues>
   savingProfile: boolean
-  onSaveProfile: (profile: ProfileDraft) => Promise<void>
+  onSaveProfile: () => Promise<void>
 }
 
 export function SettingsView({
   userEmail,
-  profile,
-  onProfileChange,
+  register,
+  errors,
   savingProfile,
   onSaveProfile,
 }: SettingsViewProps) {
   async function handleSaveProfile() {
     try {
-      await onSaveProfile(profile)
+      await onSaveProfile()
       toast.success("Settings saved.")
     } catch (saveProfileError) {
       toast.error(saveProfileError instanceof Error ? saveProfileError.message : "Failed to save settings")
@@ -44,24 +45,28 @@ export function SettingsView({
         <h2 className="text-sm font-medium text-foreground">Account</h2>
         <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
           <div>
-            <label className="mb-1.5 block text-sm text-muted-foreground">First name</label>
+            <label className="mb-1.5 block text-sm text-muted-foreground">Username</label>
             <Input
-              value={profile.firstName}
-              onChange={(event) => onProfileChange({ ...profile, firstName: event.target.value })}
-              placeholder="First name"
+              placeholder="Username"
+              {...register("username")}
             />
+            {errors.username ? (
+              <p className="mt-1 text-xs text-destructive">{errors.username.message}</p>
+            ) : null}
           </div>
           <div>
-            <label className="mb-1.5 block text-sm text-muted-foreground">Last name</label>
+            <label className="mb-1.5 block text-sm text-muted-foreground">Name</label>
             <Input
-              value={profile.lastName}
-              onChange={(event) => onProfileChange({ ...profile, lastName: event.target.value })}
-              placeholder="Last name"
+              placeholder="Name"
+              {...register("name")}
             />
+            {errors.name ? (
+              <p className="mt-1 text-xs text-destructive">{errors.name.message}</p>
+            ) : null}
           </div>
           <div className="md:col-span-2">
             <label className="mb-1.5 block text-sm text-muted-foreground">Email</label>
-            <Input value={userEmail || "—"} readOnly />
+            <Input value={userEmail || "—"} disabled />
           </div>
         </div>
         <div className="mt-4 flex justify-end">

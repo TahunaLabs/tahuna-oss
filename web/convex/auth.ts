@@ -1,7 +1,7 @@
 import { createClient, type GenericCtx } from "@convex-dev/better-auth";
 import { convex } from "@convex-dev/better-auth/plugins";
 import { betterAuth } from "better-auth/minimal";
-import { emailOTP } from "better-auth/plugins";
+import { emailOTP, username } from "better-auth/plugins";
 import { ConvexError, v } from "convex/values";
 import { components, internal } from "@convex/_generated/api";
 import type { DataModel } from "@convex/_generated/dataModel";
@@ -42,6 +42,7 @@ export const createAuth = (ctx: GenericCtx<DataModel>) => {
           await sendOtpEmail(ctx as MutationCtx, { email, otp });
         },
       }),
+      username(),
       convex({ authConfig }),
     ],
   });

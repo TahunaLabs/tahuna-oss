@@ -1,4 +1,5 @@
 import type { Id } from "@convex/_generated/dataModel"
+import { z } from "zod"
 
 export type ApiKeyRow = {
   _id: Id<"apiKeys">
@@ -12,52 +13,18 @@ export type ApiKeyRow = {
   revokedAt?: number
 }
 
-export type ProfileDraft = {
-  firstName: string
-  lastName: string
-  addressLine1: string
-  addressLine2: string
-  country: string
-  companyName: string
-  companyId: string
-  taxId: string
-}
+export const settingsNameFormSchema = z.object({
+  username: z.string()
+    .trim()
+    .min(3, "Username must be at least 3 characters")
+    .max(30, "Username must be 30 characters or fewer")
+    .regex(/^[a-zA-Z0-9_.]+$/, "Username can only include letters, numbers, underscores, and dots"),
+  name: z.string().trim().max(100, "Name must be 100 characters or fewer"),
+})
 
-export type UserProfileResponse = {
-  first_name: string
-  last_name: string
-  address_line_1: string
-  address_line_2: string
-  country: string
-  company_name: string
-  company_id: string
-  tax_id: string
-  updated_at?: number
-}
+export type SettingsNameFormValues = z.infer<typeof settingsNameFormSchema>
 
-export const EMPTY_PROFILE_DRAFT: ProfileDraft = {
-  firstName: "",
-  lastName: "",
-  addressLine1: "",
-  addressLine2: "",
-  country: "",
-  companyName: "",
-  companyId: "",
-  taxId: "",
-}
-
-export function toProfileDraft(profile: UserProfileResponse | undefined): ProfileDraft {
-  if (!profile) {
-    return EMPTY_PROFILE_DRAFT
-  }
-  return {
-    firstName: profile.first_name,
-    lastName: profile.last_name,
-    addressLine1: profile.address_line_1,
-    addressLine2: profile.address_line_2,
-    country: profile.country,
-    companyName: profile.company_name,
-    companyId: profile.company_id,
-    taxId: profile.tax_id,
-  }
+export const EMPTY_SETTINGS_NAME_FORM_VALUES: SettingsNameFormValues = {
+  username: "",
+  name: "",
 }
