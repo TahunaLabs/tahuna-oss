@@ -10,31 +10,7 @@ train:
   output_dir: outputs
   epochs: 3
   batch_size: 4
-  eval_batch_size: 4
-  gradient_accumulation_steps: 4
   learning_rate: 0.0001
-  max_seq_length: 128
-  logging_steps: 10
-  seed: 42
-  gradient_checkpointing: true
-  report_to: wandb
-  wandb:
-    project: tahuna-qwen-yoda-lora
-    run_name: qwen-yoda-lora
-  sample_predictions: 8
-  sample_max_new_tokens: 64
-  lora:
-    r: 16
-    alpha: 32
-    dropout: 0.05
-    target_modules:
-      - q_proj
-      - k_proj
-      - v_proj
-      - o_proj
-      - gate_proj
-      - up_proj
-      - down_proj
 data:
   path: data
 resources:

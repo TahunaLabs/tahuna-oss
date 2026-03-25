@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 import json
-import os
 from pathlib import Path
 from typing import Any
 
@@ -9,9 +8,29 @@ from datasets import Dataset, load_dataset
 from peft import LoraConfig
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from trl import SFTConfig, SFTTrainer
+import wandb
 import yaml
 
 CONFIG_PATH = Path("config.yaml")
+DEFAULT_GRADIENT_ACCUMULATION_STEPS = 4
+DEFAULT_MAX_SEQ_LENGTH = 128
+DEFAULT_LOGGING_STEPS = 10
+DEFAULT_SEED = 42
+DEFAULT_SAMPLE_PREDICTIONS = 8
+DEFAULT_SAMPLE_MAX_NEW_TOKENS = 64
+DEFAULT_WANDB_PROJECT = "tahuna-qwen-yoda-lora"
+DEFAULT_LORA_R = 16
+DEFAULT_LORA_ALPHA = 32
+DEFAULT_LORA_DROPOUT = 0.05
+DEFAULT_LORA_TARGET_MODULES = [
+    "q_proj",
+    "k_proj",
+    "v_proj",
+    "o_proj",
+    "gate_proj",
+    "up_proj",
+    "down_proj",
+]
 
 
 def load_config() -> tuple[dict[str, Any], dict[str, Any]]:
@@ -25,26 +44,6 @@ def select_torch_dtype() -> tuple[torch.dtype, bool, bool]:
     if torch.cuda.is_bf16_supported():
         return torch.bfloat16, True, False
     return torch.float16, False, True
-
-
-def normalize_report_to(value: Any) -> str | list[str]:
-    if value is None:
-        return "none"
-    if isinstance(value, str):
-        normalized = value.strip().lower()
-        if not normalized or normalized == "none":
-            return "none"
-        return [normalized]
-    if isinstance(value, list):
-        normalized = [str(item).strip() for item in value if str(item).strip()]
-        return normalized or "none"
-    return "none"
-
-
-def uses_wandb(report_to: str | list[str]) -> bool:
-    if isinstance(report_to, str):
-        return report_to == "wandb"
-    return "wandb" in report_to
 
 
 def write_json(path: Path, payload: dict[str, Any] | list[dict[str, Any]]) -> None:
@@ -102,6 +101,7 @@ def load_prepared_dataset(split_path: Path) -> Dataset:
 
 def main() -> None:
     config, train_config = load_config()
+    project_name = str(config.get("project", "qwen-yoda-lora"))
     model_name = str(train_config.get("model_name", "Qwen/Qwen3-0.6B"))
     data_dir = Path(str(train_config.get("data_dir", "data/yoda")))
     output_dir = Path(str(train_config.get("output_dir", "outputs")))
@@ -109,18 +109,15 @@ def main() -> None:
     adapter_dir = output_dir / "adapter"
     epochs = float(train_config.get("epochs", 3))
     batch_size = int(train_config.get("batch_size", 4))
-    eval_batch_size = int(train_config.get("eval_batch_size", batch_size))
-    gradient_accumulation_steps = int(train_config.get("gradient_accumulation_steps", 4))
     learning_rate = float(train_config.get("learning_rate", 1e-4))
-    max_seq_length = int(train_config.get("max_seq_length", 128))
-    logging_steps = max(1, int(train_config.get("logging_steps", 10)))
-    seed = int(train_config.get("seed", 42))
-    gradient_checkpointing = bool(train_config.get("gradient_checkpointing", True))
-    report_to = normalize_report_to(train_config.get("report_to", "none"))
-    sample_predictions = int(train_config.get("sample_predictions", 8))
-    sample_max_new_tokens = int(train_config.get("sample_max_new_tokens", 64))
-    wandb_config = train_config.get("wandb", {})
-    lora_config = train_config.get("lora", {})
+    eval_batch_size = batch_size
+    gradient_accumulation_steps = DEFAULT_GRADIENT_ACCUMULATION_STEPS
+    max_seq_length = DEFAULT_MAX_SEQ_LENGTH
+    logging_steps = DEFAULT_LOGGING_STEPS
+    seed = DEFAULT_SEED
+    gradient_checkpointing = True
+    sample_predictions = DEFAULT_SAMPLE_PREDICTIONS
+    sample_max_new_tokens = DEFAULT_SAMPLE_MAX_NEW_TOKENS
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -132,25 +129,34 @@ def main() -> None:
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
-    run_name = str(wandb_config.get("run_name", "qwen-yoda-lora"))
-    if uses_wandb(report_to):
-        os.environ.setdefault("WANDB_PROJECT", str(wandb_config.get("project", "tahuna-qwen-yoda-lora")))
-
     model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype=torch_dtype)
     model.config.use_cache = False
 
     peft_config = LoraConfig(
         task_type="CAUSAL_LM",
-        r=int(lora_config.get("r", 16)),
-        lora_alpha=int(lora_config.get("alpha", 32)),
-        lora_dropout=float(lora_config.get("dropout", 0.05)),
+        r=DEFAULT_LORA_R,
+        lora_alpha=DEFAULT_LORA_ALPHA,
+        lora_dropout=DEFAULT_LORA_DROPOUT,
         bias="none",
-        target_modules=list(
-            lora_config.get(
-                "target_modules",
-                ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
-            )
-        ),
+        target_modules=DEFAULT_LORA_TARGET_MODULES,
+    )
+
+    wandb.init(
+        project=DEFAULT_WANDB_PROJECT,
+        name=project_name,
+        config={
+            "project": project_name,
+            "model_name": model_name,
+            "data_dir": str(data_dir),
+            "epochs": epochs,
+            "batch_size": batch_size,
+            "learning_rate": learning_rate,
+            "gradient_accumulation_steps": gradient_accumulation_steps,
+            "max_seq_length": max_seq_length,
+            "lora_r": DEFAULT_LORA_R,
+            "lora_alpha": DEFAULT_LORA_ALPHA,
+            "lora_dropout": DEFAULT_LORA_DROPOUT,
+        },
     )
 
     training_args = SFTConfig(
@@ -172,59 +178,60 @@ def main() -> None:
         gradient_checkpointing=gradient_checkpointing,
         lr_scheduler_type="cosine",
         warmup_ratio=0.03,
-        report_to=report_to,
-        run_name=run_name,
+        report_to="wandb",
+        run_name=project_name,
         bf16=use_bf16,
         fp16=use_fp16,
         seed=seed,
     )
+    try:
+        trainer = SFTTrainer(
+            model=model,
+            args=training_args,
+            train_dataset=train_dataset,
+            eval_dataset=eval_dataset,
+            processing_class=tokenizer,
+            peft_config=peft_config,
+        )
 
-    trainer = SFTTrainer(
-        model=model,
-        args=training_args,
-        train_dataset=train_dataset,
-        eval_dataset=eval_dataset,
-        processing_class=tokenizer,
-        peft_config=peft_config,
-    )
+        print(f"model_name={model_name}")
+        print(f"data_dir={data_dir.resolve()}")
+        print(f"train_samples={len(train_dataset)} eval_samples={len(eval_dataset)}")
+        print(f"output_dir={output_dir.resolve()}")
 
-    print(f"model_name={model_name}")
-    print(f"data_dir={data_dir.resolve()}")
-    print(f"train_samples={len(train_dataset)} eval_samples={len(eval_dataset)}")
-    print(f"output_dir={output_dir.resolve()}")
-    print(f"report_to={report_to}")
+        train_result = trainer.train()
+        eval_metrics = trainer.evaluate()
 
-    train_result = trainer.train()
-    eval_metrics = trainer.evaluate()
+        trainer.save_model(str(adapter_dir))
+        tokenizer.save_pretrained(str(adapter_dir))
 
-    trainer.save_model(str(adapter_dir))
-    tokenizer.save_pretrained(str(adapter_dir))
+        sample_outputs = generate_samples(
+            model=trainer.model,
+            tokenizer=tokenizer,
+            eval_dataset=eval_dataset,
+            sample_predictions=sample_predictions,
+            sample_max_new_tokens=sample_max_new_tokens,
+        )
 
-    sample_outputs = generate_samples(
-        model=trainer.model,
-        tokenizer=tokenizer,
-        eval_dataset=eval_dataset,
-        sample_predictions=sample_predictions,
-        sample_max_new_tokens=sample_max_new_tokens,
-    )
+        write_json(
+            output_dir / "metrics.json",
+            {
+                "model_name": model_name,
+                "data_dir": str(data_dir),
+                "train_samples": len(train_dataset),
+                "eval_samples": len(eval_dataset),
+                "torch_dtype": str(torch_dtype),
+                "train_metrics": train_result.metrics,
+                "eval_metrics": eval_metrics,
+                "config": config,
+            },
+        )
+        write_json(output_dir / "sample_predictions.json", sample_outputs)
 
-    write_json(
-        output_dir / "metrics.json",
-        {
-            "model_name": model_name,
-            "data_dir": str(data_dir),
-            "train_samples": len(train_dataset),
-            "eval_samples": len(eval_dataset),
-            "torch_dtype": str(torch_dtype),
-            "train_metrics": train_result.metrics,
-            "eval_metrics": eval_metrics,
-            "config": config,
-        },
-    )
-    write_json(output_dir / "sample_predictions.json", sample_outputs)
-
-    print(f"Writing artifacts to {output_dir.resolve()}")
-    print(eval_metrics)
+        print(f"Writing artifacts to {output_dir.resolve()}")
+        print(eval_metrics)
+    finally:
+        wandb.finish()
 
 
 if __name__ == "__main__":
