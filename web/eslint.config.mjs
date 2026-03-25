@@ -1,4 +1,5 @@
 import tsParser from "@typescript-eslint/parser";
+import unusedImports from "eslint-plugin-unused-imports";
 
 const appCodeFiles = ["app/**/*.{ts,tsx,js,mjs,cjs}", "components/**/*.{ts,tsx,js,mjs,cjs}", "lib/**/*.{ts,tsx,js,mjs,cjs}", "config.ts"];
 const noRelativeAppImportsRule = [
@@ -27,6 +28,12 @@ export default [
       parser: tsParser,
       ecmaVersion: "latest",
       sourceType: "module",
+    },
+    plugins: {
+      "unused-imports": unusedImports,
+    },
+    rules: {
+      "unused-imports/no-unused-imports": "error",
     },
   },
   {
