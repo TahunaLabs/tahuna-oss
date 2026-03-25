@@ -2,7 +2,16 @@
 
 import { Search, HardDrive, Server, Play, Monitor, LogOut, Moon, Sun, ClipboardList, Settings } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { CreditsGauge } from "@/components/ui/credits-gauge"
+import {
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+} from "@/components/ui/sidebar"
 import { type DashboardView } from "@/components/features/dashboard-model"
 
 interface SidebarProps {
@@ -16,9 +25,8 @@ interface SidebarProps {
 
 export function Sidebar({ activeView, onViewChange, userInitial, isDark, onThemeToggle, onLogout }: SidebarProps) {
   return (
-    <aside className="h-full w-full bg-sidebar flex flex-col">
-      {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2.5">
+    <>
+      <SidebarHeader className="gap-0 px-3 py-2.5">
         <div className="-ml-1.5">
           <Button type="button" variant="sidebar-brand" size="none">
             <span>Tahuna</span>
@@ -29,64 +37,67 @@ export function Sidebar({ activeView, onViewChange, userInitial, isDark, onTheme
             <Search className="w-4 h-4" />
           </Button>
         </div>
-      </div>
+      </SidebarHeader>
 
-      {/* Create Environment CTA */}
-      <div className="px-2 py-1.5">
-        <Button type="button" variant="default" size="compact" className="w-full justify-center">
-          <span>+ New environment</span>
-        </Button>
-      </div>
+      <SidebarContent className="gap-0">
+        <SidebarGroup className="px-2 py-1.5">
+          <Button type="button" variant="default" size="compact" className="w-full justify-center">
+            <span>+ New environment</span>
+          </Button>
+        </SidebarGroup>
 
-      {/* Top Navigation */}
-      <nav className="px-2 py-1 space-y-0.5">
-        <SidebarItem
-          icon={<HardDrive className="w-4 h-4" />}
-          label="Storage"
-          active={activeView === "storage"}
-          onClick={() => onViewChange("storage")}
-        />
-        <SidebarItem
-          icon={<Server className="w-4 h-4" />}
-          label="Environments"
-          active={activeView === "environments"}
-          onClick={() => onViewChange("environments")}
-        />
-        <SidebarItem
-          icon={<Play className="w-4 h-4" />}
-          label="Runs"
-          active={activeView === "runs"}
-          onClick={() => onViewChange("runs")}
-        />
-      </nav>
+        <SidebarGroup className="px-2 py-1">
+          <SidebarGroupContent>
+            <SidebarMenu className="gap-0.5">
+              <SidebarItem
+                icon={<HardDrive className="w-4 h-4" />}
+                label="Storage"
+                active={activeView === "storage"}
+                onClick={() => onViewChange("storage")}
+              />
+              <SidebarItem
+                icon={<Server className="w-4 h-4" />}
+                label="Environments"
+                active={activeView === "environments"}
+                onClick={() => onViewChange("environments")}
+              />
+              <SidebarItem
+                icon={<Play className="w-4 h-4" />}
+                label="Runs"
+                active={activeView === "runs"}
+                onClick={() => onViewChange("runs")}
+              />
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
 
-      {/* Spacer */}
-      <div className="flex-1" />
+        <SidebarGroup className="mt-auto px-2 py-1">
+          <SidebarGroupContent>
+            <SidebarMenu className="gap-0.5">
+              <SidebarItem
+                icon={<Monitor className="w-4 h-4" />}
+                label="Machines"
+                active={activeView === "machines"}
+                onClick={() => onViewChange("machines")}
+              />
+              <SidebarItem
+                icon={<ClipboardList className="w-4 h-4" />}
+                label="Audit logs"
+                active={activeView === "audit_logs"}
+                onClick={() => onViewChange("audit_logs")}
+              />
+              <SidebarItem
+                icon={<Settings className="w-4 h-4" />}
+                label="Settings"
+                active={activeView === "settings"}
+                onClick={() => onViewChange("settings")}
+              />
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+      </SidebarContent>
 
-      {/* Bottom Navigation */}
-      <nav className="px-2 py-1 space-y-0.5">
-        <SidebarItem
-          icon={<Monitor className="w-4 h-4" />}
-          label="Machines"
-          active={activeView === "machines"}
-          onClick={() => onViewChange("machines")}
-        />
-        <SidebarItem
-          icon={<ClipboardList className="w-4 h-4" />}
-          label="Audit logs"
-          active={activeView === "audit_logs"}
-          onClick={() => onViewChange("audit_logs")}
-        />
-        <SidebarItem
-          icon={<Settings className="w-4 h-4" />}
-          label="Settings"
-          active={activeView === "settings"}
-          onClick={() => onViewChange("settings")}
-        />
-      </nav>
-
-      {/* Footer */}
-      <div className="border-t border-sidebar-border shrink-0">
+      <SidebarFooter className="border-t border-sidebar-border p-0">
         <div className="flex items-center justify-between px-3 h-10">
           <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-secondary text-ui-caption font-semibold text-secondary-foreground">
             {userInitial}
@@ -110,8 +121,8 @@ export function Sidebar({ activeView, onViewChange, userInitial, isDark, onTheme
             </Button>
           </div>
         </div>
-      </div>
-    </aside>
+      </SidebarFooter>
+    </>
   )
 }
 
@@ -125,18 +136,18 @@ interface SidebarItemProps {
 
 function SidebarItem({ icon, label, badge, active, onClick }: SidebarItemProps) {
   return (
-    <Button
-      type="button"
-      variant="nav"
-      data-active={active || undefined}
-      size="none"
-      onClick={onClick}
-    >
-      {icon}
-      <span>{label}</span>
-      {badge !== undefined && (
-        <span className="ml-auto text-xs text-muted-foreground">{badge}</span>
-      )}
-    </Button>
+    <SidebarMenuItem>
+      <SidebarMenuButton
+        type="button"
+        isActive={active}
+        onClick={onClick}
+      >
+        {icon}
+        <span>{label}</span>
+        {badge !== undefined && (
+          <span className="ml-auto text-xs text-muted-foreground">{badge}</span>
+        )}
+      </SidebarMenuButton>
+    </SidebarMenuItem>
   )
 }

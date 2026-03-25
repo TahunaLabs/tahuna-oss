@@ -16,11 +16,11 @@ function DashboardAppLayout({
   children,
 }: DashboardAppLayoutProps) {
   return (
-    <SidebarProvider>
-      <AppSidebar>
+    <SidebarProvider className="h-screen">
+      <AppSidebar collapsible="none">
         {sidebar}
       </AppSidebar>
-      <SidebarInset id="main-content" className="overflow-y-auto pt-10">
+      <SidebarInset id="main-content" className="overflow-y-auto border-l-0 pt-10">
         {children}
       </SidebarInset>
     </SidebarProvider>
