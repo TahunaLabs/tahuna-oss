@@ -149,7 +149,7 @@ export function Sidebar({
 
       <SidebarFooter>
         {balanceCents !== undefined && maxCents !== undefined && (
-          <div className="rounded border border-sidebar-border bg-sidebar-accent/30 p-2 flex flex-col items-center group-data-[collapsible=icon]:gap-2">
+          <div className="rounded border border-sidebar-border bg-sidebar-accent/30 p-2.5">
             <CreditsGauge balanceCents={balanceCents} maxCents={maxCents} />
           </div>
         )}
