@@ -1,17 +1,25 @@
 "use client"
 
-import { Search, HardDrive, Server, Play, Monitor, LogOut, Moon, Sun, ClipboardList, Settings } from "lucide-react"
-import { Button } from "@/components/ui/button"
+import { HardDrive, Server, Play, Monitor, LogOut, Moon, Sun, ClipboardList, Settings, BookOpen, FileText, Layers, ChevronsUpDown } from "lucide-react"
 import {
   SidebarContent,
   SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
+  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarRail,
 } from "@/components/ui/sidebar"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { type DashboardView } from "@/components/features/dashboard-model"
 
 interface SidebarProps {
@@ -23,131 +31,127 @@ interface SidebarProps {
   onLogout: () => void
 }
 
+const navPlatform = [
+  { icon: HardDrive, label: "Storage", view: "storage" },
+  { icon: Server, label: "Environments", view: "environments" },
+  { icon: Play, label: "Runs", view: "runs" },
+] as const satisfies { icon: React.ElementType; label: string; view: DashboardView }[]
+
+const navAdmin = [
+  { icon: Monitor, label: "Machines", view: "machines" },
+  { icon: ClipboardList, label: "Audit logs", view: "audit_logs" },
+  { icon: Settings, label: "Settings", view: "settings" },
+] as const satisfies { icon: React.ElementType; label: string; view: DashboardView }[]
+
+const navDocs = [
+  { icon: BookOpen, label: "Getting started", href: "https://docs.tahuna.io/getting-started" },
+  { icon: FileText, label: "API reference", href: "https://docs.tahuna.io/api" },
+  { icon: Layers, label: "Changelog", href: "https://docs.tahuna.io/changelog" },
+]
+
 export function Sidebar({ activeView, onViewChange, userInitial, isDark, onThemeToggle, onLogout }: SidebarProps) {
   return (
     <>
-      <SidebarHeader className="gap-0 px-3 py-2.5">
-        <div className="-ml-1.5">
-          <Button type="button" variant="sidebar-brand" size="none">
-            <span>Tahuna</span>
-          </Button>
-        </div>
-        <div className="flex items-center gap-0.5">
-          <Button type="button" variant="sidebar-icon" size="none">
-            <Search className="w-4 h-4" />
-          </Button>
-        </div>
+      <SidebarHeader>
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton size="lg" asChild>
+              <button type="button">
+                <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground font-semibold text-sm">
+                  T
+                </div>
+                <div className="grid flex-1 text-left text-sm leading-tight">
+                  <span className="truncate font-semibold">Tahuna</span>
+                  <span className="truncate text-xs text-muted-foreground">Cloud</span>
+                </div>
+              </button>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
       </SidebarHeader>
 
-      <SidebarContent className="gap-0">
-        <SidebarGroup className="px-2 py-1.5">
-          <Button type="button" variant="default" size="compact" className="w-full justify-center">
-            <span>+ New environment</span>
-          </Button>
-        </SidebarGroup>
-
-        <SidebarGroup className="px-2 py-1">
+      <SidebarContent>
+        <SidebarGroup>
+          <SidebarGroupLabel>Platform</SidebarGroupLabel>
           <SidebarGroupContent>
-            <SidebarMenu className="gap-0.5">
-              <SidebarItem
-                icon={<HardDrive className="w-4 h-4" />}
-                label="Storage"
-                active={activeView === "storage"}
-                onClick={() => onViewChange("storage")}
-              />
-              <SidebarItem
-                icon={<Server className="w-4 h-4" />}
-                label="Environments"
-                active={activeView === "environments"}
-                onClick={() => onViewChange("environments")}
-              />
-              <SidebarItem
-                icon={<Play className="w-4 h-4" />}
-                label="Runs"
-                active={activeView === "runs"}
-                onClick={() => onViewChange("runs")}
-              />
+            <SidebarMenu>
+              {navPlatform.map(({ icon: Icon, label, view }) => (
+                <SidebarMenuItem key={view}>
+                  <SidebarMenuButton isActive={activeView === view} onClick={() => onViewChange(view)}>
+                    <Icon />
+                    <span>{label}</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
 
-        <SidebarGroup className="mt-auto px-2 py-1">
+        <SidebarGroup>
+          <SidebarGroupLabel>Administration</SidebarGroupLabel>
           <SidebarGroupContent>
-            <SidebarMenu className="gap-0.5">
-              <SidebarItem
-                icon={<Monitor className="w-4 h-4" />}
-                label="Machines"
-                active={activeView === "machines"}
-                onClick={() => onViewChange("machines")}
-              />
-              <SidebarItem
-                icon={<ClipboardList className="w-4 h-4" />}
-                label="Audit logs"
-                active={activeView === "audit_logs"}
-                onClick={() => onViewChange("audit_logs")}
-              />
-              <SidebarItem
-                icon={<Settings className="w-4 h-4" />}
-                label="Settings"
-                active={activeView === "settings"}
-                onClick={() => onViewChange("settings")}
-              />
+            <SidebarMenu>
+              {navAdmin.map(({ icon: Icon, label, view }) => (
+                <SidebarMenuItem key={view}>
+                  <SidebarMenuButton isActive={activeView === view} onClick={() => onViewChange(view)}>
+                    <Icon />
+                    <span>{label}</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup className="mt-auto">
+          <SidebarGroupLabel>Docs</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {navDocs.map(({ icon: Icon, label, href }) => (
+                <SidebarMenuItem key={label}>
+                  <SidebarMenuButton asChild>
+                    <a href={href} target="_blank" rel="noopener noreferrer">
+                      <Icon />
+                      <span>{label}</span>
+                    </a>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
 
-      <SidebarFooter className="border-t border-sidebar-border p-0">
-        <div className="flex items-center justify-between px-3 h-10">
-          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-secondary text-ui-caption font-semibold text-secondary-foreground">
-            {userInitial}
-          </div>
-          <div className="flex items-center gap-0.5">
-            <Button
-              type="button"
-              variant="sidebar-icon"
-              size="none"
-              onClick={onThemeToggle}
-            >
-              {isDark ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
-            </Button>
-            <Button
-              type="button"
-              variant="sidebar-icon"
-              size="none"
-              onClick={onLogout}
-            >
-              <LogOut className="w-4 h-4" />
-            </Button>
-          </div>
-        </div>
+      <SidebarRail />
+
+      <SidebarFooter>
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <SidebarMenuButton>
+                  <div className="flex size-5 shrink-0 items-center justify-center rounded-full bg-secondary text-xs font-semibold text-secondary-foreground">
+                    {userInitial}
+                  </div>
+                  <span className="truncate">My account</span>
+                  <ChevronsUpDown className="ml-auto size-4" />
+                </SidebarMenuButton>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent side="top" align="start" className="w-56">
+                <DropdownMenuItem onClick={onThemeToggle}>
+                  {isDark ? <Moon className="size-4" /> : <Sun className="size-4" />}
+                  <span>{isDark ? "Switch to light" : "Switch to dark"}</span>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={onLogout}>
+                  <LogOut className="size-4" />
+                  <span>Log out</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </SidebarMenuItem>
+        </SidebarMenu>
       </SidebarFooter>
     </>
-  )
-}
-
-interface SidebarItemProps {
-  icon: React.ReactNode
-  label: string
-  badge?: number
-  active?: boolean
-  onClick?: () => void
-}
-
-function SidebarItem({ icon, label, badge, active, onClick }: SidebarItemProps) {
-  return (
-    <SidebarMenuItem>
-      <SidebarMenuButton
-        type="button"
-        isActive={active}
-        onClick={onClick}
-      >
-        {icon}
-        <span>{label}</span>
-        {badge !== undefined && (
-          <span className="ml-auto text-xs text-muted-foreground">{badge}</span>
-        )}
-      </SidebarMenuButton>
-    </SidebarMenuItem>
   )
 }
