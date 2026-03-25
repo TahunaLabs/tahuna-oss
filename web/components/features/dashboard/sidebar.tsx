@@ -26,6 +26,18 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { type DashboardView } from "@/components/features/dashboard-model"
 
+interface NavItem {
+  icon: React.ElementType
+  label: string
+  view: DashboardView
+}
+
+interface NavDocItem {
+  icon: React.ElementType
+  label: string
+  href: string
+}
+
 interface SidebarProps {
   activeView: DashboardView
   onViewChange: (view: DashboardView) => void
@@ -33,27 +45,40 @@ interface SidebarProps {
   isDark: boolean
   onThemeToggle: () => void
   onLogout: () => void
+  navPlatform?: NavItem[]
+  navAdmin?: NavItem[]
+  navDocs?: NavDocItem[]
 }
 
-const navPlatform = [
+const DEFAULT_NAV_PLATFORM: NavItem[] = [
   { icon: HardDrive, label: "Storage", view: "storage" },
   { icon: Server, label: "Environments", view: "environments" },
   { icon: Play, label: "Runs", view: "runs" },
-] as const satisfies { icon: React.ElementType; label: string; view: DashboardView }[]
+]
 
-const navAdmin = [
+const DEFAULT_NAV_ADMIN: NavItem[] = [
   { icon: Monitor, label: "Machines", view: "machines" },
   { icon: ClipboardList, label: "Audit logs", view: "audit_logs" },
   { icon: Settings, label: "Settings", view: "settings" },
-] as const satisfies { icon: React.ElementType; label: string; view: DashboardView }[]
+]
 
-const navDocs = [
+const DEFAULT_NAV_DOCS: NavDocItem[] = [
   { icon: BookOpen, label: "Getting started", href: "https://docs.tahuna.io/getting-started" },
   { icon: FileText, label: "API reference", href: "https://docs.tahuna.io/api" },
   { icon: Layers, label: "Changelog", href: "https://docs.tahuna.io/changelog" },
 ]
 
-export function Sidebar({ activeView, onViewChange, userInitial, isDark, onThemeToggle, onLogout }: SidebarProps) {
+export function Sidebar({
+  activeView,
+  onViewChange,
+  userInitial,
+  isDark,
+  onThemeToggle,
+  onLogout,
+  navPlatform = DEFAULT_NAV_PLATFORM,
+  navAdmin = DEFAULT_NAV_ADMIN,
+  navDocs = DEFAULT_NAV_DOCS,
+}: SidebarProps) {
   return (
     <>
       <SidebarHeader>
@@ -94,7 +119,7 @@ export function Sidebar({ activeView, onViewChange, userInitial, isDark, onTheme
         <Collapsible defaultOpen className="group/collapsible">
           <SidebarGroup>
             <SidebarGroupLabel asChild>
-              <CollapsibleTrigger>
+              <CollapsibleTrigger className="hover:bg-sidebar-accent rounded-md px-2 -mx-2">
                 Administration
                 <ChevronRight className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
               </CollapsibleTrigger>
@@ -102,36 +127,11 @@ export function Sidebar({ activeView, onViewChange, userInitial, isDark, onTheme
             <CollapsibleContent>
               <SidebarGroupContent>
                 <SidebarMenuSub>
-                  {navAdmin.map(({ label, view }) => (
+                  {navAdmin.map(({ icon: Icon, label, view }) => (
                     <SidebarMenuSubItem key={view}>
                       <SidebarMenuSubButton isActive={activeView === view} onClick={() => onViewChange(view)}>
-                        {label}
-                      </SidebarMenuSubButton>
-                    </SidebarMenuSubItem>
-                  ))}
-                </SidebarMenuSub>
-              </SidebarGroupContent>
-            </CollapsibleContent>
-          </SidebarGroup>
-        </Collapsible>
-
-        <Collapsible defaultOpen className="group/collapsible mt-auto">
-          <SidebarGroup>
-            <SidebarGroupLabel asChild>
-              <CollapsibleTrigger>
-                Docs
-                <ChevronRight className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
-              </CollapsibleTrigger>
-            </SidebarGroupLabel>
-            <CollapsibleContent>
-              <SidebarGroupContent>
-                <SidebarMenuSub>
-                  {navDocs.map(({ label, href }) => (
-                    <SidebarMenuSubItem key={label}>
-                      <SidebarMenuSubButton asChild>
-                        <a href={href} target="_blank" rel="noopener noreferrer">
-                          {label}
-                        </a>
+                        <Icon className="size-4" />
+                        <span>{label}</span>
                       </SidebarMenuSubButton>
                     </SidebarMenuSubItem>
                   ))}
@@ -145,6 +145,24 @@ export function Sidebar({ activeView, onViewChange, userInitial, isDark, onTheme
       <SidebarRail />
 
       <SidebarFooter>
+        <SidebarGroup>
+          <SidebarGroupLabel>Help</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {navDocs.map(({ icon: Icon, label, href }) => (
+                <SidebarMenuItem key={label}>
+                  <SidebarMenuButton asChild>
+                    <a href={href} target="_blank" rel="noopener noreferrer">
+                      <Icon className="size-4" />
+                      <span>{label}</span>
+                    </a>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
         <SidebarMenu>
           <SidebarMenuItem>
             <DropdownMenu>
