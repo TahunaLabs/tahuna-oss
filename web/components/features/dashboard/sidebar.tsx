@@ -23,7 +23,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Gauge } from "@/components/ui/gauge"
+import { CreditsGauge } from "@/components/ui/credits-gauge"
 import { type DashboardView } from "@/components/features/dashboard-model"
 import { LINKS_CONFIG } from "@/config"
 
@@ -145,51 +145,41 @@ export function Sidebar({
             </CollapsibleContent>
           </SidebarGroup>
         </Collapsible>
-
-        <Collapsible defaultOpen className="group/collapsible mt-auto">
-          <SidebarGroup>
-            <SidebarGroupLabel asChild>
-              <CollapsibleTrigger className="hover:text-sidebar-foreground/80 focus-visible:outline-hidden cursor-pointer">
-                Help
-                <ChevronRight className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
-              </CollapsibleTrigger>
-            </SidebarGroupLabel>
-            <CollapsibleContent>
-              <SidebarGroupContent>
-                <SidebarMenu>
-                  {navDocs.map(({ icon: Icon, label, href }) => (
-                    <SidebarMenuItem key={label}>
-                      <SidebarMenuButton asChild tooltip={label}>
-                        <a href={href} target="_blank" rel="noopener noreferrer">
-                          <Icon />
-                          <span>{label}</span>
-                        </a>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  ))}
-                </SidebarMenu>
-              </SidebarGroupContent>
-            </CollapsibleContent>
-          </SidebarGroup>
-        </Collapsible>
       </SidebarContent>
 
       <SidebarFooter>
         {balanceCents !== undefined && maxCents !== undefined && (
-          <SidebarMenu>
-            <SidebarMenuItem>
-              <SidebarMenuButton tooltip="Credits" onClick={() => onViewChange("billing")}>
-                <Wallet />
-                <span>Credits</span>
-                <Gauge
-                  percentage={maxCents > 0 ? Math.min(100, (balanceCents / maxCents) * 100) : 0}
-                  size="sm"
-                  className="ml-auto"
-                />
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          </SidebarMenu>
+          <>
+            <div className="rounded border border-sidebar-border bg-sidebar-accent/30 p-2.5 group-data-[collapsible=icon]:hidden">
+              <CreditsGauge balanceCents={balanceCents} maxCents={maxCents} />
+            </div>
+            <SidebarMenu className="hidden group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:flex-col group-data-[collapsible=icon]:items-center">
+              <SidebarMenuItem>
+                <SidebarMenuButton tooltip="Credits">
+                  <Wallet />
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </>
         )}
+        <SidebarGroup>
+          <SidebarGroupLabel>Help</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu className="group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:flex-col group-data-[collapsible=icon]:items-center group-data-[collapsible=icon]:gap-2">
+              {navDocs.map(({ icon: Icon, label, href }) => (
+                <SidebarMenuItem key={label}>
+                  <SidebarMenuButton asChild tooltip={label}>
+                    <a href={href} target="_blank" rel="noopener noreferrer">
+                      <Icon className="size-4" />
+                      <span className="group-data-[collapsible=icon]:hidden">{label}</span>
+                    </a>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
         <SidebarMenu>
           <SidebarMenuItem>
             <DropdownMenu>
