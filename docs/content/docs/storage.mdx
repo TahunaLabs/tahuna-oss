@@ -1,48 +1,33 @@
 ---
 title: Storage
-description: Manage data uploads and run artifacts.
+description: Inspect stored data and run artifacts.
 ---
 
 Tahuna provides unified cloud storage for your training data and run-produced artifacts. All files are stored in Cloudflare R2 and accessible from the CLI. Compute is ephemeral, so persisted data and artifacts live outside the runtime pod rather than on long-lived machine disks.
 
 Tahuna uses encrypted transport for service communication, and managed provider credentials are encrypted at rest.
 
-## Data uploads
+## Data items
 
-Upload files that your runs need as input:
-
-```bash
-tahuna data upload ./my_dataset.json
-```
-
-Upload multiple files at once:
+List the data items currently available in your workspace:
 
 ```bash
-tahuna data upload ./data/*.parquet
+tahuna data list
 ```
 
-Uploaded data appears in cloud storage and can be listed via the CLI.
+Inspect one data item in more detail:
 
-### Renaming data
+```bash
+tahuna data show <data-id>
+```
 
-Data files can be renamed via the CLI.
+Use `--verbose` with either command to see the full JSON payload.
 
 ## Run artifacts
 
 When a run writes to its output directory, those files are automatically collected and stored as artifacts.
 
 Artifacts are read-only and cannot be renamed. They are linked to the run that produced them.
-
-
-## Downloading files
-
-From the CLI:
-
-```bash
-tahuna data download <file-key> -o ./local_path
-```
-
-From the CLI, use the download command.
 
 ## Storage limits
 

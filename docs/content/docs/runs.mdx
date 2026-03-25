@@ -10,13 +10,7 @@ A run is a single execution of your code within an environment. Tahuna handles p
 From your project directory:
 
 ```bash
-tahuna run
-```
-
-Or target a specific environment:
-
-```bash
-tahuna run --env <environment-id>
+tahuna train
 ```
 
 ## Run lifecycle
@@ -40,7 +34,7 @@ Each run goes through these statuses:
 Tahuna streams stdout and stderr from your run in real-time. View logs from the CLI:
 
 ```bash
-tahuna logs <run-id>
+tahuna run logs <run-id>
 ```
 
 Or from the CLI via the run ID.

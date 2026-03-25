@@ -56,13 +56,29 @@ tahuna env delete <environment-id>
 
 ## Runs
 
-### `tahuna run`
+### `tahuna train`
 
-Launch a run in the current environment.
+Launch training in the current environment.
 
 ```bash
-tahuna run
-tahuna run --env <environment-id>
+tahuna train
+```
+
+### `tahuna run list`
+
+List runs in your workspace.
+
+```bash
+tahuna run list
+tahuna run list --verbose
+```
+
+### `tahuna run show`
+
+Inspect a specific run.
+
+```bash
+tahuna run show <run-id>
 ```
 
 ### `tahuna run cancel`
@@ -73,48 +89,48 @@ Cancel a running or queued run.
 tahuna run cancel <run-id>
 ```
 
-### `tahuna logs`
+### `tahuna run logs`
 
 Stream logs from a run.
 
 ```bash
-tahuna logs <run-id>
-tahuna logs <run-id> --follow
+tahuna run logs <run-id>
+tahuna run logs <run-id> --follow
 ```
 
 ## Data
 
-### `tahuna data upload`
+### `tahuna data list`
 
-Upload data files to cloud storage.
-
-```bash
-tahuna data upload ./file.json
-tahuna data upload ./data/*.parquet
-```
-
-### `tahuna data download`
-
-Download a file from storage.
+List data items available in your workspace.
 
 ```bash
-tahuna data download <file-key> -o ./output_path
+tahuna data list
+tahuna data list --verbose
 ```
 
-### `tahuna data bind`
+### `tahuna data show`
+
+Inspect a specific data item.
+
+```bash
+tahuna data show <data-id>
+```
+
+### `tahuna env data bind`
 
 Bind a data file to an environment. Bound data is mounted when runs start.
 
 ```bash
-tahuna data bind <environment-id> <data-id>
+tahuna env data bind <environment-id> <data-id>
 ```
 
-### `tahuna data unbind`
+### `tahuna env data unbind`
 
 Remove a data binding from an environment.
 
 ```bash
-tahuna data unbind <environment-id> <data-id>
+tahuna env data unbind <environment-id> <data-id>
 ```
 
 ## Global Options
