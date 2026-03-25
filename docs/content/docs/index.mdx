@@ -1,19 +1,30 @@
 ---
 title: Introduction
-description: Welcome to the Tahuna documentation.
+description: Tahuna is the control plane between your training code and cloud GPUs.
 ---
 
-Tahuna is a compute platform for machine learning. It lets you create GPU-accelerated environments, upload training data, launch runs, and collect artifacts — all from a simple CLI.
+Tahuna is a training orchestration platform for teams that want full control over their training code without taking on the infrastructure work around it. You keep your Python training loop. Tahuna handles GPU provisioning, code and data sync, dependency installation, run execution, metrics capture, and artifact persistence.
 
-## What is Tahuna?
+## Why Tahuna exists
 
-Tahuna provides managed infrastructure for ML workloads. Instead of manually provisioning GPUs, configuring drivers, and managing storage, you define an environment once and Tahuna handles the rest.
+Most ML training workflows still force a bad tradeoff. You can rent raw GPU compute and manage the whole stack yourself, or you can use a managed fine-tuning API and give up control over the training loop. Tahuna sits between those two options. It is the control plane between your local project and cloud GPUs, so you can run custom training and post-training workloads without SSH, Dockerfiles, or cluster setup.
+
+## What Tahuna does - A gentle control plane
+
+Tahuna turns a local project into a reproducible remote run:
+
+- You define an environment for your project.
+- Tahuna syncs your code and data into pinned snapshots.
+- Tahuna provisions compute, materializes the workspace, and executes your entrypoint.
+- Logs, metrics, and output artifacts are captured automatically.
+
+That makes Tahuna a good fit for researchers, agent builders, and small teams who need custom workflows but do not want to spend their time on GPU operations.
 
 ## Key Concepts
 
-- **Environments** — Isolated compute configurations that specify a framework (e.g. PyTorch), GPU type, GPU count, and volume size. Created via the CLI.
-- **Runs** — A single execution of your code within an environment. Tahuna provisions the pod, streams logs and metrics in real-time, and collects output artifacts.
-- **Storage** — A unified view of your uploaded data files and run-produced artifacts, stored in cloud object storage (R2).
+- **Environments** - Isolated compute configurations that define the framework, GPU type, GPU count, and volume size for a project.
+- **Runs** - A single remote execution of your code in a Tahuna-managed environment, with logs, metrics, and artifacts captured as the run progresses.
+- **Storage** - The object storage layer that holds uploaded data, pinned manifests, and run-produced artifacts.
 
 ## Quick Start
 
@@ -24,4 +35,4 @@ tahuna init .
 tahuna run
 ```
 
-See the [Installation](/docs/installation) and [Quickstart](/docs/quickstart) guides for detailed steps.
+See the [Installation](/docs/installation) and [Quickstart](/docs/quickstart) guides for the full setup and first-run workflow.
