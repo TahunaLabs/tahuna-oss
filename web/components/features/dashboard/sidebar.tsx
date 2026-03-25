@@ -145,6 +145,33 @@ export function Sidebar({
             </CollapsibleContent>
           </SidebarGroup>
         </Collapsible>
+
+        <Collapsible defaultOpen className="group/collapsible mt-auto">
+          <SidebarGroup>
+            <SidebarGroupLabel asChild>
+              <CollapsibleTrigger className="hover:text-sidebar-foreground/80 focus-visible:outline-hidden cursor-pointer">
+                Help
+                <ChevronRight className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
+              </CollapsibleTrigger>
+            </SidebarGroupLabel>
+            <CollapsibleContent>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {navDocs.map(({ icon: Icon, label, href }) => (
+                    <SidebarMenuItem key={label}>
+                      <SidebarMenuButton asChild tooltip={label}>
+                        <a href={href} target="_blank" rel="noopener noreferrer">
+                          <Icon />
+                          <span>{label}</span>
+                        </a>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </CollapsibleContent>
+          </SidebarGroup>
+        </Collapsible>
       </SidebarContent>
 
       <SidebarFooter>
@@ -163,20 +190,6 @@ export function Sidebar({
             </SidebarMenuItem>
           </SidebarMenu>
         )}
-        <SidebarGroupLabel>Help</SidebarGroupLabel>
-        <SidebarMenu>
-          {navDocs.map(({ icon: Icon, label, href }) => (
-            <SidebarMenuItem key={label}>
-              <SidebarMenuButton asChild tooltip={label}>
-                <a href={href} target="_blank" rel="noopener noreferrer">
-                  <Icon />
-                  <span>{label}</span>
-                </a>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          ))}
-        </SidebarMenu>
-
         <SidebarMenu>
           <SidebarMenuItem>
             <DropdownMenu>
