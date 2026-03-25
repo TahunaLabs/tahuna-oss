@@ -70,3 +70,9 @@ export function blobLimitByKind(kind: SyncKind) {
 export function manifestLimitByKind(kind: SyncKind) {
   return kind === "data" ? UPLOAD_LIMITS_BYTES.dataManifest : UPLOAD_LIMITS_BYTES.codeManifest;
 }
+
+export const LINKS_CONFIG = {
+  gettingStartedUrl: "https://docs.tahuna.io/getting-started",
+  apiReferenceUrl: "https://docs.tahuna.io/api",
+  changelogUrl: "https://github.com/Pazuzzu/tahuna/releases",
+} as const;

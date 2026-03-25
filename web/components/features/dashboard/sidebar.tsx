@@ -25,6 +25,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { type DashboardView } from "@/components/features/dashboard-model"
+import { LINKS_CONFIG } from "@/config"
 
 interface NavItem {
   icon: React.ElementType
@@ -63,9 +64,9 @@ const DEFAULT_NAV_ADMIN: NavItem[] = [
 ]
 
 const DEFAULT_NAV_DOCS: NavDocItem[] = [
-  { icon: BookOpen, label: "Getting started", href: "https://docs.tahuna.io/getting-started" },
-  { icon: FileText, label: "API reference", href: "https://docs.tahuna.io/api" },
-  { icon: Layers, label: "Changelog", href: "https://docs.tahuna.io/changelog" },
+  { icon: BookOpen, label: "Getting started", href: LINKS_CONFIG.gettingStartedUrl },
+  { icon: FileText, label: "API reference", href: LINKS_CONFIG.apiReferenceUrl },
+  { icon: Layers, label: "Changelog", href: LINKS_CONFIG.changelogUrl },
 ]
 
 export function Sidebar({
