@@ -20,7 +20,7 @@ function EnvironmentsEmptyState() {
           <CliStep number={1} label="Install the Tahuna CLI" command="brew tap Pazuzzu/tahuna && brew install tahuna" />
           <CliStep number={2} label="Login to your account" command="tahuna login" />
           <CliStep number={3} label="Set up your environment" command="tahuna init ." />
-          <CliStep number={4} label="Start a run" command="tahuna run" />
+          <CliStep number={4} label="Start training" command="tahuna train" />
 
           <p className="text-center text-xs text-muted-foreground">
             You can explore example configs in <code className="rounded bg-secondary px-1 py-0.5">/configs/</code>, or

@@ -24,14 +24,9 @@ Tahuna's runtime compute is ephemeral: runs execute on temporary pods rather tha
 
 ## How syncing works
 
-Tahuna syncs code and data incrementally rather than uploading a fresh tarball for every run.
+Tahuna syncs code and data incrementally rather than uploading a fresh tarball for every run. It records ordered manifests, uploads only missing content, and pins each run to exact code and data snapshots.
 
-- Each file is hashed and stored as a content-addressed blob.
-- Tahuna builds an ordered manifest that records file paths, hashes, modes, and sizes.
-- If the manifest hash has not changed, Tahuna can skip re-uploading unchanged content.
-- If files changed, Tahuna uploads only the missing blobs, then commits the new manifest pointer for the environment.
-
-This gives Tahuna two useful properties at once: faster iteration during normal development, and reproducible runs because each run is pinned to exact code and data snapshots rather than whatever happened to be on a machine at launch time.
+See [Syncing](/docs/syncing) for the full model.
 
 **That makes Tahuna a good fit for researchers, agent builders, and small teams who need custom workflows but do not want to spend their time on GPU operations.**
 
@@ -48,7 +43,7 @@ brew tap Pazuzzu/tahuna
 brew install tahuna
 tahuna login
 tahuna init .
-tahuna run
+tahuna train
 ```
 
 See the [Installation](/docs/installation) and [Quickstart](/docs/quickstart) guides for the full setup and first-run workflow.

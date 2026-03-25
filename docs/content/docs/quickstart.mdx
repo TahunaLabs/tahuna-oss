@@ -1,9 +1,9 @@
 ---
 title: Quickstart
-description: Create your first environment and launch a run in under 5 minutes.
+description: Initialize your project and start your first training run.
 ---
 
-This guide walks you through creating an environment, uploading data, and launching your first run.
+This guide walks you through the normal Tahuna flow: initialize the project, complete the interactive setup, and start a training run.
 
 ## 1. Initialize your project
 
@@ -13,7 +13,7 @@ Navigate to your ML project directory and run:
 tahuna init .
 ```
 
-This initializes the project locally by writing `.tahuna/project.yaml` and scaffolding the project files Tahuna needs, including `config.yaml`, `pyproject.toml`, `uv.lock`, and `train.py` when they do not already exist.
+This initializes the project locally, walks you through the configuration interactively, and writes `.tahuna/project.yaml`. It also scaffolds the project files Tahuna needs, including `config.yaml`, `pyproject.toml`, `uv.lock`, and `train.py` when they do not already exist.
 
 ## 2. Review the configuration
 
@@ -32,22 +32,12 @@ python_version: "3.11"
 
 You can also review the scaffolded project files directly, especially `config.yaml` for your training config and `train.py` for your entrypoint.
 
-## 3. Upload training data
+## 3. Start training
 
-If your run needs input data, upload it:
-
-```bash
-tahuna data upload ./training_data.json
-```
-
-You can upload multiple files. They will appear in the Storage view on the dashboard and can be bound to your environment.
-
-## 4. Launch a run
-
-Start a run in your environment:
+Launch a training run:
 
 ```bash
-tahuna run
+tahuna train
 ```
 
 Tahuna will:
@@ -58,9 +48,17 @@ Tahuna will:
 4. Stream logs and metrics in real-time
 5. Collect output artifacts when the run completes
 
-## 5. Monitor from the dashboard
+## 4. Monitor from the dashboard
 
 Open the [Tahuna dashboard](/dashboard) to see your run in the Runs view. Click on a run to see live logs, metrics charts, diagnostics, and output artifacts.
+
+## Optional: upload data separately
+
+If your workflow needs files uploaded to Tahuna-managed storage ahead of time, you can still do that explicitly:
+
+```bash
+tahuna data upload ./training_data.json
+```
 
 ## Next Steps
 
