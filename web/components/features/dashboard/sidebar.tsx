@@ -149,20 +149,20 @@ export function Sidebar({
 
       <SidebarFooter>
         {balanceCents !== undefined && maxCents !== undefined && (
-          <div className="rounded border border-sidebar-border bg-sidebar-accent/30 p-2.5">
+          <div className="rounded border border-sidebar-border bg-sidebar-accent/30 p-2.5 group-data-[collapsible=icon]:hidden">
             <CreditsGauge balanceCents={balanceCents} maxCents={maxCents} />
           </div>
         )}
         <SidebarGroup>
           <SidebarGroupLabel>Help</SidebarGroupLabel>
           <SidebarGroupContent>
-            <SidebarMenu className="group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:flex-col group-data-[collapsible=icon]:items-center group-data-[collapsible=icon]:gap-2">
+            <SidebarMenu>
               {navDocs.map(({ icon: Icon, label, href }) => (
                 <SidebarMenuItem key={label}>
                   <SidebarMenuButton asChild tooltip={label}>
                     <a href={href} target="_blank" rel="noopener noreferrer">
                       <Icon className="size-4" />
-                      <span className="group-data-[collapsible=icon]:hidden">{label}</span>
+                      <span>{label}</span>
                     </a>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
