@@ -52,7 +52,7 @@ export function BillingContainer({ shouldLoadQueries }: Props) {
     <BillingView
       balanceCents={myCredits?.balance_cents ?? 0}
       bootstrapCreditCents={BILLING_CONFIG.initialCreditCents}
-      currency={myCredits?.currency ?? "USD"}
+      currency={myCredits?.currency ?? BILLING_CONFIG.currency}
       initialized={myCredits?.initialized === true}
       usageEvents={usageEventsWithContext}
     />
