@@ -4,7 +4,7 @@ import { useState } from "react"
 import { CheckCircle2, ClipboardList, Clock3, Search, XCircle } from "lucide-react"
 
 import { DashboardViewLayout } from "@/components/app-shell/dashboard-view-layout"
-import type { RunRow } from "@/components/features/dashboard-model"
+import { type AuditActionFilter, type RunRow } from "@/components/features/dashboard-model"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Select } from "@/components/ui/select"
@@ -15,7 +15,6 @@ type AuditLogsViewProps = {
   environmentNameById: ReadonlyMap<string, string>
 }
 
-type AuditActionFilter = "all" | "active" | "completed" | "failed" | "cancelled"
 
 function toAuditAction(status: string): Exclude<AuditActionFilter, "all"> {
   if (status === "completed") return "completed"
