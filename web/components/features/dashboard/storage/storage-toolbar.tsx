@@ -3,24 +3,37 @@
 import { Plus, Search } from "lucide-react"
 
 import { FilterDropdown, type FilterDropdownOption } from "@/components/features/dashboard/environments/filter-dropdown"
-import { type StorageSort, type StorageSourceFilter } from "@/components/features/dashboard-model"
+import {
+  STORAGE_SORT_VALUES,
+  STORAGE_SOURCE_FILTER_VALUES,
+  type StorageSort,
+  type StorageSourceFilter,
+} from "@/components/features/dashboard-model"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 
-const SOURCE_OPTIONS: FilterDropdownOption[] = [
-  { value: "all", label: "All storage" },
-  { value: "shared", label: "Shared" },
-  { value: "private", label: "Private" },
-]
+const SOURCE_LABELS: Record<StorageSourceFilter, string> = {
+  all: "All storage",
+  shared: "Shared",
+  private: "Private",
+}
+const SOURCE_OPTIONS: FilterDropdownOption[] = STORAGE_SOURCE_FILTER_VALUES.map((value) => ({
+  value,
+  label: SOURCE_LABELS[value],
+}))
 
-const SORT_OPTIONS: FilterDropdownOption[] = [
-  { value: "created_desc", label: "Newest first" },
-  { value: "created_asc", label: "Oldest first" },
-  { value: "name_asc", label: "Name A–Z" },
-  { value: "name_desc", label: "Name Z–A" },
-  { value: "size_desc", label: "Largest first" },
-  { value: "size_asc", label: "Smallest first" },
-]
+const SORT_LABELS: Record<StorageSort, string> = {
+  created_desc: "Newest first",
+  created_asc: "Oldest first",
+  name_asc: "Name A–Z",
+  name_desc: "Name Z–A",
+  size_desc: "Largest first",
+  size_asc: "Smallest first",
+}
+const SORT_OPTIONS: FilterDropdownOption[] = STORAGE_SORT_VALUES.map((value) => ({
+  value,
+  label: SORT_LABELS[value],
+}))
 
 type StorageToolbarProps = {
   storageSearch: string
