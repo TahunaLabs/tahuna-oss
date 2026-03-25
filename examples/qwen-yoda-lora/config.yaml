@@ -6,7 +6,7 @@ command:
 train:
   # Change to Qwen/Qwen3-4B for a larger base model.
   model_name: Qwen/Qwen3-0.6B
-  dataset_name: dvgodoy/yoda_sentences
+  data_dir: data/yoda
   output_dir: outputs
   epochs: 3
   batch_size: 4
@@ -14,12 +14,13 @@ train:
   gradient_accumulation_steps: 4
   learning_rate: 0.0001
   max_seq_length: 128
-  eval_samples: 128
-  max_samples: 0
   logging_steps: 10
   seed: 42
   gradient_checkpointing: true
-  report_to: none
+  report_to: wandb
+  wandb:
+    project: tahuna-qwen-yoda-lora
+    run_name: qwen-yoda-lora
   sample_predictions: 8
   sample_max_new_tokens: 64
   lora:
@@ -34,6 +35,8 @@ train:
       - gate_proj
       - up_proj
       - down_proj
+data:
+  path: data
 resources:
   gpu_type: NVIDIA GeForce RTX 4090
   gpu_count: 1

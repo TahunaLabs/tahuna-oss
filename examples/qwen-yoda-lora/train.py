@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -11,53 +12,11 @@ from trl import SFTConfig, SFTTrainer
 import yaml
 
 CONFIG_PATH = Path("config.yaml")
-PROMPT_TEMPLATE = """Rewrite the following sentence so it sounds like Yoda.
-Keep the meaning intact.
-
-Sentence: {sentence}
-
-Yoda:"""
 
 
 def load_config() -> tuple[dict[str, Any], dict[str, Any]]:
     config = yaml.safe_load(CONFIG_PATH.read_text(encoding="utf-8")) or {}
     return config, config.get("train", {})
-
-
-def build_prompt(sentence: str) -> str:
-    return PROMPT_TEMPLATE.format(sentence=sentence.strip())
-
-
-def build_dataset(dataset_name: str, seed: int, max_samples: int, eval_samples: int) -> tuple[Dataset, Dataset]:
-    raw_dataset = load_dataset(dataset_name, split="train")
-    rows: list[dict[str, str]] = []
-    for record in raw_dataset:
-        sentence = str(record["sentence"]).strip()
-        seen_targets: set[str] = set()
-        for key in ("translation", "translation_extra"):
-            target = str(record.get(key, "")).strip()
-            if not target or target in seen_targets:
-                continue
-            seen_targets.add(target)
-            rows.append(
-                {
-                    "prompt": build_prompt(sentence),
-                    "completion": f" {target}",
-                    "source_sentence": sentence,
-                    "target_sentence": target,
-                }
-            )
-
-    dataset = Dataset.from_list(rows).shuffle(seed=seed)
-    if max_samples > 0:
-        dataset = dataset.select(range(min(max_samples, len(dataset))))
-
-    if len(dataset) < 2:
-        raise ValueError("Need at least 2 samples after preprocessing.")
-
-    bounded_eval_samples = min(max(1, eval_samples), len(dataset) - 1)
-    splits = dataset.train_test_split(test_size=bounded_eval_samples, seed=seed)
-    return splits["train"], splits["test"]
 
 
 def select_torch_dtype() -> tuple[torch.dtype, bool, bool]:
@@ -80,6 +39,12 @@ def normalize_report_to(value: Any) -> str | list[str]:
         normalized = [str(item).strip() for item in value if str(item).strip()]
         return normalized or "none"
     return "none"
+
+
+def uses_wandb(report_to: str | list[str]) -> bool:
+    if isinstance(report_to, str):
+        return report_to == "wandb"
+    return "wandb" in report_to
 
 
 def write_json(path: Path, payload: dict[str, Any] | list[dict[str, Any]]) -> None:
@@ -124,10 +89,21 @@ def generate_samples(
     return samples
 
 
+def load_prepared_dataset(split_path: Path) -> Dataset:
+    if not split_path.exists():
+        raise FileNotFoundError(
+            f"Prepared dataset not found at {split_path}. Run scripts/prepare_yoda_data.py first."
+        )
+    dataset = load_dataset("json", data_files=str(split_path), split="train")
+    if len(dataset) == 0:
+        raise ValueError(f"Prepared dataset at {split_path} is empty.")
+    return dataset
+
+
 def main() -> None:
     config, train_config = load_config()
     model_name = str(train_config.get("model_name", "Qwen/Qwen3-0.6B"))
-    dataset_name = str(train_config.get("dataset_name", "dvgodoy/yoda_sentences"))
+    data_dir = Path(str(train_config.get("data_dir", "data/yoda")))
     output_dir = Path(str(train_config.get("output_dir", "outputs")))
     checkpoints_dir = output_dir / "checkpoints"
     adapter_dir = output_dir / "adapter"
@@ -137,29 +113,28 @@ def main() -> None:
     gradient_accumulation_steps = int(train_config.get("gradient_accumulation_steps", 4))
     learning_rate = float(train_config.get("learning_rate", 1e-4))
     max_seq_length = int(train_config.get("max_seq_length", 128))
-    eval_samples = int(train_config.get("eval_samples", 128))
-    max_samples = int(train_config.get("max_samples", 0))
     logging_steps = max(1, int(train_config.get("logging_steps", 10)))
     seed = int(train_config.get("seed", 42))
     gradient_checkpointing = bool(train_config.get("gradient_checkpointing", True))
     report_to = normalize_report_to(train_config.get("report_to", "none"))
     sample_predictions = int(train_config.get("sample_predictions", 8))
     sample_max_new_tokens = int(train_config.get("sample_max_new_tokens", 64))
+    wandb_config = train_config.get("wandb", {})
     lora_config = train_config.get("lora", {})
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    train_dataset, eval_dataset = build_dataset(
-        dataset_name=dataset_name,
-        seed=seed,
-        max_samples=max_samples,
-        eval_samples=eval_samples,
-    )
+    train_dataset = load_prepared_dataset(data_dir / "train.jsonl")
+    eval_dataset = load_prepared_dataset(data_dir / "eval.jsonl")
 
     torch_dtype, use_bf16, use_fp16 = select_torch_dtype()
     tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True, padding_side="right")
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
+
+    run_name = str(wandb_config.get("run_name", "qwen-yoda-lora"))
+    if uses_wandb(report_to):
+        os.environ.setdefault("WANDB_PROJECT", str(wandb_config.get("project", "tahuna-qwen-yoda-lora")))
 
     model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype=torch_dtype)
     model.config.use_cache = False
@@ -198,6 +173,7 @@ def main() -> None:
         lr_scheduler_type="cosine",
         warmup_ratio=0.03,
         report_to=report_to,
+        run_name=run_name,
         bf16=use_bf16,
         fp16=use_fp16,
         seed=seed,
@@ -213,9 +189,10 @@ def main() -> None:
     )
 
     print(f"model_name={model_name}")
-    print(f"dataset_name={dataset_name}")
+    print(f"data_dir={data_dir.resolve()}")
     print(f"train_samples={len(train_dataset)} eval_samples={len(eval_dataset)}")
     print(f"output_dir={output_dir.resolve()}")
+    print(f"report_to={report_to}")
 
     train_result = trainer.train()
     eval_metrics = trainer.evaluate()
@@ -235,7 +212,7 @@ def main() -> None:
         output_dir / "metrics.json",
         {
             "model_name": model_name,
-            "dataset_name": dataset_name,
+            "data_dir": str(data_dir),
             "train_samples": len(train_dataset),
             "eval_samples": len(eval_dataset),
             "torch_dtype": str(torch_dtype),

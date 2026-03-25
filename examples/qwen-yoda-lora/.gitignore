@@ -4,3 +4,6 @@ __pycache__/
 
 # Training artifacts
 outputs/
+
+# Local/synced datasets
+data/
