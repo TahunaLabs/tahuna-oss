@@ -46,6 +46,7 @@ interface SidebarProps {
   activeView: DashboardView
   onViewChange: (view: DashboardView) => void
   userInitial: string
+  userAccountLabel: string
   userLoading?: boolean
   onLogout: () => void
   navPlatform?: NavItem[]
@@ -78,6 +79,7 @@ export function Sidebar({
   activeView,
   onViewChange,
   userInitial,
+  userAccountLabel,
   userLoading = false,
   onLogout,
   navPlatform = DEFAULT_NAV_PLATFORM,
@@ -197,7 +199,7 @@ export function Sidebar({
                     <div className="flex size-5 shrink-0 items-center justify-center rounded-full bg-secondary text-xs font-semibold text-secondary-foreground">
                       {userInitial}
                     </div>
-                    <span className="truncate">My account</span>
+                    <span className="truncate">{userAccountLabel}</span>
                     <ChevronsUpDown className="ml-auto size-4" />
                   </SidebarMenuButton>
                 </DropdownMenuTrigger>

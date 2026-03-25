@@ -113,6 +113,8 @@ export default function DashboardPage() {
   }
 
   const userEmail = currentUser?.email ?? ""
+  const username = typeof currentUser?.username === "string" ? currentUser.username.trim() : ""
+  const userAccountLabel = username || userEmail || "My account"
   const userInitial = userEmail.trim().charAt(0).toUpperCase() || "U"
 
   function renderActiveView() {
@@ -151,6 +153,7 @@ export default function DashboardPage() {
             activeView={activeView}
             onViewChange={(view) => { void setActiveView(view) }}
             userInitial={userInitial}
+            userAccountLabel={userAccountLabel}
             userLoading={userMenuLoading}
             onLogout={logout}
             balanceCents={myCredits?.balance_cents}
