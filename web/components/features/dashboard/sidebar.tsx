@@ -63,9 +63,9 @@ const DEFAULT_NAV_PLATFORM: NavItem[] = [
 ]
 
 const DEFAULT_NAV_ADMIN: NavItem[] = [
+  { icon: Cloud, label: "Providers", view: "providers" },
   { icon: Monitor, label: "Machines", view: "machines" },
   { icon: ClipboardList, label: "Audit logs", view: "audit_logs" },
-  { icon: Cloud, label: "Providers", view: "providers" },
   { icon: Settings, label: "Settings", view: "settings" },
 ]
 
