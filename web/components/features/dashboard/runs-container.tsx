@@ -7,6 +7,7 @@ import { toast } from "sonner"
 import { api } from "@convex/_generated/api"
 import { RunsView } from "@/components/features/dashboard/runs-view"
 import {
+  RUN_TAB_VALUES,
   TERMINAL_STATUSES,
   type EnvironmentRow,
   type RunDetail,
@@ -16,7 +17,6 @@ import {
 } from "@/components/features/dashboard-model"
 import type { Id } from "@convex/_generated/dataModel"
 
-const RUN_TAB_VALUES = ["all", "active", "completed"] as const
 
 type Props = {
   shouldLoadQueries: boolean

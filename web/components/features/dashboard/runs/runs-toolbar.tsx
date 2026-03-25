@@ -2,7 +2,7 @@
 
 import { Search } from "lucide-react"
 
-import { type RunTab } from "@/components/features/dashboard/runs-view"
+import { type RunTab } from "@/components/features/dashboard-model"
 import { FilterDropdown, type FilterDropdownOption } from "@/components/features/dashboard/environments/filter-dropdown"
 import { Input } from "@/components/ui/input"
 

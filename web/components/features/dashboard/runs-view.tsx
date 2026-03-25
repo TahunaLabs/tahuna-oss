@@ -11,7 +11,9 @@ import {
   type RunLogsOnlyDetail,
   type RunMetricsOnlyDetail,
   type RunRow,
+  type RunTab,
 } from "@/components/features/dashboard-model"
+import { ACTIVE_STATUSES, TERMINAL_STATUSES } from "@convex/runsConstants"
 import { RunDetailPanel } from "@/components/features/dashboard/runs/run-detail-panel"
 import { RunsToolbar } from "@/components/features/dashboard/runs/runs-toolbar"
 import { RunTableRow } from "@/components/features/dashboard/runs/run-table-row"
@@ -19,10 +21,7 @@ import { RunsEmptyState } from "@/components/features/dashboard/runs/runs-empty-
 import { Card } from "@/components/ui/card"
 import { TableHead } from "@/components/ui/table"
 
-export type RunTab = "all" | "active" | "completed"
-
-const ACTIVE_STATUSES = new Set(["queued", "provisioning", "running", "cancelling"])
-const COMPLETED_STATUSES = new Set(["completed", "failed", "cancelled"])
+export type { RunTab }
 
 type RunsViewProps = {
   environments: EnvironmentRow[]
@@ -66,7 +65,7 @@ export function RunsView({
   const query = searchQuery.trim().toLowerCase()
   const filteredRuns = runs.filter((run) => {
     if (activeTab === "active" && !ACTIVE_STATUSES.has(run.status)) return false
-    if (activeTab === "completed" && !COMPLETED_STATUSES.has(run.status)) return false
+    if (activeTab === "completed" && !TERMINAL_STATUSES.has(run.status)) return false
     if (query) {
       const envName = environmentNameById.get(run.environment_id) ?? ""
       const target = [run.name ?? "", run.status, envName].join(" ").toLowerCase()

@@ -10,13 +10,13 @@ import { useArtifactRename } from "@/components/features/dashboard/storage/use-a
 import { useStorageUpload } from "@/components/features/dashboard/storage/use-storage-upload"
 import {
   STORAGE_PAGE_LIMIT,
+  STORAGE_SORT_VALUES,
+  STORAGE_SOURCE_FILTER_VALUES,
   type StorageItem,
   type StorageListResult,
 } from "@/components/features/dashboard-model"
 import { useDebounce } from "@/lib/use-debounce"
 
-const STORAGE_SOURCE_FILTER_VALUES = ["all", "shared", "private"] as const
-const STORAGE_SORT_VALUES = ["created_desc", "created_asc", "name_asc", "name_desc", "size_desc", "size_asc"] as const
 
 type Props = {
   shouldLoadQueries: boolean
