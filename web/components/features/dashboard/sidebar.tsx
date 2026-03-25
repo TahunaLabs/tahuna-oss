@@ -14,7 +14,7 @@ import {
   SidebarMenuSub,
   SidebarMenuSubButton,
   SidebarMenuSubItem,
-  SidebarRail,
+  SidebarTrigger,
 } from "@/components/ui/sidebar"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import {
@@ -24,6 +24,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { CreditsGauge } from "@/components/ui/credits-gauge"
 import { type DashboardView } from "@/components/features/dashboard-model"
 import { LINKS_CONFIG } from "@/config"
 
@@ -49,6 +50,8 @@ interface SidebarProps {
   navPlatform?: NavItem[]
   navAdmin?: NavItem[]
   navDocs?: NavDocItem[]
+  balanceCents?: number
+  maxCents?: number
 }
 
 const DEFAULT_NAV_PLATFORM: NavItem[] = [
@@ -79,10 +82,12 @@ export function Sidebar({
   navPlatform = DEFAULT_NAV_PLATFORM,
   navAdmin = DEFAULT_NAV_ADMIN,
   navDocs = DEFAULT_NAV_DOCS,
+  balanceCents,
+  maxCents,
 }: SidebarProps) {
   return (
     <>
-      <SidebarHeader>
+      <SidebarHeader className="flex flex-row items-center justify-between">
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild>
@@ -98,6 +103,7 @@ export function Sidebar({
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
+        <SidebarTrigger />
       </SidebarHeader>
 
       <SidebarContent>
@@ -143,19 +149,22 @@ export function Sidebar({
         </Collapsible>
       </SidebarContent>
 
-      <SidebarRail />
-
       <SidebarFooter>
-        <SidebarGroup>
-          <SidebarGroupLabel>Help</SidebarGroupLabel>
+        {balanceCents !== undefined && maxCents !== undefined && (
+          <SidebarGroup className="group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:flex-col group-data-[collapsible=icon]:items-center">
+            <CreditsGauge balanceCents={balanceCents} maxCents={maxCents} />
+          </SidebarGroup>
+        )}
+        <SidebarGroup className="group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:flex-col group-data-[collapsible=icon]:items-center">
+          <SidebarGroupLabel className="group-data-[collapsible=icon]:hidden">Help</SidebarGroupLabel>
           <SidebarGroupContent>
-            <SidebarMenu>
+            <SidebarMenu className="group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:flex-col group-data-[collapsible=icon]:gap-2">
               {navDocs.map(({ icon: Icon, label, href }) => (
-                <SidebarMenuItem key={label}>
-                  <SidebarMenuButton asChild>
+                <SidebarMenuItem key={label} className="group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:justify-center">
+                  <SidebarMenuButton asChild tooltip={label}>
                     <a href={href} target="_blank" rel="noopener noreferrer">
                       <Icon className="size-4" />
-                      <span>{label}</span>
+                      <span className="group-data-[collapsible=icon]:hidden">{label}</span>
                     </a>
                   </SidebarMenuButton>
                 </SidebarMenuItem>

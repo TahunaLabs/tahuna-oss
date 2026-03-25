@@ -20,7 +20,7 @@ function DashboardAppLayout({
       <AppSidebar collapsible="icon">
         {sidebar}
       </AppSidebar>
-      <SidebarInset id="main-content" className="overflow-y-auto border-l-0 pt-10">
+      <SidebarInset id="main-content" className="overflow-y-auto border-l-0">
         {children}
       </SidebarInset>
     </SidebarProvider>

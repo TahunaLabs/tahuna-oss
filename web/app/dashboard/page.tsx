@@ -155,6 +155,8 @@ export default function DashboardPage() {
             isDark={isDark}
             onThemeToggle={() => setTheme(isDark ? "light" : "dark")}
             onLogout={logout}
+            balanceCents={myCredits?.balance_cents}
+            maxCents={100 * 100}
           />
         )}
       >
