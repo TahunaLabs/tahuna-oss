@@ -20,12 +20,12 @@ Authenticate with your Tahuna account. Opens a browser window for OAuth.
 tahuna login
 ```
 
-### `tahuna logout`
+### `tahuna version`
 
-Clear stored credentials.
+Print the installed CLI version.
 
 ```bash
-tahuna logout
+tahuna version
 ```
 
 ## Environments
@@ -46,12 +46,12 @@ List all environments in your workspace.
 tahuna env list
 ```
 
-### `tahuna env delete`
+### `tahuna env rm`
 
 Delete an environment and all its associated runs, logs, and artifacts.
 
 ```bash
-tahuna env delete <environment-id>
+tahuna env rm <environment-id>
 ```
 
 ## Runs
@@ -133,10 +133,6 @@ Remove a data binding from an environment.
 tahuna env data unbind <environment-id> <data-id>
 ```
 
-## Global Options
+## Notes
 
-| Flag | Description |
-| --- | --- |
-| `--version` | Print the CLI version |
-| `--help` | Show help for any command |
-| `--verbose` | Enable verbose output |
+`--help` is available on the top-level command and command groups. `--verbose` is supported on specific subcommands such as `tahuna run list`, `tahuna run show`, `tahuna run logs`, `tahuna data list`, and `tahuna data show`.
