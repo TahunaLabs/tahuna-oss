@@ -1,5 +1,5 @@
 /** @type {import('next').NextConfig} */
-const convexSiteUrl = process.env.NEXT_PUBLIC_TAHUNA_SITE_URL || process.env.NEXT_PUBLIC_CONVEX_SITE_URL
+const convexSiteUrl = process.env.NEXT_PUBLIC_CONVEX_SITE_URL
 
 const nextConfig = {
   typescript: {

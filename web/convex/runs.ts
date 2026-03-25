@@ -609,9 +609,6 @@ function resolveRuntimeApiBase() {
   // Prefer public Tahuna URLs for pod runtime callbacks.
   // Localhost app URLs are often unreachable from remote pods.
   const candidates = [
-    process.env.TAHUNA_SITE_URL,
-    process.env.NEXT_PUBLIC_TAHUNA_SITE_URL,
-    process.env.TAHUNA_PUBLIC_SITE_URL,
     process.env.NEXT_PUBLIC_CONVEX_SITE_URL,
     process.env.CONVEX_SITE_URL,
     process.env.SITE_URL,
@@ -630,7 +627,7 @@ function resolveRuntimeApiBase() {
       return trimmed.replace(/\/+$/, "");
     }
   }
-  throw new Error("TAHUNA_SITE_URL (or SITE_URL) is required for pod runtime callbacks");
+  throw new Error("SITE_URL is required for pod runtime callbacks");
 }
 
 function resolveWandbBaseURL(runtimeApiBase: string) {
