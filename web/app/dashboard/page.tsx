@@ -14,7 +14,7 @@ import { DashboardContentShell } from "@/components/app-shell/dashboard-content-
 import { useTheme } from "@/components/theme-provider"
 import { PageLoader } from "@/components/ui/spinner"
 import { BILLING_CONFIG } from "@/config"
-import { DASHBOARD_VIEW_VALUES } from "@/components/features/dashboard-model"
+import { DASHBOARD_VIEW_VALUES, type ResourceType } from "@/components/features/dashboard-model"
 import { api } from "@convex/_generated/api"
 import type { Id } from "@convex/_generated/dataModel"
 import { authClient } from "@/lib/auth-client"
@@ -30,7 +30,7 @@ export default function DashboardPage() {
   const { isAuthenticated, isLoading: authLoading } = useConvexAuth()
   const [loggingOut, setLoggingOut] = useState(false)
   const [shareDialogOpen, setShareDialogOpen] = useState(false)
-  const [shareTarget, setShareTarget] = useState<{ resourceType: "environment" | "run" | "data"; resourceId: string } | null>(null)
+  const [shareTarget, setShareTarget] = useState<{ resourceType: ResourceType; resourceId: string } | null>(null)
   const [shareBusy, setShareBusy] = useState(false)
 
   const [activeView, setActiveView] = useQueryState(
@@ -75,7 +75,7 @@ export default function DashboardPage() {
     }
   }
 
-  function openShareDialog(resourceType: "environment" | "run" | "data", resourceId: string) {
+  function openShareDialog(resourceType: ResourceType, resourceId: string) {
     setShareTarget({ resourceType, resourceId })
     setShareDialogOpen(true)
   }

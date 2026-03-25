@@ -10,8 +10,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet"
-
-type ResourceType = "environment" | "run" | "data"
+import { type ResourceType } from "@/components/features/dashboard-model"
 
 type ShareLinkItem = {
   share_link_id: string

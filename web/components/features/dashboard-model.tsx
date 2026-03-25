@@ -17,6 +17,9 @@ export type StorageSourceFilter = (typeof STORAGE_SOURCE_FILTER_VALUES)[number]
 export const ENVIRONMENT_ACCESS_FILTER_VALUES = ["all", "private", "shared"] as const
 export type EnvironmentAccessFilter = (typeof ENVIRONMENT_ACCESS_FILTER_VALUES)[number]
 
+export const RESOURCE_TYPE_VALUES = ["environment", "run", "data"] as const
+export type ResourceType = (typeof RESOURCE_TYPE_VALUES)[number]
+
 export type StorageItem = {
   id: string
   source: "data" | "run_artifact"
