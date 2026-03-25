@@ -107,7 +107,7 @@ def main() -> None:
     output_dir = Path(str(train_config.get("output_dir", "outputs")))
     checkpoints_dir = output_dir / "checkpoints"
     adapter_dir = output_dir / "adapter"
-    epochs = float(train_config.get("epochs", 3))
+    epochs = float(train_config.get("epochs", 1))
     batch_size = int(train_config.get("batch_size", 4))
     learning_rate = float(train_config.get("learning_rate", 1e-4))
     eval_batch_size = batch_size
