@@ -17,7 +17,7 @@ function EnvironmentsEmptyState() {
         </div>
 
         <div className="space-y-5 px-2">
-          <CliStep number={1} label="Install the Tahuna CLI" command="brew install tahuna" />
+          <CliStep number={1} label="Install the Tahuna CLI" command="brew tap Pazuzzu/tahuna && brew install tahuna" />
           <CliStep number={2} label="Login to your account" command="tahuna login" />
           <CliStep number={3} label="Set up your environment" command="tahuna init ." />
           <CliStep number={4} label="Start a run" command="tahuna run" />

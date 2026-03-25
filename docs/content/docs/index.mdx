@@ -18,11 +18,22 @@ Tahuna turns a local project into a reproducible remote run:
 - Tahuna provisions compute, materializes the workspace, and executes your entrypoint.
 - Logs, metrics, and output artifacts are captured automatically.
 
-# Ephemeral compute 
+### Ephemeral compute 
 
 Tahuna's runtime compute is ephemeral: runs execute on temporary pods rather than long-lived machines, and persistent state is reconstructed from pinned snapshots and stored outside the pod. Transport to Tahuna services uses encrypted connections, and managed provider credentials are encrypted at rest.
 
-That makes Tahuna a good fit for researchers, agent builders, and small teams who need custom workflows but do not want to spend their time on GPU operations.
+## How syncing works
+
+Tahuna syncs code and data incrementally rather than uploading a fresh tarball for every run.
+
+- Each file is hashed and stored as a content-addressed blob.
+- Tahuna builds an ordered manifest that records file paths, hashes, modes, and sizes.
+- If the manifest hash has not changed, Tahuna can skip re-uploading unchanged content.
+- If files changed, Tahuna uploads only the missing blobs, then commits the new manifest pointer for the environment.
+
+This gives Tahuna two useful properties at once: faster iteration during normal development, and reproducible runs because each run is pinned to exact code and data snapshots rather than whatever happened to be on a machine at launch time.
+
+**That makes Tahuna a good fit for researchers, agent builders, and small teams who need custom workflows but do not want to spend their time on GPU operations.**
 
 ## Key Concepts
 
@@ -33,6 +44,7 @@ That makes Tahuna a good fit for researchers, agent builders, and small teams wh
 ## Quick Start
 
 ```bash
+brew tap Pazuzzu/tahuna
 brew install tahuna
 tahuna login
 tahuna init .
