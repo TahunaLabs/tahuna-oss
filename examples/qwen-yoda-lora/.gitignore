@@ -1,0 +1,6 @@
+# Local Python environment
+.venv/
+__pycache__/
+
+# Training artifacts
+outputs/
