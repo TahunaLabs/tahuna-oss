@@ -148,8 +148,8 @@ export function Sidebar({
       </SidebarContent>
 
       <SidebarFooter>
-        <SidebarMenu>
-          {balanceCents !== undefined && maxCents !== undefined && (
+        {balanceCents !== undefined && maxCents !== undefined && (
+          <SidebarMenu>
             <SidebarMenuItem>
               <SidebarMenuButton tooltip="Credits" onClick={() => onViewChange("billing")}>
                 <Wallet />
@@ -161,7 +161,10 @@ export function Sidebar({
                 />
               </SidebarMenuButton>
             </SidebarMenuItem>
-          )}
+          </SidebarMenu>
+        )}
+        <SidebarGroupLabel>Help</SidebarGroupLabel>
+        <SidebarMenu>
           {navDocs.map(({ icon: Icon, label, href }) => (
             <SidebarMenuItem key={label}>
               <SidebarMenuButton asChild tooltip={label}>
