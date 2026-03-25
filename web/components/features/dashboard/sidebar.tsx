@@ -1,6 +1,7 @@
 "use client"
 
-import { HardDrive, Server, Play, Monitor, LogOut, ClipboardList, Settings, BookOpen, FileText, Layers, ChevronsUpDown, ChevronRight, Wallet } from "lucide-react"
+import Link from "next/link"
+import { HardDrive, Server, Play, Monitor, LogOut, ClipboardList, Settings, BookOpen, FileText, Layers, ChevronsUpDown, ChevronRight, Wallet, Cloud } from "lucide-react"
 import {
   SidebarContent,
   SidebarFooter,
@@ -25,6 +26,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { CreditsGauge } from "@/components/ui/credits-gauge"
 import { type DashboardView } from "@/components/features/dashboard-model"
+import { Logo } from "@/components/logo"
 import { LINKS_CONFIG } from "@/config"
 
 interface NavItem {
@@ -60,6 +62,7 @@ const DEFAULT_NAV_PLATFORM: NavItem[] = [
 const DEFAULT_NAV_ADMIN: NavItem[] = [
   { icon: Monitor, label: "Machines", view: "machines" },
   { icon: ClipboardList, label: "Audit logs", view: "audit_logs" },
+  { icon: Cloud, label: "Providers", view: "providers" },
   { icon: Settings, label: "Settings", view: "settings" },
 ]
 
@@ -83,21 +86,13 @@ export function Sidebar({
   return (
     <>
       <SidebarHeader>
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton size="lg" asChild>
-              <button type="button">
-                <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground font-semibold text-sm">
-                  T
-                </div>
-                <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-semibold">Tahuna</span>
-                  <span className="truncate text-xs text-muted-foreground">Cloud</span>
-                </div>
-              </button>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
+        <Link href="/" aria-label="Go to home" className="flex items-center justify-center py-1">
+          <Logo className="h-8 w-auto group-data-[collapsible=icon]:hidden" />
+          <Logo
+            className="hidden h-8 w-8 group-data-[collapsible=icon]:block"
+            preserveAspectRatio="xMidYMid slice"
+          />
+        </Link>
       </SidebarHeader>
 
       <SidebarContent>

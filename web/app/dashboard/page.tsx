@@ -4,6 +4,7 @@ import { AuditLogsContainer } from "@/components/features/dashboard/audit-logs-c
 import { BillingContainer } from "@/components/features/dashboard/billing-container"
 import { EnvironmentsContainer } from "@/components/features/dashboard/environments-container"
 import { MachinesContainer } from "@/components/features/dashboard/machines-container"
+import { ProvidersContainer } from "@/components/features/dashboard/providers-container"
 import { RunsContainer } from "@/components/features/dashboard/runs-container"
 import { SettingsContainer } from "@/components/features/dashboard/settings-container"
 import { StorageContainer } from "@/components/features/dashboard/storage-container"
@@ -11,7 +12,7 @@ import { ShareDialog } from "@/components/features/dashboard/share-dialog"
 import { Sidebar } from "@/components/features/dashboard/sidebar"
 import { DashboardAppLayout } from "@/components/app-shell/dashboard-app-layout"
 import { DashboardContentShell } from "@/components/app-shell/dashboard-content-shell"
-import { PageLoader } from "@/components/ui/spinner"
+import { PageLoader } from "@/components/loader"
 import { DASHBOARD_VIEW_VALUES, type ResourceType } from "@/components/features/dashboard-model"
 import { api } from "@convex/_generated/api"
 import type { Id } from "@convex/_generated/dataModel"
@@ -127,6 +128,8 @@ export default function DashboardPage() {
         return <MachinesContainer shouldLoadQueries={shouldLoadQueries} />
       case "audit_logs":
         return <AuditLogsContainer shouldLoadQueries={shouldLoadQueries} />
+      case "providers":
+        return <ProvidersContainer shouldLoadQueries={shouldLoadQueries} />
       case "settings":
         return (
           <SettingsContainer

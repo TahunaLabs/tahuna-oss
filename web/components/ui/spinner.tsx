@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils"
+import { Logo } from "@/components/logo"
 
 type SpinnerProps = {
   className?: string
@@ -6,37 +7,20 @@ type SpinnerProps = {
 }
 
 const sizeClasses = {
-  sm: "text-lg",
-  md: "text-2xl",
-  lg: "text-4xl",
+  sm: "h-8",
+  md: "h-12",
+  lg: "h-16",
 }
 
 export function Spinner({ className, size = "md" }: SpinnerProps) {
   return (
-    <span
+    <Logo
       className={cn(
-        "inline-block animate-spin font-serif text-primary select-none",
+        "w-auto animate-spin select-none",
         sizeClasses[size],
         className,
       )}
       aria-hidden="true"
-    >
-      {"✻"}
-    </span>
+    />
   )
 }
-
-type PageLoaderProps = {
-  message?: string
-  className?: string
-}
-
-export function PageLoader({ message, className }: PageLoaderProps) {
-  return (
-    <div className={cn("min-h-screen flex flex-col items-center justify-center gap-3", className)}>
-      <Spinner size="lg" />
-      {message && <p className="text-sm text-muted-foreground">{message}</p>}
-    </div>
-  )
-}
-
