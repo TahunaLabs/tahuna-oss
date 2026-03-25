@@ -20,7 +20,7 @@ function DashboardAppLayout({
       <AppSidebar>
         {sidebar}
       </AppSidebar>
-      <SidebarInset id="main-content" className="overflow-y-auto border-l border-border bg-background pt-10">
+      <SidebarInset id="main-content" className="overflow-y-auto pt-10">
         {children}
       </SidebarInset>
     </SidebarProvider>

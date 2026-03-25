@@ -38,7 +38,7 @@ const SidebarInset = React.forwardRef<
   return (
     <main
       ref={ref}
-      className={cn("min-h-0 min-w-0 flex-1", className)}
+      className={cn("min-h-0 min-w-0 flex-1 border-l border-border", className)}
       {...props}
     />
   )
