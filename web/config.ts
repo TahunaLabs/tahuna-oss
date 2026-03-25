@@ -71,6 +71,11 @@ export function manifestLimitByKind(kind: SyncKind) {
   return kind === "data" ? UPLOAD_LIMITS_BYTES.dataManifest : UPLOAD_LIMITS_BYTES.codeManifest;
 }
 
+export const CDN_CONFIG = {
+  baseUrl: "https://pub-5f7c225fd68446a9b652150d7c7e52e9.r2.dev",
+  providerIconsPath: "/assets/providers",
+} as const;
+
 export const LINKS_CONFIG = {
   gettingStartedUrl: "https://docs.tahuna.io/getting-started",
   apiReferenceUrl: "https://docs.tahuna.io/api",

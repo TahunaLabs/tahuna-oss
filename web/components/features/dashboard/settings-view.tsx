@@ -1,87 +1,29 @@
 "use client"
 
-import { useState } from "react"
-import { ChevronDown, ChevronUp, KeyRound, Settings, ShieldCheck } from "lucide-react"
-import Link from "next/link"
+import { Settings } from "lucide-react"
 import { toast } from "sonner"
 
 import { DashboardViewLayout } from "@/components/app-shell/dashboard-view-layout"
-import { RunpodSettingsCard } from "@/components/features/dashboard/runpod-settings-card"
-import type { ApiKeyRow, ProfileDraft, RunpodCredentialStatus } from "@/components/features/dashboard-settings-model"
-import { Badge } from "@/components/ui/badge"
+import type { ProfileDraft } from "@/components/features/dashboard-settings-model"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { formatDate } from "@/lib/utils"
 
 type SettingsViewProps = {
   userEmail: string
-  apiKeys: ApiKeyRow[]
-  runpodCredentialStatus?: RunpodCredentialStatus
   profile: ProfileDraft
   onProfileChange: (profile: ProfileDraft) => void
   savingProfile: boolean
   onSaveProfile: (profile: ProfileDraft) => Promise<void>
-  savingRunpodCredential: boolean
-  revokingRunpodCredential: boolean
-  onSaveRunpodCredential: (apiKey: string) => Promise<void>
-  onRevokeRunpodCredential: () => Promise<void>
-}
-
-function statusVariant(status: ApiKeyRow["status"]) {
-  if (status === "active") return "status-success" as const
-  if (status === "expired") return "status-warning" as const
-  return "status-error" as const
-}
-
-function CollapsibleSection({
-  title,
-  open,
-  onToggle,
-  children,
-}: {
-  title: string
-  open: boolean
-  onToggle: () => void
-  children: React.ReactNode
-}) {
-  return (
-    <div>
-      <Button
-        type="button"
-        variant="context-toggle"
-        size="none"
-        onClick={onToggle}
-      >
-        <span className="text-sm text-foreground">{title}</span>
-        {open ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
-      </Button>
-      {open ? <div className="mt-2">{children}</div> : null}
-    </div>
-  )
 }
 
 export function SettingsView({
   userEmail,
-  apiKeys,
-  runpodCredentialStatus,
   profile,
   onProfileChange,
   savingProfile,
   onSaveProfile,
-  savingRunpodCredential,
-  revokingRunpodCredential,
-  onSaveRunpodCredential,
-  onRevokeRunpodCredential,
 }: SettingsViewProps) {
-  const [apiKeysOpen, setApiKeysOpen] = useState(false)
-  const [runpodOpen, setRunpodOpen] = useState(false)
-  const [sessionsOpen, setSessionsOpen] = useState(false)
-  const [loginOpen, setLoginOpen] = useState(false)
-
-  const activeKeys = apiKeys.filter((key) => key.status === "active")
-  const activeSessions = activeKeys.filter((key) => (key.machineId || "").trim().length > 0)
-
   async function handleSaveProfile() {
     try {
       await onSaveProfile(profile)
@@ -98,204 +40,42 @@ export function SettingsView({
       titleIcon={<Settings size={24} />}
       toolbar={null}
     >
-      <div className="space-y-5">
-        <Card className="p-4">
-          <h2 className="text-sm font-medium text-foreground">Account information</h2>
-          <div className="mt-4">
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-            <div>
-              <label className="mb-1.5 block text-sm text-muted-foreground">First name</label>
-              <Input
-               
-                value={profile.firstName}
-                onChange={(event) => onProfileChange({ ...profile, firstName: event.target.value })}
-                placeholder="First name"
-              />
-            </div>
-            <div>
-              <label className="mb-1.5 block text-sm text-muted-foreground">Last name</label>
-              <Input
-               
-                value={profile.lastName}
-                onChange={(event) => onProfileChange({ ...profile, lastName: event.target.value })}
-                placeholder="Last name"
-              />
-            </div>
-            <div>
-              <label className="mb-1.5 block text-sm text-muted-foreground">Address line 1</label>
-              <Input
-               
-                value={profile.addressLine1}
-                onChange={(event) => onProfileChange({ ...profile, addressLine1: event.target.value })}
-                placeholder="Street address"
-              />
-            </div>
-            <div>
-              <label className="mb-1.5 block text-sm text-muted-foreground">Address line 2</label>
-              <Input
-               
-                value={profile.addressLine2}
-                onChange={(event) => onProfileChange({ ...profile, addressLine2: event.target.value })}
-                placeholder="Suite, floor, etc. (optional)"
-              />
-            </div>
-            <div>
-              <label className="mb-1.5 block text-sm text-muted-foreground">Country</label>
-              <Input
-               
-                value={profile.country}
-                onChange={(event) => onProfileChange({ ...profile, country: event.target.value })}
-                placeholder="Country"
-              />
-            </div>
-            <div>
-              <label className="mb-1.5 block text-sm text-muted-foreground">Company name</label>
-              <Input
-               
-                value={profile.companyName}
-                onChange={(event) => onProfileChange({ ...profile, companyName: event.target.value })}
-                placeholder="Company name"
-              />
-            </div>
-            <div>
-              <label className="mb-1.5 block text-sm text-muted-foreground">Company ID</label>
-              <Input
-               
-                value={profile.companyId}
-                onChange={(event) => onProfileChange({ ...profile, companyId: event.target.value })}
-                placeholder="Company registration ID"
-              />
-            </div>
-            <div>
-              <label className="mb-1.5 block text-sm text-muted-foreground">Tax ID</label>
-              <Input
-               
-                value={profile.taxId}
-                onChange={(event) => onProfileChange({ ...profile, taxId: event.target.value })}
-                placeholder="Tax ID"
-              />
-            </div>
-            <div className="md:col-span-2">
-              <label className="mb-1.5 block text-sm text-muted-foreground">Account email</label>
-              <Input value={userEmail || "—"} readOnly />
-            </div>
+      <Card className="p-4">
+        <h2 className="text-sm font-medium text-foreground">Account</h2>
+        <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
+          <div>
+            <label className="mb-1.5 block text-sm text-muted-foreground">First name</label>
+            <Input
+              value={profile.firstName}
+              onChange={(event) => onProfileChange({ ...profile, firstName: event.target.value })}
+              placeholder="First name"
+            />
           </div>
-          <div className="mt-4 flex justify-end">
-              <Button
-                type="button"
-                variant="default"
-                size="control"
-                disabled={savingProfile}
-                onClick={() => {
-                  void handleSaveProfile()
-                }}
-              >
-                {savingProfile ? "Saving..." : "Save changes"}
-              </Button>
-            </div>
+          <div>
+            <label className="mb-1.5 block text-sm text-muted-foreground">Last name</label>
+            <Input
+              value={profile.lastName}
+              onChange={(event) => onProfileChange({ ...profile, lastName: event.target.value })}
+              placeholder="Last name"
+            />
           </div>
-        </Card>
-
-        <Card className="p-4">
-          <CollapsibleSection
-            title="Tahuna API keys"
-            open={apiKeysOpen}
-            onToggle={() => setApiKeysOpen((open) => !open)}
+          <div className="md:col-span-2">
+            <label className="mb-1.5 block text-sm text-muted-foreground">Email</label>
+            <Input value={userEmail || "—"} readOnly />
+          </div>
+        </div>
+        <div className="mt-4 flex justify-end">
+          <Button
+            type="button"
+            variant="default"
+            size="control"
+            disabled={savingProfile}
+            onClick={() => { void handleSaveProfile() }}
           >
-            <div className="mt-3 space-y-3">
-              <div className="flex items-center justify-between">
-                <p className="text-sm text-muted-foreground">
-                  {apiKeys.length} total keys, {activeKeys.length} active
-                </p>
-                <Button asChild type="button" variant="outline" size="control">
-                  <Link href="/dashboard?view=machines">Manage sessions</Link>
-                </Button>
-              </div>
-              {apiKeys.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No API keys created yet.</p>
-              ) : (
-                <div className="space-y-2">
-                  {apiKeys.slice(0, 8).map((key) => (
-                    <div key={key._id} className="rounded border border-border p-3">
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="flex min-w-0 items-center gap-2">
-                          <KeyRound className="h-4 w-4 shrink-0 text-muted-foreground" />
-                          <p className="truncate text-sm text-foreground">{key.name}</p>
-                          <Badge variant={statusVariant(key.status)}>{key.status}</Badge>
-                        </div>
-                        <p className="font-mono text-xs text-muted-foreground">{key.keyPrefix}</p>
-                      </div>
-                      <p className="mt-1 truncate text-xs text-muted-foreground">
-                        machine: {key.machineId || "n/a"} • last used: {formatDate(key.lastUsedAt)}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </CollapsibleSection>
-        </Card>
-
-        <Card className="p-4">
-          <CollapsibleSection
-            title="GPU provider API keys"
-            open={runpodOpen}
-            onToggle={() => setRunpodOpen((open) => !open)}
-          >
-            <div className="mt-3">
-              <RunpodSettingsCard
-                status={runpodCredentialStatus}
-                saving={savingRunpodCredential}
-                revoking={revokingRunpodCredential}
-                onSave={onSaveRunpodCredential}
-                onRevoke={onRevokeRunpodCredential}
-              />
-            </div>
-          </CollapsibleSection>
-        </Card>
-
-        <Card className="p-4">
-          <CollapsibleSection
-            title="Active sessions"
-            open={sessionsOpen}
-            onToggle={() => setSessionsOpen((open) => !open)}
-          >
-            <div className="mt-3 space-y-2">
-              {activeSessions.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No active machine sessions found.</p>
-              ) : (
-                activeSessions.map((session) => (
-                  <div key={session._id} className="flex items-center justify-between gap-3 rounded border border-border p-3">
-                    <div>
-                      <p className="text-sm text-foreground">{session.machineId}</p>
-                      <p className="text-xs text-muted-foreground">{session.name}</p>
-                    </div>
-                    <p className="text-xs text-muted-foreground">{formatDate(session.lastUsedAt)}</p>
-                  </div>
-                ))
-              )}
-            </div>
-          </CollapsibleSection>
-        </Card>
-
-        <Card className="p-4">
-          <CollapsibleSection
-            title="Login settings"
-            open={loginOpen}
-            onToggle={() => setLoginOpen((open) => !open)}
-          >
-            <div className="mt-3 space-y-3">
-              <div className="flex items-center gap-2 text-foreground">
-                <ShieldCheck className="h-4 w-4 text-success" />
-                <p className="text-sm">Sign in with a one-time code sent to your email.</p>
-              </div>
-              <p className="text-sm text-muted-foreground">
-                We will email you a fresh code each time you sign in.
-              </p>
-            </div>
-          </CollapsibleSection>
-        </Card>
-      </div>
+            {savingProfile ? "Saving..." : "Save changes"}
+          </Button>
+        </div>
+      </Card>
     </DashboardViewLayout>
   )
 }

@@ -4,8 +4,7 @@ import { useState } from "react"
 import { ShieldCheck } from "lucide-react"
 import { toast } from "sonner"
 
-import type { RunpodCredentialStatus } from "@/components/features/dashboard-settings-model"
-import { Badge } from "@/components/ui/badge"
+import type { RunpodCredentialStatus } from "@/components/features/dashboard-providers-model"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { formatDate } from "@/lib/utils"
@@ -54,19 +53,9 @@ export function RunpodSettingsCard({
 
   return (
     <div className="space-y-4">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-sm text-muted-foreground">
-            Add your Runpod API key to use Runpod GPUs in Tahuna.
-          </p>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Changes apply to new launches only.
-          </p>
-        </div>
-        <Badge variant={status?.configured ? "status-success" : "status-warning"}>
-          {status?.configured ? "configured" : "not configured"}
-        </Badge>
-      </div>
+      <p className="text-sm text-muted-foreground">
+        Add your Runpod API key to enable Runpod GPU launches. Changes apply to new launches only.
+      </p>
 
       {status?.configured ? (
         <div className="rounded border border-border p-3">

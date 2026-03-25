@@ -8,7 +8,7 @@ import type { ReactNode } from "react"
 
 export type MainSection = "data" | "environments" | "runs"
 
-export const DASHBOARD_VIEW_VALUES = ["storage", "environments", "runs", "machines", "billing", "audit_logs", "settings"] as const
+export const DASHBOARD_VIEW_VALUES = ["storage", "environments", "runs", "machines", "billing", "audit_logs", "settings", "providers"] as const
 export type DashboardView = (typeof DASHBOARD_VIEW_VALUES)[number]
 
 export const STORAGE_SOURCE_FILTER_VALUES = ["all", "shared", "private"] as const

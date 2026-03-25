@@ -1,7 +1,5 @@
 import type { Id } from "@convex/_generated/dataModel"
 
-export type ThemeChoice = "light" | "dark"
-
 export type ApiKeyRow = {
   _id: Id<"apiKeys">
   _creationTime: number
@@ -34,14 +32,6 @@ export type UserProfileResponse = {
   company_name: string
   company_id: string
   tax_id: string
-  updated_at?: number
-}
-
-export type RunpodCredentialStatus = {
-  configured: boolean
-  credential_id: Id<"runpodCredentials"> | null
-  key_prefix: string
-  validated_at?: number
   updated_at?: number
 }
 

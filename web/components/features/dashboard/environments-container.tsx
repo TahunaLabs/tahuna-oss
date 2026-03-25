@@ -10,7 +10,7 @@ import {
   type DataBlobRow,
   type EnvironmentRow,
 } from "@/components/features/dashboard-model"
-import type { RunpodCredentialStatus } from "@/components/features/dashboard-settings-model"
+import type { RunpodCredentialStatus } from "@/components/features/dashboard-providers-model"
 import type { Id } from "@convex/_generated/dataModel"
 
 type Props = {
