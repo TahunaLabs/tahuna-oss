@@ -10,16 +10,18 @@ import { cn } from "@/lib/utils"
 
 const commands = {
   brew: "brew tap Pazuzzu/tahuna && brew install tahuna",
-  script: "curl -fsSL https://tahuna.dev/install | sh",
+  direct: "brew install Pazuzzu/tahuna/tahuna",
 } as const
 
 const terminalSteps = [
-  { kind: "read", label: "Read", value: "pyproject.toml" },
-  { kind: "read", label: "Read", value: "tahuna.yaml" },
-  { kind: "read", label: "Read", value: "data manifest snapshot" },
-  { kind: "run", label: "Sync", value: "upload changed blobs only" },
-  { kind: "run", label: "Provision", value: "request H100 on RunPod" },
-  { kind: "run", label: "Capture", value: "stream logs, metrics, and artifacts" },
+  { kind: "command", value: "$ tahuna login" },
+  { kind: "status", value: "opens browser for authentication" },
+  { kind: "command", value: "$ tahuna init ." },
+  { kind: "status", value: "writes .tahuna/tahuna.toml and scaffolds missing project files" },
+  { kind: "command", value: "$ tahuna train" },
+  { kind: "status", value: "sync: unchanged blobs reused, code and data manifests pinned" },
+  { kind: "status", value: "run: queued -> provisioning -> running" },
+  { kind: "status", value: "logs and metrics stream live, outputs collected as artifacts" },
 ]
 
 export function LandingTerminalSection() {
@@ -45,6 +47,10 @@ export function LandingTerminalSection() {
             <br />
             for post-training
           </h2>
+          <p className="mt-4 max-w-sm text-base leading-relaxed text-muted-foreground">
+            Tahuna is the RL training substrate that keeps your code and your loop intact while handling provisioning,
+            sync, dependencies, monitoring, and artifacts.
+          </p>
         </div>
 
         <div className="lg:w-2/3">
@@ -59,39 +65,32 @@ export function LandingTerminalSection() {
             </div>
 
             <CardContent className="min-h-80 space-y-4 p-5 font-mono text-sm">
-              <div className="flex items-start gap-2">
-                <span className="shrink-0 text-primary">{">"}</span>
-                <span className="text-foreground/80">Thinking</span>
-                <span className="text-muted-foreground">{">"}</span>
-              </div>
-
-              <p className="pl-5 text-xs leading-relaxed text-muted-foreground">
-                You keep your training loop. Tahuna handles the machinery around it: snapshotting code and data,
-                materializing the workspace, installing dependencies, running on GPU, and persisting artifacts.
-              </p>
-
-              <div className="space-y-1.5 pl-5">
+              <div className="space-y-1.5">
                 {terminalSteps.map((step) => (
                   <div key={step.value} className="flex items-center gap-2 text-xs">
-                    <span className={cn(step.kind === "read" ? "text-destructive" : "text-success")}>
-                      {step.kind === "read" ? "x" : ">"}
+                    <span className={cn(step.kind === "command" ? "text-primary" : "text-success")}>
+                      {step.kind === "command" ? ">" : "•"}
                     </span>
-                    <span className="text-muted-foreground">{step.label}</span>
-                    <span className="text-primary/80 underline underline-offset-2">{step.value}</span>
+                    <span className={cn(
+                      "leading-relaxed",
+                      step.kind === "command" ? "text-foreground/85" : "text-muted-foreground",
+                    )}>
+                      {step.value}
+                    </span>
                   </div>
                 ))}
               </div>
 
-              <p className="pl-5 text-xs leading-relaxed text-muted-foreground">
-                Init. Align. Converge. Emerge. The heavy machinery stays out of sight. The run remains pinned to exact
-                snapshots.
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                Tahuna reconstructs the remote workspace from pinned snapshots before execution, then persists output
+                files from the configured output directory as run artifacts.
               </p>
 
               <div className="mt-4 flex items-center justify-between border-t border-border pt-4">
                 <Badge variant="status">smart</Badge>
                 <div className="flex items-center gap-4 text-xs text-muted-foreground">
                   <span>runtime/warden</span>
-                  <span>artifacts persisted</span>
+                  <span>wandb-compatible metrics</span>
                 </div>
               </div>
             </CardContent>
@@ -116,11 +115,11 @@ export function LandingTerminalSection() {
                 size="compact-sm"
                 className={cn(
                   "rounded-full px-4 font-mono",
-                  activeCommand === "script" ? "bg-secondary text-foreground" : "text-muted-foreground",
+                  activeCommand === "direct" ? "bg-secondary text-foreground" : "text-muted-foreground",
                 )}
-                onClick={() => setActiveCommand("script")}
+                onClick={() => setActiveCommand("direct")}
               >
-                Install Script
+                Direct
               </Button>
             </div>
             <div className="flex min-w-0 flex-1 items-center gap-2 rounded-full border border-border bg-card px-5 py-2.5">

@@ -19,14 +19,10 @@ export function LandingHero() {
           </h1>
 
           <div className="flex flex-col gap-10 lg:flex-row lg:items-start lg:justify-between">
-            <div className="max-w-2xl">
-              <p className="mb-3 text-lg leading-relaxed text-foreground/85 md:text-xl">
+            <div className="max-w-xl">
+              <p className="text-lg leading-relaxed text-foreground/85 md:text-xl">
                 The future of artificial intelligence is a wide field of specialized systems. Training them should not
                 require a platform team.
-              </p>
-              <p className="text-base text-muted-foreground md:text-lg">
-                Tahuna is the RL training substrate that keeps your code and your loop intact while handling
-                provisioning, sync, dependencies, monitoring, and artifacts.
               </p>
             </div>
 
