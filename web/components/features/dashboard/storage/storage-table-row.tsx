@@ -1,6 +1,6 @@
 "use client"
 
-import { Download, ExternalLink, Lock, Pencil, Share2, Unlock, X } from "lucide-react"
+import { Download, ExternalLink, Lock, Pencil, Share2, Trash2, Unlock, X } from "lucide-react"
 
 import {
   formatBytes,
@@ -27,6 +27,8 @@ type StorageTableRowProps = {
   onCancelRenameArtifact: () => void
   onStartRenameArtifact: (item: StorageItem) => void
   onShareStorageItem?: (item: StorageItem) => void
+  onDeleteStorageItem?: (item: StorageItem) => void
+  deleteBusy: boolean
   onSetVisibility?: (item: StorageItem, visibility: "shared" | "private") => void
   selected: boolean
   onToggleSelected: (itemId: string) => void
@@ -42,14 +44,16 @@ function StorageTableRow({
   onCancelRenameArtifact,
   onStartRenameArtifact,
   onShareStorageItem,
+  onDeleteStorageItem,
+  deleteBusy,
   onSetVisibility,
   selected,
   onToggleSelected,
 }: StorageTableRowProps) {
   const isRenaming = renamingStorageId === item.id
   const isBusy = artifactRenameBusyId === item.id
-  const runLabel = item.run_label || "—"
-  const environmentLabel = item.environment_label || "—"
+  const runLabel = item.run?.name || "—"
+  const environmentLabel = item.environment?.name || "—"
 
   return (
     <TableRow
@@ -167,6 +171,15 @@ function StorageTableRow({
                       <Unlock className="h-3.5 w-3.5" />
                     )}
                     {item.visibility === "shared" ? "Make private" : "Make shared"}
+                  </DropdownMenuItem>
+                ) : null}
+                {onDeleteStorageItem ? (
+                  <DropdownMenuItem
+                    disabled={deleteBusy}
+                    onClick={() => { close(); onDeleteStorageItem(item) }}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    Delete
                   </DropdownMenuItem>
                 ) : null}
               </>

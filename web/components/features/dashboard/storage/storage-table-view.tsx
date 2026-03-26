@@ -1,5 +1,7 @@
 "use client"
 
+import { useState } from "react"
+
 import {
   type StorageItem,
 } from "@/components/features/dashboard-model"
@@ -25,7 +27,9 @@ type StorageTableViewProps = {
   onPreviousPage: () => void
   onNextPage: () => void
   onShareStorageItem?: (item: StorageItem) => void
+  onDeleteStorageItems: (items: StorageItem[]) => Promise<boolean>
   onSetVisibility?: (item: StorageItem, visibility: "shared" | "private") => void
+  deleteBusy: boolean
 }
 
 function StorageTableView({
@@ -43,8 +47,11 @@ function StorageTableView({
   onPreviousPage,
   onNextPage,
   onShareStorageItem,
+  onDeleteStorageItems,
   onSetVisibility,
+  deleteBusy,
 }: StorageTableViewProps) {
+  const [deletingSelected, setDeletingSelected] = useState(false)
   const visibleStorageIds = items.map((item) => item.id)
   const {
     selectedIds: selectedStorageIds,
@@ -56,13 +63,26 @@ function StorageTableView({
     clearSelection,
   } = useTableSelection(visibleStorageIds)
 
+  async function deleteSelectedStorageItems() {
+    const selectedItems = items.filter((item) => selectedStorageIds.has(item.id))
+    if (selectedItems.length === 0 || deleteBusy || deletingSelected) return
+    setDeletingSelected(true)
+    try {
+      const deleted = await onDeleteStorageItems(selectedItems)
+      if (deleted) clearSelection()
+    } finally {
+      setDeletingSelected(false)
+    }
+  }
+
   return (
     <>
       <TableSelectionBar
         selectedCount={selectedVisibleCount}
         itemLabel="storage item"
         onClearSelection={clearSelection}
-        onDeleteSelected={clearSelection}
+        onDeleteSelected={() => { void deleteSelectedStorageItems() }}
+        deleteBusy={deleteBusy || deletingSelected}
       />
       <DashboardTable
         columns={[
@@ -116,6 +136,8 @@ function StorageTableView({
             onCancelRenameArtifact={onCancelRenameArtifact}
             onStartRenameArtifact={onStartRenameArtifact}
             onShareStorageItem={onShareStorageItem}
+            onDeleteStorageItem={(target) => { void onDeleteStorageItems([target]) }}
+            deleteBusy={deleteBusy}
             onSetVisibility={onSetVisibility}
             selected={selectedStorageIds.has(item.id)}
             onToggleSelected={toggleSelected}
