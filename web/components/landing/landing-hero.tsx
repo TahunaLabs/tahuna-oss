@@ -6,10 +6,6 @@ import { Button } from "@/components/ui/button"
 export function LandingHero() {
   return (
     <section className="relative overflow-hidden px-6 py-20 md:py-28">
-      <div className="absolute right-8 top-8 hidden font-serif text-5xl text-primary lg:block" aria-hidden="true">
-        *
-      </div>
-
       <div className="mx-auto max-w-7xl">
         <div className="max-w-5xl">
           <h1 className="mb-10 font-serif text-5xl leading-display-tight tracking-tight text-foreground md:text-7xl xl:text-8xl">
