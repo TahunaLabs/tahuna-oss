@@ -1,18 +1,23 @@
 "use client"
 
+import { Moon, Sun } from "lucide-react"
 import Link from "next/link"
 
 import { LINKS_CONFIG } from "@/config"
 import { Logo } from "@/components/logo"
+import { useTheme } from "@/components/theme-provider"
 import { Button } from "@/components/ui/button"
 
 const NAV_LINKS = [
   { label: "Dashboard", href: "/dashboard" },
   { label: "GitHub",    href: LINKS_CONFIG.repoUrl, external: true },
   { label: "Docs",      href: LINKS_CONFIG.gettingStartedUrl, external: true },
+  { label: "Blog",      href: "#" },
 ] as const
 
 export function LandingNav() {
+  const { theme, setTheme } = useTheme()
+
   return (
     <header className="flex h-14 shrink-0 items-center px-8">
       <Link href="/" className="flex shrink-0 items-center gap-2.5">
@@ -32,6 +37,15 @@ export function LandingNav() {
             )}
           </Button>
         ))}
+
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label="Toggle theme"
+          onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+        >
+          {theme === "dark" ? <Sun className="size-4" /> : <Moon className="size-4" />}
+        </Button>
 
         <Button variant="outline" size="sm" asChild>
           <Link href="/login">Log in</Link>
