@@ -41,6 +41,102 @@ function Sparkline() {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Olive branch — organic SVG that sweeps behind the cards            */
+/*  Matches the logo's hand-drawn, irregular style                     */
+/*  Uses inline style for opacity since Tailwind classes don't         */
+/*  reliably apply to SVG path fills                                   */
+/* ------------------------------------------------------------------ */
+function OliveBranch() {
+  const gold = 'var(--primary)'
+  const stone = '#b3aea2' // from the logo's lighter fill
+
+  return (
+    <svg
+      className="absolute inset-0 w-full h-full pointer-events-none"
+      viewBox="0 0 500 550"
+      fill="none"
+      preserveAspectRatio="xMidYMid slice"
+    >
+      {/* Main stem — thick, organic, slightly irregular S-curve */}
+      <path
+        d="M 40 510 C 70 440, 110 380, 160 330
+           C 210 280, 250 260, 290 230
+           C 330 200, 370 165, 400 130
+           C 430 95, 450 70, 475 35"
+        stroke={gold}
+        strokeWidth="2.5"
+        strokeLinecap="round"
+        opacity="0.18"
+      />
+      {/* Secondary thinner line along the stem — gives organic depth */}
+      <path
+        d="M 45 505 C 75 435, 115 378, 165 328
+           C 215 275, 255 255, 295 225
+           C 335 195, 372 160, 405 125"
+        stroke={stone}
+        strokeWidth="1"
+        strokeLinecap="round"
+        opacity="0.10"
+      />
+
+      {/* ---- Sub-branches splitting off the main stem ---- */}
+      <path d="M 120 385 C 95 365, 70 360, 55 370" stroke={gold} strokeWidth="1.5" strokeLinecap="round" opacity="0.14" />
+      <path d="M 200 295 C 175 275, 148 268, 132 278" stroke={gold} strokeWidth="1.5" strokeLinecap="round" opacity="0.14" />
+      <path d="M 200 295 C 220 268, 245 252, 265 258" stroke={gold} strokeWidth="1.2" strokeLinecap="round" opacity="0.12" />
+      <path d="M 290 230 C 265 212, 242 206, 228 218" stroke={gold} strokeWidth="1.5" strokeLinecap="round" opacity="0.14" />
+      <path d="M 340 185 C 360 158, 382 145, 398 152" stroke={gold} strokeWidth="1.2" strokeLinecap="round" opacity="0.12" />
+      <path d="M 400 130 C 378 115, 358 110, 345 120" stroke={gold} strokeWidth="1.5" strokeLinecap="round" opacity="0.14" />
+      <path d="M 440 80 C 455 55, 470 42, 485 48" stroke={gold} strokeWidth="1" strokeLinecap="round" opacity="0.10" />
+
+      {/* ---- Leaves — organic teardrop shapes, alternating sides ---- */}
+
+      {/* Bottom cluster (near training card) */}
+      <path d="M 80 410 C 55 392, 35 385, 28 398 C 42 402, 62 406, 80 410Z" fill={gold} opacity="0.14" />
+      <path d="M 90 405 C 108 382, 128 372, 138 384 C 122 392, 105 400, 90 405Z" fill={gold} opacity="0.11" />
+      <path d="M 65 420 C 42 415, 25 420, 22 432 C 36 428, 52 424, 65 420Z" fill={stone} opacity="0.08" />
+
+      {/* Lower-mid cluster */}
+      <path d="M 155 340 C 130 322, 108 315, 100 328 C 116 332, 136 336, 155 340Z" fill={gold} opacity="0.16" />
+      <path d="M 168 332 C 188 308, 210 296, 222 308 C 206 318, 186 328, 168 332Z" fill={gold} opacity="0.12" />
+      <path d="M 140 350 C 118 348, 98 355, 96 366 C 112 360, 128 354, 140 350Z" fill={stone} opacity="0.09" />
+
+      {/* Center cluster — the fullest, most visible */}
+      <path d="M 260 252 C 235 232, 212 224, 204 238 C 220 244, 240 248, 260 252Z" fill={gold} opacity="0.20" />
+      <path d="M 275 242 C 298 216, 320 204, 332 216 C 316 228, 295 238, 275 242Z" fill={gold} opacity="0.16" />
+      <path d="M 248 265 C 224 260, 204 266, 200 280 C 216 274, 234 268, 248 265Z" fill={gold} opacity="0.13" />
+      <path d="M 288 232 C 308 208, 330 198, 340 210 C 324 220, 306 228, 288 232Z" fill={stone} opacity="0.10" />
+      <path d="M 242 258 C 220 248, 198 252, 195 264 C 210 260, 228 256, 242 258Z" fill={stone} opacity="0.07" />
+
+      {/* Upper cluster (between training & dashboard) */}
+      <path d="M 355 172 C 332 154, 312 146, 305 158 C 320 164, 338 168, 355 172Z" fill={gold} opacity="0.16" />
+      <path d="M 368 162 C 388 138, 408 128, 418 140 C 402 150, 384 158, 368 162Z" fill={gold} opacity="0.12" />
+      <path d="M 342 182 C 320 178, 300 185, 298 196 C 314 190, 330 186, 342 182Z" fill={stone} opacity="0.09" />
+
+      {/* Top cluster (near dashboard) */}
+      <path d="M 425 108 C 405 90, 385 82, 378 94 C 392 100, 410 104, 425 108Z" fill={gold} opacity="0.16" />
+      <path d="M 438 98 C 454 74, 470 64, 480 76 C 466 86, 450 94, 438 98Z" fill={gold} opacity="0.12" />
+      <path d="M 460 68 C 472 48, 486 40, 494 50 C 482 58, 470 64, 460 68Z" fill={gold} opacity="0.10" />
+
+      {/* ---- Olives / berries — small filled circles along the stem ---- */}
+      <circle cx="100" cy="392" r="5" fill={gold} opacity="0.18" />
+      <circle cx="105" cy="395" r="2.5" fill={stone} opacity="0.25" />
+
+      <circle cx="182" cy="310" r="5.5" fill={gold} opacity="0.20" />
+      <circle cx="185" cy="313" r="2.5" fill={stone} opacity="0.28" />
+
+      <circle cx="270" cy="240" r="6" fill={gold} opacity="0.22" />
+      <circle cx="273" cy="243" r="3" fill={stone} opacity="0.30" />
+
+      <circle cx="358" cy="165" r="5" fill={gold} opacity="0.18" />
+      <circle cx="361" cy="168" r="2.5" fill={stone} opacity="0.25" />
+
+      <circle cx="445" cy="82" r="4.5" fill={gold} opacity="0.16" />
+      <circle cx="447" cy="84" r="2" fill={stone} opacity="0.22" />
+    </svg>
+  )
+}
+
+/* ------------------------------------------------------------------ */
 /*  Main hero decoration — the Tahuna story                            */
 /*                                                                     */
 /*  Diagonal cascade filling the space:                                */
@@ -133,76 +229,8 @@ export function HeroDecoration() {
         </CardContent>
       </Card>
 
-      {/* ---- Olive branch — sweeps from bottom-left through center to top-right ---- */}
-      <svg
-        className="absolute inset-0 w-full h-full pointer-events-none"
-        viewBox="0 0 500 500"
-        fill="none"
-        preserveAspectRatio="xMidYMid slice"
-      >
-        {/* Main branch stem — a graceful S-curve */}
-        <path
-          d="M 60 460 C 100 380, 140 320, 200 280 S 320 200, 360 160 S 420 100, 460 50"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          className="text-primary/20"
-        />
-
-        {/* ---- Leaves along the branch (alternating sides) ---- */}
-        {/* Leaf cluster 1 — bottom, near training card */}
-        <path d="M 95 400 C 75 380, 55 375, 40 385 C 55 390, 75 395, 95 400Z" className="fill-primary/15" />
-        <path d="M 105 395 C 120 370, 135 360, 150 368 C 135 378, 120 388, 105 395Z" className="fill-primary/12" />
-
-        {/* Leaf cluster 2 — mid-left */}
-        <path d="M 170 305 C 145 290, 125 280, 115 292 C 130 298, 150 300, 170 305Z" className="fill-primary/15" />
-        <path d="M 185 295 C 200 270, 218 258, 230 268 C 215 278, 200 288, 185 295Z" className="fill-primary/12" />
-        <path d="M 155 315 C 135 310, 115 315, 112 328 C 128 322, 142 318, 155 315Z" className="fill-primary/10" />
-
-        {/* Leaf cluster 3 — center, the fullest point */}
-        <path d="M 260 235 C 238 218, 215 210, 208 222 C 222 228, 242 230, 260 235Z" className="fill-primary/18" />
-        <path d="M 275 225 C 292 200, 312 188, 322 200 C 308 210, 290 220, 275 225Z" className="fill-primary/15" />
-        <path d="M 248 248 C 225 240, 205 245, 202 258 C 218 252, 235 248, 248 248Z" className="fill-primary/12" />
-        <path d="M 285 215 C 300 192, 318 182, 328 192 C 312 202, 298 212, 285 215Z" className="fill-primary/10" />
-
-        {/* Leaf cluster 4 — upper, toward dashboard */}
-        <path d="M 365 155 C 345 138, 325 130, 318 142 C 332 148, 350 150, 365 155Z" className="fill-primary/15" />
-        <path d="M 378 145 C 395 122, 412 112, 422 122 C 408 132, 392 140, 378 145Z" className="fill-primary/12" />
-
-        {/* Leaf cluster 5 — top, near dashboard */}
-        <path d="M 430 95 C 412 78, 395 70, 388 82 C 402 88, 418 90, 430 95Z" className="fill-primary/15" />
-        <path d="M 442 85 C 455 62, 468 52, 478 62 C 465 72, 452 80, 442 85Z" className="fill-primary/12" />
-
-        {/* Small olives / berries along the branch */}
-        <circle cx="130" cy="350" r="4" className="fill-primary/20" />
-        <circle cx="220" cy="265" r="5" className="fill-primary/25" />
-        <circle cx="310" cy="190" r="4" className="fill-primary/20" />
-        <circle cx="400" cy="120" r="4.5" className="fill-primary/22" />
-        <circle cx="455" cy="65" r="3.5" className="fill-primary/18" />
-
-        {/* Secondary thinner branches splitting off */}
-        <path
-          d="M 200 280 C 175 265, 155 255, 140 260"
-          stroke="currentColor"
-          strokeWidth="1"
-          strokeLinecap="round"
-          className="text-primary/12"
-        />
-        <path
-          d="M 260 235 C 275 215, 295 205, 310 210"
-          stroke="currentColor"
-          strokeWidth="1"
-          strokeLinecap="round"
-          className="text-primary/12"
-        />
-        <path
-          d="M 360 160 C 340 145, 325 140, 315 148"
-          stroke="currentColor"
-          strokeWidth="1"
-          strokeLinecap="round"
-          className="text-primary/12"
-        />
-      </svg>
+      {/* ---- Olive branch — organic, behind cards ---- */}
+      <OliveBranch />
     </div>
   )
 }
