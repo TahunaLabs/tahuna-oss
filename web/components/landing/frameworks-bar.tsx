@@ -12,7 +12,7 @@ const FRAMEWORKS = [
 
 export function FrameworksBar() {
   return (
-    <section className="shrink-0 border-t border-border px-8 py-5">
+    <section className="shrink-0 px-8 py-8">
       <div className="flex items-center gap-8">
         <Eyebrow variant="cancelling" className="shrink-0">
           Works with your stack

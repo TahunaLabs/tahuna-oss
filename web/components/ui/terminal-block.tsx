@@ -19,9 +19,9 @@ function TerminalBlock({ command }: { command: string }) {
     <Card variant="surface">
       {/* Window chrome — traffic lights built from design-system color tokens */}
       <div className="flex items-center gap-1.5 border-b border-border px-4 py-2.5">
-        <div className="size-2.5 rounded-full bg-destructive" />
-        <div className="size-2.5 rounded-full bg-warning" />
-        <div className="size-2.5 rounded-full bg-success" />
+        <div className="size-2.5 rounded-full bg-muted-foreground/40" />
+        <div className="size-2.5 rounded-full bg-muted-foreground/25" />
+        <div className="size-2.5 rounded-full border border-muted-foreground/25" />
       </div>
 
       <CardContent className="flex items-center gap-3 py-3">

@@ -4,7 +4,7 @@ import { HeroDecoration } from '@/components/landing/hero-decoration'
 
 export function LandingHero() {
   return (
-    <section id="hero" className="flex flex-1 items-start px-8 py-12">
+    <section id="hero" className="flex flex-1 items-center px-8 py-12">
       <div className="grid w-full grid-cols-2 gap-8">
         <div className="flex flex-col justify-center gap-8">
           <Eyebrow variant="cancelling">Vision</Eyebrow>
