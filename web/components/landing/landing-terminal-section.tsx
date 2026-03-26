@@ -14,14 +14,15 @@ const commands = {
 } as const
 
 const terminalSteps = [
-  { kind: "command", value: "$ tahuna login" },
-  { kind: "status", value: "opens browser for authentication" },
   { kind: "command", value: "$ tahuna init ." },
-  { kind: "status", value: "writes .tahuna/tahuna.toml and scaffolds missing project files" },
+  { kind: "status", value: "config def" },
+  { kind: "status", value: "entrypoint detected, environment scaffolded" },
+  { kind: "command", value: "$ tahuna sync" },
+  { kind: "status", value: "syncing code, data, env config" },
   { kind: "command", value: "$ tahuna train" },
-  { kind: "status", value: "sync: unchanged blobs reused, code and data manifests pinned" },
-  { kind: "status", value: "run: queued -> provisioning -> running" },
-  { kind: "status", value: "logs and metrics stream live, outputs collected as artifacts" },
+  { kind: "status", value: "materializing" },
+  { kind: "status", value: "finetuning minimax2.5" },
+  { kind: "status", value: "streaming metrics" },
 ]
 
 export function LandingTerminalSection() {
@@ -81,14 +82,8 @@ export function LandingTerminalSection() {
                 ))}
               </div>
 
-              <p className="text-xs leading-relaxed text-muted-foreground">
-                Tahuna reconstructs the remote workspace from pinned snapshots before execution, then persists output
-                files from the configured output directory as run artifacts.
-              </p>
-
               <div className="mt-4 flex items-center justify-between border-t border-border pt-4">
-                <Badge variant="status">smart</Badge>
-                <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                <div className="ml-auto flex items-center gap-4 text-xs text-muted-foreground">
                   <span>runtime/warden</span>
                   <span>wandb-compatible metrics</span>
                 </div>
