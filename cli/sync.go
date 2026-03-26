@@ -26,10 +26,17 @@ import (
 func runSyncWithStatus(environmentID string, scope syncScope) error {
 	start := time.Now()
 	dynamic := supportsDynamicStatus()
-	if err := syncIncremental(environmentID, scope, syncOptions{
+	options := syncOptions{
 		logProgress:   true,
 		dynamicStatus: dynamic,
-	}); err != nil {
+	}
+	if err := syncIncremental(environmentID, scope, options); err != nil {
+		if dynamic {
+			clearStatusLine()
+		}
+		return err
+	}
+	if err := syncProjectConfigWithStatus(environmentID, options); err != nil {
 		if dynamic {
 			clearStatusLine()
 		}
@@ -39,6 +46,16 @@ func runSyncWithStatus(environmentID string, scope syncScope) error {
 		clearStatusLine()
 	}
 	printSuccessLine(fmt.Sprintf("sync complete (%s)", formatDuration(time.Since(start))))
+	return nil
+}
+
+func syncProjectConfigWithStatus(environmentID string, options syncOptions) error {
+	configSpinner := newSyncPhaseSpinner("syncing environment...", options)
+	if err := syncLinkedLocalProjectConfig(environmentID); err != nil {
+		configSpinner.StopError()
+		return fmt.Errorf("environment sync failed: %w", err)
+	}
+	configSpinner.StopSuccess("syncing environment")
 	return nil
 }
 
