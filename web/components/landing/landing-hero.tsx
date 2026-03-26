@@ -9,9 +9,9 @@ export function LandingHero() {
       <div className="mx-auto max-w-7xl">
         <div className="max-w-5xl">
           <h1 className="mb-10 font-serif text-5xl leading-display-tight tracking-tight text-foreground md:text-7xl xl:text-8xl">
-            AGI is not a monolith.
+            AGI is not a single Oracle.
             <br />
-            <span className="italic">It&apos;s a species of models.</span>
+            <span className="italic">It&apos;s a billion of species of models.</span>
           </h1>
 
           <div className="flex flex-col gap-10 lg:flex-row lg:items-start lg:justify-between">
