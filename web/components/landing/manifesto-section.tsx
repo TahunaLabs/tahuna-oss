@@ -5,7 +5,7 @@ export function ManifestoSection() {
   return (
     <section id="manifesto" className="shrink-0 border-t border-border px-8 py-20">
       <div className="mx-auto max-w-2xl">
-        <Eyebrow variant="queued" className="mb-8">
+        <Eyebrow className="mb-8">
           Philosophy
         </Eyebrow>
 

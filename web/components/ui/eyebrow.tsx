@@ -1,19 +1,17 @@
-import { StatusDot, type StatusDotVariant } from '@/components/ui/status-dot'
+import { Separator } from '@/components/ui/separator'
 import { cn } from '@/lib/utils'
 
 function Eyebrow({
-  variant = 'cancelling',
   className,
   children,
 }: {
-  variant?: StatusDotVariant
   className?: string
   children: React.ReactNode
 }) {
   return (
-    <div data-slot="eyebrow" className={cn('flex items-center gap-2', className)}>
-      <StatusDot variant={variant} size="sm" />
-      <span className="font-medium text-ui-caption tracking-ui-eyebrow uppercase text-foreground">
+    <div data-slot="eyebrow" className={cn('flex items-center gap-3', className)}>
+      <Separator className="data-[orientation=horizontal]:w-8" />
+      <span className="font-medium text-ui-caption tracking-ui-eyebrow uppercase text-muted-foreground">
         {children}
       </span>
     </div>
