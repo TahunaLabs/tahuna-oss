@@ -1,5 +1,3 @@
-import { ChevronLeft, ChevronRight } from "lucide-react"
-
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 
@@ -49,17 +47,9 @@ export function LandingLayersSection() {
           </div>
 
           <div className="flex items-center gap-6">
-            <p className="max-w-md text-lg font-serif text-foreground/80 md:text-xl">
+            <p className="max-w-md text-lg font-serif font-medium text-foreground md:text-xl">
               You keep the training loop. Tahuna handles everything around it in four clear steps.
             </p>
-            <div className="hidden items-center gap-2 md:flex">
-              <Button variant="outline" size="icon-control" aria-label="Previous layer">
-                <ChevronLeft />
-              </Button>
-              <Button variant="outline" size="icon-control" aria-label="Next layer">
-                <ChevronRight />
-              </Button>
-            </div>
           </div>
         </div>
 

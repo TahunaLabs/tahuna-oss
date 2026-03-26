@@ -6,6 +6,7 @@ import { useState } from "react"
 
 import { Logo } from "@/components/logo"
 import { Button } from "@/components/ui/button"
+import { LINKS_CONFIG } from "@/config"
 import { cn } from "@/lib/utils"
 
 export function LandingHeader() {
@@ -20,6 +21,11 @@ export function LandingHeader() {
         </Link>
 
         <div className="hidden items-center gap-3 md:flex">
+          <Button asChild variant="ghost" size="compact">
+            <Link href={LINKS_CONFIG.gettingStartedUrl} target="_blank" rel="noreferrer">
+              Documentation
+            </Link>
+          </Button>
           <Button asChild variant="ghost" size="compact">
             <Link href="/login">Sign In</Link>
           </Button>
@@ -46,6 +52,15 @@ export function LandingHeader() {
         )}
       >
         <div className="space-y-3">
+          <Link
+            href={LINKS_CONFIG.gettingStartedUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="block text-sm text-muted-foreground transition-colors hover:text-foreground"
+            onClick={() => setMobileMenuOpen(false)}
+          >
+            Documentation
+          </Link>
           <Link
             href="/login"
             className="block text-sm text-muted-foreground transition-colors hover:text-foreground"
