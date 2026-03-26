@@ -8,12 +8,6 @@ import { Logo } from "@/components/logo"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
-const navLinks = [
-  { label: "The Layers", href: "/#layers" },
-  { label: "The Loop", href: "/#loop" },
-  { label: "Start", href: "/#start" },
-]
-
 export function LandingHeader() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
@@ -26,15 +20,6 @@ export function LandingHeader() {
         </Link>
 
         <div className="hidden items-center gap-3 md:flex">
-          {navLinks.map((link) => (
-            <Link
-              key={link.label}
-              href={link.href}
-              className="text-sm text-muted-foreground transition-colors hover:text-foreground"
-            >
-              {link.label}
-            </Link>
-          ))}
           <Button asChild variant="ghost" size="compact">
             <Link href="/login">Sign In</Link>
           </Button>
@@ -61,16 +46,6 @@ export function LandingHeader() {
         )}
       >
         <div className="space-y-3">
-          {navLinks.map((link) => (
-            <Link
-              key={link.label}
-              href={link.href}
-              className="block text-sm text-muted-foreground transition-colors hover:text-foreground"
-              onClick={() => setMobileMenuOpen(false)}
-            >
-              {link.label}
-            </Link>
-          ))}
           <Link
             href="/login"
             className="block text-sm text-muted-foreground transition-colors hover:text-foreground"
