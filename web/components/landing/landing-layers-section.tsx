@@ -1,6 +1,5 @@
 import { ChevronLeft, ChevronRight } from "lucide-react"
 
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 
@@ -11,7 +10,6 @@ const layers = [
     detail: "Tahuna scans your project, detects your framework, identifies your entrypoint and data, and scaffolds anything missing.",
     statA: "Project-aware",
     statB: "Setup without ceremony",
-    badge: "STEP 01",
   },
   {
     title: "Align",
@@ -19,7 +17,6 @@ const layers = [
     detail: "Your code and data are synced incrementally. Only changed files travel, and every run is pinned to exact snapshots.",
     statA: "Incremental sync",
     statB: "Reproducible by default",
-    badge: "STEP 02",
   },
   {
     title: "Converge",
@@ -27,7 +24,6 @@ const layers = [
     detail: "Tahuna provisions the GPU, materializes the workspace, installs dependencies, and runs your training entrypoint.",
     statA: "Logs stream live",
     statB: "Your loop stays yours",
-    badge: "STEP 03",
   },
   {
     title: "Emerge",
@@ -35,7 +31,6 @@ const layers = [
     detail: "Your checkpoints, models, and outputs are persisted. Run history stays queryable, and every experiment can be traced back to exact inputs.",
     statA: "Artifacts persisted",
     statB: "History stays queryable",
-    badge: "STEP 04",
   },
 ]
 
@@ -92,10 +87,6 @@ export function LandingLayersSection() {
                     <div className="flex items-center justify-between text-xs text-muted-foreground">
                       <span>{layer.statA}</span>
                       <span>{layer.statB}</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <Badge variant="default">{layer.badge}</Badge>
-                      <span className="text-xs text-muted-foreground">Tahuna flow</span>
                     </div>
                   </div>
                 </div>
