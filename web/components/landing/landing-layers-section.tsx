@@ -6,36 +6,36 @@ import { Card, CardContent } from "@/components/ui/card"
 
 const layers = [
   {
-    title: "CLI",
-    owner: "Go surface",
-    detail: "login, init, sync, train, run management",
-    statA: "4 commands",
-    statB: "Terminal first",
-    badge: "ENTRY",
+    title: "Init",
+    owner: "tahuna init .",
+    detail: "Tahuna scans your project, detects your framework, identifies your entrypoint and data, and scaffolds anything missing.",
+    statA: "Project-aware",
+    statB: "Setup without ceremony",
+    badge: "STEP 01",
   },
   {
-    title: "Control Plane",
-    owner: "Convex backend",
-    detail: "auth, state, lifecycle orchestration, monitoring",
-    statA: "Snapshots pinned",
-    statB: "Runs queryable",
-    badge: "CORE",
-  },
-  {
-    title: "Runtime",
-    owner: "Warden",
-    detail: "materialize workspace, install deps, execute, report",
-    statA: "One binary",
-    statB: "No shell fallback",
-    badge: "EXEC",
-  },
-  {
-    title: "Storage + Compute",
-    owner: "R2 and RunPod",
-    detail: "content-addressed blobs, manifests, artifacts, GPU pods",
+    title: "Align",
+    owner: "tahuna sync",
+    detail: "Your code and data are synced incrementally. Only changed files travel, and every run is pinned to exact snapshots.",
     statA: "Incremental sync",
-    statB: "Artifacts persisted",
-    badge: "INFRA",
+    statB: "Reproducible by default",
+    badge: "STEP 02",
+  },
+  {
+    title: "Converge",
+    owner: "tahuna train",
+    detail: "Tahuna provisions the GPU, materializes the workspace, installs dependencies, and runs your training entrypoint.",
+    statA: "Logs stream live",
+    statB: "Your loop stays yours",
+    badge: "STEP 03",
+  },
+  {
+    title: "Emerge",
+    owner: "runs + artifacts",
+    detail: "Your checkpoints, models, and outputs are persisted. Run history stays queryable, and every experiment can be traced back to exact inputs.",
+    statA: "Artifacts persisted",
+    statB: "History stays queryable",
+    badge: "STEP 04",
   },
 ]
 
@@ -49,13 +49,13 @@ export function LandingLayersSection() {
             <h2 className="font-serif text-3xl leading-tight tracking-tight text-foreground md:text-4xl">
               Explore
               <br />
-              <span className="italic">the</span> architecture
+              <span className="italic">the</span> core loop
             </h2>
           </div>
 
           <div className="flex items-center gap-6">
             <p className="max-w-md text-lg font-serif text-foreground/80 md:text-xl">
-              Full control over the training loop. Low complexity everywhere around it.
+              You keep the training loop. Tahuna handles everything around it in four clear steps.
             </p>
             <div className="hidden items-center gap-2 md:flex">
               <Button variant="outline" size="icon-control" aria-label="Previous layer">
@@ -95,7 +95,7 @@ export function LandingLayersSection() {
                     </div>
                     <div className="flex items-center justify-between">
                       <Badge variant="default">{layer.badge}</Badge>
-                      <span className="text-xs text-muted-foreground">Path C</span>
+                      <span className="text-xs text-muted-foreground">Tahuna flow</span>
                     </div>
                   </div>
                 </div>
