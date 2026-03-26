@@ -4,7 +4,6 @@ version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = [
   "accelerate",
-  "pyyaml",
   "torch==2.8.0",
   "torchvision",
   "transformers",

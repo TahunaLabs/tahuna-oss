@@ -7,6 +7,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -36,7 +38,12 @@ func projectEnvironmentFilePath() string {
 	return filepath.Join(projectStateDir, projectEnvIDFile)
 }
 
+func legacyProjectConfigFilePath() string {
+	return filepath.Join(projectStateDir, "project.yaml")
+}
+
 type projectConfig struct {
+	EnvironmentName   string
 	DataDir           string
 	OutputDir         string
 	ConfigYAMLPath    string
@@ -46,9 +53,13 @@ type projectConfig struct {
 	Framework         string
 	FrameworkVersion  string
 	PythonVersion     string
+	GPUType           string
+	GPUCount          int
+	VolumeGB          int
 }
 
-type projectConfigYAML struct {
+type legacyProjectConfigYAML struct {
+	EnvironmentName   string `yaml:"environment_name"`
 	Entrypoint        string `yaml:"entrypoint"`
 	TrainEntrypoint   string `yaml:"train_entrypoint"`
 	DataDir           string `yaml:"data_dir"`
@@ -60,6 +71,9 @@ type projectConfigYAML struct {
 	Framework         string `yaml:"framework"`
 	FrameworkVersion  string `yaml:"framework_version"`
 	PythonVersion     string `yaml:"python_version"`
+	GPUType           string `yaml:"gpu_type"`
+	GPUCount          int    `yaml:"gpu_count"`
+	VolumeGB          int    `yaml:"volume_gb"`
 	Requirements      any    `yaml:"requirements"`
 }
 
@@ -78,6 +92,8 @@ var requiredProjectConfigKeys = []projectConfigKeySpec{
 	{name: "framework", aliases: []string{"framework"}},
 	{name: "python_version", aliases: []string{"python_version"}},
 }
+
+var tomlPositiveIntPattern = regexp.MustCompile(`^\d+$`)
 
 func collectProjectInitConfig() (projectConfig, string, error) {
 	cfg := projectConfig{
@@ -295,21 +311,7 @@ func saveProjectConfig(cfg projectConfig) error {
 	if err := os.MkdirAll(projectStateDir, 0o755); err != nil {
 		return err
 	}
-	body, err := yaml.Marshal(projectConfigYAML{
-		Entrypoint:        cfg.TrainEntrypoint,
-		DataDir:           cfg.DataDir,
-		OutputDir:         cfg.OutputDir,
-		ConfigFile:        cfg.ConfigYAMLPath,
-		PythonProjectFile: cfg.PythonProjectFile,
-		UVLockFile:        cfg.UVLockFile,
-		Framework:         cfg.Framework,
-		FrameworkVersion:  cfg.FrameworkVersion,
-		PythonVersion:     cfg.PythonVersion,
-	})
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(projectConfigFilePath(), body, 0o600)
+	return os.WriteFile(projectConfigFilePath(), []byte(renderProjectConfig(cfg)), 0o600)
 }
 
 func loadProjectConfig() (projectConfig, error) {
@@ -323,6 +325,10 @@ func loadProjectConfig() (projectConfig, error) {
 		PythonVersion:     "3.11",
 	}
 
+	if err := migrateLegacyProjectConfigIfNeeded(); err != nil {
+		return cfg, err
+	}
+
 	raw, err := os.ReadFile(projectConfigFilePath())
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -331,44 +337,12 @@ func loadProjectConfig() (projectConfig, error) {
 		return cfg, err
 	}
 
-	var parsed projectConfigYAML
-	if err := yaml.Unmarshal(raw, &parsed); err != nil {
+	parsed, _, err := parseProjectConfigTOML(string(raw))
+	if err != nil {
 		return cfg, fmt.Errorf("failed to parse %s: %w", projectConfigFilePath(), err)
 	}
 
-	if value := strings.TrimSpace(parsed.Entrypoint); value != "" {
-		cfg.TrainEntrypoint = filepath.Clean(value)
-	} else if value := strings.TrimSpace(parsed.TrainEntrypoint); value != "" {
-		cfg.TrainEntrypoint = filepath.Clean(value)
-	}
-	if value := strings.TrimSpace(parsed.DataDir); value != "" {
-		cfg.DataDir = filepath.Clean(value)
-	}
-	if value := strings.TrimSpace(parsed.OutputDir); value != "" {
-		cfg.OutputDir = filepath.Clean(value)
-	}
-	if value := strings.TrimSpace(parsed.ConfigFile); value != "" {
-		cfg.ConfigYAMLPath = filepath.Clean(value)
-	} else if value := strings.TrimSpace(parsed.ConfigYAML); value != "" {
-		cfg.ConfigYAMLPath = filepath.Clean(value)
-	}
-	if value := strings.TrimSpace(parsed.PythonProjectFile); value != "" {
-		cfg.PythonProjectFile = filepath.Clean(value)
-	}
-	if value := strings.TrimSpace(parsed.UVLockFile); value != "" {
-		cfg.UVLockFile = filepath.Clean(value)
-	}
-	if value := strings.TrimSpace(parsed.Framework); value != "" {
-		cfg.Framework = value
-	}
-	if value := strings.TrimSpace(parsed.FrameworkVersion); value != "" {
-		cfg.FrameworkVersion = value
-	}
-	if value := strings.TrimSpace(parsed.PythonVersion); value != "" {
-		cfg.PythonVersion = value
-	}
-
-	return cfg, nil
+	return mergeProjectConfig(cfg, parsed), nil
 }
 
 func validateProjectConfigBindings(environmentID string) (projectConfig, error) {
@@ -447,32 +421,324 @@ func validateProjectConfigBindings(environmentID string) (projectConfig, error) 
 			}
 			fmt.Printf("%s✓%s Environment updated: %s %s, Python %s\n", cAmpGreen, cReset, resolved.Framework, resolved.FrameworkVersion, resolved.PythonVersion)
 		}
+		if err := syncLinkedLocalProjectConfig(environmentID); err != nil {
+			return resolved, fmt.Errorf("failed to refresh local project config: %w", err)
+		}
 	}
 
 	return resolved, nil
 }
 
 func loadRawProjectConfigValues(path string) (map[string]string, error) {
+	if err := migrateLegacyProjectConfigIfNeeded(); err != nil {
+		return nil, err
+	}
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
-	var parsed map[string]any
-	if err := yaml.Unmarshal(raw, &parsed); err != nil {
+	_, values, err := parseProjectConfigTOML(string(raw))
+	if err != nil {
 		return nil, fmt.Errorf("failed to parse %s: %w", path, err)
 	}
-	values := map[string]string{}
-	for key, rawValue := range parsed {
-		switch value := rawValue.(type) {
-		case nil:
-			values[key] = ""
-		case string:
-			values[key] = strings.TrimSpace(value)
-		default:
-			values[key] = strings.TrimSpace(fmt.Sprintf("%v", value))
+	return values, nil
+}
+
+func mergeProjectConfig(base, next projectConfig) projectConfig {
+	if value := strings.TrimSpace(next.EnvironmentName); value != "" {
+		base.EnvironmentName = value
+	}
+	if value := strings.TrimSpace(next.DataDir); value != "" {
+		base.DataDir = filepath.Clean(value)
+	}
+	if value := strings.TrimSpace(next.OutputDir); value != "" {
+		base.OutputDir = filepath.Clean(value)
+	}
+	if value := strings.TrimSpace(next.ConfigYAMLPath); value != "" {
+		base.ConfigYAMLPath = filepath.Clean(value)
+	}
+	if value := strings.TrimSpace(next.TrainEntrypoint); value != "" {
+		base.TrainEntrypoint = filepath.Clean(value)
+	}
+	if value := strings.TrimSpace(next.PythonProjectFile); value != "" {
+		base.PythonProjectFile = filepath.Clean(value)
+	}
+	if value := strings.TrimSpace(next.UVLockFile); value != "" {
+		base.UVLockFile = filepath.Clean(value)
+	}
+	if value := strings.TrimSpace(next.Framework); value != "" {
+		base.Framework = value
+	}
+	if value := strings.TrimSpace(next.FrameworkVersion); value != "" {
+		base.FrameworkVersion = value
+	}
+	if value := strings.TrimSpace(next.PythonVersion); value != "" {
+		base.PythonVersion = value
+	}
+	if value := strings.TrimSpace(next.GPUType); value != "" {
+		base.GPUType = value
+	}
+	if next.GPUCount > 0 {
+		base.GPUCount = next.GPUCount
+	}
+	if next.VolumeGB > 0 {
+		base.VolumeGB = next.VolumeGB
+	}
+	return base
+}
+
+func hasEnvironmentSection(cfg projectConfig) bool {
+	return strings.TrimSpace(cfg.EnvironmentName) != "" ||
+		strings.TrimSpace(cfg.Framework) != "" ||
+		strings.TrimSpace(cfg.FrameworkVersion) != "" ||
+		strings.TrimSpace(cfg.PythonVersion) != "" ||
+		strings.TrimSpace(cfg.GPUType) != "" ||
+		cfg.GPUCount > 0 ||
+		cfg.VolumeGB > 0
+}
+
+func escapeProjectConfigValue(value string) string {
+	replacer := strings.NewReplacer(
+		"\\", "\\\\",
+		"\"", "\\\"",
+		"\n", "\\n",
+		"\r", "\\r",
+		"\t", "\\t",
+	)
+	return replacer.Replace(value)
+}
+
+func renderProjectConfig(cfg projectConfig) string {
+	lines := []string{
+		"# Generated from local Tahuna project state.",
+		"[project]",
+		fmt.Sprintf("entrypoint = \"%s\"", escapeProjectConfigValue(cfg.TrainEntrypoint)),
+		fmt.Sprintf("data_dir = \"%s\"", escapeProjectConfigValue(cfg.DataDir)),
+		fmt.Sprintf("output_dir = \"%s\"", escapeProjectConfigValue(cfg.OutputDir)),
+		fmt.Sprintf("config_file = \"%s\"", escapeProjectConfigValue(cfg.ConfigYAMLPath)),
+		fmt.Sprintf("python_project_file = \"%s\"", escapeProjectConfigValue(cfg.PythonProjectFile)),
+		fmt.Sprintf("uv_lock_file = \"%s\"", escapeProjectConfigValue(cfg.UVLockFile)),
+	}
+	if hasEnvironmentSection(cfg) {
+		lines = append(lines, "", "[environment]")
+		if value := strings.TrimSpace(cfg.EnvironmentName); value != "" {
+			lines = append(lines, fmt.Sprintf("name = \"%s\"", escapeProjectConfigValue(value)))
+		}
+		if value := strings.TrimSpace(cfg.Framework); value != "" {
+			lines = append(lines, fmt.Sprintf("framework = \"%s\"", escapeProjectConfigValue(value)))
+		}
+		if value := strings.TrimSpace(cfg.FrameworkVersion); value != "" {
+			lines = append(lines, fmt.Sprintf("version = \"%s\"", escapeProjectConfigValue(value)))
+		}
+		if value := strings.TrimSpace(cfg.PythonVersion); value != "" {
+			lines = append(lines, fmt.Sprintf("python_version = \"%s\"", escapeProjectConfigValue(value)))
+		}
+		if value := strings.TrimSpace(cfg.GPUType); value != "" {
+			lines = append(lines, fmt.Sprintf("gpu_type = \"%s\"", escapeProjectConfigValue(value)))
+		}
+		if cfg.GPUCount > 0 {
+			lines = append(lines, fmt.Sprintf("gpu_count = %d", cfg.GPUCount))
+		}
+		if cfg.VolumeGB > 0 {
+			lines = append(lines, fmt.Sprintf("volume_gb = %d", cfg.VolumeGB))
 		}
 	}
-	return values, nil
+	return strings.Join(lines, "\n") + "\n"
+}
+
+func parseTomlStringValue(raw string, lineNumber int) (string, error) {
+	if len(raw) < 2 {
+		return "", fmt.Errorf("line %d: expected quoted string value", lineNumber)
+	}
+	quote := raw[0]
+	if (quote != '"' && quote != '\'') || raw[len(raw)-1] != quote {
+		return "", fmt.Errorf("line %d: expected quoted string value", lineNumber)
+	}
+	inner := raw[1 : len(raw)-1]
+	if quote == '\'' {
+		return inner, nil
+	}
+	return strings.NewReplacer(
+		`\\`, `\`,
+		`\"`, `"`,
+		`\n`, "\n",
+		`\r`, "\r",
+		`\t`, "\t",
+	).Replace(inner), nil
+}
+
+func parseTomlPositiveIntValue(raw string, lineNumber int) (int, error) {
+	if !tomlPositiveIntPattern.MatchString(raw) {
+		return 0, fmt.Errorf("line %d: expected a positive integer", lineNumber)
+	}
+	value, err := strconv.Atoi(raw)
+	if err != nil || value < 1 {
+		return 0, fmt.Errorf("line %d: expected a positive integer", lineNumber)
+	}
+	return value, nil
+}
+
+func parseProjectConfigTOML(text string) (projectConfig, map[string]string, error) {
+	cfg := projectConfig{}
+	values := map[string]string{}
+	seen := map[string]struct{}{}
+	section := ""
+
+	for index, rawLine := range strings.Split(text, "\n") {
+		lineNumber := index + 1
+		line := strings.TrimSpace(rawLine)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
+			section = strings.TrimSpace(line[1 : len(line)-1])
+			if section != "project" && section != "environment" {
+				return cfg, nil, fmt.Errorf("line %d: unsupported section [%s]", lineNumber, section)
+			}
+			continue
+		}
+		if section == "" {
+			return cfg, nil, fmt.Errorf("line %d: expected [project] or [environment] section before config values", lineNumber)
+		}
+
+		separator := strings.Index(line, "=")
+		if separator < 0 {
+			return cfg, nil, fmt.Errorf("line %d: expected key = value", lineNumber)
+		}
+		key := strings.TrimSpace(line[:separator])
+		rawValue := strings.TrimSpace(line[separator+1:])
+		fullKey := section + "." + key
+		if _, exists := seen[fullKey]; exists {
+			return cfg, nil, fmt.Errorf("line %d: duplicate key %s", lineNumber, fullKey)
+		}
+		seen[fullKey] = struct{}{}
+
+		switch section {
+		case "project":
+			value, err := parseTomlStringValue(rawValue, lineNumber)
+			if err != nil {
+				return cfg, nil, err
+			}
+			values[key] = strings.TrimSpace(value)
+			switch key {
+			case "entrypoint":
+				cfg.TrainEntrypoint = value
+			case "data_dir":
+				cfg.DataDir = value
+			case "output_dir":
+				cfg.OutputDir = value
+			case "config_file":
+				cfg.ConfigYAMLPath = value
+			case "python_project_file":
+				cfg.PythonProjectFile = value
+			case "uv_lock_file":
+				cfg.UVLockFile = value
+			default:
+				return cfg, nil, fmt.Errorf("line %d: unsupported key %s in [project]", lineNumber, key)
+			}
+		case "environment":
+			switch key {
+			case "name", "framework", "version", "python_version", "gpu_type":
+				value, err := parseTomlStringValue(rawValue, lineNumber)
+				if err != nil {
+					return cfg, nil, err
+				}
+				values[key] = strings.TrimSpace(value)
+				switch key {
+				case "name":
+					cfg.EnvironmentName = value
+				case "framework":
+					cfg.Framework = value
+				case "version":
+					cfg.FrameworkVersion = value
+				case "python_version":
+					cfg.PythonVersion = value
+				case "gpu_type":
+					cfg.GPUType = value
+				}
+			case "gpu_count", "volume_gb":
+				value, err := parseTomlPositiveIntValue(rawValue, lineNumber)
+				if err != nil {
+					return cfg, nil, err
+				}
+				values[key] = strconv.Itoa(value)
+				if key == "gpu_count" {
+					cfg.GPUCount = value
+				} else {
+					cfg.VolumeGB = value
+				}
+			default:
+				return cfg, nil, fmt.Errorf("line %d: unsupported key %s in [environment]", lineNumber, key)
+			}
+		}
+	}
+
+	return cfg, values, nil
+}
+
+func loadLegacyProjectConfig(path string) (projectConfig, error) {
+	cfg := projectConfig{
+		DataDir:           "data",
+		OutputDir:         "outputs",
+		ConfigYAMLPath:    "config.yaml",
+		TrainEntrypoint:   "train.py",
+		PythonProjectFile: "pyproject.toml",
+		UVLockFile:        "uv.lock",
+		PythonVersion:     "3.11",
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return cfg, err
+	}
+	var parsed legacyProjectConfigYAML
+	if err := yaml.Unmarshal(raw, &parsed); err != nil {
+		return cfg, fmt.Errorf("failed to parse %s: %w", path, err)
+	}
+	return mergeProjectConfig(cfg, projectConfig{
+		EnvironmentName:   parsed.EnvironmentName,
+		TrainEntrypoint:   firstNonEmpty(parsed.Entrypoint, parsed.TrainEntrypoint),
+		DataDir:           parsed.DataDir,
+		OutputDir:         parsed.OutputDir,
+		ConfigYAMLPath:    firstNonEmpty(parsed.ConfigFile, parsed.ConfigYAML),
+		PythonProjectFile: parsed.PythonProjectFile,
+		UVLockFile:        parsed.UVLockFile,
+		Framework:         parsed.Framework,
+		FrameworkVersion:  parsed.FrameworkVersion,
+		PythonVersion:     parsed.PythonVersion,
+		GPUType:           parsed.GPUType,
+		GPUCount:          parsed.GPUCount,
+		VolumeGB:          parsed.VolumeGB,
+	}), nil
+}
+
+func migrateLegacyProjectConfigIfNeeded() error {
+	if fileExists(projectConfigFilePath()) {
+		return nil
+	}
+	legacyPath := legacyProjectConfigFilePath()
+	if !fileExists(legacyPath) {
+		return nil
+	}
+	cfg, err := loadLegacyProjectConfig(legacyPath)
+	if err != nil {
+		return err
+	}
+	if err := saveProjectConfig(cfg); err != nil {
+		return err
+	}
+	if err := os.Remove(legacyPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	return nil
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
 }
 
 func validateRequiredProjectConfigValues(path string, values map[string]string) error {
@@ -540,7 +806,7 @@ func validateAndResolveRuntimeConfig(cfg projectConfig, environmentID string) (p
 	frameworkVersion := strings.TrimSpace(cfg.FrameworkVersion)
 	pythonVersion := strings.TrimSpace(cfg.PythonVersion)
 
-	// If framework_version is missing locally (older project), fetch from environment.
+	// If version is missing locally (older project), fetch from environment.
 	if frameworkVersion == "" && environmentID != "" {
 		env, envErr := doJSONAs[environmentResponse](http.MethodGet, "/environments/"+environmentID, nil)
 		if envErr == nil {
@@ -738,6 +1004,54 @@ func ensureUVLockFile(pyprojectPath, uvLockPath string) error {
 
 func defaultTrainEntrypointTemplate(cfg projectConfig) string {
 	return fmt.Sprintf("print(\"Tahuna training entrypoint\")\nprint(\"data dir: %s\")\n", cfg.DataDir)
+}
+
+func projectConfigFromEnvironment(env environmentResponse) projectConfig {
+	cfg := projectConfig{
+		EnvironmentName:  strings.TrimSpace(env.Name),
+		Framework:        strings.TrimSpace(env.Framework),
+		FrameworkVersion: strings.TrimSpace(env.Version),
+		PythonVersion:    strings.TrimSpace(env.PythonVersion),
+		GPUType:          strings.TrimSpace(env.GPUType),
+	}
+	if env.GPUCount > 0 {
+		cfg.GPUCount = int(env.GPUCount)
+	}
+	if env.VolumeGB > 0 {
+		cfg.VolumeGB = int(env.VolumeGB)
+	}
+	return cfg
+}
+
+func syncLocalProjectConfig(environmentID string) error {
+	environmentID = strings.TrimSpace(environmentID)
+	if environmentID == "" {
+		return errors.New("environment id is empty")
+	}
+	env, err := doJSONAs[environmentResponse](http.MethodGet, "/environments/"+environmentID, nil)
+	if err != nil {
+		return err
+	}
+	cfg, err := loadProjectConfig()
+	if err != nil {
+		return err
+	}
+	return saveProjectConfig(mergeProjectConfig(cfg, projectConfigFromEnvironment(env)))
+}
+
+func syncLinkedLocalProjectConfig(environmentID string) error {
+	environmentID = strings.TrimSpace(environmentID)
+	if environmentID == "" {
+		return nil
+	}
+	linkedEnvironmentID, err := loadLinkedEnvironmentID()
+	if err != nil {
+		return err
+	}
+	if linkedEnvironmentID == "" || linkedEnvironmentID != environmentID {
+		return nil
+	}
+	return syncLocalProjectConfig(environmentID)
 }
 
 func mustGetwd() string {

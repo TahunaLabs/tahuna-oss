@@ -8,9 +8,15 @@ from torch import nn
 from torch.utils.data import Dataset, Subset
 from torchvision import datasets, transforms
 from transformers import Trainer, TrainingArguments
-import yaml
 
-CONFIG_PATH = Path("config.yaml")
+DEFAULT_DATA_DIR = Path("data/mnist")
+DEFAULT_OUTPUT_DIR = Path("outputs")
+DEFAULT_EPOCHS = 1.0
+DEFAULT_BATCH_SIZE = 64
+DEFAULT_LEARNING_RATE = 1e-3
+DEFAULT_TRAIN_SUBSET_SIZE = 0
+DEFAULT_EVAL_SUBSET_SIZE = 0
+DEFAULT_LOGGING_STEPS = 1
 
 
 class ImageFolderDataset(Dataset):
@@ -69,16 +75,14 @@ def maybe_subset(dataset: Dataset, limit: int | None) -> Dataset:
 
 
 def main() -> None:
-    config = yaml.safe_load(CONFIG_PATH.read_text(encoding="utf-8")) or {}
-    train_config = config.get("train", {})
-    data_dir = Path(str(train_config.get("data_dir", "data/mnist")))
-    output_dir = Path(str(train_config.get("output_dir", "outputs")))
-    epochs = float(train_config.get("epochs", 1))
-    batch_size = int(train_config.get("batch_size", 64))
-    learning_rate = float(train_config.get("learning_rate", 1e-3))
-    train_subset_size = int(train_config.get("train_subset_size", 0))
-    eval_subset_size = int(train_config.get("eval_subset_size", 0))
-    logging_steps = max(1, int(train_config.get("logging_steps", 1)))
+    data_dir = DEFAULT_DATA_DIR
+    output_dir = DEFAULT_OUTPUT_DIR
+    epochs = DEFAULT_EPOCHS
+    batch_size = DEFAULT_BATCH_SIZE
+    learning_rate = DEFAULT_LEARNING_RATE
+    train_subset_size = DEFAULT_TRAIN_SUBSET_SIZE
+    eval_subset_size = DEFAULT_EVAL_SUBSET_SIZE
+    logging_steps = DEFAULT_LOGGING_STEPS
 
     output_dir.mkdir(parents=True, exist_ok=True)
 

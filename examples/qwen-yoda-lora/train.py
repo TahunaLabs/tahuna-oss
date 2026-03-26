@@ -9,9 +9,14 @@ from peft import LoraConfig
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from trl import SFTConfig, SFTTrainer
 import wandb
-import yaml
 
-CONFIG_PATH = Path("config.yaml")
+PROJECT_NAME = "qwen-yoda-lora"
+MODEL_NAME = "Qwen/Qwen3-0.6B"
+DATA_DIR = Path("data/yoda")
+OUTPUT_DIR = Path("outputs")
+EPOCHS = 1.0
+BATCH_SIZE = 4
+LEARNING_RATE = 1e-4
 DEFAULT_GRADIENT_ACCUMULATION_STEPS = 4
 DEFAULT_MAX_SEQ_LENGTH = 128
 DEFAULT_LOGGING_STEPS = 10
@@ -31,11 +36,6 @@ DEFAULT_LORA_TARGET_MODULES = [
     "up_proj",
     "down_proj",
 ]
-
-
-def load_config() -> tuple[dict[str, Any], dict[str, Any]]:
-    config = yaml.safe_load(CONFIG_PATH.read_text(encoding="utf-8")) or {}
-    return config, config.get("train", {})
 
 
 def select_torch_dtype() -> tuple[torch.dtype, bool, bool]:
@@ -100,16 +100,15 @@ def load_prepared_dataset(split_path: Path) -> Dataset:
 
 
 def main() -> None:
-    config, train_config = load_config()
-    project_name = str(config.get("project", "qwen-yoda-lora"))
-    model_name = str(train_config.get("model_name", "Qwen/Qwen3-0.6B"))
-    data_dir = Path(str(train_config.get("data_dir", "data/yoda")))
-    output_dir = Path(str(train_config.get("output_dir", "outputs")))
+    project_name = PROJECT_NAME
+    model_name = MODEL_NAME
+    data_dir = DATA_DIR
+    output_dir = OUTPUT_DIR
     checkpoints_dir = output_dir / "checkpoints"
     adapter_dir = output_dir / "adapter"
-    epochs = float(train_config.get("epochs", 1))
-    batch_size = int(train_config.get("batch_size", 4))
-    learning_rate = float(train_config.get("learning_rate", 1e-4))
+    epochs = EPOCHS
+    batch_size = BATCH_SIZE
+    learning_rate = LEARNING_RATE
     eval_batch_size = batch_size
     gradient_accumulation_steps = DEFAULT_GRADIENT_ACCUMULATION_STEPS
     max_seq_length = DEFAULT_MAX_SEQ_LENGTH

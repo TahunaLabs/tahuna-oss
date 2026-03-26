@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -365,6 +366,66 @@ func TestPersistFallbackEnvironmentGPU_UpdatesLinkedEnvironmentGPUType(t *testin
 	}
 	if asString(patchPayload["gpu_type"]) != "NVIDIA RTX A5000" {
 		t.Fatalf("expected gpu_type patch to match selected fallback GPU, got %v", patchPayload["gpu_type"])
+	}
+}
+
+func TestPersistFallbackEnvironmentGPU_RefreshesLocalProjectConfig(t *testing.T) {
+	setupTestProject(t, false)
+	if err := saveLinkedEnvironmentID("env-test"); err != nil {
+		t.Fatalf("failed to save linked environment id: %v", err)
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodPatch && r.URL.Path == "/api/environments/env-test":
+			_ = json.NewEncoder(w).Encode(map[string]any{"environment_id": "env-test"})
+			return
+		case r.Method == http.MethodGet && r.URL.Path == "/api/environments/env-test":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"environment_id": "env-test",
+				"name":           "fallback-env",
+				"gpu_type":       "NVIDIA RTX A5000",
+				"gpu_count":      1,
+				"volume_gb":      80,
+				"framework":      "pt",
+				"version":        "2.8.0-cu128",
+				"python_version": "3.11",
+			})
+			return
+		default:
+			w.WriteHeader(http.StatusNotFound)
+			_ = json.NewEncoder(w).Encode(map[string]any{"detail": "not found"})
+		}
+	}))
+	defer server.Close()
+
+	t.Setenv("TAHUNA_API_URL", server.URL)
+
+	persistFallbackEnvironmentGPU("/environments/env-test/runs", "NVIDIA RTX A5000")
+
+	raw, err := os.ReadFile(projectConfigFilePath())
+	if err != nil {
+		t.Fatalf("expected local project config to be written: %v", err)
+	}
+	text := string(raw)
+	if !strings.Contains(text, "[project]") {
+		t.Fatalf("expected project section in local config, got: %s", text)
+	}
+	if !strings.Contains(text, "entrypoint = \"train.py\"") || !strings.Contains(text, "uv_lock_file = \"uv.lock\"") {
+		t.Fatalf("expected project bindings to be preserved, got: %s", text)
+	}
+	if !strings.Contains(text, "[environment]") {
+		t.Fatalf("expected environment section in local config, got: %s", text)
+	}
+	if !strings.Contains(text, "gpu_type = \"NVIDIA RTX A5000\"") {
+		t.Fatalf("expected fallback gpu in local config, got: %s", text)
+	}
+	if !strings.Contains(text, "framework = \"pt\"") || !strings.Contains(text, "version = \"2.8.0-cu128\"") || !strings.Contains(text, "python_version = \"3.11\"") {
+		t.Fatalf("expected runtime fields in local config, got: %s", text)
+	}
+	if strings.Contains(text, "framework_version") || strings.Contains(text, "requirements") {
+		t.Fatalf("local project config leaked legacy fields: %s", text)
 	}
 }
 

@@ -104,6 +104,9 @@ func initProject(target string) error {
 		}
 		return fmt.Errorf("failed to save environment link: %w (rolled back environment %s)", saveErr, setup.environmentID)
 	}
+	if err := syncLinkedLocalProjectConfig(setup.environmentID); err != nil {
+		return fmt.Errorf("failed to save local project config: %w", err)
+	}
 	return nil
 }
 
@@ -863,6 +866,7 @@ func environmentUpdate(args []string) {
 
 	resp, err := doJSON(http.MethodPatch, "/environments/"+environmentID, payload)
 	must(err)
+	must(syncLinkedLocalProjectConfig(environmentID))
 	printJSON(resp)
 }
 
@@ -1179,6 +1183,10 @@ func persistFallbackEnvironmentGPU(path, gpuType string) {
 	})
 	if err != nil {
 		logWarn("run created with fallback GPU %q but failed to update environment %s: %v", selectedGPU, environmentID, err)
+		return
+	}
+	if err := syncLinkedLocalProjectConfig(environmentID); err != nil {
+		logWarn("run created with fallback GPU %q but failed to refresh local project config for %s: %v", selectedGPU, environmentID, err)
 	}
 }
 

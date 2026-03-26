@@ -10,7 +10,7 @@ Guided project setup that detects/scaffolds local project files, selects runtime
 |---------|------|-------------|
 | `.tahuna/` | Local directory | Project-local Tahuna state |
 | `.tahuna/environment_id` | Local file | Links this project to a remote environment |
-| `.tahuna/project.yaml` | Local file | Local project config (entrypoint, data dir, config path, uv files, output dir) |
+| `.tahuna/tahuna.toml` | Local file | Local project config and linked environment defaults |
 | `train.py` | Project file | Entrypoint script (default name, user can override) |
 | `data/` | Project directory | Training data directory (default name, user can override) |
 | `outputs/` | Project directory | Training output directory (default name, user can override) |
@@ -92,24 +92,32 @@ Guided project setup that detects/scaffolds local project files, selects runtime
    - POST /api/environments with: name, framework, version,
      gpu_type, gpu_count, volume_gb
    - Save environment ID to .tahuna/environment_id
-   - Save project config to .tahuna/project.yaml
+   - Save project config to .tahuna/tahuna.toml
 
 7. SUCCESS OUTPUT
    - Print summary: project path, environment ID, GPU config
    - Print next steps: "Run `tahuna train` to start training."
 ```
 
-### `.tahuna/project.yaml` Schema
+### `.tahuna/tahuna.toml` Schema
 
-```yaml
-entrypoint: train.py
-data_dir: data
-output_dir: outputs
-config_file: config.yaml
-python_project_file: pyproject.toml
-uv_lock_file: uv.lock
-framework: pytorch       # detected from uv files
-python_version: "3.11"   # detected from uv files
+```toml
+[project]
+entrypoint = "train.py"
+data_dir = "data"
+output_dir = "outputs"
+config_file = "config.yaml"
+python_project_file = "pyproject.toml"
+uv_lock_file = "uv.lock"
+
+[environment]
+name = "my-project"
+framework = "pt"
+version = "2.8.0-cu128"
+python_version = "3.11"
+gpu_type = "NVIDIA A100 80GB"
+gpu_count = 1
+volume_gb = 80
 ```
 
 ## Invariants

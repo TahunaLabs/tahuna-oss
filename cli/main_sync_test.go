@@ -143,7 +143,7 @@ func TestPreRunSync_ConfigValidationDetectsMissingBindingAfterSync(t *testing.T)
 	installSyncStubs(t, mock)
 	setupTestProject(t, true)
 
-	if err := os.WriteFile(projectConfigFilePath(), []byte("data_dir: \"data\"\n"), 0o600); err != nil {
+	if err := os.WriteFile(projectConfigFilePath(), []byte("[project]\ndata_dir = \"data\"\n"), 0o600); err != nil {
 		t.Fatalf("failed to write broken project config: %v", err)
 	}
 

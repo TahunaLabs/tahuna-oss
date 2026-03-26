@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -164,5 +165,93 @@ func TestEnvironmentUpdate_VolumeOnly_PatchesVolumeGB(t *testing.T) {
 	}
 	if _, ok := patchPayload["gpu_type"]; ok {
 		t.Fatalf("did not expect gpu_type in volume-only update")
+	}
+}
+
+func TestEnvironmentUpdate_LinkedEnvironmentRefreshesLocalProjectConfig(t *testing.T) {
+	setupTestProject(t, false)
+	if err := saveLinkedEnvironmentID("env-test"); err != nil {
+		t.Fatalf("failed to save linked environment id: %v", err)
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/gpus":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"gpus": []map[string]any{
+					{"id": "NVIDIA A100 80GB", "display_name": "NVIDIA A100 80GB", "max_gpu_count": 8, "memory_gb": 80},
+				},
+				"images": map[string]any{
+					"pt": map[string]any{
+						"2.8.0-cu128": map[string]any{
+							"3.11": "docker.io/test/tahuna:pt-2.8.0-cu128-py3.11",
+						},
+					},
+				},
+			})
+			return
+		case r.Method == http.MethodPatch && r.URL.Path == "/api/environments/env-test":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"environment_id": "env-test",
+				"gpu_type":       "NVIDIA A100 80GB",
+				"gpu_count":      2,
+				"volume_gb":      160,
+			})
+			return
+		case r.Method == http.MethodGet && r.URL.Path == "/api/environments/env-test":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"environment_id": "env-test",
+				"name":           "linked-env",
+				"gpu_type":       "NVIDIA A100 80GB",
+				"gpu_count":      2,
+				"volume_gb":      160,
+				"framework":      "pt",
+				"version":        "2.8.0-cu128",
+				"python_version": "3.11",
+			})
+			return
+		default:
+			w.WriteHeader(http.StatusNotFound)
+			_ = json.NewEncoder(w).Encode(map[string]any{"detail": "not found"})
+			return
+		}
+	}))
+	defer server.Close()
+
+	t.Setenv("TAHUNA_API_URL", server.URL)
+
+	captureStdout(t, func() {
+		environmentUpdate([]string{"--id", "env-test", "--gpu-type", "NVIDIA A100 80GB", "--gpu-count", "2", "--volume-gb", "160"})
+	})
+
+	raw, err := os.ReadFile(projectConfigFilePath())
+	if err != nil {
+		t.Fatalf("expected local project config to be written: %v", err)
+	}
+	text := string(raw)
+	if !strings.Contains(text, "[project]") {
+		t.Fatalf("expected project section in local config, got: %s", text)
+	}
+	if !strings.Contains(text, "entrypoint = \"train.py\"") || !strings.Contains(text, "config_file = \"config.yaml\"") {
+		t.Fatalf("expected project bindings to be preserved, got: %s", text)
+	}
+	if !strings.Contains(text, "[environment]") {
+		t.Fatalf("expected environment section in local config, got: %s", text)
+	}
+	if !strings.Contains(text, "name = \"linked-env\"") {
+		t.Fatalf("expected environment name in local config, got: %s", text)
+	}
+	if !strings.Contains(text, "version = \"2.8.0-cu128\"") {
+		t.Fatalf("expected environment version in local config, got: %s", text)
+	}
+	if !strings.Contains(text, "gpu_type = \"NVIDIA A100 80GB\"") {
+		t.Fatalf("expected gpu_type in local config, got: %s", text)
+	}
+	if !strings.Contains(text, "gpu_count = 2") || !strings.Contains(text, "volume_gb = 160") {
+		t.Fatalf("expected hardware fields in local config, got: %s", text)
+	}
+	if strings.Contains(text, "framework_version") || strings.Contains(text, "requirements") {
+		t.Fatalf("local project config leaked legacy fields: %s", text)
 	}
 }

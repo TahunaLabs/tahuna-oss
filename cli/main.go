@@ -22,7 +22,7 @@ const (
 	apiPrefix        = "/api"
 	projectStateDir  = ".tahuna"
 	projectEnvIDFile = "environment_id"
-	projectCfgFile   = "project.yaml"
+	projectCfgFile   = "tahuna.toml"
 	cReset           = "\033[0m"
 	// AMP frontend palette mapping:
 	// background #0b1d1f, foreground #e8e0d4, primary/accent #c8a84e, muted #8a9a93
