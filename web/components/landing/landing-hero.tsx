@@ -1,0 +1,44 @@
+import Link from "next/link"
+import { ArrowRight } from "lucide-react"
+
+import { Button } from "@/components/ui/button"
+
+export function LandingHero() {
+  return (
+    <section className="relative overflow-hidden px-6 py-20 md:py-28">
+      <div className="absolute right-8 top-8 hidden font-serif text-5xl text-primary lg:block" aria-hidden="true">
+        *
+      </div>
+
+      <div className="mx-auto max-w-7xl">
+        <div className="max-w-5xl">
+          <h1 className="mb-10 font-serif text-5xl leading-display-tight tracking-tight text-foreground md:text-7xl xl:text-8xl">
+            AGI is not a monolith.
+            <br />
+            <span className="italic">It&apos;s a species of models.</span>
+          </h1>
+
+          <div className="flex flex-col gap-10 lg:flex-row lg:items-start lg:justify-between">
+            <div className="max-w-2xl">
+              <p className="mb-3 text-lg leading-relaxed text-foreground/85 md:text-xl">
+                The future of artificial intelligence is a wide field of specialized systems. Training them should not
+                require a platform team.
+              </p>
+              <p className="text-base text-muted-foreground md:text-lg">
+                Tahuna is the RL training substrate that keeps your code and your loop intact while handling
+                provisioning, sync, dependencies, monitoring, and artifacts.
+              </p>
+            </div>
+
+            <Button asChild variant="outline" size="lg" className="self-start rounded-full px-8">
+              <Link href="/login">
+                Get Started for Free
+                <ArrowRight />
+              </Link>
+            </Button>
+          </div>
+        </div>
+      </div>
+    </section>
+  )
+}
