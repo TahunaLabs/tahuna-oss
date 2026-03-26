@@ -17,7 +17,7 @@ export function LandingHero() {
 
           <div className="flex flex-col gap-4 font-mono text-sm text-muted-foreground leading-relaxed">
             <p>
-              CLI-native finetuning. For you, or the agents
+              CLI-native post-training. For you, or the agents
               <br />
               working alongside you.
             </p>
