@@ -228,7 +228,6 @@ def main() -> None:
                 "torch_dtype": str(torch_dtype),
                 "train_metrics": train_result.metrics,
                 "eval_metrics": eval_metrics,
-                "config": config,
             },
         )
         write_json(output_dir / "sample_predictions.json", sample_outputs)
