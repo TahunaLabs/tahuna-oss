@@ -4,6 +4,8 @@ import os
 from pathlib import Path
 from typing import Any
 
+os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
+
 import torch
 from datasets import Dataset, load_dataset
 from peft import LoraConfig
@@ -14,7 +16,7 @@ import yaml
 
 CONFIG_PATH = Path("config.yaml")
 DEFAULT_GRADIENT_ACCUMULATION_STEPS = 1
-DEFAULT_MAX_SEQ_LENGTH = 256
+DEFAULT_MAX_SEQ_LENGTH = 128
 DEFAULT_LOGGING_STEPS = 10
 DEFAULT_SEED = 42
 DEFAULT_SAMPLE_PREDICTIONS = 8
