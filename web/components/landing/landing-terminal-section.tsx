@@ -49,7 +49,10 @@ export function LandingTerminalSection() {
             for post-training
           </h2>
           <p className="mt-4 max-w-sm text-base leading-relaxed text-muted-foreground">
-            Tahuna is the RL training substrate that keeps your code and your loop intact while handling provisioning,
+            Post-training is the new frontier, but the tooling haven't caught up yet.
+          </p>
+          <p className="mt-3 max-w-sm text-base leading-relaxed text-muted-foreground">
+            Tahuna is the training substrate that keeps your code and your loop intact while handling provisioning,
             sync, dependencies, monitoring, and artifacts.
           </p>
         </div>
