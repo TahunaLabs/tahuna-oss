@@ -5,10 +5,11 @@ import Link from "next/link"
 
 import { CliStep } from "@/components/features/dashboard/environments/cli-step"
 import { Button } from "@/components/ui/button"
+import { Card } from "@/components/ui/card"
 
 function EnvironmentsEmptyState() {
   return (
-    <div className="flex h-full items-center justify-center">
+    <Card variant="ghost" className="flex min-h-72 items-center justify-center">
       <div className="w-full max-w-lg">
         <div className="mb-6 text-center">
           <p className="text-sm leading-relaxed text-muted-foreground">
@@ -35,7 +36,7 @@ function EnvironmentsEmptyState() {
           </Button>
         </div>
       </div>
-    </div>
+    </Card>
   )
 }
 

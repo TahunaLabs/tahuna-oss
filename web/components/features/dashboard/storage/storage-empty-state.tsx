@@ -1,6 +1,7 @@
 "use client"
 
 import { Button } from "@/components/ui/button"
+import { Card } from "@/components/ui/card"
 
 type StorageEmptyStateProps = {
   hasFilters: boolean
@@ -13,7 +14,7 @@ function StorageEmptyState({ hasFilters, onUpload }: StorageEmptyStateProps) {
     : "Manage your storage buckets and artifacts. Store and organize files, build outputs, and other assets for your projects."
 
   return (
-    <div className="flex h-full items-center justify-center">
+    <Card variant="ghost" className="flex min-h-72 items-center justify-center">
       <div className="max-w-md text-center">
         <p className="mb-6 text-sm leading-relaxed text-muted-foreground">{message}</p>
         {!hasFilters && onUpload ? (
@@ -24,7 +25,7 @@ function StorageEmptyState({ hasFilters, onUpload }: StorageEmptyStateProps) {
           </div>
         ) : null}
       </div>
-    </div>
+    </Card>
   )
 }
 

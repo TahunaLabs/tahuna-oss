@@ -19,13 +19,14 @@ import { RunsToolbar } from "@/components/features/dashboard/runs/runs-toolbar"
 import { RunTableRow } from "@/components/features/dashboard/runs/run-table-row"
 import { RunsEmptyState } from "@/components/features/dashboard/runs/runs-empty-state"
 import { Card } from "@/components/ui/card"
+import { Spinner } from "@/components/ui/spinner"
 import { TableHead } from "@/components/ui/table"
 
 export type { RunTab }
 
 type RunsViewProps = {
-  environments: EnvironmentRow[]
-  runs: RunRow[]
+  environments: EnvironmentRow[] | undefined
+  runs: RunRow[] | undefined
   busy: boolean
   activeTab: RunTab
   selectedRunId: string | null
@@ -58,12 +59,12 @@ export function RunsView({
 }: RunsViewProps) {
   const [searchQuery, setSearchQuery] = useState("")
 
-  const environmentNameById = new Map(environments.map((e) => [String(e.environment_id), e.name]))
+  const environmentNameById = new Map((environments ?? []).map((e) => [String(e.environment_id), e.name]))
 
-  const activeCount = runs.filter((r) => ACTIVE_STATUSES.has(r.status)).length
+  const activeCount = (runs ?? []).filter((r) => ACTIVE_STATUSES.has(r.status)).length
 
   const query = searchQuery.trim().toLowerCase()
-  const filteredRuns = runs.filter((run) => {
+  const filteredRuns = (runs ?? []).filter((run) => {
     if (activeTab === "active" && !ACTIVE_STATUSES.has(run.status)) return false
     if (activeTab === "completed" && !TERMINAL_STATUSES.has(run.status)) return false
     if (query) {
@@ -74,7 +75,7 @@ export function RunsView({
     return true
   })
 
-  const noEnvironments = environments.length === 0
+  const loading = runs === undefined
   const hasData = filteredRuns.length > 0
 
   return (
@@ -82,7 +83,7 @@ export function RunsView({
       sectionLabel="Runs"
       title="Runs"
       titleIcon={<Play size={24} />}
-      count={runs.length > 0 ? runs.length : undefined}
+      count={runs && runs.length > 0 ? runs.length : undefined}
       toolbar={(
         <RunsToolbar
           searchQuery={searchQuery}
@@ -93,8 +94,11 @@ export function RunsView({
         />
       )}
     >
-      {noEnvironments ? (
-        <RunsEmptyState noEnvironments />
+      {loading ? (
+        <Card variant="ghost" className="flex min-h-72 flex-col items-center justify-center gap-3">
+          <Spinner />
+          <p className="text-sm text-muted-foreground">Loading runs…</p>
+        </Card>
       ) : !hasData ? (
         <RunsEmptyState activeTab={activeTab} />
       ) : (

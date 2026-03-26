@@ -39,10 +39,10 @@ export function RunsContainer({ shouldLoadQueries, onOpenShareDialog }: Props) {
     | undefined
   const runResult = useQuery(api.runs.list, shouldLoadQueries ? {} : "skip") as { runs: RunRow[] } | undefined
 
-  const runs = runResult?.runs ?? []
-  const environments = envResult?.environments ?? []
+  const runs = runResult?.runs
+  const environments = envResult?.environments
 
-  const selectedRunFromList = runs.find((r) => r.run_id === selectedRunId)
+  const selectedRunFromList = runs?.find((r) => r.run_id === selectedRunId)
   const shouldLoadRunDetail = shouldLoadQueries && selectedRunId !== null && selectedRunFromList !== undefined
   const isSelectedRunTerminal =
     selectedRunFromList !== undefined && TERMINAL_STATUSES.has(selectedRunFromList.status)
@@ -88,7 +88,7 @@ export function RunsContainer({ shouldLoadQueries, onOpenShareDialog }: Props) {
   // Clear selected run if it disappears from the list
   useEffect(() => {
     if (selectedRunId === null || runResult === undefined) return
-    if (runs.some((r) => r.run_id === selectedRunId)) return
+    if (runs?.some((r) => r.run_id === selectedRunId)) return
     setSelectedRunId(null)
     if (terminalLogsCache?.runId === selectedRunId) setTerminalLogsCache(null)
     if (terminalMetricsCache?.runId === selectedRunId) setTerminalMetricsCache(null)

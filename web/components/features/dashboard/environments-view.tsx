@@ -26,6 +26,7 @@ const ACCESS_FILTER_OPTIONS: FilterDropdownOption[] = ENVIRONMENT_ACCESS_FILTER_
   value,
   label: ACCESS_FILTER_LABELS[value],
 }))
+import { Card } from "@/components/ui/card"
 import { Spinner } from "@/components/ui/spinner"
 
 type EnvironmentsViewProps = {
@@ -140,16 +141,16 @@ export function EnvironmentsView({
       )}
     >
       {environmentsLoading ? (
-        <div className="flex h-full flex-col items-center justify-center gap-3">
+        <Card variant="ghost" className="flex min-h-72 flex-col items-center justify-center gap-3">
           <Spinner />
           <p className="text-sm text-muted-foreground">Loading environments…</p>
-        </div>
+        </Card>
       ) : environments.length === 0 ? (
         <EnvironmentsEmptyState />
       ) : visibleEnvironments.length === 0 ? (
-        <div className="flex h-full items-center justify-center">
+        <Card variant="ghost" className="flex min-h-72 items-center justify-center">
           <p className="text-sm text-muted-foreground">No environments match your current filters.</p>
-        </div>
+        </Card>
       ) : (
         <>
           <div className="md:hidden">

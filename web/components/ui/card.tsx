@@ -3,13 +3,14 @@ import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
-const cardVariants = cva("overflow-hidden rounded-lg border border-border text-foreground", {
+const cardVariants = cva("overflow-hidden rounded-lg text-foreground", {
   variants: {
     variant: {
-      default: "bg-card",
-      surface: "bg-background",
-      panel: "bg-background/80",
-      frame: "mt-2 ml-2 h-full bg-background shadow-xl",
+      default: "border border-border bg-card",
+      surface: "border border-border bg-background",
+      panel: "border border-border bg-background/80",
+      frame: "mt-2 ml-2 h-full border border-border bg-background shadow-xl",
+      ghost: "bg-transparent",
     },
   },
   defaultVariants: { variant: "default" },

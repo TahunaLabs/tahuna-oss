@@ -15,6 +15,7 @@ import { StorageTableView } from "@/components/features/dashboard/storage/storag
 import { StorageEmptyState } from "@/components/features/dashboard/storage/storage-empty-state"
 import { StorageToolbar } from "@/components/features/dashboard/storage/storage-toolbar"
 import { StorageUploadDrawer } from "@/components/features/dashboard/storage/storage-upload-drawer"
+import { Card } from "@/components/ui/card"
 import { Spinner } from "@/components/ui/spinner"
 
 type StorageViewProps = {
@@ -133,14 +134,14 @@ export function StorageView({
       />
 
       {bootstrapping || (storageResult === undefined && storageLoading) ? (
-        <div className="flex h-full flex-col items-center justify-center gap-3">
+        <Card variant="ghost" className="flex min-h-72 flex-col items-center justify-center gap-3">
           <Spinner />
           <p className="text-sm text-muted-foreground">Loading storage…</p>
-        </div>
+        </Card>
       ) : storageError ? (
-        <div className="flex h-full items-center justify-center">
+        <Card variant="ghost" className="flex min-h-72 items-center justify-center">
           <p className="text-sm text-destructive-foreground">{storageError}</p>
-        </div>
+        </Card>
       ) : storageItems.length === 0 ? (
         <StorageEmptyState hasFilters={hasFilters} onUpload={openUploadDrawer} />
       ) : (
