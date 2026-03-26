@@ -9,9 +9,9 @@ import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
 const navLinks = [
-  { label: "The Layers", href: "#layers" },
-  { label: "The Loop", href: "#loop" },
-  { label: "Start", href: "#start" },
+  { label: "The Layers", href: "/#layers" },
+  { label: "The Loop", href: "/#loop" },
+  { label: "Start", href: "/#start" },
 ]
 
 export function LandingHeader() {
