@@ -32,7 +32,7 @@ export function LandingHero() {
 
             <Button asChild variant="outline" size="lg" className="self-start rounded-full px-8">
               <Link href="/login">
-                Get Started for Free
+                Try it
                 <ArrowRight />
               </Link>
             </Button>
