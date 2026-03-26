@@ -32,7 +32,7 @@ export default async function RootLayout({
   const initialTheme = themeCookie === "dark" ? "dark" : "light"
   return (
     <html lang="en" className={`${geist.variable} ${geistMono.variable} ${cormorant.variable} ${initialTheme}`}>
-      <body className="font-sans antialiased bg-sidebar p-2 h-svh">
+      <body className="font-sans antialiased bg-sidebar h-svh overflow-hidden">
         <ThemeProvider initialTheme={initialTheme}>
           <Card variant="frame" className="h-full overflow-hidden">
             <TooltipProvider>
