@@ -48,6 +48,8 @@ function StorageTableRow({
 }: StorageTableRowProps) {
   const isRenaming = renamingStorageId === item.id
   const isBusy = artifactRenameBusyId === item.id
+  const runLabel = item.run_label || "—"
+  const environmentLabel = item.environment_label || "—"
 
   return (
     <TableRow
@@ -108,6 +110,14 @@ function StorageTableRow({
 
       <TableCell className="text-muted-foreground">
         {item.source === "data" ? "Data upload" : "Run artifact"}
+      </TableCell>
+
+      <TableCell className="text-muted-foreground">
+        <TruncatedTooltip>{runLabel}</TruncatedTooltip>
+      </TableCell>
+
+      <TableCell className="text-muted-foreground">
+        <TruncatedTooltip>{environmentLabel}</TruncatedTooltip>
       </TableCell>
 
       <TableActionsCell>

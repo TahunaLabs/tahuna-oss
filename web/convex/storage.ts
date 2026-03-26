@@ -37,6 +37,9 @@ const storageItemValidator = v.object({
   created_at: v.number(),
   download_url: v.string(),
   run_id: v.optional(v.string()),
+  run_label: v.optional(v.string()),
+  environment_id: v.optional(v.string()),
+  environment_label: v.optional(v.string()),
   data_blob_id: v.optional(v.string()),
 });
 
@@ -73,6 +76,9 @@ const indexedStorageRowValidator = v.object({
   size: v.number(),
   created_at: v.number(),
   run_id: v.optional(v.string()),
+  run_label: v.optional(v.string()),
+  environment_id: v.optional(v.string()),
+  environment_label: v.optional(v.string()),
   data_blob_id: v.optional(v.string()),
 });
 
@@ -91,6 +97,9 @@ type StorageItem = {
   created_at: number;
   download_url: string;
   run_id?: string;
+  run_label?: string;
+  environment_id?: string;
+  environment_label?: string;
   data_blob_id?: string;
 };
 
@@ -104,6 +113,9 @@ type IndexedStorageRow = {
   size: number;
   created_at: number;
   run_id?: string;
+  run_label?: string;
+  environment_id?: string;
+  environment_label?: string;
   data_blob_id?: string;
 };
 
@@ -219,7 +231,15 @@ function sortItems(items: StorageItem[], sort: StorageSort) {
 
 function matchesSearch(item: StorageItem, search: string) {
   if (!search) return true;
-  const haystack = [item.name, item.path, item.run_id || "", item.data_blob_id || ""].join(" ").toLowerCase();
+  const haystack = [
+    item.name,
+    item.path,
+    item.run_id || "",
+    item.run_label || "",
+    item.environment_id || "",
+    item.environment_label || "",
+    item.data_blob_id || "",
+  ].join(" ").toLowerCase();
   return haystack.includes(search);
 }
 
@@ -246,7 +266,44 @@ function toStorageItem(row: IndexedStorageRow): StorageItem {
     created_at: row.created_at,
     download_url: "",
     run_id: row.run_id,
+    run_label: row.run_label,
+    environment_id: row.environment_id,
+    environment_label: row.environment_label,
     data_blob_id: row.data_blob_id,
+  };
+}
+
+function getContextFields(
+  row: {
+    runId?: Id<"runs">;
+    objectKind: "data_upload" | "data_manifest" | "run_artifact";
+    dataId?: string;
+  },
+  runsById: Map<string, { name?: string }>,
+  environmentById: Map<string, { _id: Id<"environments">; name: string }>,
+  environmentByDataId: Map<string, { _id: Id<"environments">; name: string }>,
+) {
+  if (row.runId) {
+    const runId = String(row.runId);
+    const run = runsById.get(runId);
+    const environmentId = run ? String(run.environmentId) : undefined;
+    const environment = environmentId ? environmentById.get(environmentId) : undefined;
+    return {
+      run_label: run?.name?.trim() || `Run ${runId.slice(0, 8)}`,
+      environment_id: environmentId,
+      environment_label: environment?.name,
+    };
+  }
+  if (row.objectKind !== "data_manifest" || !row.dataId) {
+    return {};
+  }
+  const environment = environmentByDataId.get(row.dataId) || environmentById.get(row.dataId);
+  if (!environment) {
+    return {};
+  }
+  return {
+    environment_id: String(environment._id),
+    environment_label: environment.name,
   };
 }
 
@@ -291,10 +348,30 @@ export const internalListIndexedObjects = internalQuery({
   },
   returns: indexedStorageListValidator,
   handler: async (ctx, args) => {
-    const allRows = await ctx.db
+    const [allRows, runs, environments] = await Promise.all([
+      ctx.db
       .query("storageObjects")
       .withIndex("by_user", (q) => q.eq("userId", args.userId))
-      .collect();
+      .collect(),
+      ctx.db
+        .query("runs")
+        .withIndex("by_user", (q) => q.eq("userId", args.userId))
+        .collect(),
+      ctx.db
+        .query("environments")
+        .withIndex("by_user", (q) => q.eq("userId", args.userId))
+        .collect(),
+    ]);
+    const runsById = new Map(runs.map((run) => [String(run._id), run]));
+    const environmentById = new Map(environments.map((environment) => [String(environment._id), environment]));
+    const environmentByDataId = new Map(
+      environments
+        .map((environment) => {
+          const dataId = environment.dataId?.trim();
+          return dataId ? [dataId, environment] as const : null;
+        })
+        .filter((entry): entry is readonly [string, (typeof environments)[number]] => entry !== null),
+    );
     const rows =
       args.visibility === "shared"
         ? allRows.filter((r) => r.visibility === "shared")
@@ -304,6 +381,7 @@ export const internalListIndexedObjects = internalQuery({
 
     return {
       objects: rows.map((row) => ({
+        ...getContextFields(row, runsById, environmentById, environmentByDataId),
         id: String(row._id),
         source: row.source,
         visibility: row.visibility ?? "private",

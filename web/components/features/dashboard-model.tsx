@@ -34,6 +34,9 @@ export type StorageItem = {
   download_url: string
   created_at: number
   run_id?: string
+  run_label?: string
+  environment_id?: string
+  environment_label?: string
   data_blob_id?: string
 }
 

@@ -72,6 +72,8 @@ function StorageTableView({
           { role: "meta" },
           { role: "meta" },
           { role: "meta" },
+          { role: "meta" },
+          { role: "meta" },
           { role: "actions" },
         ]}
         headerCells={(
@@ -87,6 +89,8 @@ function StorageTableView({
             <TableHead>Size</TableHead>
             <TableHead>Created</TableHead>
             <TableHead>Source</TableHead>
+            <TableHead>Run</TableHead>
+            <TableHead>Environment</TableHead>
             <TableHead className="px-0" />
           </>
         )}
