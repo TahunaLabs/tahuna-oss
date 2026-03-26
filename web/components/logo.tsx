@@ -7,7 +7,7 @@ type LogoProps = SVGProps<SVGSVGElement>
 export function Logo({ className, ...props }: LogoProps) {
   return (
     <svg
-      viewBox="0 0 677 378"
+      viewBox="160 20 360 340"
       preserveAspectRatio="xMidYMid meet"
       className={cn("h-12 w-auto", className)}
       {...props}

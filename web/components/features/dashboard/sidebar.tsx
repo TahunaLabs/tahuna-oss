@@ -91,9 +91,9 @@ export function Sidebar({
   return (
     <>
       <SidebarHeader>
-        <Link href="/" aria-label="Go to home" className="flex flex-col items-center justify-center py-1">
+        <Link href="/" aria-label="Go to home" className="flex items-center justify-center gap-2 py-1">
           <Logo className="h-8 w-auto group-data-[collapsible=icon]:hidden" />
-          <span className="text-xs font-semibold leading-none text-sidebar-foreground group-data-[collapsible=icon]:hidden">Tahuna</span>
+          <span className="text-xl font-semibold leading-none text-sidebar-foreground group-data-[collapsible=icon]:hidden">Tahuna</span>
           <Logo
             className="hidden h-8 w-8 group-data-[collapsible=icon]:block"
             preserveAspectRatio="xMidYMid slice"
