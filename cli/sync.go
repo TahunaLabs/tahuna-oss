@@ -30,13 +30,21 @@ func runSyncWithStatus(environmentID string, scope syncScope) error {
 		logProgress:   true,
 		dynamicStatus: dynamic,
 	}
-	if err := syncIncremental(environmentID, scope, options); err != nil {
+	prepared, err := prepareSyncManifestsWithStatus(environmentID, scope, options)
+	if err != nil {
 		if dynamic {
 			clearStatusLine()
 		}
 		return err
 	}
+	defer cleanupPreparedManifests(prepared)
 	if err := syncProjectConfigWithStatus(environmentID, options); err != nil {
+		if dynamic {
+			clearStatusLine()
+		}
+		return err
+	}
+	if err := finalizeSyncWithStatus(environmentID, prepared, options); err != nil {
 		if dynamic {
 			clearStatusLine()
 		}
@@ -60,6 +68,15 @@ func syncProjectConfigWithStatus(environmentID string, options syncOptions) erro
 }
 
 func syncIncremental(environmentID string, scope syncScope, options syncOptions) error {
+	prepared, err := prepareSyncManifestsWithStatus(environmentID, scope, options)
+	if err != nil {
+		return err
+	}
+	defer cleanupPreparedManifests(prepared)
+	return finalizeSyncWithStatus(environmentID, prepared, options)
+}
+
+func prepareSyncManifestsWithStatus(environmentID string, scope syncScope, options syncOptions) ([]preparedManifest, error) {
 	prepared := []preparedManifest{}
 
 	if scope.code {
@@ -67,14 +84,11 @@ func syncIncremental(environmentID string, scope syncScope, options syncOptions)
 		codeManifest, err := prepareCodeManifest()
 		if err != nil {
 			codeSpinner.StopError()
-			return fmt.Errorf("code sync failed: %w", err)
-		}
-		if codeManifest.cleanup != nil {
-			defer codeManifest.cleanup()
+			return nil, fmt.Errorf("code sync failed: %w", err)
 		}
 		if err := syncMissingBlobs(environmentID, codeManifest, nil, false); err != nil {
 			codeSpinner.StopError()
-			return fmt.Errorf("%s sync failed: %w", codeManifest.kind, err)
+			return nil, fmt.Errorf("%s sync failed: %w", codeManifest.kind, err)
 		}
 		codeSpinner.StopSuccess("syncing code")
 		prepared = append(prepared, codeManifest)
@@ -85,21 +99,22 @@ func syncIncremental(environmentID string, scope syncScope, options syncOptions)
 		dataManifest, err := prepareDataManifest()
 		if err != nil {
 			dataSpinner.StopError()
-			return fmt.Errorf("data sync failed: %w", err)
-		}
-		if dataManifest.cleanup != nil {
-			defer dataManifest.cleanup()
+			return nil, fmt.Errorf("data sync failed: %w", err)
 		}
 		if err := syncMissingBlobs(environmentID, dataManifest, func(done, total int, phase string) {
 			dataSpinner.SetMessage(formatDataSyncProgress(done, total, phase))
 		}, false); err != nil {
 			dataSpinner.StopError()
-			return fmt.Errorf("%s sync failed: %w", dataManifest.kind, err)
+			return nil, fmt.Errorf("%s sync failed: %w", dataManifest.kind, err)
 		}
 		dataSpinner.StopSuccess("syncing data")
 		prepared = append(prepared, dataManifest)
 	}
 
+	return prepared, nil
+}
+
+func finalizeSyncWithStatus(environmentID string, prepared []preparedManifest, options syncOptions) error {
 	commitSpinner := newSyncPhaseSpinner("finalizing sync...", options)
 	commitPayload := map[string]any{
 		"environment_id": environmentID,
@@ -162,6 +177,14 @@ func syncIncremental(environmentID string, scope syncScope, options syncOptions)
 		}
 	}
 	return nil
+}
+
+func cleanupPreparedManifests(prepared []preparedManifest) {
+	for _, item := range prepared {
+		if item.cleanup != nil {
+			item.cleanup()
+		}
+	}
 }
 
 func formatDuration(d time.Duration) string {

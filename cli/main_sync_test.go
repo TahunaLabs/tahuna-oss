@@ -143,6 +143,9 @@ func TestRunSyncWithStatus_RefreshesAndReportsEnvironmentSync(t *testing.T) {
 	if !strings.Contains(output, "syncing environment") {
 		t.Fatalf("expected sync output to include environment sync phase, got: %s", output)
 	}
+	if envIndex, finalizeIndex := strings.Index(output, "syncing environment"), strings.Index(output, "finalizing sync"); envIndex < 0 || finalizeIndex < 0 || envIndex > finalizeIndex {
+		t.Fatalf("expected environment sync to be reported before finalizing sync, got: %s", output)
+	}
 
 	raw, err := os.ReadFile(projectConfigFilePath())
 	if err != nil {
@@ -186,6 +189,9 @@ func TestRunSyncWithStatus_EnvironmentOnlyConfigDoesNotFailOrInventProjectBindin
 
 	if !strings.Contains(output, "syncing environment") {
 		t.Fatalf("expected sync output to include environment sync phase, got: %s", output)
+	}
+	if envIndex, finalizeIndex := strings.Index(output, "syncing environment"), strings.Index(output, "finalizing sync"); envIndex < 0 || finalizeIndex < 0 || envIndex > finalizeIndex {
+		t.Fatalf("expected environment sync to be reported before finalizing sync, got: %s", output)
 	}
 
 	raw, err := os.ReadFile(projectConfigFilePath())

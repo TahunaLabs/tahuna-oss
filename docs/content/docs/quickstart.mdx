@@ -13,21 +13,24 @@ Navigate to your ML project directory and run:
 tahuna init .
 ```
 
-This initializes the project locally, walks you through the configuration interactively, and writes `.tahuna/project.yaml`. It also scaffolds the project files Tahuna needs, including `config.yaml`, `pyproject.toml`, `uv.lock`, and `train.py` when they do not already exist.
+This initializes the project locally, walks you through the configuration interactively, and writes `.tahuna/tahuna.toml`. It also scaffolds the project files Tahuna needs, including `config.yaml`, `pyproject.toml`, `uv.lock`, and `train.py` when they do not already exist.
 
 ## 2. Review the configuration
 
-Tahuna keeps local project bindings in `.tahuna/project.yaml`:
+Tahuna keeps local project bindings in `.tahuna/tahuna.toml`:
 
-```yaml
-entrypoint: train.py
-data_dir: data
-output_dir: outputs
-config_file: config.yaml
-python_project_file: pyproject.toml
-uv_lock_file: uv.lock
-framework: pt
-python_version: "3.11"
+```toml
+[project]
+entrypoint = "train.py"
+data_dir = "data"
+output_dir = "outputs"
+config_file = "config.yaml"
+python_project_file = "pyproject.toml"
+uv_lock_file = "uv.lock"
+
+[environment]
+framework = "pt"
+python_version = "3.11"
 ```
 
 You can also review the scaffolded project files directly, especially `config.yaml` for your training config and `train.py` for your entrypoint.
