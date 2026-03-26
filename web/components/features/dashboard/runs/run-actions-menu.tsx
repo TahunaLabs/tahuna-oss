@@ -4,7 +4,7 @@ import { Share2, Trash2, X } from "lucide-react"
 
 import { CANCELLABLE_STATUSES, type RunRow } from "@/components/features/dashboard-model"
 import { ActionsMenu } from "@/components/features/dashboard/actions-menu"
-import { Button } from "@/components/ui/button"
+import { DropdownMenuItem } from "@/components/ui/dropdown-menu"
 
 type RunActionsMenuProps = {
   run: { run_id: RunRow["run_id"] | string; status: string; name?: string | null }
@@ -32,34 +32,25 @@ function RunActionsMenu({
       {(close) => (
         <>
           {onShareRun ? (
-            <Button
-              type="button"
-              variant="sidebar-menu-item"
-              size="none"
+            <DropdownMenuItem
               onClick={() => { close(); onShareRun(run.run_id) }}
             >
               <Share2 className="h-3.5 w-3.5" />
               Share
-            </Button>
+            </DropdownMenuItem>
           ) : null}
 
           {CANCELLABLE_STATUSES.has(run.status) ? (
-            <Button
-              type="button"
-              variant="sidebar-menu-item"
-              size="none"
+            <DropdownMenuItem
               disabled={busy}
               onClick={() => { close(); onCancelRun(run.run_id as RunRow["run_id"]) }}
             >
               <X className="h-3.5 w-3.5" />
               Cancel run
-            </Button>
+            </DropdownMenuItem>
           ) : null}
 
-          <Button
-            type="button"
-            variant="sidebar-menu-item"
-            size="none"
+          <DropdownMenuItem
             disabled={busy}
             onClick={() => {
               close()
@@ -68,7 +59,7 @@ function RunActionsMenu({
           >
             <Trash2 className="h-3.5 w-3.5" />
             Delete run
-          </Button>
+          </DropdownMenuItem>
         </>
       )}
     </ActionsMenu>

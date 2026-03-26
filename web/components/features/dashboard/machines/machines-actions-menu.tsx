@@ -3,7 +3,7 @@
 import { ShieldOff } from "lucide-react"
 
 import { ActionsMenu } from "@/components/features/dashboard/actions-menu"
-import { Button } from "@/components/ui/button"
+import { DropdownMenuItem } from "@/components/ui/dropdown-menu"
 import type { ApiKeyRow } from "@/components/features/dashboard-settings-model"
 import type { Id } from "@convex/_generated/dataModel"
 
@@ -17,10 +17,7 @@ function MachinesActionsMenu({ apiKey, busy, onRevokeRequest }: MachinesActionsM
   return (
     <ActionsMenu triggerLabel={`Open actions for ${apiKey.name}`}>
       {(close) => (
-        <Button
-          type="button"
-          variant="sidebar-menu-item"
-          size="none"
+        <DropdownMenuItem
           disabled={busy}
           onClick={() => {
             close()
@@ -29,7 +26,7 @@ function MachinesActionsMenu({ apiKey, busy, onRevokeRequest }: MachinesActionsM
         >
           <ShieldOff className="h-3.5 w-3.5" />
           Revoke session
-        </Button>
+        </DropdownMenuItem>
       )}
     </ActionsMenu>
   )

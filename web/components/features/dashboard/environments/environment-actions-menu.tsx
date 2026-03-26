@@ -5,7 +5,7 @@ import { FileCode2, Play, Share2, Trash2 } from "lucide-react"
 import type { EnvironmentRow } from "@/components/features/dashboard-model"
 import { ActionsMenu } from "@/components/features/dashboard/actions-menu"
 import type { EnvironmentConfigEditor } from "@/components/features/dashboard/environments/environments-grid-view"
-import { Button } from "@/components/ui/button"
+import { DropdownMenuItem } from "@/components/ui/dropdown-menu"
 
 type EnvironmentActionsMenuProps = {
   environment: EnvironmentRow
@@ -33,10 +33,7 @@ function EnvironmentActionsMenu({
     <ActionsMenu triggerLabel={`Open actions for ${environment.name}`}>
       {(close) => (
         <>
-          <Button
-            type="button"
-            variant="sidebar-menu-item"
-            size="none"
+          <DropdownMenuItem
             onClick={() => {
               close()
               if (configOpen) {
@@ -49,12 +46,9 @@ function EnvironmentActionsMenu({
           >
             <FileCode2 className="h-3.5 w-3.5" />
             Config
-          </Button>
+          </DropdownMenuItem>
 
-          <Button
-            type="button"
-            variant="sidebar-menu-item"
-            size="none"
+          <DropdownMenuItem
             onClick={() => {
               close()
               onLaunchRun(environment.environment_id)
@@ -63,13 +57,10 @@ function EnvironmentActionsMenu({
           >
             <Play className="h-3.5 w-3.5" />
             Run
-          </Button>
+          </DropdownMenuItem>
 
           {onShareEnvironment ? (
-            <Button
-              type="button"
-              variant="sidebar-menu-item"
-              size="none"
+            <DropdownMenuItem
               onClick={() => {
                 close()
                 onShareEnvironment(environment.environment_id)
@@ -77,13 +68,10 @@ function EnvironmentActionsMenu({
             >
               <Share2 className="h-3.5 w-3.5" />
               Share
-            </Button>
+            </DropdownMenuItem>
           ) : null}
 
-          <Button
-            type="button"
-            variant="sidebar-menu-item"
-            size="none"
+          <DropdownMenuItem
             onClick={() => {
               close()
               void onDeleteEnvironments([environment.environment_id]).then((deleted) => {
@@ -96,7 +84,7 @@ function EnvironmentActionsMenu({
           >
             <Trash2 className="h-3.5 w-3.5" />
             Delete
-          </Button>
+          </DropdownMenuItem>
         </>
       )}
     </ActionsMenu>
