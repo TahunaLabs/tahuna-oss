@@ -28,9 +28,10 @@ type BootstrapEntry struct {
 }
 
 type BootstrapPlan struct {
-	RunID           string `json:"run_id"`
-	ContractVersion string `json:"contract_version"`
-	WorkspaceRoot   string `json:"workspace_root"`
+	RunID           string   `json:"run_id"`
+	ContractVersion string   `json:"contract_version"`
+	WorkspaceRoot   string   `json:"workspace_root"`
+	Command         []string `json:"command"`
 	Code            struct {
 		ManifestHash string           `json:"manifest_hash"`
 		Entries      []BootstrapEntry `json:"entries"`

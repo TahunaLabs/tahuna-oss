@@ -233,7 +233,7 @@ func TestEnvironmentUpdate_LinkedEnvironmentRefreshesLocalProjectConfig(t *testi
 	if !strings.Contains(text, "[project]") {
 		t.Fatalf("expected project section in local config, got: %s", text)
 	}
-	if !strings.Contains(text, "entrypoint = \"train.py\"") || !strings.Contains(text, "config_file = \"config.yaml\"") {
+	if !strings.Contains(text, "entrypoint = \"train.py\"") || !strings.Contains(text, "uv_lock_file = \"uv.lock\"") {
 		t.Fatalf("expected project bindings to be preserved, got: %s", text)
 	}
 	if !strings.Contains(text, "[environment]") {

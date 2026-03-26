@@ -40,7 +40,6 @@ type projectConfig struct {
 	EnvironmentName   string
 	DataDir           string
 	OutputDir         string
-	ConfigYAMLPath    string
 	TrainEntrypoint   string
 	PythonProjectFile string
 	UVLockFile        string
@@ -72,7 +71,6 @@ func collectProjectInitConfig() (projectConfig, string, error) {
 	cfg := projectConfig{
 		DataDir:           "data",
 		OutputDir:         "outputs",
-		ConfigYAMLPath:    "config.yaml",
 		TrainEntrypoint:   "train.py",
 		PythonProjectFile: "pyproject.toml",
 		UVLockFile:        "uv.lock",
@@ -100,19 +98,6 @@ func collectProjectInitConfig() (projectConfig, string, error) {
 	} else {
 		fmt.Printf("%s?%s No outputs/ directory\n", cAmpGold, cReset)
 		cfg.OutputDir = choosePathWhenMissing("Output directory", "outputs")
-	}
-
-	if fileExists("config.yaml") {
-		cfg.ConfigYAMLPath = "config.yaml"
-		fmt.Printf("✓ Found %sconfig.yaml%s\n", cAmpGold, cReset)
-		cfg.ConfigYAMLPath = choosePathWhenFound("Config file", cfg.ConfigYAMLPath, "config.yaml")
-	} else if fileExists("config.yml") {
-		cfg.ConfigYAMLPath = "config.yml"
-		fmt.Printf("✓ Found %sconfig.yml%s\n", cAmpGold, cReset)
-		cfg.ConfigYAMLPath = choosePathWhenFound("Config file", cfg.ConfigYAMLPath, "config.yaml")
-	} else {
-		fmt.Printf("%s?%s No config yaml found\n", cAmpGold, cReset)
-		cfg.ConfigYAMLPath = choosePathWhenMissing("Config file", "config.yaml")
 	}
 
 	if fileExists(cfg.PythonProjectFile) {
@@ -357,11 +342,6 @@ func validateProjectConfigBindings(environmentID string) (projectConfig, error) 
 	if err := validateProjectConfigPathBinding("output_dir", cfg.OutputDir, true); err != nil {
 		return cfg, err
 	}
-	if strings.TrimSpace(cfg.ConfigYAMLPath) != "" {
-		if err := validateProjectConfigPathBinding("config_file", cfg.ConfigYAMLPath, false); err != nil {
-			return cfg, err
-		}
-	}
 	if err := validateProjectConfigPathBinding("python_project_file", cfg.PythonProjectFile, false); err != nil {
 		return cfg, err
 	}
@@ -437,9 +417,6 @@ func mergeProjectConfig(base, next projectConfig) projectConfig {
 	if value := strings.TrimSpace(next.OutputDir); value != "" {
 		base.OutputDir = filepath.Clean(value)
 	}
-	if value := strings.TrimSpace(next.ConfigYAMLPath); value != "" {
-		base.ConfigYAMLPath = filepath.Clean(value)
-	}
 	if value := strings.TrimSpace(next.TrainEntrypoint); value != "" {
 		base.TrainEntrypoint = filepath.Clean(value)
 	}
@@ -484,7 +461,6 @@ func hasProjectSection(cfg projectConfig) bool {
 	return strings.TrimSpace(cfg.TrainEntrypoint) != "" ||
 		strings.TrimSpace(cfg.DataDir) != "" ||
 		strings.TrimSpace(cfg.OutputDir) != "" ||
-		strings.TrimSpace(cfg.ConfigYAMLPath) != "" ||
 		strings.TrimSpace(cfg.PythonProjectFile) != "" ||
 		strings.TrimSpace(cfg.UVLockFile) != ""
 }
@@ -512,9 +488,6 @@ func renderProjectConfig(cfg projectConfig) string {
 		}
 		if value := strings.TrimSpace(cfg.OutputDir); value != "" {
 			lines = append(lines, fmt.Sprintf("output_dir = \"%s\"", escapeProjectConfigValue(value)))
-		}
-		if value := strings.TrimSpace(cfg.ConfigYAMLPath); value != "" {
-			lines = append(lines, fmt.Sprintf("config_file = \"%s\"", escapeProjectConfigValue(value)))
 		}
 		if value := strings.TrimSpace(cfg.PythonProjectFile); value != "" {
 			lines = append(lines, fmt.Sprintf("python_project_file = \"%s\"", escapeProjectConfigValue(value)))
@@ -634,8 +607,6 @@ func parseProjectConfigTOML(text string) (projectConfig, map[string]string, erro
 				cfg.DataDir = value
 			case "output_dir":
 				cfg.OutputDir = value
-			case "config_file":
-				cfg.ConfigYAMLPath = value
 			case "python_project_file":
 				cfg.PythonProjectFile = value
 			case "uv_lock_file":
@@ -865,10 +836,6 @@ func ensureProjectFile(path, content string) error {
 	return os.WriteFile(path, []byte(content), 0o644)
 }
 
-func defaultConfigYAMLTemplate(cfg projectConfig) string {
-	return fmt.Sprintf("project: %q\nentrypoint: %q\ndata:\n  path: %q\n", filepath.Base(mustGetwd()), cfg.TrainEntrypoint, cfg.DataDir)
-}
-
 func defaultPyProjectTemplate(framework string) string {
 	dependency := "torch"
 	if framework == "tf" {
@@ -934,6 +901,14 @@ func ensureUVLockFile(pyprojectPath, uvLockPath string) error {
 
 func defaultTrainEntrypointTemplate(cfg projectConfig) string {
 	return fmt.Sprintf("print(\"Tahuna training entrypoint\")\nprint(\"data dir: %s\")\n", cfg.DataDir)
+}
+
+func defaultTrainCommand(entrypoint string) []string {
+	resolvedEntrypoint := strings.TrimSpace(entrypoint)
+	if resolvedEntrypoint == "" {
+		resolvedEntrypoint = "train.py"
+	}
+	return []string{"uv", "run", "--active", "--no-sync", "python", "-u", resolvedEntrypoint}
 }
 
 func projectConfigFromEnvironment(env environmentResponse) projectConfig {

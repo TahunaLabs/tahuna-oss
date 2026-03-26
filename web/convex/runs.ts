@@ -19,6 +19,7 @@ import {
   resolveRunpodCloudType,
   type RuntimeCompatibilityFingerprint,
 } from "@/lib/runtime-incompatibility";
+import { buildDefaultRunCommand } from "@/lib/run-command";
 import { images } from "@convex/catalog";
 import { PYTHON_CONFIG, RUN_CONFIG, SYNC_CONFIG } from "@convex/appConfig";
 import { applyStorageDeltaCredits, USAGE_EVENT_TYPE, upsertLedgerDebitTotal } from "@convex/credits";
@@ -174,6 +175,7 @@ const provisioningPayloadValidator = v.object({
   run_id: v.string(),
   environment_id: v.string(),
   user_id: v.string(),
+  command: v.array(v.string()),
   output_dir: v.string(),
   input_path: v.string(),
   output_path: v.string(),
@@ -249,6 +251,7 @@ const runtimeBootstrapPlanValidator = v.object({
   run_id: v.string(),
   contract_version: v.string(),
   workspace_root: v.string(),
+  command: v.array(v.string()),
   code: v.object({
     manifest_hash: v.string(),
     entries: v.array(runtimeBootstrapEntryValidator),
@@ -282,6 +285,7 @@ type ProvisioningPayload = {
   run_id: string;
   environment_id: string;
   user_id: string;
+  command: string[];
   output_dir: string;
   input_path: string;
   output_path: string;
@@ -303,6 +307,7 @@ type RuntimeBootstrapPlan = {
   run_id: string;
   contract_version: string;
   workspace_root: string;
+  command: string[];
   code: {
     manifest_hash: string;
     entries: RuntimeBootstrapEntry[];
@@ -433,6 +438,7 @@ function toProvisioningPayload(row: Doc<"runs">): ProvisioningPayload {
     run_id: String(row._id),
     environment_id: String(row.environmentId),
     user_id: row.userId,
+    command: Array.isArray(row.command) && row.command.length > 0 ? row.command : buildDefaultRunCommand(""),
     output_dir: typeof row.outputDir === "string" && row.outputDir.trim() !== "" ? row.outputDir.trim() : "outputs",
     input_path: row.input,
     output_path: row.output,
@@ -866,6 +872,7 @@ export const create = mutation({
   args: {
     environmentId: v.id("environments"),
     name: v.optional(v.string()),
+    command: v.optional(v.array(v.string())),
     output_dir: v.optional(v.string()),
     gpu_type: v.optional(v.string()),
     gpu_count: v.optional(v.number()),
@@ -878,6 +885,7 @@ export const create = mutation({
       userId: String(user._id),
       environmentId: args.environmentId,
       name: args.name,
+      command: args.command,
       output_dir: args.output_dir,
       gpu_type: args.gpu_type,
       gpu_count: args.gpu_count,
@@ -959,6 +967,7 @@ export const internalCreate = internalMutation({
     userId: v.string(),
     environmentId: v.id("environments"),
     name: v.optional(v.string()),
+    command: v.optional(v.array(v.string())),
     output_dir: v.optional(v.string()),
     gpu_type: v.optional(v.string()),
     gpu_count: v.optional(v.number()),
@@ -1403,6 +1412,7 @@ export const internalGetRuntimeBootstrapPlan = internalAction({
       run_id: provisioningPayload.run_id,
       contract_version: provisioningPayload.contract_version,
       workspace_root: "/workspace",
+      command: provisioningPayload.command,
       code: {
         manifest_hash: codeManifestHash,
         entries: codeEntries,

@@ -1,0 +1,4 @@
+project: "qwen-yoda-lora"
+entrypoint: "train.py"
+data:
+  path: "data"

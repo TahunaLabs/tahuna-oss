@@ -3,6 +3,7 @@ import { ConvexError } from "convex/values";
 import { components, internal } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import type { MutationCtx } from "@convex/_generated/server";
+import { buildDefaultRunCommand } from "@/lib/run-command";
 import { resolveRunComputePricing } from "@/lib/run-compute-pricing";
 import { buildRuntimeCompatibilityKey, resolveRunpodCloudType } from "@/lib/runtime-incompatibility";
 import { PYTHON_CONFIG, RUN_CONFIG } from "@convex/appConfig";
@@ -59,6 +60,7 @@ export async function createRunForUserId(
     userId: string;
     environmentId: Id<"environments">;
     name?: string;
+    command?: string[];
     output_dir?: string;
     gpu_type?: string;
     gpu_count?: number;
@@ -66,6 +68,7 @@ export async function createRunForUserId(
     enqueue_provisioning?: boolean;
   },
 ) {
+  const command = normalizePinnedRunCommand(args.command);
   const env = await getAccessibleEnvironment(ctx, args.userId, args.environmentId);
   const effectiveGpuType = args.gpu_type ?? env.gpuType;
   const effectiveGpuCount = args.gpu_count ?? env.gpuCount;
@@ -128,6 +131,7 @@ export async function createRunForUserId(
     userId: args.userId,
     environmentId: args.environmentId,
     name: runName,
+    command,
     dataId,
     outputDir,
     input: `runs/${args.environmentId}/${now}/input`,
@@ -155,6 +159,7 @@ export async function createRunForUserId(
     message: "run queued for provisioning",
     metadata: {
       name: runName,
+      command,
       gpu_type: effectiveGpuType,
       gpu_count: effectiveGpuCount,
       volume_gb: effectiveVolumeGb,
@@ -172,6 +177,19 @@ export async function createRunForUserId(
     throw new ConvexError("failed to create run");
   }
   return toRunResponse(row);
+}
+
+function normalizePinnedRunCommand(command: string[] | undefined) {
+  if (!Array.isArray(command) || command.length === 0) {
+    return buildDefaultRunCommand("");
+  }
+  const normalized = command
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0);
+  if (normalized.length === 0) {
+    throw new ConvexError("run command is required");
+  }
+  return normalized;
 }
 
 export async function cancelRunForUserId(

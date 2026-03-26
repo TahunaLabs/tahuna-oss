@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -77,6 +78,18 @@ func TestRunCreateDetached_WithNamePayload(t *testing.T) {
 	}
 	if got := strings.TrimSpace(asString(runCreatePayload["output_dir"])); got != "outputs" {
 		t.Fatalf("expected run create payload output_dir=outputs, got %q", got)
+	}
+	commandAny, ok := runCreatePayload["command"].([]any)
+	if !ok {
+		t.Fatalf("expected run create payload command array, got %#v", runCreatePayload["command"])
+	}
+	gotCommand := make([]string, 0, len(commandAny))
+	for _, item := range commandAny {
+		gotCommand = append(gotCommand, asString(item))
+	}
+	wantCommand := []string{"uv", "run", "--active", "--no-sync", "python", "-u", "train.py"}
+	if !reflect.DeepEqual(gotCommand, wantCommand) {
+		t.Fatalf("expected run create payload command=%v, got %v", wantCommand, gotCommand)
 	}
 	if !strings.Contains(output, "run created: warm-river-fox (run-created)") {
 		t.Fatalf("expected run name and id in output, got: %s", output)

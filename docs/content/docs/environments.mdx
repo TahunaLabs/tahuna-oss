@@ -24,7 +24,6 @@ The local project file `.tahuna/tahuna.toml` records the paths and bindings Tahu
 entrypoint = "train.py"
 data_dir = "data"
 output_dir = "outputs"
-config_file = "config.yaml"
 python_project_file = "pyproject.toml"
 uv_lock_file = "uv.lock"
 
@@ -40,7 +39,6 @@ python_version = "3.11"
 | `entrypoint` | Training script Tahuna executes for the project | `train.py` |
 | `data_dir` | Directory synced as project input data | `data` |
 | `output_dir` | Directory collected for run outputs and artifacts | `outputs` |
-| `config_file` | Project config file path used by your training code | `config.yaml` |
 | `python_project_file` | Python project metadata used for dependency resolution | `pyproject.toml` |
 | `uv_lock_file` | Lockfile used to install pinned dependencies in the runtime | `uv.lock` |
 | `framework` | Detected framework key stored for the project | `pt`, `tf` |

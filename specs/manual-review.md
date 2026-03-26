@@ -22,7 +22,7 @@ environments.md
 - multiple data items can be binded to environment (e.g. user wants to load an already pretrained model for finetuning and the finetuning data)
 
 init.md
-- '- If not found: "No entrypoint found. ' no it should be consistant with the rest ! same for '- If not found: "Creating config.yaml with defaults."', adhere to similar convention of: '- If not found: "Creating data/ directory."'
+- '- If not found: "No entrypoint found. ' no it should be consistant with the rest ! same for any scaffold messaging, adhere to similar convention of: '- If not found: "Creating data/ directory."'
 - '- Parse requirements.txt for "torch"/"pytorch" -> PyTorch' no! use UV. 
 
 pod-bootstrap.md

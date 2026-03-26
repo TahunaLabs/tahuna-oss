@@ -68,9 +68,6 @@ func initProject(target string) error {
 		envName = "tahuna-project"
 	}
 
-	if err := ensureProjectFile(projectCfg.ConfigYAMLPath, defaultConfigYAMLTemplate(projectCfg)); err != nil {
-		return fmt.Errorf("failed to create config yaml: %w", err)
-	}
 	if err := ensureProjectFile(projectCfg.PythonProjectFile, defaultPyProjectTemplate(frameworkKey)); err != nil {
 		return fmt.Errorf("failed to create pyproject.toml: %w", err)
 	}
@@ -891,6 +888,7 @@ func runCreate(args []string) {
 
 	payload := map[string]any{}
 	payload["output_dir"] = mustLoadRunOutputDir()
+	payload["command"] = mustLoadRunCommand()
 	if strings.TrimSpace(*name) != "" {
 		payload["name"] = strings.TrimSpace(*name)
 	}
@@ -1030,6 +1028,7 @@ func train(args []string) {
 
 	payload := map[string]any{}
 	payload["output_dir"] = mustLoadRunOutputDir()
+	payload["command"] = mustLoadRunCommand()
 	if *gpuType != "" {
 		payload["gpu_type"] = *gpuType
 	}
@@ -1256,4 +1255,10 @@ func mustLoadRunOutputDir() string {
 		return "outputs"
 	}
 	return outputDir
+}
+
+func mustLoadRunCommand() []string {
+	cfg, err := loadProjectConfig()
+	must(err)
+	return defaultTrainCommand(cfg.TrainEntrypoint)
 }
