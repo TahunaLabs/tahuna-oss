@@ -17,6 +17,7 @@ type CreateRunStrictArgs = {
   userId: string;
   environmentId: Id<"environments">;
   name?: string;
+  command?: string[];
   output_dir?: string;
   gpu_type?: string;
   gpu_count?: number;

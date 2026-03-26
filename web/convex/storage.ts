@@ -13,6 +13,7 @@ const MAX_LIMIT = 100;
 const METADATA_LOOKUP_CONCURRENCY = 20;
 const MAX_SEARCH_CHARS = 120;
 const MAX_ARTIFACT_NAME_CHARS = 255;
+const DELETE_BATCH_SIZE = 20;
 
 const sortValidator = v.union(
   v.literal("created_desc"),
@@ -25,6 +26,10 @@ const sortValidator = v.union(
 
 const visibilityFilterValidator = v.union(v.literal("all"), v.literal("shared"), v.literal("private"));
 const objectKindValidator = v.union(v.literal("data_upload"), v.literal("data_manifest"), v.literal("run_artifact"));
+const resourceRefValidator = v.object({
+  id: v.string(),
+  name: v.string(),
+});
 
 const storageItemValidator = v.object({
   id: v.string(),
@@ -36,7 +41,8 @@ const storageItemValidator = v.object({
   size: v.number(),
   created_at: v.number(),
   download_url: v.string(),
-  run_id: v.optional(v.string()),
+  run: v.optional(resourceRefValidator),
+  environment: v.optional(resourceRefValidator),
   data_blob_id: v.optional(v.string()),
 });
 
@@ -72,7 +78,8 @@ const indexedStorageRowValidator = v.object({
   name: v.string(),
   size: v.number(),
   created_at: v.number(),
-  run_id: v.optional(v.string()),
+  run: v.optional(resourceRefValidator),
+  environment: v.optional(resourceRefValidator),
   data_blob_id: v.optional(v.string()),
 });
 
@@ -90,7 +97,8 @@ type StorageItem = {
   size: number;
   created_at: number;
   download_url: string;
-  run_id?: string;
+  run?: { id: string; name: string };
+  environment?: { id: string; name: string };
   data_blob_id?: string;
 };
 
@@ -103,7 +111,8 @@ type IndexedStorageRow = {
   name: string;
   size: number;
   created_at: number;
-  run_id?: string;
+  run?: { id: string; name: string };
+  environment?: { id: string; name: string };
   data_blob_id?: string;
 };
 
@@ -219,7 +228,15 @@ function sortItems(items: StorageItem[], sort: StorageSort) {
 
 function matchesSearch(item: StorageItem, search: string) {
   if (!search) return true;
-  const haystack = [item.name, item.path, item.run_id || "", item.data_blob_id || ""].join(" ").toLowerCase();
+  const haystack = [
+    item.name,
+    item.path,
+    item.run?.id || "",
+    item.run?.name || "",
+    item.environment?.id || "",
+    item.environment?.name || "",
+    item.data_blob_id || "",
+  ].join(" ").toLowerCase();
   return haystack.includes(search);
 }
 
@@ -245,8 +262,52 @@ function toStorageItem(row: IndexedStorageRow): StorageItem {
     size: row.size,
     created_at: row.created_at,
     download_url: "",
-    run_id: row.run_id,
+    run: row.run,
+    environment: row.environment,
     data_blob_id: row.data_blob_id,
+  };
+}
+
+function getContextFields(
+  row: {
+    runId?: Id<"runs">;
+    objectKind: "data_upload" | "data_manifest" | "run_artifact";
+    dataId?: string;
+  },
+  runsById: Map<string, { environmentId: Id<"environments">; name?: string }>,
+  environmentById: Map<string, { _id: Id<"environments">; name: string }>,
+  environmentByDataId: Map<string, { _id: Id<"environments">; name: string }>,
+) {
+  if (row.runId) {
+    const runId = String(row.runId);
+    const run = runsById.get(runId);
+    const environmentId = run ? String(run.environmentId) : undefined;
+    const environment = environmentId ? environmentById.get(environmentId) : undefined;
+    return {
+      run: {
+        id: runId,
+        name: run?.name?.trim() || `Run ${runId.slice(0, 8)}`,
+      },
+      environment: environment
+        ? {
+            id: String(environment._id),
+            name: environment.name,
+          }
+        : undefined,
+    };
+  }
+  if (row.objectKind !== "data_manifest" || !row.dataId) {
+    return {};
+  }
+  const environment = environmentByDataId.get(row.dataId) || environmentById.get(row.dataId);
+  if (!environment) {
+    return {};
+  }
+  return {
+    environment: {
+      id: String(environment._id),
+      name: environment.name,
+    },
   };
 }
 
@@ -291,10 +352,30 @@ export const internalListIndexedObjects = internalQuery({
   },
   returns: indexedStorageListValidator,
   handler: async (ctx, args) => {
-    const allRows = await ctx.db
+    const [allRows, runs, environments] = await Promise.all([
+      ctx.db
       .query("storageObjects")
       .withIndex("by_user", (q) => q.eq("userId", args.userId))
-      .collect();
+      .collect(),
+      ctx.db
+        .query("runs")
+        .withIndex("by_user", (q) => q.eq("userId", args.userId))
+        .collect(),
+      ctx.db
+        .query("environments")
+        .withIndex("by_user", (q) => q.eq("userId", args.userId))
+        .collect(),
+    ]);
+    const runsById = new Map(runs.map((run) => [String(run._id), run]));
+    const environmentById = new Map(environments.map((environment) => [String(environment._id), environment]));
+    const environmentByDataId = new Map(
+      environments
+        .map((environment) => {
+          const dataId = environment.dataId?.trim();
+          return dataId ? [dataId, environment] as const : null;
+        })
+        .filter((entry): entry is readonly [string, (typeof environments)[number]] => entry !== null),
+    );
     const rows =
       args.visibility === "shared"
         ? allRows.filter((r) => r.visibility === "shared")
@@ -304,6 +385,7 @@ export const internalListIndexedObjects = internalQuery({
 
     return {
       objects: rows.map((row) => ({
+        ...getContextFields(row, runsById, environmentById, environmentByDataId),
         id: String(row._id),
         source: row.source,
         visibility: row.visibility ?? "private",
@@ -312,10 +394,85 @@ export const internalListIndexedObjects = internalQuery({
         name: row.name || toObjectName(row.key),
         size: row.size || 0,
         created_at: row.createdAt || 0,
-        run_id: row.runId ? String(row.runId) : undefined,
         data_blob_id: row.dataBlobId || undefined,
       })),
     };
+  },
+});
+
+export const deleteMany = mutation({
+  args: {
+    keys: v.array(v.string()),
+  },
+  returns: v.object({
+    deleted: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    const userId = String(user._id);
+    const keys = Array.from(
+      new Set(args.keys.map((key) => key.trim()).filter((key) => key.length > 0)),
+    );
+    if (keys.length === 0) {
+      return { deleted: 0 };
+    }
+
+    const rows = (
+      await Promise.all(
+        keys.map((key) =>
+          ctx.db
+            .query("storageObjects")
+            .withIndex("by_user_and_key", (q) => q.eq("userId", userId).eq("key", key))
+            .first(),
+        ),
+      )
+    ).filter((row): row is NonNullable<typeof row> => row !== null);
+
+    for (let start = 0; start < rows.length; start += DELETE_BATCH_SIZE) {
+      const chunk = rows.slice(start, start + DELETE_BATCH_SIZE);
+      await Promise.all(
+        chunk.map(async (row) => {
+          try {
+            await r2.deleteObject(ctx, row.key);
+          } catch {
+            // Best-effort cleanup to avoid leaving stale index rows.
+          }
+        }),
+      );
+    }
+
+    for (const row of rows) {
+      if (row.runId) {
+        const run = await ctx.db.get("runs", row.runId);
+        if (run && run.userId === userId) {
+          await ctx.db.patch("runs", row.runId, {
+            artifactKeys: (run.artifactKeys || []).filter((key) => key !== row.key),
+          });
+          await ctx.db.insert("runEvents", {
+            runId: row.runId,
+            status: run.status,
+            message: "artifact deleted",
+            metadata: {
+              key: row.key,
+            },
+          });
+        }
+      }
+
+      if (row.objectKind === "data_upload") {
+        const dataBlob = await ctx.db
+          .query("dataBlobs")
+          .withIndex("by_key", (q) => q.eq("key", row.key))
+          .first();
+        if (dataBlob && dataBlob.userId === userId) {
+          await ctx.db.delete("dataBlobs", dataBlob._id);
+        }
+      }
+
+      await ctx.db.delete("storageObjects", row._id);
+    }
+
+    return { deleted: rows.length };
   },
 });
 

@@ -1,6 +1,8 @@
 package main
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -114,6 +116,97 @@ func TestSyncIncremental_DataScopeOnlyCommitsDataManifest(t *testing.T) {
 	}
 }
 
+func TestRunSyncWithStatus_RefreshesAndReportsEnvironmentSync(t *testing.T) {
+	mock := newSyncBackendMock()
+	installSyncStubs(t, mock)
+	setupTestProject(t, false)
+	if err := saveLinkedEnvironmentID("env-test"); err != nil {
+		t.Fatalf("failed to save linked environment id: %v", err)
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if serveGpusAndEnvironment(w, r) {
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	t.Setenv("TAHUNA_API_URL", server.URL)
+
+	output := captureStdout(t, func() {
+		if err := runSyncWithStatus("env-test", syncScope{code: true}); err != nil {
+			t.Fatalf("runSyncWithStatus failed: %v", err)
+		}
+	})
+
+	if !strings.Contains(output, "syncing environment") {
+		t.Fatalf("expected sync output to include environment sync phase, got: %s", output)
+	}
+	if envIndex, finalizeIndex := strings.Index(output, "syncing environment"), strings.Index(output, "finalizing sync"); envIndex < 0 || finalizeIndex < 0 || envIndex > finalizeIndex {
+		t.Fatalf("expected environment sync to be reported before finalizing sync, got: %s", output)
+	}
+
+	raw, err := os.ReadFile(projectConfigFilePath())
+	if err != nil {
+		t.Fatalf("expected project config to be written: %v", err)
+	}
+	text := string(raw)
+	if !strings.Contains(text, "name = \"test\"") {
+		t.Fatalf("expected synced environment name in project config, got: %s", text)
+	}
+	if !strings.Contains(text, "gpu_type = \"NVIDIA A100 80GB\"") || !strings.Contains(text, "gpu_count = 1") {
+		t.Fatalf("expected synced environment hardware in project config, got: %s", text)
+	}
+}
+
+func TestRunSyncWithStatus_EnvironmentOnlyConfigDoesNotFailOrInventProjectBindings(t *testing.T) {
+	mock := newSyncBackendMock()
+	installSyncStubs(t, mock)
+	setupTestProject(t, false)
+	if err := saveLinkedEnvironmentID("env-test"); err != nil {
+		t.Fatalf("failed to save linked environment id: %v", err)
+	}
+	if err := os.WriteFile(projectConfigFilePath(), []byte("# Generated from the remote Tahuna environment record.\n[environment]\nname = \"broken-env\"\nframework = \"pt\"\nversion = \"2.8.0-cu128\"\npython_version = \"3.11\"\ngpu_type = \"NVIDIA RTX A5000\"\ngpu_count = 1\nvolume_gb = 80\n"), 0o600); err != nil {
+		t.Fatalf("failed to write env-only project config: %v", err)
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if serveGpusAndEnvironment(w, r) {
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	t.Setenv("TAHUNA_API_URL", server.URL)
+
+	output := captureStdout(t, func() {
+		if err := runSyncWithStatus("env-test", syncScope{code: true}); err != nil {
+			t.Fatalf("runSyncWithStatus failed: %v", err)
+		}
+	})
+
+	if !strings.Contains(output, "syncing environment") {
+		t.Fatalf("expected sync output to include environment sync phase, got: %s", output)
+	}
+	if envIndex, finalizeIndex := strings.Index(output, "syncing environment"), strings.Index(output, "finalizing sync"); envIndex < 0 || finalizeIndex < 0 || envIndex > finalizeIndex {
+		t.Fatalf("expected environment sync to be reported before finalizing sync, got: %s", output)
+	}
+
+	raw, err := os.ReadFile(projectConfigFilePath())
+	if err != nil {
+		t.Fatalf("expected project config to be written: %v", err)
+	}
+	text := string(raw)
+	if strings.Contains(text, "[project]") {
+		t.Fatalf("expected env-only config to remain env-only during sync, got: %s", text)
+	}
+	if !strings.Contains(text, "name = \"test\"") || !strings.Contains(text, "gpu_type = \"NVIDIA A100 80GB\"") {
+		t.Fatalf("expected environment fields to refresh in env-only config, got: %s", text)
+	}
+}
+
 func TestPreRunSync_SyncsCodeAndData(t *testing.T) {
 	mock := newSyncBackendMock()
 	installSyncStubs(t, mock)
@@ -143,7 +236,7 @@ func TestPreRunSync_ConfigValidationDetectsMissingBindingAfterSync(t *testing.T)
 	installSyncStubs(t, mock)
 	setupTestProject(t, true)
 
-	if err := os.WriteFile(projectConfigFilePath(), []byte("data_dir: \"data\"\n"), 0o600); err != nil {
+	if err := os.WriteFile(projectConfigFilePath(), []byte("[project]\ndata_dir = \"data\"\n"), 0o600); err != nil {
 		t.Fatalf("failed to write broken project config: %v", err)
 	}
 

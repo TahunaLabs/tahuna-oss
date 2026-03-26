@@ -37,6 +37,7 @@ export default defineSchema({
     userId: v.string(),
     environmentId: v.id("environments"),
     name: v.optional(v.string()),
+    command: v.optional(v.array(v.string())),
     dataId: v.optional(v.string()),
     outputDir: v.optional(v.string()),
     input: v.string(),

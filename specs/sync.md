@@ -126,8 +126,8 @@ Code sync excludes:
   - .git/              (always)
   - node_modules/      (always)
   - __pycache__/       (always)
-  - configured data directory (from project.yaml)
-  - configured output directory (from project.yaml)
+  - configured data directory (from `.tahuna/tahuna.toml`)
+  - configured output directory (from `.tahuna/tahuna.toml`)
   - patterns from .gitignore (if file exists)
 
 Data sync includes:

@@ -82,17 +82,14 @@ func serveGpusAndEnvironment(w http.ResponseWriter, r *http.Request) bool {
 }
 
 // setupTestProject creates a minimal tahuna project in a temp directory with
-// all required files (train.py, config.yaml, pyproject.toml, uv.lock, data/,
-// outputs/) and a saved project config. Changes cwd to the project directory
+// all required files (train.py, pyproject.toml, uv.lock, data/, outputs/)
+// and a saved project config. Changes cwd to the project directory
 // and restores cwd on cleanup.
 func setupTestProject(t *testing.T, withData bool) string {
 	t.Helper()
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "train.py"), []byte("print('hello')\n"), 0o644); err != nil {
 		t.Fatalf("failed to write train.py: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "config.yaml"), []byte("project: test\nentrypoint: train.py\n"), 0o644); err != nil {
-		t.Fatalf("failed to write config.yaml: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(dir, "pyproject.toml"), []byte("[project]\nname = \"test\"\nversion = \"0.1.0\"\nrequires-python = \">=3.11\"\n"), 0o644); err != nil {
 		t.Fatalf("failed to write pyproject.toml: %v", err)
@@ -121,7 +118,6 @@ func setupTestProject(t *testing.T, withData bool) string {
 	if err := saveProjectConfig(projectConfig{
 		DataDir:           "data",
 		OutputDir:         "outputs",
-		ConfigYAMLPath:    "config.yaml",
 		TrainEntrypoint:   "train.py",
 		PythonProjectFile: "pyproject.toml",
 		UVLockFile:        "uv.lock",

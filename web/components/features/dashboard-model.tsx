@@ -33,7 +33,8 @@ export type StorageItem = {
   size: number
   download_url: string
   created_at: number
-  run_id?: string
+  run?: { id: string; name: string }
+  environment?: { id: string; name: string }
   data_blob_id?: string
 }
 

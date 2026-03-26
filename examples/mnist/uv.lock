@@ -1164,7 +1164,6 @@ version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
     { name = "accelerate" },
-    { name = "pyyaml" },
     { name = "torch" },
     { name = "torchvision" },
     { name = "transformers" },
@@ -1174,7 +1173,6 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "accelerate" },
-    { name = "pyyaml" },
     { name = "torch", specifier = "==2.8.0" },
     { name = "torchvision" },
     { name = "transformers" },

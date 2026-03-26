@@ -77,6 +77,7 @@ export const createRun = httpAction(async (ctx, request) => {
       userId,
       environmentId: body?.environment_id as Id<"environments">,
       name: typeof body?.name === "string" ? body.name : undefined,
+      command: Array.isArray(body?.command) ? body.command.filter((item: unknown) => typeof item === "string") : undefined,
       gpu_type: body?.gpu_type,
       gpu_count: body?.gpu_count,
       volume_gb: body?.volume_gb,

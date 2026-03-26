@@ -27,7 +27,6 @@ The pod bootstrap is the sequence that runs inside a Runpod GPU pod from startup
 ```
 /workspace/
   train.py              # entrypoint (from code manifest)
-  config.yaml           # config (from code manifest)
   pyproject.toml        # dependencies/runtime metadata (from code manifest)
   uv.lock               # locked dependency graph (from code manifest)
   ...                   # other code files
@@ -49,11 +48,7 @@ POD STARTS
    Response: {
      code: { entries: [...], download_urls: {...} },
      data: { entries: [...], download_urls: {...} },
-     entrypoint: "train.py",
-     config_file: "config.yaml",
-     python_project_file: "pyproject.toml",
-     uv_lock_file: "uv.lock",
-     python_version: "3.11",
+     command: ["uv", "run", "--active", "--no-sync", "python", "-u", "train.py"],
      output_dir: "outputs"
    }
     |
@@ -92,9 +87,7 @@ POD STARTS
     |
     v
 6. RUN ENTRYPOINT
-   - Parse entrypoint command:
-     a. Check config.yaml for `command:` field
-     b. Default: `uv run python -u {entrypoint}`
+   - Use the pinned bootstrap `command`
    - Execute with subprocess, capture stdout + stderr
    - Stream output to backend as logs:
      POST /api/runs/{RUN_ID}/runtime/logs

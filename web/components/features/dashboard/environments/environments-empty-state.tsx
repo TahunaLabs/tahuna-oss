@@ -11,8 +11,8 @@ function EnvironmentsEmptyState() {
   return (
     <Card variant="ghost" className="flex min-h-72 items-center justify-center">
       <div className="w-full max-w-lg">
-        <div className="mb-6 text-center">
-          <p className="text-sm leading-relaxed text-muted-foreground">
+        <div className="mb-6 flex justify-center text-center">
+          <p className="max-w-md text-base font-medium leading-relaxed text-foreground">
             Create and manage compute environments using the Tahuna CLI.
           </p>
         </div>

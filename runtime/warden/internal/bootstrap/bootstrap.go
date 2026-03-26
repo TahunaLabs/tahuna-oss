@@ -240,6 +240,7 @@ func (r *Runner) Run(ctx context.Context) error {
 	exitCode, cancelled, err := train.RunEntrypoint(
 		trainCtx,
 		r.cfg.WorkspaceRoot,
+		plan.Command,
 		time.Duration(r.cfg.CancellationGraceSec)*time.Second,
 		hooks,
 	)

@@ -39,8 +39,10 @@ export function StorageContainer({ shouldLoadQueries, onOpenShareDialog }: Props
   const [storageLoading, setStorageLoading] = useState(false)
   const [storageError, setStorageError] = useState("")
   const [storageReloadToken, setStorageReloadToken] = useState(0)
+  const [storageDeleteBusy, setStorageDeleteBusy] = useState(false)
 
   const listStorageAction = useAction(api.storage.list)
+  const deleteStorageMutation = useMutation(api.storage.deleteMany)
   const setStorageVisibilityMutation = useMutation(api.storage.setVisibility)
 
   const storageItems = storageResult?.items ?? []
@@ -95,6 +97,24 @@ export function StorageContainer({ shouldLoadQueries, onOpenShareDialog }: Props
     }
   }
 
+  async function deleteStorageItems(items: StorageItem[]) {
+    const keys = Array.from(new Set(items.map((item) => item.key)))
+    if (keys.length === 0 || storageDeleteBusy) return false
+    setStorageDeleteBusy(true)
+    try {
+      const result = await deleteStorageMutation({ keys })
+      if (result.deleted > 0) {
+        setStorageReloadToken((n) => n + 1)
+      }
+      return result.deleted === keys.length
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "failed to delete storage items")
+      return false
+    } finally {
+      setStorageDeleteBusy(false)
+    }
+  }
+
   return (
     <StorageView
       bootstrapping={!shouldLoadQueries}
@@ -107,6 +127,7 @@ export function StorageContainer({ shouldLoadQueries, onOpenShareDialog }: Props
       storageResult={storageResult}
       storageLoading={storageLoading}
       storageError={storageError}
+      storageDeleteBusy={storageDeleteBusy}
       renamingStorageId={rename.renamingId}
       artifactRenameDraft={rename.renameDraft}
       artifactRenameBusyId={rename.renameBusyId}
@@ -133,6 +154,7 @@ export function StorageContainer({ shouldLoadQueries, onOpenShareDialog }: Props
       onShareStorageItem={(item) => {
         if (item.source === "data" && item.data_blob_id) onOpenShareDialog("data", item.data_blob_id)
       }}
+      onDeleteStorageItems={(items) => deleteStorageItems(items)}
       onSetVisibility={(item, visibility) => { void setStorageVisibility(item, visibility) }}
     />
   )

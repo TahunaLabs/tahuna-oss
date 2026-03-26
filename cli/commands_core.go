@@ -68,9 +68,6 @@ func initProject(target string) error {
 		envName = "tahuna-project"
 	}
 
-	if err := ensureProjectFile(projectCfg.ConfigYAMLPath, defaultConfigYAMLTemplate(projectCfg)); err != nil {
-		return fmt.Errorf("failed to create config yaml: %w", err)
-	}
 	if err := ensureProjectFile(projectCfg.PythonProjectFile, defaultPyProjectTemplate(frameworkKey)); err != nil {
 		return fmt.Errorf("failed to create pyproject.toml: %w", err)
 	}
@@ -103,6 +100,9 @@ func initProject(target string) error {
 			return fmt.Errorf("failed to save environment link: %w (also failed to roll back environment %s: %v)", saveErr, setup.environmentID, cleanupErr)
 		}
 		return fmt.Errorf("failed to save environment link: %w (rolled back environment %s)", saveErr, setup.environmentID)
+	}
+	if err := syncLinkedLocalProjectConfig(setup.environmentID); err != nil {
+		return fmt.Errorf("failed to save local project config: %w", err)
 	}
 	return nil
 }
@@ -863,6 +863,7 @@ func environmentUpdate(args []string) {
 
 	resp, err := doJSON(http.MethodPatch, "/environments/"+environmentID, payload)
 	must(err)
+	must(syncLinkedLocalProjectConfig(environmentID))
 	printJSON(resp)
 }
 
@@ -887,6 +888,7 @@ func runCreate(args []string) {
 
 	payload := map[string]any{}
 	payload["output_dir"] = mustLoadRunOutputDir()
+	payload["command"] = mustLoadRunCommand()
 	if strings.TrimSpace(*name) != "" {
 		payload["name"] = strings.TrimSpace(*name)
 	}
@@ -1026,6 +1028,7 @@ func train(args []string) {
 
 	payload := map[string]any{}
 	payload["output_dir"] = mustLoadRunOutputDir()
+	payload["command"] = mustLoadRunCommand()
 	if *gpuType != "" {
 		payload["gpu_type"] = *gpuType
 	}
@@ -1179,6 +1182,10 @@ func persistFallbackEnvironmentGPU(path, gpuType string) {
 	})
 	if err != nil {
 		logWarn("run created with fallback GPU %q but failed to update environment %s: %v", selectedGPU, environmentID, err)
+		return
+	}
+	if err := syncLinkedLocalProjectConfig(environmentID); err != nil {
+		logWarn("run created with fallback GPU %q but failed to refresh local project config for %s: %v", selectedGPU, environmentID, err)
 	}
 }
 
@@ -1248,4 +1255,10 @@ func mustLoadRunOutputDir() string {
 		return "outputs"
 	}
 	return outputDir
+}
+
+func mustLoadRunCommand() []string {
+	cfg, err := loadProjectConfig()
+	must(err)
+	return defaultTrainCommand(cfg.TrainEntrypoint)
 }

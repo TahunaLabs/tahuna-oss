@@ -13,21 +13,23 @@ Initialize an environment in your project:
 tahuna init .
 ```
 
-This initializes the current project, writes local project state to `.tahuna/project.yaml`, and creates any missing project files needed for a run.
+This initializes the current project, writes local project state to `.tahuna/tahuna.toml`, and creates any missing project files needed for a run.
 
 ## Configuration
 
-The local project file `.tahuna/project.yaml` records the paths and bindings Tahuna uses for the project:
+The local project file `.tahuna/tahuna.toml` records the paths and bindings Tahuna uses for the project:
 
-```yaml
-entrypoint: train.py
-data_dir: data
-output_dir: outputs
-config_file: config.yaml
-python_project_file: pyproject.toml
-uv_lock_file: uv.lock
-framework: pt
-python_version: "3.11"
+```toml
+[project]
+entrypoint = "train.py"
+data_dir = "data"
+output_dir = "outputs"
+python_project_file = "pyproject.toml"
+uv_lock_file = "uv.lock"
+
+[environment]
+framework = "pt"
+python_version = "3.11"
 ```
 
 ### Fields
@@ -37,7 +39,6 @@ python_version: "3.11"
 | `entrypoint` | Training script Tahuna executes for the project | `train.py` |
 | `data_dir` | Directory synced as project input data | `data` |
 | `output_dir` | Directory collected for run outputs and artifacts | `outputs` |
-| `config_file` | Project config file path used by your training code | `config.yaml` |
 | `python_project_file` | Python project metadata used for dependency resolution | `pyproject.toml` |
 | `uv_lock_file` | Lockfile used to install pinned dependencies in the runtime | `uv.lock` |
 | `framework` | Detected framework key stored for the project | `pt`, `tf` |

@@ -1,10 +1,7 @@
 #!/usr/bin/env python3
 import json
-import os
 from pathlib import Path
 from typing import Any
-
-os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
 
 import torch
 from datasets import Dataset, load_dataset
@@ -12,17 +9,21 @@ from peft import LoraConfig
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from trl import SFTConfig, SFTTrainer
 import wandb
-import yaml
 
-CONFIG_PATH = Path("config.yaml")
-DEFAULT_GRADIENT_ACCUMULATION_STEPS = 1
+PROJECT_NAME = "qwen-yoda-lora"
+MODEL_NAME = "Qwen/Qwen3-0.6B"
+DATA_DIR = Path("data/yoda")
+OUTPUT_DIR = Path("outputs")
+EPOCHS = 2
+BATCH_SIZE = 16
+LEARNING_RATE = 1e-4
+DEFAULT_GRADIENT_ACCUMULATION_STEPS = 4
 DEFAULT_MAX_SEQ_LENGTH = 128
 DEFAULT_LOGGING_STEPS = 10
 DEFAULT_SEED = 42
 DEFAULT_SAMPLE_PREDICTIONS = 8
 DEFAULT_SAMPLE_MAX_NEW_TOKENS = 64
 DEFAULT_WANDB_PROJECT = "tahuna-qwen-yoda-lora"
-DEFAULT_DATALOADER_NUM_WORKERS = min(4, os.cpu_count() or 1)
 DEFAULT_LORA_R = 16
 DEFAULT_LORA_ALPHA = 32
 DEFAULT_LORA_DROPOUT = 0.05
@@ -35,11 +36,6 @@ DEFAULT_LORA_TARGET_MODULES = [
     "up_proj",
     "down_proj",
 ]
-
-
-def load_config() -> tuple[dict[str, Any], dict[str, Any]]:
-    config = yaml.safe_load(CONFIG_PATH.read_text(encoding="utf-8")) or {}
-    return config, config.get("train", {})
 
 
 def select_torch_dtype() -> tuple[torch.dtype, bool, bool]:
@@ -104,25 +100,23 @@ def load_prepared_dataset(split_path: Path) -> Dataset:
 
 
 def main() -> None:
-    config, train_config = load_config()
-    project_name = str(config.get("project", "qwen-yoda-lora"))
-    model_name = str(train_config.get("model_name", "Qwen/Qwen3-4B"))
-    data_dir = Path(str(train_config.get("data_dir", "data/yoda")))
-    output_dir = Path(str(train_config.get("output_dir", "outputs")))
+    project_name = PROJECT_NAME
+    model_name = MODEL_NAME
+    data_dir = DATA_DIR
+    output_dir = OUTPUT_DIR
     checkpoints_dir = output_dir / "checkpoints"
     adapter_dir = output_dir / "adapter"
-    epochs = float(train_config.get("epochs", 1))
-    batch_size = int(train_config.get("batch_size", 16))
-    learning_rate = float(train_config.get("learning_rate", 1e-4))
+    epochs = EPOCHS
+    batch_size = BATCH_SIZE
+    learning_rate = LEARNING_RATE
     eval_batch_size = batch_size
     gradient_accumulation_steps = DEFAULT_GRADIENT_ACCUMULATION_STEPS
     max_seq_length = DEFAULT_MAX_SEQ_LENGTH
     logging_steps = DEFAULT_LOGGING_STEPS
     seed = DEFAULT_SEED
-    gradient_checkpointing = False
+    gradient_checkpointing = True
     sample_predictions = DEFAULT_SAMPLE_PREDICTIONS
     sample_max_new_tokens = DEFAULT_SAMPLE_MAX_NEW_TOKENS
-    dataloader_num_workers = DEFAULT_DATALOADER_NUM_WORKERS
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -158,8 +152,6 @@ def main() -> None:
             "learning_rate": learning_rate,
             "gradient_accumulation_steps": gradient_accumulation_steps,
             "max_seq_length": max_seq_length,
-            "packing": True,
-            "dataloader_num_workers": dataloader_num_workers,
             "lora_r": DEFAULT_LORA_R,
             "lora_alpha": DEFAULT_LORA_ALPHA,
             "lora_dropout": DEFAULT_LORA_DROPOUT,
@@ -181,7 +173,6 @@ def main() -> None:
         metric_for_best_model="eval_loss",
         greater_is_better=False,
         max_length=max_seq_length,
-        packing=True,
         completion_only_loss=True,
         gradient_checkpointing=gradient_checkpointing,
         lr_scheduler_type="cosine",
@@ -191,8 +182,6 @@ def main() -> None:
         bf16=use_bf16,
         fp16=use_fp16,
         seed=seed,
-        dataloader_num_workers=dataloader_num_workers,
-        dataloader_persistent_workers=dataloader_num_workers > 0,
     )
     try:
         trainer = SFTTrainer(
@@ -210,7 +199,7 @@ def main() -> None:
         print(
             "train_profile="
             f"batch_size:{batch_size} grad_accum:{gradient_accumulation_steps} "
-            f"max_length:{max_seq_length} packing:True "
+            f"max_length:{max_seq_length} packing:False "
             f"gradient_checkpointing:{gradient_checkpointing}"
         )
         print(f"output_dir={output_dir.resolve()}")
@@ -239,7 +228,6 @@ def main() -> None:
                 "torch_dtype": str(torch_dtype),
                 "train_metrics": train_result.metrics,
                 "eval_metrics": eval_metrics,
-                "config": config,
             },
         )
         write_json(output_dir / "sample_predictions.json", sample_outputs)

@@ -86,7 +86,7 @@ An embedded in-pod bootstrap orchestrator:
 - **Docs:** Fumadocs (MDX-based documentation)
 ### **Infrastructure Dependencies:**
 - **Local storage:** `.tahuna/` directory for project config, environment ID, sync cache
-- **Config files:** `config.yaml`, `pyproject.toml`, `uv.lock` (declared by user or scaffolded)
+- **Project files:** `train.py`, `pyproject.toml`, `uv.lock` (declared by user or scaffolded)
 - **Convex deployment:** Convex Cloud for serverless backend
 ---
 ## 4. **USER EXPERIENCE / WORKFLOW**
@@ -98,9 +98,9 @@ tahuna login
   ↓ [Stores token in ~/.config/tahuna/config.env]
 # 2. Initialize project
 tahuna init .
-  ↓ [Guided prompts: entrypoint, data dir, output dir, config file, framework]
+  ↓ [Guided prompts: entrypoint, data dir, output dir, framework]
   ↓ [Auto-detects framework from pyproject.toml or prompts]
-  ↓ [Scaffolds: config.yaml, pyproject.toml, uv.lock, train.py if missing]
+  ↓ [Scaffolds: pyproject.toml, uv.lock, train.py if missing]
   ↓ [Creates .tahuna/environment_id linking project to backend]
   ↓ [Prompts for machine/GPU specs]
 # 3. Sync (automatic before run, or manual)
@@ -172,8 +172,8 @@ tahuna run cancel <id> # graceful shutdown
 Tahuna doesn't provide fine-tuning itself. Instead, it orchestrates *any* Python training script:
 1. **User writes** `train.py` (PyTorch, TensorFlow, etc.)
 2. **Declares dependencies** in `pyproject.toml` and `uv.lock`
-3. **Configures hyperparameters** in `config.yaml` (parsed by user code)
-4. **Specifies entrypoint** in `config.yaml`: `command: uv run python -u train.py`
+3. **Configures hyperparameters** in any user-owned config file or directly in code
+4. **Specifies entrypoint** in `.tahuna/tahuna.toml`; Tahuna derives the pinned run command from it
 5. **Tahuna handles:**
    - Syncing code/data to R2
    - Selecting framework + Python version from `uv` files
