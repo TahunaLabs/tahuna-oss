@@ -16,7 +16,7 @@ function DashboardAppLayout({
   children,
 }: DashboardAppLayoutProps) {
   return (
-    <SidebarProvider className="h-svh overflow-hidden">
+    <SidebarProvider className="relative h-full overflow-hidden">
       <AppSidebar collapsible="icon">
         {sidebar}
       </AppSidebar>

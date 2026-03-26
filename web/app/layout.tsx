@@ -1,5 +1,6 @@
 import { ConvexClientProvider } from "@/components/convex-client-provider"
 import { ThemeProvider } from "@/components/theme-provider"
+import { Card } from "@/components/ui/card"
 import { Toaster } from "@/components/ui/toaster"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { siteMetadata } from "@/app/site-metadata"
@@ -31,14 +32,16 @@ export default async function RootLayout({
   const initialTheme = themeCookie === "dark" ? "dark" : "light"
   return (
     <html lang="en" className={`${geist.variable} ${geistMono.variable} ${cormorant.variable} ${initialTheme}`}>
-      <body className="font-sans antialiased">
+      <body className="font-sans antialiased bg-sidebar p-2 h-svh">
         <ThemeProvider initialTheme={initialTheme}>
-          <TooltipProvider>
-            <NuqsAdapter>
-              <ConvexClientProvider initialToken={token}>{children}</ConvexClientProvider>
-            </NuqsAdapter>
-          </TooltipProvider>
-          <Toaster />
+          <Card variant="frame" className="h-full overflow-hidden">
+            <TooltipProvider>
+              <NuqsAdapter>
+                <ConvexClientProvider initialToken={token}>{children}</ConvexClientProvider>
+              </NuqsAdapter>
+            </TooltipProvider>
+            <Toaster />
+          </Card>
         </ThemeProvider>
         <Analytics />
       </body>
