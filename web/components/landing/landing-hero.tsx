@@ -10,23 +10,16 @@ export function LandingHero() {
           <Eyebrow variant="cancelling">Vision</Eyebrow>
 
           <h1 className="font-serif text-6xl font-semibold leading-display-tight text-foreground">
-            Fine-tune Models
+            The gap between
             <br />
-            Without the Ops
+            general and yours.
           </h1>
 
           <div className="flex flex-col gap-4 font-mono text-sm text-muted-foreground leading-relaxed">
             <p>
-              The only fine-tuning platform
+              CLI-native finetuning. For you, or the agents
               <br />
-              that works everywhere you do.
-            </p>
-            <p>
-              From data prep to deployment — run experiments,
-              <br />
-              track metrics, and ship adapters without
-              <br />
-              changing your tools, models, or workflow.
+              working alongside you.
             </p>
           </div>
 
