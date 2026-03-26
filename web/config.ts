@@ -74,6 +74,7 @@ export function manifestLimitByKind(kind: SyncKind) {
 export const CDN_CONFIG = {
   baseUrl: "https://pub-5f7c225fd68446a9b652150d7c7e52e9.r2.dev",
   providerIconsPath: "/assets/providers",
+  frameworkIconsPath: "/assets/frameworks",
   faviconPath: "/assets/favicon",
 } as const;
 
