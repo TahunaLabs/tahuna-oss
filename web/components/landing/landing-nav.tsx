@@ -9,10 +9,10 @@ import { useTheme } from "@/components/theme-provider"
 import { Button } from "@/components/ui/button"
 
 const NAV_LINKS = [
-  { label: "Dashboard", href: "/dashboard" },
-  { label: "GitHub",    href: LINKS_CONFIG.repoUrl, external: true },
-  { label: "Docs",      href: LINKS_CONFIG.gettingStartedUrl, external: true },
-  { label: "Blog",      href: "#" },
+  { label: "Dashboard", href: "/dashboard",                          external: false },
+  { label: "GitHub",    href: LINKS_CONFIG.repoUrl,                  external: true },
+  { label: "Docs",      href: LINKS_CONFIG.gettingStartedUrl,        external: true },
+  { label: "Blog",      href: "#",                                   external: false },
 ] as const
 
 export function LandingNav() {

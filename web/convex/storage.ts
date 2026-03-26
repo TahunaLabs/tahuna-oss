@@ -279,7 +279,7 @@ function getContextFields(
     objectKind: "data_upload" | "data_manifest" | "run_artifact";
     dataId?: string;
   },
-  runsById: Map<string, { name?: string }>,
+  runsById: Map<string, { name?: string; environmentId?: string }>,
   environmentById: Map<string, { _id: Id<"environments">; name: string }>,
   environmentByDataId: Map<string, { _id: Id<"environments">; name: string }>,
 ) {
