@@ -4,12 +4,12 @@ command:
   - python
   - train.py
 train:
-  # Change to Qwen/Qwen3-4B for a larger base model.
-  model_name: Qwen/Qwen3-0.6B
+  # Change to Qwen/Qwen3-0.6B for a cheaper smoke test.
+  model_name: Qwen/Qwen3-4B
   data_dir: data/yoda
   output_dir: outputs
   epochs: 1
-  batch_size: 4
+  batch_size: 16
   learning_rate: 0.0001
 data:
   path: data
