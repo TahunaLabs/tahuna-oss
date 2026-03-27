@@ -39,7 +39,7 @@ document.body.style.setProperty("--app-shell-background-image", `url("${artefact
 
 const router = createBrowserRouter([
   {
-    path: "*",
+    path: "/*",
     element: (
       <RootProvider>
         <App />
