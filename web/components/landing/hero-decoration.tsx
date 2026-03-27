@@ -178,7 +178,7 @@ export function HeroDecoration() {
             <span className="font-mono text-ui-caption text-foreground">3 / 8</span>
           </div>
           <div className="h-1 w-full rounded-full bg-border">
-            <div className="h-1 rounded-full bg-primary" style={{ width: '37.5%' }} />
+            <div className="h-1 w-2/5 rounded-full bg-primary" />
           </div>
           <div className="flex items-baseline justify-between">
             <span className="font-mono text-ui-micro text-muted-foreground">loss</span>
