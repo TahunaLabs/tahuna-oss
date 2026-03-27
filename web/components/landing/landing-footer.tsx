@@ -78,7 +78,7 @@ export function LandingFooter() {
         </div>
 
         {/* Decorative text — in normal flow, no overlap */}
-        <div className="pointer-events-none select-none overflow-hidden text-center">
+        <div className="pointer-events-none -mt-20 select-none overflow-hidden text-center">
           <p
             className="font-serif leading-none font-semibold tracking-tight text-white/10"
             style={{ fontSize: "clamp(10rem, 24vw, 24rem)", transform: "translateY(22%)" }}
