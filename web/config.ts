@@ -71,12 +71,14 @@ export function manifestLimitByKind(kind: SyncKind) {
   return kind === "data" ? UPLOAD_LIMITS_BYTES.dataManifest : UPLOAD_LIMITS_BYTES.codeManifest;
 }
 
+const R2_ARTEFACTS_PATH = "/assets/artefacts";
+
 export const CDN_CONFIG = {
   baseUrl: "https://pub-5f7c225fd68446a9b652150d7c7e52e9.r2.dev",
   providerIconsPath: "/assets/providers",
   frameworkIconsPath: "/assets/frameworks",
   faviconPath: "/assets/favicon",
-  artefactsPath: "/assets/artefacts",
+  artefactsPath: R2_ARTEFACTS_PATH,
 } as const;
 
 export const LINKS_CONFIG = {
