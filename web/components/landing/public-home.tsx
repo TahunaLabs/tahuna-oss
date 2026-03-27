@@ -1,3 +1,4 @@
+import { FrameworksBar } from "@/components/landing/frameworks-bar"
 import { LandingFooter } from "@/components/landing/landing-footer"
 import { LandingHero } from "@/components/landing/landing-hero"
 import { LandingLayersSection } from "@/components/landing/landing-layers-section"
@@ -11,6 +12,7 @@ export function PublicHome() {
         <LandingNav />
         <main>
           <LandingHero />
+          <FrameworksBar />
           <LandingTerminalSection />
           <div className="relative">
             <div className="absolute inset-0 bg-background/75" />
