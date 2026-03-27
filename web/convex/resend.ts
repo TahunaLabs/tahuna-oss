@@ -12,13 +12,8 @@ type OtpEmailPayload = {
   otp: string;
 };
 
-function isProductionDeployment() {
-  const deployment = process.env.CONVEX_DEPLOYMENT?.trim().toLowerCase() || "";
-  return deployment.startsWith("prod:");
-}
-
 function resolveOtpFromEmail() {
-  if (isProductionDeployment()) {
+  if (process.env.NODE_ENV === "production") {
     return EMAIL_CONFIG.otpFromEmail.production.trim();
   }
   return process.env.RESEND_FROM_EMAIL?.trim() || "";
