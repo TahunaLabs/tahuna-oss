@@ -9,9 +9,9 @@ import { useTheme } from "@/components/theme-provider"
 import { LINKS_CONFIG } from "@/config"
 
 const NAV_LINKS = [
-  { label: "Dashboard", href: "/dashboard" },
+  { label: "Dashboard", href: "/dashboard", external: false },
   // { label: "GitHub", href: LINKS_CONFIG.repoUrl, external: true },
-  { label: "Docs", href: LINKS_CONFIG.gettingStartedUrl, external: true },
+  { label: "Docs", href: LINKS_CONFIG.docsUrl, external: true },
   // { label: "Blog", href: "#" },
 ] as const
 

@@ -70,8 +70,8 @@ const DEFAULT_NAV_ADMIN: NavItem[] = [
 ]
 
 const DEFAULT_NAV_DOCS: NavDocItem[] = [
-  { icon: BookOpen, label: "Getting started", href: LINKS_CONFIG.gettingStartedUrl },
-  { icon: FileText, label: "API reference", href: LINKS_CONFIG.apiReferenceUrl },
+  { icon: BookOpen, label: "Documentation", href: LINKS_CONFIG.docsUrl },
+  { icon: FileText, label: "CLI reference", href: LINKS_CONFIG.cliReferenceUrl },
   { icon: Layers, label: "Changelog", href: LINKS_CONFIG.changelogUrl },
 ]
 

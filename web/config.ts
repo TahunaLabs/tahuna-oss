@@ -82,8 +82,11 @@ export const CDN_CONFIG = {
 } as const;
 
 export const LINKS_CONFIG = {
-  gettingStartedUrl: "https://docs.tahuna.io/getting-started",
-  apiReferenceUrl: "https://docs.tahuna.io/api",
+  docsUrl: "https://docs.tahuna.app",
+  quickstartUrl: "https://docs.tahuna.app/quickstart",
+  environmentsUrl: "https://docs.tahuna.app/environments",
+  runsUrl: "https://docs.tahuna.app/runs",
+  cliReferenceUrl: "https://docs.tahuna.app/cli",
   changelogUrl: "https://github.com/Pazuzzu/tahuna/releases",
   repoUrl: "https://github.com/Pazuzzu/tahuna",
 } as const;

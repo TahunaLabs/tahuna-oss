@@ -7,17 +7,16 @@ const FOOTER_SECTIONS = [
   {
     title: "Platform",
     links: [
-      { label: "Quickstart", href: "https://docs.tahuna.io/quickstart", external: true },
-      { label: "Environments", href: "https://docs.tahuna.io/environments", external: true },
-      { label: "Runs", href: "https://docs.tahuna.io/runs", external: true },
+      { label: "Quickstart", href: LINKS_CONFIG.quickstartUrl, external: true },
+      { label: "Environments", href: LINKS_CONFIG.environmentsUrl, external: true },
+      { label: "Runs", href: LINKS_CONFIG.runsUrl, external: true },
     ],
   },
   {
     title: "Documentation",
     links: [
-      { label: "Getting Started", href: LINKS_CONFIG.gettingStartedUrl, external: true },
-      { label: "API Reference", href: LINKS_CONFIG.apiReferenceUrl, external: true },
-      { label: "CLI", href: "https://docs.tahuna.io/cli", external: true },
+      { label: "Documentation", href: LINKS_CONFIG.docsUrl, external: true },
+      { label: "CLI Reference", href: LINKS_CONFIG.cliReferenceUrl, external: true },
     ],
   },
   {
