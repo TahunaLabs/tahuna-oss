@@ -17,7 +17,6 @@ export const AUTH_CONFIG = {
 export const EMAIL_CONFIG = {
   otpFromEmail: {
     production: "hi@tahuna.app",
-    nonProduction: "hi@tahuna.app",
   },
 } as const;
 

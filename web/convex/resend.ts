@@ -16,7 +16,7 @@ function resolveOtpFromEmail() {
   if (process.env.NODE_ENV === "production") {
     return EMAIL_CONFIG.otpFromEmail.production.trim();
   }
-  return EMAIL_CONFIG.otpFromEmail.nonProduction.trim();
+  return process.env.RESEND_FROM_EMAIL?.trim() || "";
 }
 
 export async function sendOtpEmail(ctx: MutationCtx, { email, otp }: OtpEmailPayload) {
