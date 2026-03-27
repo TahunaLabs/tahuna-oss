@@ -76,3 +76,4 @@ test_ml_project/data/*
 
 
 scripts/*
+!scripts/install-tahuna.sh

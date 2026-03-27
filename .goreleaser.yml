@@ -42,23 +42,3 @@ release:
   mode: replace
   draft: false
   prerelease: auto
-
-brews:
-  - name: tahuna
-    ids:
-      - tahuna
-    repository:
-      owner: Pazuzzu
-      name: homebrew-tahuna
-      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
-    directory: Formula
-    homepage: "https://github.com/Pazuzzu/tahuna"
-    description: "Tahuna CLI for ML training orchestration"
-    url_template: "https://github.com/Pazuzzu/tahuna-cli/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
-    commit_author:
-      name: github-actions[bot]
-      email: 41898282+github-actions[bot]@users.noreply.github.com
-    install: |
-      bin.install "tahuna"
-    test: |
-      system "#{bin}/tahuna", "version"

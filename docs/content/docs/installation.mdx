@@ -5,23 +5,18 @@ description: Install the Tahuna CLI on your machine.
 
 ## Requirements
 
-- macOS, Linux, or WSL on Windows
+- macOS (`amd64` or `arm64`)
+- Linux (`amd64`)
+- WSL on Windows (`amd64`)
 - Python 3.10+ (for ML frameworks)
 - A Tahuna account
 
-## Install via Homebrew
+## Install with the installer script
 
 The recommended way to install the Tahuna CLI:
 
 ```bash
-brew tap Pazuzzu/tahuna
-brew install tahuna
-```
-
-If you prefer a single command, you can install directly from the tap:
-
-```bash
-brew install Pazuzzu/tahuna/tahuna
+curl -fsSL https://raw.githubusercontent.com/Pazuzzu/tahuna/main/scripts/install-tahuna.sh | bash
 ```
 
 Verify the installation:
@@ -29,6 +24,27 @@ Verify the installation:
 ```bash
 tahuna version
 ```
+
+## Manual install (without `curl | bash`)
+
+If you prefer to download and unpack manually, pick the artifact that matches your OS and CPU:
+
+- `tahuna_darwin_amd64.tar.gz`
+- `tahuna_darwin_arm64.tar.gz`
+- `tahuna_linux_amd64.tar.gz`
+
+Example:
+
+```bash
+VERSION=v0.1.1
+OS=darwin
+ARCH=arm64
+curl -fsSL -o tahuna.tar.gz "https://github.com/Pazuzzu/tahuna-cli/releases/download/${VERSION}/tahuna_${OS}_${ARCH}.tar.gz"
+tar -xzf tahuna.tar.gz
+install -m 0755 tahuna ~/.local/bin/tahuna
+```
+
+Release checksums are published in `checksums.txt` for each release tag.
 
 ## Authenticate
 
@@ -55,8 +71,13 @@ Tahuna stores the credential encrypted at rest and uses it only for new RunPod l
 To update to the latest version:
 
 ```bash
-brew update
-brew upgrade tahuna
+curl -fsSL https://raw.githubusercontent.com/Pazuzzu/tahuna/main/scripts/install-tahuna.sh | bash
+```
+
+To install a specific version:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Pazuzzu/tahuna/main/scripts/install-tahuna.sh | bash -s -- --version v0.1.1
 ```
 
 ## Next Steps

@@ -2,6 +2,15 @@
 
 Standalone Go CLI for login, project init, sync, and run lifecycle management.
 
+## Install released binary
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Pazuzzu/tahuna/main/scripts/install-tahuna.sh | bash
+```
+
+See the docs installation guide for manual tarball install and pinned versions:
+`docs/content/docs/installation.mdx`.
+
 ## Run locally
 
 ```bash
