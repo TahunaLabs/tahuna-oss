@@ -157,6 +157,7 @@
   --leading-display-tight: 0.95;
   --tracking-ui-eyebrow: 0.22em;
   --tracking-ui-label: 0.01em;
+
 }
 
 @layer base {
