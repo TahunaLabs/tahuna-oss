@@ -1,8 +1,5 @@
 import { Card, CardContent } from '@/components/ui/card'
 
-/* ------------------------------------------------------------------ */
-/*  Step badge — a completed automation step                           */
-/* ------------------------------------------------------------------ */
 function StepBadge({ label }: { label: string }) {
   return (
     <div className="flex items-center gap-1.5 rounded-md border border-border bg-background px-2.5 py-1">
@@ -22,9 +19,6 @@ function StepBadge({ label }: { label: string }) {
   )
 }
 
-/* ------------------------------------------------------------------ */
-/*  Sparkline — descending loss curve as bars                          */
-/* ------------------------------------------------------------------ */
 function Sparkline() {
   const bars = [72, 60, 48, 42, 34, 28, 22, 17, 13, 10, 8, 7]
   return (
@@ -40,12 +34,6 @@ function Sparkline() {
   )
 }
 
-/* ------------------------------------------------------------------ */
-/*  Olive branch — organic SVG that sweeps behind the cards            */
-/*  Matches the logo's hand-drawn, irregular style                     */
-/*  Uses inline style for opacity since Tailwind classes don't         */
-/*  reliably apply to SVG path fills                                   */
-/* ------------------------------------------------------------------ */
 function OliveBranch() {
   const gold = 'var(--primary)'
   const stone = '#b3aea2' // from the logo's lighter fill
@@ -136,16 +124,9 @@ function OliveBranch() {
   )
 }
 
-/* ------------------------------------------------------------------ */
-/*  Main hero decoration — the Tahuna story                            */
-/*                                                                     */
-/*  Diagonal cascade filling the space:                                */
-/*  top-left: command → center-left: steps → center: training          */
-/*  top-right: dashboard (the outcome, visible from the start)         */
-/* ------------------------------------------------------------------ */
 export function HeroDecoration() {
   return (
-    <div className="relative h-full w-full min-h-[28rem] select-none" aria-hidden>
+    <div className="relative h-full w-full min-h-96 select-none" aria-hidden>
 
       {/* ---- ACT 1: The command (top-left) ---- */}
       <Card variant="surface" className="absolute left-[2%] top-[6%] w-48 shadow-sm">
@@ -197,7 +178,7 @@ export function HeroDecoration() {
             <span className="font-mono text-ui-caption text-foreground">3 / 8</span>
           </div>
           <div className="h-1 w-full rounded-full bg-border">
-            <div className="h-1 w-[37.5%] rounded-full bg-primary" />
+            <div className="h-1 rounded-full bg-primary" style={{ width: '37.5%' }} />
           </div>
           <div className="flex items-baseline justify-between">
             <span className="font-mono text-ui-micro text-muted-foreground">loss</span>
