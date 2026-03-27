@@ -10,7 +10,7 @@ function DocsPageRoute() {
   const slug = params["*"]?.split("/").filter(Boolean)
   const page = source.getPage(slug?.length ? slug : undefined)
 
-  if (!page) return <Navigate to="/docs" replace />
+  if (!page) return <Navigate to="/" replace />
 
   const MDX = page.data.body
 
@@ -30,9 +30,7 @@ function DocsPageRoute() {
 export function App() {
   return (
     <Routes>
-      <Route path="/" element={<Navigate to="/docs" replace />} />
-      <Route path="/docs/*" element={<DocsPageRoute />} />
-      <Route path="*" element={<Navigate to="/" replace />} />
+      <Route path="/*" element={<DocsPageRoute />} />
     </Routes>
   )
 }
