@@ -1,3 +1,79 @@
 @import "tailwindcss";
 @import "fumadocs-ui/css/neutral.css";
 @import "fumadocs-ui/css/preset.css";
+
+/* ============================================================
+   Shared theme — mirrors web/app/globals.css
+   Override --color-fd-* so Fumadocs picks up the brand palette
+   ============================================================ */
+
+:root {
+  --color-fd-background: #f6f9f8;
+  --color-fd-foreground: #162123;
+  --color-fd-card: #ffffff;
+  --color-fd-card-foreground: #162123;
+  --color-fd-popover: #ffffff;
+  --color-fd-popover-foreground: #162123;
+  --color-fd-primary: #c8a84e;
+  --color-fd-primary-foreground: #1a1c12;
+  --color-fd-secondary: #e9f0ef;
+  --color-fd-secondary-foreground: #1e3133;
+  --color-fd-muted: #eef4f3;
+  --color-fd-muted-foreground: #5f7473;
+  --color-fd-accent: #c8a84e;
+  --color-fd-accent-foreground: #1a1c12;
+  --color-fd-border: #d6e2e0;
+  --color-fd-ring: #c8a84e;
+}
+
+.dark {
+  --color-fd-background: #0b1d1f;
+  --color-fd-foreground: #e8e0d4;
+  --color-fd-card: #0f2628;
+  --color-fd-card-foreground: #e8e0d4;
+  --color-fd-popover: #0b1d1f;
+  --color-fd-popover-foreground: #e8e0d4;
+  --color-fd-primary: #c8a84e;
+  --color-fd-primary-foreground: #0b1d1f;
+  --color-fd-secondary: #142e30;
+  --color-fd-secondary-foreground: #e8e0d4;
+  --color-fd-muted: #1a3638;
+  --color-fd-muted-foreground: #8a9a93;
+  --color-fd-accent: #c8a84e;
+  --color-fd-accent-foreground: #0b1d1f;
+  --color-fd-border: #1e3e40;
+  --color-fd-ring: #c8a84e;
+}
+
+@layer base {
+  body {
+    position: relative;
+    min-height: 100vh;
+    isolation: isolate;
+  }
+
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: -2;
+    pointer-events: none;
+    background: url("/background.webp") center / cover no-repeat;
+    opacity: 0.9;
+  }
+
+  body::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    pointer-events: none;
+    background: url("/background.webp") center / cover no-repeat;
+    mix-blend-mode: multiply;
+    opacity: 0.7;
+  }
+}
+
+html {
+  scroll-behavior: smooth;
+}
