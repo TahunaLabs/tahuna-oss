@@ -6,28 +6,28 @@ const layers = [
     owner: "tahuna init .",
     detail: "Tahuna scans your project, detects your framework, identifies your entrypoint and data, and scaffolds anything missing.",
     statA: "Project-aware",
-    statB: "Setup without ceremony",
+    statB: "No boilerplate",
   },
   {
     title: "Align",
     owner: "tahuna sync",
     detail: "Your code and data are synced incrementally. Only changed files travel, and every run is pinned to exact snapshots.",
     statA: "Incremental sync",
-    statB: "Reproducible by default",
+    statB: "Delta-only uploads",
   },
   {
-    title: "Converge",
+    title: "Train",
     owner: "tahuna train",
     detail: "Tahuna provisions the GPU, materializes the workspace, installs dependencies, and runs your training entrypoint.",
     statA: "Logs stream live",
     statB: "Your loop stays yours",
   },
   {
-    title: "Emerge",
+    title: "Persist",
     owner: "runs + artifacts",
     detail: "Your checkpoints, models, and outputs are persisted. Run history stays queryable, and every experiment can be traced back to exact inputs.",
     statA: "Artifacts persisted",
-    statB: "History stays queryable",
+    statB: "Fully reproducible",
   },
 ]
 
