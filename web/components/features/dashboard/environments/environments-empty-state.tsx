@@ -4,6 +4,7 @@ import Link from "next/link"
 
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
+import { TerminalBlock } from "@/components/ui/terminal-block"
 import { LINKS_CONFIG } from "@/config"
 
 function EnvironmentsEmptyState() {
@@ -13,9 +14,7 @@ function EnvironmentsEmptyState() {
         <p className="text-sm leading-relaxed text-muted-foreground">
           No environments yet. Initialize one with the Tahuna CLI to get started.
         </p>
-        <div className="rounded-lg border border-border bg-secondary-dim px-4 py-2.5 text-left">
-          <code className="font-mono text-sm text-foreground">tahuna init .</code>
-        </div>
+        <TerminalBlock title="tahuna init" command="tahuna init ." className="text-left" />
         <Button asChild variant="secondary" size="compact" className="w-full justify-center rounded-lg text-sm">
           <Link href={LINKS_CONFIG.docsUrl}>Go to docs</Link>
         </Button>

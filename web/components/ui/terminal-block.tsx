@@ -1,41 +1,51 @@
-'use client'
+"use client"
 
-import { Copy } from 'lucide-react'
-import { useState } from 'react'
+import { Check, Copy } from "lucide-react"
+import { useState } from "react"
 
-import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
+import { Button } from "@/components/ui/button"
+import { Card, CardContent } from "@/components/ui/card"
+import { cn } from "@/lib/utils"
 
-function TerminalBlock({ command }: { command: string }) {
+type TerminalBlockProps = {
+  command: string
+  title?: string
+  className?: string
+}
+
+function TerminalBlock({ command, title = "terminal", className }: TerminalBlockProps) {
   const [copied, setCopied] = useState(false)
 
   function handleCopy() {
     void navigator.clipboard.writeText(command)
     setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+    window.setTimeout(() => setCopied(false), 2000)
   }
 
   return (
-    <Card variant="surface">
-      {/* Window chrome — traffic lights built from design-system color tokens */}
-      <div className="flex items-center gap-1.5 border-b border-border px-4 py-2.5">
-        <div className="size-2.5 rounded-full bg-muted-foreground/40" />
-        <div className="size-2.5 rounded-full bg-muted-foreground/25" />
-        <div className="size-2.5 rounded-full border border-muted-foreground/25" />
+    <Card variant="default" className={cn("overflow-hidden rounded-lg bg-card/95", className)}>
+      <div className="flex items-center gap-2 border-b border-border px-4 py-3">
+        <div className="flex gap-1.5">
+          <div className="h-3 w-3 rounded-full bg-muted-foreground/30" />
+          <div className="h-3 w-3 rounded-full bg-muted-foreground/30" />
+          <div className="h-3 w-3 rounded-full bg-muted-foreground/30" />
+        </div>
+        <span className="ml-2 truncate font-mono text-xs text-muted-foreground">{title}</span>
       </div>
 
-      <CardContent className="flex items-center gap-3 py-3">
-        <span className="font-mono text-sm text-primary select-none" aria-hidden>
-          {'>'}
+      <CardContent className="flex items-center gap-2 px-4 py-3">
+        <span className="font-mono text-sm text-primary" aria-hidden>
+          $
         </span>
-        <span className="flex-1 font-mono text-sm">{command}</span>
+        <code className="flex-1 truncate font-mono text-sm text-foreground/85">{command}</code>
         <Button
           variant="ghost"
           size="icon-sm"
+          className="ml-auto"
           onClick={handleCopy}
-          aria-label={copied ? 'Copied' : 'Copy command'}
+          aria-label={copied ? "Copied command" : "Copy command"}
         >
-          <Copy />
+          {copied ? <Check className="h-3.5 w-3.5 text-success" /> : <Copy className="h-3.5 w-3.5" />}
         </Button>
       </CardContent>
     </Card>
