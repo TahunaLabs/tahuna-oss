@@ -40,7 +40,8 @@ function useArtifactRename({ storageItems, onSuccess }: UseArtifactRenameArgs) {
   }
 
   async function save(item: StorageItem) {
-    if (item.source !== "run_artifact" || !item.run_id) {
+    const runId = item.run?.id
+    if (item.source !== "run_artifact" || !runId) {
       toast.error("only run artifacts can be renamed")
       return
     }
@@ -58,7 +59,7 @@ function useArtifactRename({ storageItems, onSuccess }: UseArtifactRenameArgs) {
     setRenameBusyId(item.id)
     try {
       const renamed = await renameArtifactAction({
-        runId: item.run_id as Id<"runs">,
+        runId: runId as Id<"runs">,
         key: item.key,
         name: nextName,
       })
