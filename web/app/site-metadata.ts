@@ -10,6 +10,12 @@ function faviconAsset(filename: string) {
   return `${CDN_CONFIG.baseUrl}${CDN_CONFIG.faviconPath}/${filename}`
 }
 
+function artefactAsset(filename: string) {
+  return `${CDN_CONFIG.baseUrl}${CDN_CONFIG.artefactsPath}/${filename}`
+}
+
+const socialImageUrl = artefactAsset("opengraph.png")
+
 export const siteMetadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: SITE_TITLE,
@@ -24,13 +30,13 @@ export const siteMetadata: Metadata = {
     url: siteUrl,
     title: SITE_TITLE,
     description: SITE_DESCRIPTION,
-    images: [{ url: "/opengraph-image" }],
+    images: [{ url: socialImageUrl }],
   },
   twitter: {
     card: "summary_large_image",
     title: SITE_TITLE,
     description: SITE_DESCRIPTION,
-    images: ["/twitter-image"],
+    images: [socialImageUrl],
   },
   icons: {
     icon: [
