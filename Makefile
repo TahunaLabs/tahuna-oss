@@ -36,7 +36,7 @@ run-docs:
 	cd docs && bun run dev
 
 build-docs:
-	cd docs && bunx --bun next build --webpack
+	cd docs && bun run build
 
 install-cli:
 	cd cli && go mod download
