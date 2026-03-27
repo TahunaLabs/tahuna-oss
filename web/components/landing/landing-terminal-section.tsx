@@ -8,9 +8,11 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
+const installerScriptCommand = "curl -fsSL https://raw.githubusercontent.com/Pazuzzu/tahuna/main/scripts/install-tahuna.sh"
+
 const commands = {
-  brew: "brew tap Pazuzzu/tahuna && brew install tahuna",
-  direct: "brew install Pazuzzu/tahuna/tahuna",
+  stable: `${installerScriptCommand} | bash`,
+  nightly: `${installerScriptCommand} | bash -s -- --channel nightly`,
 } as const
 
 const terminalSteps = [
@@ -26,7 +28,7 @@ const terminalSteps = [
 ]
 
 export function LandingTerminalSection() {
-  const [activeCommand, setActiveCommand] = useState<keyof typeof commands>("brew")
+  const [activeCommand, setActiveCommand] = useState<keyof typeof commands>("stable")
   const [copiedCommand, setCopiedCommand] = useState(false)
 
   function handleCopy() {
@@ -104,22 +106,22 @@ export function LandingTerminalSection() {
                 size="compact-sm"
                 className={cn(
                   "rounded-full px-4 font-mono",
-                  activeCommand === "brew" ? "bg-secondary text-foreground" : "text-muted-foreground",
+                  activeCommand === "stable" ? "bg-secondary text-foreground" : "text-muted-foreground",
                 )}
-                onClick={() => setActiveCommand("brew")}
+                onClick={() => setActiveCommand("stable")}
               >
-                Homebrew
+                Stable
               </Button>
               <Button
                 variant="ghost"
                 size="compact-sm"
                 className={cn(
                   "rounded-full px-4 font-mono",
-                  activeCommand === "direct" ? "bg-secondary text-foreground" : "text-muted-foreground",
+                  activeCommand === "nightly" ? "bg-secondary text-foreground" : "text-muted-foreground",
                 )}
-                onClick={() => setActiveCommand("direct")}
+                onClick={() => setActiveCommand("nightly")}
               >
-                Direct
+                Nightly
               </Button>
             </div>
             <div className="flex min-w-0 flex-1 items-center gap-2 rounded-full border border-border bg-card px-5 py-2.5">
