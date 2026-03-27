@@ -1,6 +1,4 @@
 "use client"
-
-import { LandingHeader } from "@/components/landing/landing-header"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -99,8 +97,6 @@ export default function LoginPage() {
       />
 
       <div className="relative flex min-h-screen flex-col">
-        <LandingHeader />
-
         <div className="flex flex-1 items-center justify-center px-4 py-12">
           <div className="relative w-full max-w-sm">
             <div className="rounded-xl border border-border bg-card px-6 py-7 shadow-sm">
