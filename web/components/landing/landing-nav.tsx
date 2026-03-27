@@ -22,7 +22,7 @@ export function LandingNav() {
     <header className="flex h-14 shrink-0 items-center px-8">
       <Link href="/" className="flex shrink-0 items-center gap-2.5">
         <Logo className="h-6 w-auto" />
-        <span className="text-sm font-semibold uppercase tracking-ui-eyebrow">Tahuna</span>
+        <span className="font-serif text-xl tracking-tight">Tahuna</span>
       </Link>
 
       <div className="ml-auto flex items-center gap-1">

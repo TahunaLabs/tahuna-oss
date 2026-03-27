@@ -10,7 +10,7 @@ export function LandingFooter() {
       <div className="absolute top-14 left-12 z-10 md:top-20 md:left-16">
         <Link href="/" className="inline-flex items-center gap-3 text-white">
           <Logo className="h-10" />
-          <span className="text-2xl font-medium tracking-tight">Tahuna</span>
+          <span className="font-serif text-2xl tracking-tight">Tahuna</span>
         </Link>
       </div>
 
