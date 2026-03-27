@@ -75,7 +75,7 @@ export function LandingTerminalSection() {
                     {step.kind === "command" ? (
                       <span className="text-primary">&gt;</span>
                     ) : (
-                      <span className="ml-0.5 h-1 w-1 rounded-full bg-foreground/45" />
+                      <span className="ml-3 h-1 w-1 rounded-full bg-foreground/45" />
                     )}
                     <span className={cn(
                       "leading-relaxed",
