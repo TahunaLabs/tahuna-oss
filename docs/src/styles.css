@@ -58,7 +58,7 @@
     inset: 0;
     z-index: -2;
     pointer-events: none;
-    background: url("/background.webp") center / cover no-repeat;
+    background: var(--app-shell-background-image) center / cover no-repeat;
     opacity: 0.9;
   }
 
@@ -68,7 +68,7 @@
     inset: 0;
     z-index: 9999;
     pointer-events: none;
-    background: url("/background.webp") center / cover no-repeat;
+    background: var(--app-shell-background-image) center / cover no-repeat;
     mix-blend-mode: multiply;
     opacity: 0.7;
   }

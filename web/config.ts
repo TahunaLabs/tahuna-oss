@@ -76,6 +76,7 @@ export const CDN_CONFIG = {
   providerIconsPath: "/assets/providers",
   frameworkIconsPath: "/assets/frameworks",
   faviconPath: "/assets/favicon",
+  artefactsPath: "/assets/artefacts",
 } as const;
 
 export const LINKS_CONFIG = {
