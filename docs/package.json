@@ -13,6 +13,7 @@
     "fumadocs-core": "^16.6.17",
     "fumadocs-mdx": "^14.2.10",
     "fumadocs-ui": "^16.6.17",
+    "path-browserify": "^1.0.1",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "react-router": "^7.13.1"
@@ -22,6 +23,7 @@
     "@tailwindcss/vite": "^4.2.1",
     "@types/mdx": "^2.0.13",
     "@types/node": "^25.5.0",
+    "@types/path-browserify": "^1.0.3",
     "@types/react": "^19.1.2",
     "@types/react-dom": "^19.1.2",
     "@vitejs/plugin-react": "^5.1.0",
