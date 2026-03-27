@@ -5,7 +5,6 @@ import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { TerminalBlock } from "@/components/ui/terminal-block"
-import { LINKS_CONFIG } from "@/config"
 
 function EnvironmentsEmptyState() {
   return (
@@ -16,7 +15,9 @@ function EnvironmentsEmptyState() {
         </p>
         <TerminalBlock title="tahuna init" command="tahuna init ." className="text-left" />
         <Button asChild variant="secondary" size="compact" className="w-full justify-center rounded-lg text-sm">
-          <Link href={LINKS_CONFIG.docsUrl}>Go to docs</Link>
+          <Link href="https://docs.tahuna.app/quickstart" target="_blank" rel="noopener noreferrer">
+            Get started
+          </Link>
         </Button>
       </div>
     </Card>
