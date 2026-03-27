@@ -72,9 +72,11 @@ export function LandingTerminalSection() {
               <div className="space-y-1.5">
                 {terminalSteps.map((step) => (
                   <div key={step.value} className="flex items-center gap-2 text-xs">
-                    <span className={cn(step.kind === "command" ? "text-primary" : "text-success")}>
-                      {step.kind === "command" ? ">" : "•"}
-                    </span>
+                    {step.kind === "command" ? (
+                      <span className="text-primary">&gt;</span>
+                    ) : (
+                      <span className="ml-0.5 h-1 w-1 rounded-full bg-foreground/45" />
+                    )}
                     <span className={cn(
                       "leading-relaxed",
                       step.kind === "command" ? "text-foreground/85" : "text-muted-foreground",
