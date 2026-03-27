@@ -29,6 +29,7 @@ type StorageViewProps = {
   storageResult: StorageListResult | undefined
   storageLoading: boolean
   storageError: string
+  storageDeleteBusy: boolean
   renamingStorageId: string | null
   artifactRenameDraft: string
   artifactRenameBusyId: string | null
@@ -44,6 +45,7 @@ type StorageViewProps = {
   onPreviousStoragePage: () => void
   onNextStoragePage: () => void
   onShareStorageItem?: (item: StorageItem) => void
+  onDeleteStorageItems: (items: StorageItem[]) => Promise<boolean>
   onSetVisibility?: (item: StorageItem, visibility: "shared" | "private") => void
 }
 
@@ -58,6 +60,7 @@ export function StorageView({
   storageResult,
   storageLoading,
   storageError,
+  storageDeleteBusy,
   renamingStorageId,
   artifactRenameDraft,
   artifactRenameBusyId,
@@ -73,6 +76,7 @@ export function StorageView({
   onPreviousStoragePage,
   onNextStoragePage,
   onShareStorageItem,
+  onDeleteStorageItems,
   onSetVisibility,
 }: StorageViewProps) {
   const [showUploadDrawer, setShowUploadDrawer] = useState(false)
@@ -160,6 +164,8 @@ export function StorageView({
           onPreviousPage={onPreviousStoragePage}
           onNextPage={onNextStoragePage}
           onShareStorageItem={onShareStorageItem}
+          deleteBusy={storageDeleteBusy}
+          onDeleteStorageItems={onDeleteStorageItems}
           onSetVisibility={onSetVisibility}
         />
       )}

@@ -14,7 +14,6 @@ Guided project setup that detects/scaffolds local project files, selects runtime
 | `train.py` | Project file | Entrypoint script (default name, user can override) |
 | `data/` | Project directory | Training data directory (default name, user can override) |
 | `outputs/` | Project directory | Training output directory (default name, user can override) |
-| `config.yaml` | Project file | Hyperparameter configuration |
 | `pyproject.toml` | Project file | Python project metadata + dependencies (uv source of truth) |
 | `uv.lock` | Project file | Locked dependency + Python resolution for reproducible runtime |
 | Remote environment | Backend record | Created in Convex `environments` table |
@@ -62,13 +61,7 @@ Guided project setup that detects/scaffolds local project files, selects runtime
       - If found: "Detected outputs/. Use this? [Y/n/custom path]"
       - If not found: "Creating outputs/."
 
-   d. Config file (default: config.yaml)
-      - Detect: look for config.yaml or config.yml
-      - If found: "Detected config.yaml. Use this? [Y/n/custom path]"
-      - If not found: "Creating config.yaml."
-      - Template: minimal YAML with learning_rate, epochs, batch_size
-
-   e. UV project files (`pyproject.toml` + `uv.lock`)
+   d. UV project files (`pyproject.toml` + `uv.lock`)
       - Detect: look for pyproject.toml (required) and uv.lock (preferred)
       - If found: "Detected pyproject.toml/uv.lock. Use these? [Y/n/custom path]"
       - If pyproject.toml missing: "Creating pyproject.toml."
@@ -106,7 +99,6 @@ Guided project setup that detects/scaffolds local project files, selects runtime
 entrypoint = "train.py"
 data_dir = "data"
 output_dir = "outputs"
-config_file = "config.yaml"
 python_project_file = "pyproject.toml"
 uv_lock_file = "uv.lock"
 
@@ -123,7 +115,7 @@ volume_gb = 80
 ## Invariants
 
 - `.tahuna/` must not exist before init. Re-init is an error.
-- All mandatory project items (entrypoint, data dir, output dir, config, uv project files) are created if missing.
+- All mandatory project items (entrypoint, data dir, output dir, uv project files) are created if missing.
 - One project directory maps to exactly one remote environment.
 - Framework/Python detection reads from uv files only (`pyproject.toml`, `uv.lock`) unless detection fails.
 - The environment ID file (`.tahuna/environment_id`) is the single link between local project and remote state.

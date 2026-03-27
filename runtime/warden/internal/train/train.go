@@ -509,16 +509,12 @@ func InstallDependencies(ctx context.Context, workspaceRoot string, hooks Hooks)
 func RunEntrypoint(
 	ctx context.Context,
 	workspaceRoot string,
+	command []string,
 	gracePeriod time.Duration,
 	hooks Hooks,
 ) (exitCode int, cancelled bool, err error) {
-	command, sourceConfig := LoadCommandFromConfig(workspaceRoot)
 	normalized := NormalizeCommand(command)
-	if sourceConfig != "" {
-		emitLog(hooks, "info", "train", "using command from "+sourceConfig+": "+strings.Join(normalized, " "))
-	} else {
-		emitLog(hooks, "info", "train", "no config command found; using default: "+strings.Join(normalized, " "))
-	}
+	emitLog(hooks, "info", "train", "using command: "+strings.Join(normalized, " "))
 
 	entrypoint := resolveEntrypoint(normalized)
 	entrypointPath := filepath.Join(workspaceRoot, entrypoint)
@@ -649,47 +645,6 @@ func emitTrainOutputLine(
 		emitMetrics(hooks, samples)
 	}
 	return step + 1
-}
-
-func LoadCommandFromConfig(workspaceRoot string) ([]string, string) {
-	candidates := []string{
-		filepath.Join(workspaceRoot, "config.yaml"),
-		filepath.Join(workspaceRoot, "config.yml"),
-	}
-	for _, configPath := range candidates {
-		content, err := os.ReadFile(configPath)
-		if err != nil {
-			continue
-		}
-		lines := strings.Split(string(content), "\n")
-		command := []string{}
-		inCommand := false
-		for _, line := range lines {
-			stripped := strings.TrimSpace(line)
-			if stripped == "" || strings.HasPrefix(stripped, "#") {
-				continue
-			}
-			if !inCommand {
-				if stripped == "command:" {
-					inCommand = true
-				}
-				continue
-			}
-			if !strings.HasPrefix(line, " ") && !strings.HasPrefix(line, "\t") {
-				break
-			}
-			if strings.HasPrefix(stripped, "- ") {
-				value := unquote(strings.TrimSpace(strings.TrimPrefix(stripped, "- ")))
-				if value != "" {
-					command = append(command, value)
-				}
-			}
-		}
-		if len(command) > 0 {
-			return command, configPath
-		}
-	}
-	return nil, ""
 }
 
 func NormalizeCommand(command []string) []string {
@@ -834,17 +789,6 @@ func resolveEntrypoint(command []string) string {
 		}
 	}
 	return "train.py"
-}
-
-func unquote(value string) string {
-	text := strings.TrimSpace(value)
-	if len(text) >= 2 {
-		if (strings.HasPrefix(text, "\"") && strings.HasSuffix(text, "\"")) ||
-			(strings.HasPrefix(text, "'") && strings.HasSuffix(text, "'")) {
-			return text[1 : len(text)-1]
-		}
-	}
-	return text
 }
 
 func extractMetrics(pattern *regexp.Regexp, line string, step int64) []runtimeapi.MetricSample {

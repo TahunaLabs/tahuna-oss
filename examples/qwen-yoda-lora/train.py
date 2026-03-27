@@ -14,8 +14,8 @@ PROJECT_NAME = "qwen-yoda-lora"
 MODEL_NAME = "Qwen/Qwen3-0.6B"
 DATA_DIR = Path("data/yoda")
 OUTPUT_DIR = Path("outputs")
-EPOCHS = 1.0
-BATCH_SIZE = 4
+EPOCHS = 2
+BATCH_SIZE = 16
 LEARNING_RATE = 1e-4
 DEFAULT_GRADIENT_ACCUMULATION_STEPS = 4
 DEFAULT_MAX_SEQ_LENGTH = 128
@@ -228,7 +228,6 @@ def main() -> None:
                 "torch_dtype": str(torch_dtype),
                 "train_metrics": train_result.metrics,
                 "eval_metrics": eval_metrics,
-                "config": config,
             },
         )
         write_json(output_dir / "sample_predictions.json", sample_outputs)

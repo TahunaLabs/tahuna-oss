@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -20,7 +21,7 @@ func TestGetBootstrapPlanUsesRuntimeAuthAndPath(t *testing.T) {
 			t.Fatalf("unexpected auth header: %q", got)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"run_id":"run_abc","contract_version":"0.1.0","workspace_root":"/workspace","code":{"manifest_hash":"c","entries":[]},"data":{"manifest_hash":null,"entries":[]}}`))
+		_, _ = w.Write([]byte(`{"run_id":"run_abc","contract_version":"0.1.0","workspace_root":"/workspace","command":["uv","run","--active","--no-sync","python","-u","train.py"],"code":{"manifest_hash":"c","entries":[]},"data":{"manifest_hash":null,"entries":[]}}`))
 	}))
 	defer server.Close()
 
@@ -31,6 +32,9 @@ func TestGetBootstrapPlanUsesRuntimeAuthAndPath(t *testing.T) {
 	}
 	if plan.RunID != "run_abc" {
 		t.Fatalf("expected run_abc, got %q", plan.RunID)
+	}
+	if got := strings.Join(plan.Command, " "); got != "uv run --active --no-sync python -u train.py" {
+		t.Fatalf("unexpected bootstrap command: %q", got)
 	}
 }
 

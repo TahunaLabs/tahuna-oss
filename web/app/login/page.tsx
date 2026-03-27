@@ -1,6 +1,6 @@
 "use client"
 
-import { Logo } from "@/components/logo"
+import { LandingHeader } from "@/components/landing/landing-header"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -86,7 +86,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center px-4">
+    <div className="min-h-screen bg-background">
       {/* Subtle background texture */}
       <div
         aria-hidden
@@ -98,108 +98,104 @@ export default function LoginPage() {
         }}
       />
 
-      <div className="relative w-full max-w-sm">
-        {/* Logo */}
-        <div className="mb-8 flex flex-col items-center gap-3">
-          <Logo className="h-10 w-auto" />
-          <p className="text-[11px] tracking-[0.22em] uppercase text-muted-foreground font-medium">
-            Tahuna
-          </p>
+      <div className="relative flex min-h-screen flex-col">
+        <LandingHeader />
+
+        <div className="flex flex-1 items-center justify-center px-4 py-12">
+          <div className="relative w-full max-w-sm">
+            <div className="rounded-xl border border-border bg-card px-6 py-7 shadow-sm">
+              {step === "email" ? (
+                <form onSubmit={onSendCode} className="space-y-5">
+                  <div className="space-y-1">
+                    <h1 className="text-base font-medium tracking-tight text-foreground">
+                      Sign in
+                    </h1>
+                    <p className="text-sm text-muted-foreground">
+                      Enter your email to receive a one-time code.
+                    </p>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label htmlFor="email">Email</Label>
+                    <Input
+                      id="email"
+                      type="email"
+                      autoComplete="email"
+                      autoFocus
+                      required
+                      placeholder="you@example.com"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                    />
+                  </div>
+
+                  {error ? <Notice variant="error">{error}</Notice> : null}
+
+                  <Button type="submit" disabled={loading} className="w-full">
+                    <Mail className="size-4" />
+                    {loading ? "Sending…" : "Send code"}
+                  </Button>
+                </form>
+              ) : (
+                <form onSubmit={onVerifyCode} className="space-y-5">
+                  <div className="space-y-1">
+                    <h1 className="text-base font-medium tracking-tight text-foreground">
+                      Check your inbox
+                    </h1>
+                    <p className="text-sm text-muted-foreground">
+                      We sent a 6-digit code to{" "}
+                      <span className="font-medium text-foreground">{email}</span>.
+                    </p>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label htmlFor="otp">Verification code</Label>
+                    <Input
+                      ref={otpRef}
+                      id="otp"
+                      inputMode="numeric"
+                      pattern="[0-9]{6}"
+                      maxLength={6}
+                      required
+                      placeholder="123456"
+                      value={otp}
+                      onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
+                      className="font-mono tracking-widest text-center text-base"
+                    />
+                  </div>
+
+                  {error ? <Notice variant="error">{error}</Notice> : null}
+
+                  <div className="flex flex-col gap-2">
+                    <Button
+                      type="submit"
+                      disabled={loading || otp.length !== 6}
+                      className="w-full"
+                    >
+                      {loading ? "Verifying…" : "Continue"}
+                    </Button>
+
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={onBack}
+                      disabled={loading}
+                      className="w-full text-muted-foreground"
+                    >
+                      <ArrowLeft className="size-3.5" />
+                      Back
+                    </Button>
+                  </div>
+                </form>
+              )}
+            </div>
+
+            <p className="mt-5 text-center text-xs text-muted-foreground">
+              No password needed — just your email.
+            </p>
+          </div>
         </div>
-
-        {/* Card */}
-        <div className="rounded-xl border border-border bg-card px-6 py-7 shadow-sm">
-          {step === "email" ? (
-            <form onSubmit={onSendCode} className="space-y-5">
-              <div className="space-y-1">
-                <h1 className="text-base font-medium text-foreground tracking-tight">
-                  Sign in
-                </h1>
-                <p className="text-sm text-muted-foreground">
-                  Enter your email to receive a one-time code.
-                </p>
-              </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  autoComplete="email"
-                  autoFocus
-                  required
-                  placeholder="you@example.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                />
-              </div>
-
-              {error ? <Notice variant="error">{error}</Notice> : null}
-
-              <Button type="submit" disabled={loading} className="w-full">
-                <Mail className="size-4" />
-                {loading ? "Sending…" : "Send code"}
-              </Button>
-            </form>
-          ) : (
-            <form onSubmit={onVerifyCode} className="space-y-5">
-              <div className="space-y-1">
-                <h1 className="text-base font-medium text-foreground tracking-tight">
-                  Check your inbox
-                </h1>
-                <p className="text-sm text-muted-foreground">
-                  We sent a 6-digit code to{" "}
-                  <span className="font-medium text-foreground">{email}</span>.
-                </p>
-              </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="otp">Verification code</Label>
-                <Input
-                  ref={otpRef}
-                  id="otp"
-                  inputMode="numeric"
-                  pattern="[0-9]{6}"
-                  maxLength={6}
-                  required
-                  placeholder="123456"
-                  value={otp}
-                  onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
-                  className="font-mono tracking-widest text-center text-base"
-                />
-              </div>
-
-              {error ? <Notice variant="error">{error}</Notice> : null}
-
-              <div className="flex flex-col gap-2">
-                <Button
-                  type="submit"
-                  disabled={loading || otp.length !== 6}
-                  className="w-full"
-                >
-                  {loading ? "Verifying…" : "Continue"}
-                </Button>
-
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={onBack}
-                  disabled={loading}
-                  className="w-full text-muted-foreground"
-                >
-                  <ArrowLeft className="size-3.5" />
-                  Back
-                </Button>
-              </div>
-            </form>
-          )}
-        </div>
-
-        {/* Footer note */}
-        <p className="mt-5 text-center text-xs text-muted-foreground">
-          No password needed — just your email.
-        </p>
       </div>
     </div>
   )

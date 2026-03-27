@@ -6,7 +6,7 @@
 AGI is Not a Monolith. It's a species of models.
 
 **Subheadline:**
-The future of artificial intelligence isn't a single oracle that knows everything. We're entering an era of speciation — a vast diversity of specialized intelligences evolving to master specific tasks. Training them shouldn't require a platform team.
+The future of artificial intelligence isn't a single oracle that knows everything. We're entering an era of speciation — a vast diversity of specialized intelligences evolving to master specific tasks.
 
 
 ## A gentle control plane for post-training.
