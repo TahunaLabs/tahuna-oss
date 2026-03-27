@@ -1,14 +1,14 @@
 import { LandingFooter } from "@/components/landing/landing-footer"
-import { LandingHeader } from "@/components/landing/landing-header"
 import { LandingHero } from "@/components/landing/landing-hero"
 import { LandingLayersSection } from "@/components/landing/landing-layers-section"
+import { LandingNav } from "@/components/landing/landing-nav"
 import { LandingTerminalSection } from "@/components/landing/landing-terminal-section"
 
 export function PublicHome() {
   return (
     <div className="h-full overflow-y-auto">
       <div className="min-h-full bg-background/70 backdrop-blur-sm">
-        <LandingHeader />
+        <LandingNav />
         <main>
           <LandingHero />
           <LandingTerminalSection />

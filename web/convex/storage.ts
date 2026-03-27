@@ -274,7 +274,6 @@ function getContextFields(
     objectKind: "data_upload" | "data_manifest" | "run_artifact";
     dataId?: string;
   },
-  runsById: Map<string, { name?: string; environmentId?: string }>,
   runsById: Map<string, { environmentId: Id<"environments">; name?: string }>,
   environmentById: Map<string, { _id: Id<"environments">; name: string }>,
   environmentByDataId: Map<string, { _id: Id<"environments">; name: string }>,
@@ -367,9 +366,11 @@ export const internalListIndexedObjects = internalQuery({
         .withIndex("by_user", (q) => q.eq("userId", args.userId))
         .collect(),
     ]);
-    const runsById = new Map(runs.map((run) => [String(run._id), run]));
-    const environmentById = new Map(environments.map((environment) => [String(environment._id), environment]));
-    const environmentByDataId = new Map(
+    const runsById = new Map<string, (typeof runs)[number]>(runs.map((run) => [String(run._id), run]));
+    const environmentById = new Map<string, (typeof environments)[number]>(
+      environments.map((environment) => [String(environment._id), environment]),
+    );
+    const environmentByDataId = new Map<string, (typeof environments)[number]>(
       environments
         .map((environment) => {
           const dataId = environment.dataId?.trim();
