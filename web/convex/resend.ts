@@ -1,6 +1,7 @@
 import { Resend } from "@convex-dev/resend";
 import { components } from "@convex/_generated/api";
 import type { MutationCtx } from "@convex/_generated/server";
+import { EMAIL_CONFIG } from "@convex/appConfig";
 
 const resend = new Resend(components.resend, {
   testMode: false,
@@ -11,8 +12,15 @@ type OtpEmailPayload = {
   otp: string;
 };
 
+function resolveOtpFromEmail() {
+  if (process.env.NODE_ENV === "production") {
+    return EMAIL_CONFIG.otpFromEmail.production.trim();
+  }
+  return EMAIL_CONFIG.otpFromEmail.nonProduction.trim();
+}
+
 export async function sendOtpEmail(ctx: MutationCtx, { email, otp }: OtpEmailPayload) {
-  const from = process.env.RESEND_FROM_EMAIL?.trim() || "";
+  const from = resolveOtpFromEmail();
   if (!from) {
     throw new Error("OTP delivery is not configured");
   }

@@ -14,6 +14,13 @@ export const AUTH_CONFIG = {
   loginTimeoutSeconds: 5 * 60,
 } as const;
 
+export const EMAIL_CONFIG = {
+  otpFromEmail: {
+    production: "hi@tahuna.app",
+    nonProduction: "hi@tahuna.app",
+  },
+} as const;
+
 export const BILLING_CONFIG = {
   currency: "USD",
   initialCreditCents: 1000,
