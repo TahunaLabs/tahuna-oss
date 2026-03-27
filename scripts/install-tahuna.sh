@@ -5,24 +5,36 @@ OWNER="Pazuzzu"
 REPO="tahuna-cli"
 BINARY_NAME="tahuna"
 DEFAULT_BIN_DIR="${HOME}/.local/bin"
+CHANNELS_REPO_OWNER="Pazuzzu"
+CHANNELS_REPO_NAME="tahuna"
+CHANNELS_CONFIG_PATH="releases/channels.conf"
+DEFAULT_CHANNEL="stable"
 
 VERSION=""
+CHANNEL="${TAHUNA_RELEASE_CHANNEL:-$DEFAULT_CHANNEL}"
 BIN_DIR="$DEFAULT_BIN_DIR"
+CHANNELS_URL="${TAHUNA_CHANNELS_URL:-https://raw.githubusercontent.com/${CHANNELS_REPO_OWNER}/${CHANNELS_REPO_NAME}/main/${CHANNELS_CONFIG_PATH}}"
 
 usage() {
   cat <<'EOF'
 Install the Tahuna CLI from GitHub Releases.
 
 Usage:
-  install-tahuna.sh [--version vX.Y.Z] [--bin-dir PATH]
+  install-tahuna.sh [--channel stable|nightly] [--version vX.Y.Z] [--bin-dir PATH]
   install-tahuna.sh --help
 
 Options:
+  --channel   Release channel to install from.
+              Default: stable
   --version   Install a specific release tag (for example: v0.1.1).
-              Defaults to the latest release.
+              Overrides --channel when provided.
   --bin-dir   Destination directory for the tahuna binary.
               Default: ~/.local/bin
   -h, --help  Show this help message.
+
+Environment:
+  TAHUNA_RELEASE_CHANNEL  Default channel override (stable|nightly)
+  TAHUNA_CHANNELS_URL     Override channel config URL
 EOF
 }
 
@@ -41,8 +53,29 @@ download() {
   curl -fsSL --retry 3 --retry-delay 1 --connect-timeout 10 -o "$output" "$url"
 }
 
+resolve_channel_version() {
+  local channel="$1"
+  local config_path="$2"
+  grep -E "^[[:space:]]*${channel}[[:space:]]*=" "$config_path" \
+    || true
+}
+
+resolve_channel_version_value() {
+  local channel="$1"
+  local config_path="$2"
+  resolve_channel_version "$channel" "$config_path" \
+    | tail -n 1 \
+    | cut -d '=' -f 2- \
+    | tr -d '[:space:]'
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --channel)
+      shift
+      [[ $# -gt 0 ]] || die "missing value for --channel"
+      CHANNEL="$1"
+      ;;
     --version)
       shift
       [[ $# -gt 0 ]] || die "missing value for --version"
@@ -63,6 +96,13 @@ while [[ $# -gt 0 ]]; do
   esac
   shift
 done
+
+case "$CHANNEL" in
+  stable|nightly) ;;
+  *)
+    die "unsupported channel: ${CHANNEL}. Supported: stable, nightly."
+    ;;
+esac
 
 os="$(uname -s | tr '[:upper:]' '[:lower:]')"
 case "$os" in
@@ -91,20 +131,24 @@ fi
 
 artifact="${BINARY_NAME}_${os}_${arch}.tar.gz"
 
-if [[ -n "$VERSION" ]]; then
-  release_base="https://github.com/${OWNER}/${REPO}/releases/download/${VERSION}"
-else
-  release_base="https://github.com/${OWNER}/${REPO}/releases/latest/download"
-fi
-
-artifact_url="${release_base}/${artifact}"
-checksums_url="${release_base}/checksums.txt"
-
 tmpdir="$(mktemp -d)"
 cleanup() {
   rm -rf "$tmpdir"
 }
 trap cleanup EXIT
+
+if [[ -z "$VERSION" ]]; then
+  channels_path="${tmpdir}/channels.conf"
+  info "Resolving channel ${CHANNEL}"
+  download "$CHANNELS_URL" "$channels_path"
+  VERSION="$(resolve_channel_version_value "$CHANNEL" "$channels_path")"
+  [[ -n "$VERSION" ]] || die "could not resolve channel ${CHANNEL} from ${CHANNELS_URL}"
+  info "Resolved ${CHANNEL} -> ${VERSION}"
+fi
+
+release_base="https://github.com/${OWNER}/${REPO}/releases/download/${VERSION}"
+artifact_url="${release_base}/${artifact}"
+checksums_url="${release_base}/checksums.txt"
 
 archive_path="${tmpdir}/${artifact}"
 checksums_path="${tmpdir}/checksums.txt"

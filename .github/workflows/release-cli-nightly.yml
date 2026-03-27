@@ -1,0 +1,79 @@
+name: Release CLI Nightly
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-cli-nightly
+  cancel-in-progress: true
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_REPO: Pazuzzu/tahuna-cli
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: cli/go.mod
+          cache-dependency-path: cli/go.sum
+
+      - name: Build nightly artifacts
+        id: build
+        run: |
+          set -euo pipefail
+
+          rm -rf dist
+          mkdir -p dist
+
+          nightly_version="nightly-$(date -u +%Y%m%d)-${GITHUB_SHA::7}"
+          echo "nightly_version=${nightly_version}" >> "$GITHUB_OUTPUT"
+
+          for target in "darwin amd64" "darwin arm64" "linux amd64"; do
+            os="${target%% *}"
+            arch="${target##* }"
+
+            workdir="dist/${os}_${arch}"
+            mkdir -p "${workdir}"
+
+            CGO_ENABLED=0 GOOS="${os}" GOARCH="${arch}" \
+              go build -C cli -trimpath -ldflags "-s -w -X main.cliVersion=${nightly_version}" -o "../${workdir}/tahuna" .
+
+            tar -C "${workdir}" -czf "dist/tahuna_${os}_${arch}.tar.gz" tahuna
+            rm -rf "${workdir}"
+          done
+
+          (
+            cd dist
+            sha256sum tahuna_*.tar.gz > checksums.txt
+          )
+
+          {
+            echo "Nightly CLI build"
+            echo
+            echo "Source: ${GITHUB_REPOSITORY}@${GITHUB_SHA}"
+            echo "Version: ${nightly_version}"
+            echo "Generated at: $(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+          } > dist/release-notes.txt
+
+      - name: Publish nightly release assets
+        env:
+          GH_TOKEN: ${{ secrets.RELEASES_GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          if gh release view nightly --repo "${RELEASE_REPO}" >/dev/null 2>&1; then
+            gh release upload nightly dist/tahuna_*.tar.gz dist/checksums.txt --repo "${RELEASE_REPO}" --clobber
+            gh release edit nightly --repo "${RELEASE_REPO}" --prerelease --title "Tahuna CLI Nightly" --notes-file dist/release-notes.txt
+          else
+            gh release create nightly dist/tahuna_*.tar.gz dist/checksums.txt --repo "${RELEASE_REPO}" --prerelease --title "Tahuna CLI Nightly" --notes-file dist/release-notes.txt
+          fi

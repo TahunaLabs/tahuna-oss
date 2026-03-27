@@ -19,6 +19,14 @@ The recommended way to install the Tahuna CLI:
 curl -fsSL https://raw.githubusercontent.com/Pazuzzu/tahuna/main/scripts/install-tahuna.sh | bash
 ```
 
+This command resolves the `stable` channel from `releases/channels.conf`.
+
+To install the rolling nightly channel (built from `main`):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Pazuzzu/tahuna/main/scripts/install-tahuna.sh | bash -s -- --channel nightly
+```
+
 Verify the installation:
 
 ```bash
@@ -78,6 +86,12 @@ To install a specific version:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Pazuzzu/tahuna/main/scripts/install-tahuna.sh | bash -s -- --version v0.1.1
+```
+
+To update on nightly channel:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Pazuzzu/tahuna/main/scripts/install-tahuna.sh | bash -s -- --channel nightly
 ```
 
 ## Next Steps

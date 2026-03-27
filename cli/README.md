@@ -8,6 +8,12 @@ Standalone Go CLI for login, project init, sync, and run lifecycle management.
 curl -fsSL https://raw.githubusercontent.com/Pazuzzu/tahuna/main/scripts/install-tahuna.sh | bash
 ```
 
+Install nightly channel:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Pazuzzu/tahuna/main/scripts/install-tahuna.sh | bash -s -- --channel nightly
+```
+
 See the docs installation guide for manual tarball install and pinned versions:
 `docs/content/docs/installation.mdx`.
 
