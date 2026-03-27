@@ -41,5 +41,4 @@ export const siteMetadata: Metadata = {
     apple: [{ url: faviconAsset("apple-touch-icon.png"), sizes: "180x180", type: "image/png" }],
     shortcut: [faviconAsset("favicon.ico")],
   },
-  manifest: faviconAsset("site.webmanifest"),
 }

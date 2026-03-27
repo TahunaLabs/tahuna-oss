@@ -55,7 +55,8 @@
   --status-dot-failed: #dc2626;
   --status-dot-cancelling: #ea580c;
   --app-shell-background-image-opacity: 0.9;
-  --app-shell-background-tint-opacity: 0.2;
+  --app-shell-background-image-filter: none;
+  --app-shell-background-overlay-opacity: 0.7;
 }
 
 .dark {
@@ -96,8 +97,9 @@
   --status-dot-running: #4ade80;
   --status-dot-failed: #f87171;
   --status-dot-cancelling: #fb923c;
-  --app-shell-background-image-opacity: 0.55;
-  --app-shell-background-tint-opacity: 0.62;
+  --app-shell-background-image-opacity: 0.34;
+  --app-shell-background-image-filter: brightness(0.55) saturate(0.8);
+  --app-shell-background-overlay-opacity: 0.78;
 }
 
 @theme inline {
@@ -184,16 +186,24 @@
     pointer-events: none;
     background: var(--app-shell-background-image) center / cover no-repeat;
     opacity: var(--app-shell-background-image-opacity);
+    filter: var(--app-shell-background-image-filter);
   }
 
   body::after {
     content: "";
     position: fixed;
     inset: 0;
-    z-index: -1;
+    z-index: 9999;
     pointer-events: none;
+    background: var(--app-shell-background-image) center / cover no-repeat;
+    mix-blend-mode: multiply;
+    opacity: var(--app-shell-background-overlay-opacity);
+  }
+
+  .dark body::after {
+    z-index: -1;
     background: var(--background);
-    opacity: var(--app-shell-background-tint-opacity);
+    mix-blend-mode: normal;
   }
 }
 
