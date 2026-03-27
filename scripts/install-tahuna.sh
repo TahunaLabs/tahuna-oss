@@ -26,7 +26,7 @@ Usage:
 Options:
   --channel   Release channel to install from.
               Default: stable
-  --version   Install a specific release tag (for example: v0.1.1).
+  --version   Install a specific release tag (for example: v0.1.0).
               Overrides --channel when provided.
   --bin-dir   Destination directory for the tahuna binary.
               Default: ~/.local/bin
