@@ -1,8 +1,6 @@
 import Link from "next/link"
 
 import { Logo } from "@/components/logo"
-import { Button } from "@/components/ui/button"
-import { Eyebrow } from "@/components/ui/eyebrow"
 import { LINKS_CONFIG } from "@/config"
 
 const FOOTER_SECTIONS = [
@@ -39,55 +37,51 @@ const FOOTER_SECTIONS = [
 
 export function LandingFooter() {
   return (
-    <footer id="start" className="relative overflow-hidden border-t border-white/10 bg-black text-white">
-      <div className="absolute top-14 left-12 z-10 md:top-20 md:left-16">
-        <Link href="/" className="inline-flex items-center gap-3 text-white">
-          <Logo className="h-10" />
-          <span className="font-serif text-2xl tracking-tight">Tahuna</span>
-        </Link>
-      </div>
+    <footer id="start" className="overflow-hidden border-t border-white/10 bg-black text-white">
+      <div className="mx-auto max-w-7xl px-6 pt-10 md:px-16 md:pt-14">
+        {/* Top area: brand left, links right */}
+        <div className="flex flex-col gap-10 md:flex-row md:items-start md:justify-between">
+          {/* Brand + copyright grouped */}
+          <div className="flex shrink-0 flex-col gap-4">
+            <Link href="/" className="inline-flex items-center gap-3 text-white">
+              <Logo className="h-7" />
+              <span className="font-serif text-xl tracking-tight">Tahuna</span>
+            </Link>
+            <p className="text-sm text-white/40">
+              © 2026 Tahuna. All rights reserved.
+            </p>
+          </div>
 
-      <div
-        className="relative mx-auto flex max-w-7xl px-6 py-14 md:py-20"
-        style={{ minHeight: "clamp(20rem, 36vw, 26rem)" }}
-      >
-        <div className="ml-auto grid w-full max-w-3xl grid-cols-2 gap-8 md:grid-cols-4">
-          {FOOTER_SECTIONS.map((section) => (
-            <div key={section.title} className="relative z-10 flex flex-col items-start gap-3">
-              <Eyebrow className="[&_[data-slot=separator]]:bg-white/30 [&_span]:text-white/60">
-                {section.title}
-              </Eyebrow>
-              <div className="flex flex-col items-start gap-1">
-                {section.links.map((link) => (
-                  <Button
-                    key={link.label}
-                    asChild
-                    variant="ghost"
-                    size="compact-xs"
-                    className="-ml-2 text-white hover:bg-white/10 hover:text-white"
-                  >
-                    {link.external ? (
-                      <Link href={link.href} target="_blank" rel="noreferrer">
+          {/* Link columns — pushed right */}
+          <div className="grid grid-cols-2 gap-x-16 gap-y-8 md:grid-cols-4">
+            {FOOTER_SECTIONS.map((section) => (
+              <div key={section.title} className="flex flex-col gap-3">
+                <span className="text-xs font-medium tracking-widest uppercase text-white/50">
+                  {section.title}
+                </span>
+                <ul className="flex flex-col gap-2">
+                  {section.links.map((link) => (
+                    <li key={link.label}>
+                      <Link
+                        href={link.href}
+                        {...(link.external ? { target: "_blank", rel: "noreferrer" } : {})}
+                        className="text-sm text-white/70 transition-colors hover:text-white"
+                      >
                         {link.label}
                       </Link>
-                    ) : (
-                      <Link href={link.href}>{link.label}</Link>
-                    )}
-                  </Button>
-                ))}
+                    </li>
+                  ))}
+                </ul>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
 
-        <div className="absolute left-6 bottom-10 z-10 text-sm text-white/45 md:left-16">
-          <p>Copyright © 2026 Tahuna. All rights reserved.</p>
-        </div>
-
-        <div className="pointer-events-none absolute inset-x-6 bottom-0 overflow-hidden">
+        {/* Decorative text — in normal flow, no overlap */}
+        <div className="pointer-events-none select-none overflow-hidden text-center">
           <p
-            className="font-serif leading-none font-semibold tracking-tight text-white/20"
-            style={{ fontSize: "clamp(12rem, 30vw, 28rem)", transform: "translateY(10%)" }}
+            className="font-serif leading-none font-semibold tracking-tight text-white/10"
+            style={{ fontSize: "clamp(10rem, 24vw, 24rem)", transform: "translateY(22%)" }}
           >
             Tahuna
           </p>
