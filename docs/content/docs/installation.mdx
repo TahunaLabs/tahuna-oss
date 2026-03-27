@@ -40,6 +40,16 @@ tahuna login
 
 This opens a browser window for authentication. Once complete, your credentials are stored locally and all subsequent commands are authenticated.
 
+## Configure your RunPod key
+
+Tahuna now launches compute using your own RunPod account. Before you start your first run, add a RunPod API key in the Tahuna dashboard:
+
+1. Open the [Tahuna dashboard](/dashboard)
+2. Go to Settings / Providers
+3. Save your RunPod API key
+
+Tahuna stores the credential encrypted at rest and uses it only for new RunPod launches.
+
 ## Update
 
 To update to the latest version:
@@ -51,4 +61,4 @@ brew upgrade tahuna
 
 ## Next Steps
 
-Once installed, head to the [Quickstart](/docs/quickstart) guide to create your first environment and launch a run.
+Once installed, head to the [Quickstart](/docs/quickstart) guide to create your first environment and launch a run with your configured RunPod key.

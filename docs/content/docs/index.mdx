@@ -3,7 +3,7 @@ title: Introduction
 description: Tahuna is the control plane between your training code and cloud GPUs.
 ---
 
-Tahuna is a training orchestration platform for teams that want full control over their training code without taking on the infrastructure work around it. You keep your Python training loop. Tahuna handles GPU provisioning, code and data sync, dependency installation, run execution, metrics capture, and artifact persistence.
+Tahuna is a training orchestration platform for teams that want full control over their training code without taking on the infrastructure work around it. You keep your Python training loop. Tahuna handles code and data sync, dependency installation, run execution, metrics capture, and artifact persistence, while launches run against your own RunPod account via a user-provided API key.
 
 ## Why Tahuna exists
 
@@ -20,7 +20,7 @@ Tahuna turns a local project into a reproducible remote run:
 
 ### Ephemeral compute 
 
-Tahuna's runtime compute is ephemeral: runs execute on temporary pods rather than long-lived machines, and persistent state is reconstructed from pinned snapshots and stored outside the pod. Transport to Tahuna services uses encrypted connections, and managed provider credentials are encrypted at rest.
+Tahuna's runtime compute is ephemeral: runs execute on temporary RunPod pods rather than long-lived machines, and persistent state is reconstructed from pinned snapshots and stored outside the pod. Transport to Tahuna services uses encrypted connections, and your saved provider credentials are encrypted at rest.
 
 ## How syncing works
 
@@ -43,6 +43,17 @@ brew tap Pazuzzu/tahuna
 brew install tahuna
 tahuna login
 tahuna init .
+```
+
+Before your first launch, add your RunPod API key in the Tahuna dashboard so Tahuna can provision pods on your behalf:
+
+1. Open the [Tahuna dashboard](/dashboard)
+2. Go to Settings / Providers
+3. Save your RunPod API key
+
+Then you can launch runs:
+
+```bash
 tahuna train
 ```
 

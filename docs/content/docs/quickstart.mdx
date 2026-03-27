@@ -3,7 +3,7 @@ title: Quickstart
 description: Initialize your project and start your first training run.
 ---
 
-This guide walks you through the normal Tahuna flow: initialize the project, complete the interactive setup, and start a training run.
+This guide walks you through the normal Tahuna flow: initialize the project, complete the interactive setup, configure your RunPod key, and start a training run.
 
 ## 1. Initialize your project
 
@@ -34,7 +34,17 @@ python_version = "3.11"
 
 You can also review the scaffolded project files directly, especially `train.py` for your entrypoint and `pyproject.toml` for your runtime dependencies.
 
-## 3. Start training
+## 3. Add your RunPod API key
+
+Tahuna now provisions compute through your own RunPod account. Before your first launch:
+
+1. Open the [Tahuna dashboard](/dashboard)
+2. Go to Settings / Providers
+3. Save your RunPod API key
+
+Tahuna uses this credential for new launches only.
+
+## 4. Start training
 
 Launch a training run:
 
@@ -44,13 +54,15 @@ tahuna train
 
 Tahuna will:
 
-1. Provision a GPU pod matching your environment spec
+1. Provision a RunPod GPU pod matching your environment spec
 2. Sync your code to the pod
 3. Execute your training script
 4. Stream logs and metrics in real-time
 5. Collect output artifacts when the run completes
 
-## 4. Monitor from the dashboard
+If no RunPod API key is configured, the launch will fail until you add one in the dashboard.
+
+## 5. Monitor from the dashboard
 
 Open the [Tahuna dashboard](/dashboard) to see your run in the Runs view. Click on a run to see live logs, metrics charts, diagnostics, and output artifacts.
 

@@ -3,7 +3,7 @@ title: Runs
 description: Launch, monitor, and manage training runs.
 ---
 
-A run is a single execution of your code within an environment. Tahuna handles provisioning, code sync, log streaming, and artifact collection.
+A run is a single execution of your code within an environment. Tahuna handles RunPod provisioning, code sync, log streaming, and artifact collection.
 
 ## Launching a run
 
@@ -12,6 +12,8 @@ From your project directory:
 ```bash
 tahuna train
 ```
+
+Before launching, make sure your RunPod API key is configured in the Tahuna dashboard under Settings / Providers. Tahuna uses your key to provision the pod for the run.
 
 ## Run lifecycle
 
