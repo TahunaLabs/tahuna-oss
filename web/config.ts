@@ -16,8 +16,8 @@ export const AUTH_CONFIG = {
 
 export const EMAIL_CONFIG = {
   otpFromEmail: {
-    production: process.env.TAHUNA_OTP_FROM_EMAIL_PRODUCTION?.trim() || "hi@tahuna.app",
-    nonProduction: process.env.TAHUNA_OTP_FROM_EMAIL_NON_PRODUCTION?.trim() || "onboarding@resend.dev",
+    production: "hi@tahuna.app",
+    nonProduction: "onboarding@resend.dev",
   },
 } as const;
 

@@ -12,13 +12,16 @@ type OtpEmailPayload = {
   otp: string;
 };
 
-function isProductionDeployment() {
-  const deployment = process.env.CONVEX_DEPLOYMENT?.trim().toLowerCase() || "";
-  return deployment.startsWith("prod:");
+function isProductionEnvironment() {
+  const env = process.env.ENV;
+  if (typeof env !== "string") {
+    return false;
+  }
+  return env.trim().toLowerCase() === "production";
 }
 
 function resolveOtpFromEmail() {
-  if (isProductionDeployment()) {
+  if (isProductionEnvironment()) {
     return EMAIL_CONFIG.otpFromEmail.production.trim();
   }
   return EMAIL_CONFIG.otpFromEmail.nonProduction.trim();
