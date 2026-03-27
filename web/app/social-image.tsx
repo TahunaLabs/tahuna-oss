@@ -6,7 +6,20 @@ export const socialImageAlt = "Tahuna | The RL Training Substrate"
 export const socialImageSize = { width: 1200, height: 630 }
 export const socialImageContentType = "image/png"
 
-export function renderSocialImage() {
+const WORDMARK = "Tahuna"
+
+const cormorantFont = fetch(
+  "https://osp.kitchen/work/caveat/tree/master/fonts/Cormorant_Garamond/CormorantGaramond-SemiBold.ttf",
+).then((response) => {
+  if (!response.ok) {
+    throw new Error("Could not load Cormorant Garamond font source")
+  }
+  return response.arrayBuffer()
+})
+
+export async function renderSocialImage() {
+  const fontData = await cormorantFont
+
   return new ImageResponse(
     (
       <div
@@ -37,11 +50,21 @@ export function renderSocialImage() {
               lineHeight: 1,
             }}
           >
-            Tahuna
+            {WORDMARK}
           </div>
         </div>
       </div>
     ),
-    socialImageSize,
+    {
+      ...socialImageSize,
+      fonts: [
+        {
+          name: "Cormorant Garamond",
+          data: fontData,
+          weight: 600,
+          style: "normal",
+        },
+      ],
+    },
   )
 }

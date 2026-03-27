@@ -5,6 +5,6 @@ export const alt = socialImageAlt
 export const size = socialImageSize
 export const contentType = socialImageContentType
 
-export default function OpenGraphImage() {
+export default async function OpenGraphImage() {
   return renderSocialImage()
 }
