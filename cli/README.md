@@ -17,6 +17,28 @@ curl -fsSL https://raw.githubusercontent.com/Pazuzzu/tahuna-cli/main/scripts/ins
 See the docs installation guide for manual tarball install and pinned versions:
 `docs/content/docs/installation.mdx`.
 
+## Release
+
+Nightly (tracks `main`):
+
+1. Push commits to `main`.
+2. `Release CLI Nightly` runs on each `main` push and updates the `nightly` release in `Pazuzzu/tahuna-cli`.
+
+Stable:
+
+1. Ensure the release commit is on `main`.
+2. Create and push a semver tag from `main`.
+
+```bash
+git checkout main
+git pull --ff-only origin main
+git tag -a v0.1.1 -m "Release v0.1.1"
+git push origin v0.1.1
+```
+
+3. `Release CLI` publishes release assets to `Pazuzzu/tahuna-cli`.
+4. Promote stable by updating `releases/channels.conf` (`stable=vX.Y.Z`) and pushing `main`.
+
 ## Run locally
 
 ```bash
