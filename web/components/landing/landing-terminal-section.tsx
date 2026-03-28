@@ -55,8 +55,8 @@ export function LandingTerminalSection() {
             Post-training is the new frontier, but the tooling haven't caught up yet.
           </p>
           <p className="mt-3 max-w-sm text-base leading-relaxed text-muted-foreground">
-            Tahuna is the training substrate that keeps your code and your loop intact while handling provisioning,
-            sync, dependencies, monitoring, and artifacts.
+            Tahuna is a gentle control plane for post-training that keeps your code and your loop intact while
+            handling provisioning, sync, dependencies, monitoring, and artifacts.
           </p>
         </div>
 

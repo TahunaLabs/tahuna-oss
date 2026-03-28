@@ -1,6 +1,6 @@
 # Tahuna Manifesto
 
-**The RL Training Substrate**
+**A gentle control plane for post-training**
 *Where AI agents practice, adapt, and improve through experience — no research lab required.*
 
 ---

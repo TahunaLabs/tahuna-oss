@@ -1,9 +1,9 @@
 import { CDN_CONFIG, NETWORK_CONFIG } from "@/config"
 import type { Metadata } from "next"
 
-const SITE_TITLE = "Tahuna | The RL Training Substrate"
+const SITE_TITLE = "Tahuna | A gentle control plane for post-training"
 const SITE_DESCRIPTION =
-  "The RL training substrate. Where AI agents practice, adapt, and improve through experience — no research lab required."
+  "A gentle control plane for post-training. Where AI agents practice, adapt, and improve through experience — no research lab required."
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL?.trim() || NETWORK_CONFIG.defaultApiUrl
 
 function faviconAsset(filename: string) {

@@ -372,10 +372,10 @@ Show less
 Based on my thorough exploration of all documentation, specifications, and marketing materials in the codebase, here is what Tahuna is and how it positions itself:
 ---
 ### **Product Identity & Positioning**
-**Tahuna** is described in the metadata as **"The RL Training Substrate"** with the tagline: *"Where AI agents practice, adapt, and improve through experience — no research lab required."*
-The product positions itself as engineered for frontier AI work: **"Engineered For The Frontier"** — a frontier training substrate that lets users wield the full power of leading models.
+**Tahuna** is described in the metadata as **"A gentle control plane for post-training"** with the tagline: *"Where AI agents practice, adapt, and improve through experience — no research lab required."*
+The product positions itself as engineered for frontier AI work: **"Engineered For The Frontier"** — a gentle control plane for post-training that lets users wield the full power of leading models.
 **Core Value Proposition:**
-- "Tahuna is the frontier training substrate that lets you wield the full power of leading models."
+- "Tahuna is a gentle control plane for post-training that lets you wield the full power of leading models."
 - "Pay as you go, with no markup for individuals."
 ---
 ### **What Tahuna Actually Does**
