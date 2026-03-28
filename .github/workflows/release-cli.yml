@@ -21,6 +21,21 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Require tag commit on main
+        run: |
+          set -euo pipefail
+
+          git fetch --no-tags origin main
+
+          if git merge-base --is-ancestor "${GITHUB_SHA}" "origin/main"; then
+            echo "Tag commit ${GITHUB_SHA} is contained in origin/main."
+            exit 0
+          fi
+
+          echo "Tag ${GITHUB_REF_NAME} points to ${GITHUB_SHA}, which is not on origin/main."
+          echo "Stable releases are only allowed from commits reachable on main."
+          exit 1
+
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
