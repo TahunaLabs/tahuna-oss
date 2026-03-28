@@ -1,0 +1,59 @@
+name: Sync CLI Distribution Files
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - scripts/install-tahuna.sh
+      - releases/channels.conf
+      - .github/workflows/sync-cli-distribution-files.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sync-cli-distribution-files
+  cancel-in-progress: true
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source repository
+        uses: actions/checkout@v5
+
+      - name: Checkout distribution repository
+        uses: actions/checkout@v5
+        with:
+          repository: Pazuzzu/tahuna-cli
+          ref: main
+          token: ${{ secrets.RELEASES_GITHUB_TOKEN }}
+          path: tahuna-cli
+
+      - name: Copy installer metadata
+        run: |
+          set -euo pipefail
+          mkdir -p tahuna-cli/scripts tahuna-cli/releases
+          cp scripts/install-tahuna.sh tahuna-cli/scripts/install-tahuna.sh
+          cp releases/channels.conf tahuna-cli/releases/channels.conf
+          chmod +x tahuna-cli/scripts/install-tahuna.sh
+
+      - name: Commit and push when changed
+        run: |
+          set -euo pipefail
+
+          cd tahuna-cli
+
+          if git diff --quiet -- scripts/install-tahuna.sh releases/channels.conf; then
+            echo "No distribution metadata changes to sync."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add scripts/install-tahuna.sh releases/channels.conf
+          git commit -m "dist: sync installer metadata from Pazuzzu/tahuna@${GITHUB_SHA::7}"
+          git push origin HEAD:main
