@@ -22,22 +22,22 @@ function DashboardTopBar(props: React.ComponentProps<"header">) {
       <div className="ml-auto flex items-center gap-1">
         <Button variant="ghost" size="icon" asChild>
           <a
-            href={LINKS_CONFIG.repoUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-label="GitHub repository"
-          >
-            <GitHubLogoIcon className="size-4" />
-          </a>
-        </Button>
-        <Button variant="ghost" size="icon" asChild>
-          <a
             href={LINKS_CONFIG.bugReportUrl}
             target="_blank"
             rel="noopener noreferrer"
             aria-label="Report a bug on Linear"
           >
             <Bug className="size-4" />
+          </a>
+        </Button>
+        <Button variant="ghost" size="icon" asChild>
+          <a
+            href={LINKS_CONFIG.repoUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="GitHub repository"
+          >
+            <GitHubLogoIcon className="size-4" />
           </a>
         </Button>
         <Button
