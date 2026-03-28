@@ -4,8 +4,9 @@ import { Check, Copy } from "lucide-react"
 import { useState } from "react"
 
 import { Badge } from "@/components/ui/badge"
-import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { Card, CardContent } from "@/components/ui/card"
+import { TruncatedTooltip } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 
 const installerScriptCommand = "curl -fsSL https://raw.githubusercontent.com/Pazuzzu/tahuna-cli/main/scripts/install-tahuna.sh"
@@ -99,7 +100,6 @@ export function LandingTerminalSection() {
           </Card>
 
           <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center">
-            <span className="text-xs font-mono uppercase tracking-ui-eyebrow text-muted-foreground">Install</span>
             <div className="flex items-center gap-1 rounded-full border border-border bg-card">
               <Button
                 variant="ghost"
@@ -125,7 +125,9 @@ export function LandingTerminalSection() {
               </Button>
             </div>
             <div className="flex min-w-0 flex-1 items-center gap-2 rounded-full border border-border bg-card px-5 py-2.5">
-              <code className="truncate text-sm text-foreground/85">{commands[activeCommand]}</code>
+              <TruncatedTooltip className="min-w-0 flex-1 font-mono text-sm text-foreground/85">
+                {commands[activeCommand]}
+              </TruncatedTooltip>
               <Button variant="ghost" size="icon-sm" className="ml-auto" onClick={handleCopy} aria-label="Copy command">
                 {copiedCommand ? <Check className="text-success" /> : <Copy />}
               </Button>
