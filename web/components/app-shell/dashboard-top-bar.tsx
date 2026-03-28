@@ -2,7 +2,7 @@
 
 import type * as React from "react"
 import { GitHubLogoIcon } from "@radix-ui/react-icons"
-import { Moon, Sun } from "lucide-react"
+import { Bug, Moon, Sun } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { useTheme } from "@/components/theme-provider"
@@ -28,6 +28,16 @@ function DashboardTopBar(props: React.ComponentProps<"header">) {
             aria-label="GitHub repository"
           >
             <GitHubLogoIcon className="size-4" />
+          </a>
+        </Button>
+        <Button variant="ghost" size="icon" asChild>
+          <a
+            href={LINKS_CONFIG.bugReportUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Report a bug on Linear"
+          >
+            <Bug className="size-4" />
           </a>
         </Button>
         <Button
