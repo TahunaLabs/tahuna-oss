@@ -16,7 +16,7 @@ description: Install the Tahuna CLI on your machine.
 The recommended way to install the Tahuna CLI:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Pazuzzu/tahuna/main/scripts/install-tahuna.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Pazuzzu/tahuna-cli/main/scripts/install-tahuna.sh | bash
 ```
 
 This command resolves the `stable` channel from `releases/channels.conf`.
@@ -24,7 +24,7 @@ This command resolves the `stable` channel from `releases/channels.conf`.
 To install the rolling nightly channel (built from `main`):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Pazuzzu/tahuna/main/scripts/install-tahuna.sh | bash -s -- --channel nightly
+curl -fsSL https://raw.githubusercontent.com/Pazuzzu/tahuna-cli/main/scripts/install-tahuna.sh | bash -s -- --channel nightly
 ```
 
 Verify the installation:
@@ -79,19 +79,19 @@ Tahuna stores the credential encrypted at rest and uses it only for new RunPod l
 To update to the latest version:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Pazuzzu/tahuna/main/scripts/install-tahuna.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Pazuzzu/tahuna-cli/main/scripts/install-tahuna.sh | bash
 ```
 
 To install a specific version:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Pazuzzu/tahuna/main/scripts/install-tahuna.sh | bash -s -- --version v0.1.0
+curl -fsSL https://raw.githubusercontent.com/Pazuzzu/tahuna-cli/main/scripts/install-tahuna.sh | bash -s -- --version v0.1.0
 ```
 
 To update on nightly channel:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Pazuzzu/tahuna/main/scripts/install-tahuna.sh | bash -s -- --channel nightly
+curl -fsSL https://raw.githubusercontent.com/Pazuzzu/tahuna-cli/main/scripts/install-tahuna.sh | bash -s -- --channel nightly
 ```
 
 ## Next Steps
