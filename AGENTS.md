@@ -4,6 +4,7 @@
 
 - Execute tasks in agreed order. One logical unit per commit.
 - Change code only when the user explicitly asks for implementation. Discussion-first default: treat "can you make sure…?" as analysis — do not edit files until explicitly asked.
+- Never create, move, or push Git tags unless the user explicitly asks for tagging in the current thread.
 - For every change: search Linear first; if an issue exists ask the user to update it, otherwise log to Linear (issue, recommendation, commit hash, validation commands) using the Linear tool.
 - For any Linear issue created or updated: set `delegate` to the agent's own name and include `Agent: <agent-name>` in the body or update comment.
 - Linear state hygiene: do not leave shipped work in `Backlog`/`Todo`; before handoff set state to `Done`, add commit hash, list validation commands/results in a final comment; use state-filtered queries when reporting next tasks; do not infer active work from `gitBranchName` alone.
