@@ -9,7 +9,7 @@
 - For any Linear issue created or updated: set `delegate` to the agent's own name and include `Agent: <agent-name>` in the body or update comment.
 - Linear state hygiene: do not leave shipped work in `Backlog`/`Todo`; before handoff set state to `Done`, add commit hash, list validation commands/results in a final comment; use state-filtered queries when reporting next tasks; do not infer active work from `gitBranchName` alone.
 - No backward-compat layers unless requested. Keep names canonical across layers (command surface, API paths, symbols, errors, docs) in the same change. No stale terminology once a term is renamed; grep for remaining hits before committing.
-- Validate before commit: `bun run lint` (ESLint + TypeScript unused checks). For Go CLI: `make validate-cli`. For Go Runtime: `make validate-warden`.
+- Validate before commit in the affected subrepo(s): for frontend changes run `cd web && bun run lint` (ESLint + TypeScript unused checks); for Go CLI run `make validate-cli`; for Go Runtime run `make validate-warden`.
 - Runtime image CI guardrail: keep `.github/workflows/build-templates.yml` push trigger on `develop` during MVP; switch back to `main` when MVP closes (keep inline TODO).
 - **If guardrails conflict or intent is ambiguous: stop and ask before touching any code.**
 - Tests only when explicitly requested.
@@ -31,7 +31,7 @@
 - Preserve existing naming, copy tone, and interaction patterns. Reuse shared primitives before introducing variants. Use shadcn/ui components when available; create a local shadcn-style component if the primitive doesn't exist.
 - Keep `web/app/globals.css` for tokens (`:root` + `@theme inline`) and base styles only. No new BEM/global layout classes without explicit approval. No arbitrary Tailwind values (`text-[...]`, `rounded-[...]`, etc.) without explicit approval. Reuse semantic token utilities; avoid explicit px values when a token utility exists. Extract a `cva` variant when a class pattern repeats 3+ times.
 - Refactors must be net simplification (added lines/indirection must not exceed removed).
-- Frontend validation before commit: `bun run lint` and `rg -n "text-\\[|leading-\\[|tracking-\\[|rounded-\\[|grid-cols-\\[" web --glob '!web/convex/**'`
+- Frontend validation before commit: `cd web && bun run lint` and `rg -n "text-\\[|leading-\\[|tracking-\\[|rounded-\\[|grid-cols-\\[" web --glob '!web/convex/**'`
 
 ## Convex (`web/convex/**`)
 
