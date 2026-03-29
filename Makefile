@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help install-web run-web install-docs run-docs build-docs install-cli install-cli-tools run-cli lint-cli test-cli validate-cli install-runtime-tools lint-warden test-warden validate-warden
+.PHONY: help install-web run-web install-docs run-docs build-docs install-cli install-cli-dev install-cli-tools run-cli lint-cli test-cli validate-cli install-runtime-tools lint-warden test-warden validate-warden
 
 help:
 	@echo "Available targets:"
@@ -18,6 +18,7 @@ help:
 	@echo "  lint-warden  Run Warden runtime formatting, vet, and lint checks"
 	@echo "  test-warden  Run Warden runtime tests"
 	@echo "  validate-warden Run the full Warden runtime validation stack"
+	@echo "  install-cli-dev  Build and install CLI as tahuna-dev (local dev binary)"
 	@echo "  run-cli      Run the CLI"
 
 install-web:
@@ -40,6 +41,17 @@ build-docs:
 
 install-cli:
 	cd cli && go mod download
+
+install-cli-dev:
+	cd cli && go build -o "$$(go env GOPATH)/bin/tahuna-dev" .
+	@API_KEY=$$(grep '^TAHUNA_API_KEY=' cli/.env.local 2>/dev/null | cut -d= -f2); \
+	ALIAS_LINE="alias tahuna-dev='TAHUNA_API_URL=http://localhost:3000 TAHUNA_API_KEY=$$API_KEY tahuna-dev'"; \
+	if ! grep -qF "alias tahuna-dev=" ~/.zshrc 2>/dev/null; then \
+		echo "" >> ~/.zshrc; \
+		echo "$$ALIAS_LINE" >> ~/.zshrc; \
+		echo "Added tahuna-dev alias to ~/.zshrc — run: source ~/.zshrc"; \
+	fi
+	@echo "Installed tahuna-dev ✔"
 
 install-cli-tools:
 	cd cli && GOBIN="$$(go env GOPATH)/bin" go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.8

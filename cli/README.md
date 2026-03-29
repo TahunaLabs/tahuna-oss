@@ -39,6 +39,21 @@ git push origin v0.1.1
 3. `Release CLI` publishes release assets to `Pazuzzu/tahuna-cli`.
 4. Promote stable by updating `releases/channels.conf` (`stable=vX.Y.Z`) and pushing `main`.
 
+## Dev binary (tahuna-dev)
+
+To work with both prod and dev CLIs side by side, install the dev build as a separate `tahuna-dev` binary:
+
+```bash
+make install-cli-dev && source ~/.zshrc
+```
+
+The target builds the CLI to `tahuna-dev`, then adds a shell alias to `~/.zshrc` that sets `TAHUNA_API_URL` and `TAHUNA_API_KEY` (read from `cli/.env.local`) automatically. After that you can use both:
+
+```bash
+tahuna deploy       # prod binary → https://tahuna.app
+tahuna-dev deploy   # dev binary  → http://localhost:3000
+```
+
 ## Run locally
 
 ```bash
