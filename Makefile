@@ -44,8 +44,7 @@ install-cli:
 
 install-cli-dev:
 	cd cli && go build -o "$$(go env GOPATH)/bin/tahuna-dev" .
-	@API_KEY=$$(grep '^TAHUNA_API_KEY=' cli/.env.local 2>/dev/null | cut -d= -f2); \
-	ALIAS_LINE="alias tahuna-dev='TAHUNA_API_URL=http://localhost:3000 TAHUNA_API_KEY=$$API_KEY tahuna-dev'"; \
+	@ALIAS_LINE="alias tahuna-dev='TAHUNA_API_URL=http://localhost:3000 TAHUNA_CONFIG_DIR=\$$HOME/.config/tahuna-dev tahuna-dev'"; \
 	if ! grep -qF "alias tahuna-dev=" ~/.zshrc 2>/dev/null; then \
 		echo "" >> ~/.zshrc; \
 		echo "$$ALIAS_LINE" >> ~/.zshrc; \

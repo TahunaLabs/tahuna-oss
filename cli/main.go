@@ -233,6 +233,9 @@ func openBrowser(rawURL string) error {
 }
 
 func defaultEnvFilePath() string {
+	if dir := os.Getenv("TAHUNA_CONFIG_DIR"); dir != "" {
+		return filepath.Join(dir, "config.env")
+	}
 	home, err := os.UserHomeDir()
 	if err != nil || strings.TrimSpace(home) == "" {
 		return "tahuna.config.env"

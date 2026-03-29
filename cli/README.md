@@ -47,11 +47,17 @@ To work with both prod and dev CLIs side by side, install the dev build as a sep
 make install-cli-dev && source ~/.zshrc
 ```
 
-The target builds the CLI to `tahuna-dev`, then adds a shell alias to `~/.zshrc` that sets `TAHUNA_API_URL` and `TAHUNA_API_KEY` (read from `cli/.env.local`) automatically. After that you can use both:
+The target builds the CLI to `tahuna-dev` and adds a shell alias to `~/.zshrc` that sets `TAHUNA_API_URL` (localhost) and `TAHUNA_CONFIG_DIR` (separate from prod). Then log in once:
 
 ```bash
-tahuna deploy       # prod binary → https://tahuna.app
-tahuna-dev deploy   # dev binary  → http://localhost:3000
+tahuna-dev login
+```
+
+After that you can use both side by side:
+
+```bash
+tahuna env list       # prod → https://tahuna.app   (config: ~/.config/tahuna/)
+tahuna-dev env list   # dev  → http://localhost:3000 (config: ~/.config/tahuna-dev/)
 ```
 
 ## Run locally
