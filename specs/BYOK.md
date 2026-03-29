@@ -30,7 +30,7 @@ It is used for:
 
 The Tahuna server must be configured with:
 
-- `TAHUNA_RUNPOD_CREDENTIALS_KEY`
+- `TAHUNA_CREDENTIALS_SECRET`
 
 This value must be a base64-encoded 32-byte key.
 
@@ -158,7 +158,7 @@ If pod termination fails:
 
 Recommended verification path:
 
-1. Set `TAHUNA_RUNPOD_CREDENTIALS_KEY` on the server.
+1. Set `TAHUNA_CREDENTIALS_SECRET` on the server.
 2. Open Dashboard Settings and save a valid Runpod key.
 3. Confirm the Runpod card shows configured status.
 4. Run `tahuna gpus list` and confirm GPUs load for that user.

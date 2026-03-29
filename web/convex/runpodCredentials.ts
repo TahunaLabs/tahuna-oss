@@ -15,7 +15,7 @@ import {
 } from "@convex/runpodCredentialsStore";
 import { sha256Hex } from "@convex/syncManifest";
 
-const RUNPOD_CREDENTIAL_KEY_ENV_NAME = "TAHUNA_RUNPOD_CREDENTIALS_KEY";
+const RUNPOD_CREDENTIAL_KEY_ENV_NAME = "TAHUNA_CREDENTIALS_SECRET";
 const RUNPOD_CREDENTIAL_KEY_VERSION = 1;
 const RUNPOD_CREDENTIAL_IV_BYTES = 12;
 
