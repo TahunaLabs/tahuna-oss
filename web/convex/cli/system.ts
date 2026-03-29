@@ -58,7 +58,7 @@ export const getGpus = httpAction(async (ctx, request) => {
     );
   } catch (err) {
     const detail = toClientErrorDetail(err, "failed to load gpus");
-    const status = detail.toLowerCase().includes("runpod api key is not configured") ? 400 : 500;
+    const status = detail.toLowerCase().includes("no compute provider configured") ? 400 : 500;
     return new Response(JSON.stringify({ detail }), {
       status,
       headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),

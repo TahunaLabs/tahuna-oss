@@ -225,7 +225,7 @@ export async function resolveActiveRunpodApiKeyForUserId(ctx: ActionCtx, userId:
     userId,
   });
   if (!row) {
-    throw new ConvexError("Runpod API key is not configured");
+    throw new ConvexError("No compute provider configured. Add one in Settings → Providers.");
   }
   return {
     credentialId: row.credentialId,

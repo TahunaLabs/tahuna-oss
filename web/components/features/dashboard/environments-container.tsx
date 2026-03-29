@@ -83,7 +83,7 @@ export function EnvironmentsContainer({ shouldLoadQueries, onOpenShareDialog }: 
 
   async function launchRun(environmentId: Id<"environments">) {
     if (runpodCredentialStatus?.configured === false) {
-      toast.error("Runpod API key is not configured. Open Settings to add one.")
+      toast.error("No compute provider configured. Add one in Settings → Providers.")
       return
     }
     await withBusy(async () => {

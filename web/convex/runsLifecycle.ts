@@ -123,7 +123,7 @@ export async function createRunForUserId(
   }
   const runpodCredential = await getLatestActiveRunpodCredentialForUserId(ctx, args.userId);
   if (!runpodCredential) {
-    throw new ConvexError("Runpod API key is not configured");
+    throw new ConvexError("No compute provider configured. Add one in Settings → Providers.");
   }
 
   const now = Date.now();

@@ -684,6 +684,8 @@ func friendlyError(err error) string {
 			return "Resource not found."
 		case apiErr.status == 409:
 			return apiErr.detail
+		case apiErr.status == 400 && strings.Contains(detail, "no compute provider configured"):
+			return fmt.Sprintf("No compute provider configured. Add one at: %s", providerSettingsURL())
 		case apiErr.status == 400:
 			return apiErr.detail
 		case apiErr.status >= 500:
@@ -889,6 +891,10 @@ func browserBaseURL() string {
 	base := strings.TrimRight(apiURL(), "/")
 	base = strings.TrimSuffix(base, apiPrefix)
 	return base
+}
+
+func providerSettingsURL() string {
+	return strings.TrimRight(browserBaseURL(), "/") + "/dashboard?view=providers"
 }
 
 func runDashboardURL(runID string) string {
