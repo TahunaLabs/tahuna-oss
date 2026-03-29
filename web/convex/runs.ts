@@ -615,10 +615,8 @@ function resolveRuntimeApiBase() {
   // Prefer public Tahuna URLs for pod runtime callbacks.
   // Localhost app URLs are often unreachable from remote pods.
   const candidates = [
-    process.env.NEXT_PUBLIC_CONVEX_SITE_URL,
-    process.env.CONVEX_SITE_URL,
-    process.env.SITE_URL,
-    process.env.NEXT_PUBLIC_SITE_URL,
+    process.env.NEXT_PUBLIC_CONVEX_SITE_URL, // dev: direct Convex .site URL (pods can't reach localhost)
+    process.env.SITE_URL, // prod: public app URL (e.g. https://tahuna.app)
   ];
   for (const candidate of candidates) {
     const trimmed = (candidate || "").trim();
