@@ -888,11 +888,6 @@ func browserBaseURL() string {
 
 	base := strings.TrimRight(apiURL(), "/")
 	base = strings.TrimSuffix(base, apiPrefix)
-	// Convex backend hosts serve /api routes but not Next.js app routes like /auth/cli.
-	// Default to local web app URL unless browser base is explicitly configured.
-	if strings.Contains(base, ".convex.cloud") {
-		return defaultAPIURL
-	}
 	return base
 }
 

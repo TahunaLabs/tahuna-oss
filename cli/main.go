@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	defaultAPIURL    = "http://localhost:3000"
+	defaultAPIURL    = "https://tahuna.app"
 	apiPrefix        = "/api"
 	projectStateDir  = ".tahuna"
 	projectEnvIDFile = "environment_id"
@@ -114,7 +114,7 @@ Environment:
   tahuna env rm <env_id> | --id <env_id> | --all|-a
 
 Auth:
-  TAHUNA_API_URL      API base URL (default: http://localhost:3000)
+  TAHUNA_API_URL      API base URL (default: https://tahuna.app)
   TAHUNA_SITE_URL     Canonical site URL alias for API base
   TAHUNA_PUBLIC_SITE_URL Public site URL alias for API base
   TAHUNA_BROWSER_URL  Browser auth URL base for "tahuna login" (optional)

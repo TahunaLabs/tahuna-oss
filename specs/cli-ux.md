@@ -181,7 +181,7 @@ Error: Not authenticated. Run `tahuna login` first.
 1. `TAHUNA_API_URL` environment variable
 2. `TAHUNA_SITE_URL` environment variable
 3. `TAHUNA_PUBLIC_SITE_URL` environment variable
-4. Default: `http://localhost:3000`
+4. Default: `https://tahuna.app`
 
 - If URL ends with `/api`, CLI does not double-prefix.
 - CLI auto-prefixes requests with `/api`.
