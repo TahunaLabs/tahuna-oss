@@ -13,6 +13,7 @@ DEFAULT_CHANNEL="stable"
 VERSION=""
 CHANNEL="${TAHUNA_RELEASE_CHANNEL:-$DEFAULT_CHANNEL}"
 BIN_DIR="$DEFAULT_BIN_DIR"
+MODIFY_PATH=true
 CHANNELS_URL="${TAHUNA_CHANNELS_URL:-https://raw.githubusercontent.com/${CHANNELS_REPO_OWNER}/${CHANNELS_REPO_NAME}/main/${CHANNELS_CONFIG_PATH}}"
 
 usage() {
@@ -24,13 +25,14 @@ Usage:
   install-tahuna.sh --help
 
 Options:
-  --channel   Release channel to install from.
-              Default: stable
-  --version   Install a specific release tag (for example: v0.1.0).
-              Overrides --channel when provided.
-  --bin-dir   Destination directory for the tahuna binary.
-              Default: ~/.local/bin
-  -h, --help  Show this help message.
+  --channel          Release channel to install from.
+                     Default: stable
+  --version          Install a specific release tag (for example: v0.1.0).
+                     Overrides --channel when provided.
+  --bin-dir          Destination directory for the tahuna binary.
+                     Default: ~/.local/bin
+  --no-modify-path   Do not modify shell profile to add bin dir to PATH.
+  -h, --help         Show this help message.
 
 Environment:
   TAHUNA_RELEASE_CHANNEL  Default channel override (stable|nightly)
@@ -85,6 +87,9 @@ while [[ $# -gt 0 ]]; do
       shift
       [[ $# -gt 0 ]] || die "missing value for --bin-dir"
       BIN_DIR="$1"
+      ;;
+    --no-modify-path)
+      MODIFY_PATH=false
       ;;
     -h|--help)
       usage
@@ -186,9 +191,43 @@ echo "Installed ${BINARY_NAME} to ${BIN_DIR}/${BINARY_NAME}"
 case ":$PATH:" in
   *":${BIN_DIR}:"*) ;;
   *)
-    echo
-    echo "Note: ${BIN_DIR} is not in your PATH."
-    echo "Add this to your shell profile:"
-    echo "  export PATH=\"${BIN_DIR}:\$PATH\""
+    if [[ "$MODIFY_PATH" == "true" ]]; then
+      path_line="export PATH=\"${BIN_DIR}:\$PATH\""
+      block_open="# >>> tahuna >>>"
+      block_close="# <<< tahuna <<<"
+      path_block="${block_open}
+${path_line}
+${block_close}"
+
+      shell_profile=""
+      case "$(basename "${SHELL:-}")" in
+        zsh)  shell_profile="${HOME}/.zshrc" ;;
+        bash)
+          if [[ -f "${HOME}/.bashrc" ]]; then
+            shell_profile="${HOME}/.bashrc"
+          else
+            shell_profile="${HOME}/.profile"
+          fi
+          ;;
+        fish) shell_profile="${HOME}/.config/fish/config.fish" ;;
+        *)    shell_profile="${HOME}/.profile" ;;
+      esac
+
+      if [[ -n "$shell_profile" ]]; then
+        if [[ -f "$shell_profile" ]] && grep -qF "$block_open" "$shell_profile" 2>/dev/null; then
+          info "PATH already configured in ${shell_profile}"
+        else
+          echo >> "$shell_profile"
+          echo "$path_block" >> "$shell_profile"
+          info "Added ${BIN_DIR} to PATH in ${shell_profile}"
+          echo "  Restart your shell or run: source ${shell_profile}"
+        fi
+      fi
+    else
+      echo
+      echo "Note: ${BIN_DIR} is not in your PATH."
+      echo "Add this to your shell profile:"
+      echo "  export PATH=\"${BIN_DIR}:\$PATH\""
+    fi
     ;;
 esac
