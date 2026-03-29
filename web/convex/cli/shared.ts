@@ -182,7 +182,7 @@ const SAFE_CLIENT_ERROR_PATTERNS: RegExp[] = [
   /\bmax gpu count\b/i,
   /\bgpu type .* is not available\b/i,
   /\bgpu pricing not configured\b/i,
-  /\brunpod api key is not configured\b/i,
+  /\bno compute provider configured\b/i,
   /\bdisable or replace it in settings\b/i,
   /\benvironment code is not synced\b/i,
   /\bcancel it before deleting\b/i,
