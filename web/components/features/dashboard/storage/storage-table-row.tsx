@@ -54,7 +54,10 @@ function StorageTableRow({
   const isBusy = artifactRenameBusyId === item.id
   const runLabel = item.run?.name || "—"
   const environmentLabel = item.environment?.name || "—"
-  const displayName = item.object_kind === "data_manifest" ? "Primary synced data" : item.name
+  const displayName = item.object_kind === "data_manifest"
+    ? `${item.environment?.name || "primary"}-primarydata`
+    : item.name
+  const downloadName = item.object_kind === "data_manifest" ? `${displayName}.tar.gz` : item.name
   const sourceLabel = item.object_kind === "data_manifest"
     ? "Primary synced data"
     : item.source === "data"
@@ -70,7 +73,7 @@ function StorageTableRow({
     >
       <TableSelectCell
         checked={selected}
-        ariaLabel={`Select storage item ${item.name}`}
+        ariaLabel={`Select storage item ${displayName}`}
         onCheckedChange={() => onToggleSelected(item.id)}
       />
 
@@ -132,7 +135,7 @@ function StorageTableRow({
 
       <TableActionsCell>
         {!isRenaming ? (
-          <ActionsMenu triggerLabel={`Open actions for ${item.name}`}>
+          <ActionsMenu triggerLabel={`Open actions for ${displayName}`}>
             {(close) => (
               <>
                 <DropdownMenuItem asChild onClick={() => close()}>
@@ -142,7 +145,7 @@ function StorageTableRow({
                   </a>
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild onClick={() => close()}>
-                  <a href={item.download_url} download={item.name}>
+                  <a href={item.download_url} download={downloadName}>
                     <Download className="h-3.5 w-3.5" />
                     Download
                   </a>

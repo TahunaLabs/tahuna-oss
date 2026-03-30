@@ -5,6 +5,8 @@ import { components, internal } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { action, internalMutation, internalQuery, mutation, type ActionCtx, type MutationCtx } from "@convex/_generated/server";
 import { requireUser } from "@convex/auth";
+import { buildBlobObjectKey } from "@/convex/cli/shared";
+import { parseManifest } from "@/convex/syncManifest";
 
 const r2 = new R2(components.r2);
 
@@ -271,6 +273,26 @@ function toStorageItem(row: IndexedStorageRow): StorageItem {
   };
 }
 
+async function resolvePrimaryDataDownload(
+  ctx: ActionCtx,
+  item: StorageItem,
+): Promise<Pick<StorageItem, "download_url" | "size"> | null> {
+  try {
+    const manifestUrl = (await r2.getMetadata(ctx, item.key))?.url || (await r2.getUrl(item.key));
+    const response = await fetch(manifestUrl, { method: "GET" });
+    if (!response.ok) return null;
+    const manifest = parseManifest(await response.json(), "data");
+    const bundleEntry = manifest?.entries.find((entry) => entry.path === "__tahuna__/data_bundle.tar.gz");
+    if (!bundleEntry) return null;
+    return {
+      download_url: await r2.getUrl(buildBlobObjectKey(bundleEntry.sha256)),
+      size: bundleEntry.size,
+    };
+  } catch {
+    return null;
+  }
+}
+
 function getContextFields(
   row: {
     runId?: Id<"runs">;
@@ -320,6 +342,16 @@ async function hydrateDownloadUrls(ctx: ActionCtx, pageItems: StorageItem[]) {
     const chunk = pageItems.slice(start, start + METADATA_LOOKUP_CONCURRENCY);
     const rows = await Promise.all(
       chunk.map(async (item) => {
+        if (item.object_kind === "data_manifest") {
+          const resolved = await resolvePrimaryDataDownload(ctx, item);
+          if (resolved) {
+            return {
+              ...item,
+              size: resolved.size,
+              download_url: resolved.download_url,
+            };
+          }
+        }
         let metadata: null | { size?: number; lastModified?: string; url?: string } = null;
         try {
           metadata = await r2.getMetadata(ctx, item.key);
