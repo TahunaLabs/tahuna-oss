@@ -1,6 +1,6 @@
 # Tahuna OSS
 
-Last updated: 2026-03-24
+Last updated: 2026-03-30
 
 ## Objective
 
@@ -51,6 +51,82 @@ The OSS product should not depend on:
 - Cloudflare R2 as the only object store
 - Runpod as the only compute provider
 - any billing-related table, API, UI, or workflow
+
+## Canonical Boundary
+
+This document is the canonical source of truth for the `tahuna-core` / `tahuna-cloud` split.
+
+If any README, spec, implementation detail, or migration plan conflicts with this file, this file wins.
+
+The target public architecture should be:
+
+- `tahuna-core`
+- `tahuna-cloud`, which depends on `tahuna-core`
+
+`tahuna-core` is the open-source, locally runnable, self-hostable product.
+
+`tahuna-cloud` is the hosted Tahuna product layer that adds hosted-only integrations, operational glue, and business logic on top of `tahuna-core`.
+
+### `tahuna-core`
+
+`tahuna-core` should contain:
+
+- the standalone API and worker control plane
+- the CLI
+- the web app as a pure frontend over the API
+- the runtime agent (`warden`)
+- environments, runs, manifests, sync, logs, metrics, and artifacts
+- runtime bootstrap contracts and runtime token flows
+- storage abstractions and self-hostable object-store implementations
+- compute abstractions and provider adapters, starting with Runpod and GCP
+- the auth boundary and only the minimal self-hosted auth surface needed for browser sessions, CLI API keys, and runtime authentication
+
+`tahuna-core` must not contain:
+
+- billing
+- credits
+- ledger accounting
+- balance tracking
+- pricing-based run admission
+- hosted account monetization or usage enforcement
+- hosted-only auth implementation details
+- hosted email delivery integrations
+- hosted analytics, branded CDN assets, or hosted docs/changelog links
+- cloud deployment plumbing or release publishing concerns
+- any required dependency on Convex, Better Auth, Resend, R2, Workpool, Vercel, or Docker Hub
+
+### `tahuna-cloud`
+
+`tahuna-cloud` should contain:
+
+- hosted billing, credits, ledger, and pricing enforcement
+- hosted auth implementation details and account-management UX
+- hosted email delivery integrations
+- hosted provider credential management and secret storage UX where those concerns are productized rather than self-hosted infrastructure
+- hosted analytics, branded asset delivery, hosted docs links, and product-site concerns
+- hosted deployment plumbing, image publishing, and other operational composition around `tahuna-core`
+- temporary legacy product infrastructure during migration, if needed, but never as part of the `tahuna-core` contract
+
+### Extraction Targets From The Current Codebase
+
+From the current repository, the following concerns should be isolated from `tahuna-core` and treated as `tahuna-cloud` concerns or migration-only legacy surfaces:
+
+- billing and credits, including `user_credits`, `usage_events`, run settlement, storage charging, billing UI, and credit gauges
+- the current Convex + Better Auth + Resend auth stack, including OTP delivery, session handling, login pages tightly coupled to Convex auth, and dashboard account settings tied to that implementation
+- provider credential vault UX and related hosted secret-management flows where they are implemented as product surface rather than generic provider adapter contracts
+- hosted Convex application composition and framework wiring
+- hosted product defaults such as Tahuna-hosted API URLs, branded CDN assets, hosted docs links, Vercel analytics, and Docker Hub image publishing
+
+From the current repository, the following concerns should remain in `tahuna-core`, but must be extracted behind explicit interfaces instead of staying vendor-specific:
+
+- object storage behavior for blobs, manifests, artifacts, and signed URLs
+- compute provisioning and machine lifecycle behavior
+- background job execution
+- the control-plane HTTP contract used by CLI, web, and runtime
+
+Runpod support itself belongs in `tahuna-core` as a provider adapter.
+
+Runpod-specific credential storage UX, hosted secret handling, and any hosted-only provider management surface do not define the `tahuna-core` contract.
 
 ## Architecture Decision
 
@@ -340,6 +416,7 @@ Freeze the OSS product boundary before implementation starts.
 ### Deliverables
 
 - this spec
+- this spec as the canonical source of truth for the `tahuna-core` / `tahuna-cloud` boundary
 - explicit removal decision for payments, credits, and ledger accounting
 - decision to target Postgres + object storage + worker-based control plane
 - decision to support Runpod and GCP adapters
@@ -348,6 +425,7 @@ Freeze the OSS product boundary before implementation starts.
 
 - no OSS workstream assumes billing features will remain
 - no new architecture work depends on Convex-specific primitives
+- no extraction plan or packaging decision contradicts the `tahuna-core` / `tahuna-cloud` boundary defined in this document
 
 ## Phase 1: Control Plane Extraction
 
