@@ -41,6 +41,7 @@ type projectConfig struct {
 	DataDir           string
 	OutputDir         string
 	TrainEntrypoint   string
+	EntrypointCommand string
 	PythonProjectFile string
 	UVLockFile        string
 	Framework         string
@@ -82,6 +83,12 @@ func collectProjectInitConfig() (projectConfig, string, error) {
 	} else {
 		fmt.Printf("%s?%s No train.py found\n", cAmpGold, cReset)
 		cfg.TrainEntrypoint = choosePathWhenMissing("Entrypoint script", "train.py")
+	}
+
+	defaultCmd := strings.Join(defaultTrainCommand(cfg.TrainEntrypoint), " ")
+	customCmd := strings.TrimSpace(promptString("Launch command", defaultCmd))
+	if customCmd != defaultCmd && customCmd != "" {
+		cfg.EntrypointCommand = customCmd
 	}
 
 	if dirExists(cfg.DataDir) {
@@ -420,6 +427,9 @@ func mergeProjectConfig(base, next projectConfig) projectConfig {
 	if value := strings.TrimSpace(next.TrainEntrypoint); value != "" {
 		base.TrainEntrypoint = filepath.Clean(value)
 	}
+	if value := strings.TrimSpace(next.EntrypointCommand); value != "" {
+		base.EntrypointCommand = value
+	}
 	if value := strings.TrimSpace(next.PythonProjectFile); value != "" {
 		base.PythonProjectFile = filepath.Clean(value)
 	}
@@ -459,6 +469,7 @@ func hasEnvironmentSection(cfg projectConfig) bool {
 
 func hasProjectSection(cfg projectConfig) bool {
 	return strings.TrimSpace(cfg.TrainEntrypoint) != "" ||
+		strings.TrimSpace(cfg.EntrypointCommand) != "" ||
 		strings.TrimSpace(cfg.DataDir) != "" ||
 		strings.TrimSpace(cfg.OutputDir) != "" ||
 		strings.TrimSpace(cfg.PythonProjectFile) != "" ||
@@ -482,6 +493,9 @@ func renderProjectConfig(cfg projectConfig) string {
 		lines = append(lines, "[project]")
 		if value := strings.TrimSpace(cfg.TrainEntrypoint); value != "" {
 			lines = append(lines, fmt.Sprintf("entrypoint = \"%s\"", escapeProjectConfigValue(value)))
+		}
+		if value := strings.TrimSpace(cfg.EntrypointCommand); value != "" {
+			lines = append(lines, fmt.Sprintf("entrypoint_command = \"%s\"", escapeProjectConfigValue(value)))
 		}
 		if value := strings.TrimSpace(cfg.DataDir); value != "" {
 			lines = append(lines, fmt.Sprintf("data_dir = \"%s\"", escapeProjectConfigValue(value)))
@@ -603,6 +617,8 @@ func parseProjectConfigTOML(text string) (projectConfig, map[string]string, erro
 			switch key {
 			case "entrypoint":
 				cfg.TrainEntrypoint = value
+			case "entrypoint_command":
+				cfg.EntrypointCommand = value
 			case "data_dir":
 				cfg.DataDir = value
 			case "output_dir":
@@ -909,6 +925,76 @@ func defaultTrainCommand(entrypoint string) []string {
 		resolvedEntrypoint = "train.py"
 	}
 	return []string{"uv", "run", "--active", "--no-sync", "python", "-u", resolvedEntrypoint}
+}
+
+// parseShellCommand splits a shell-like command string into tokens,
+// respecting single-quoted and double-quoted spans and backslash escapes.
+func parseShellCommand(s string) ([]string, error) {
+	var tokens []string
+	var current strings.Builder
+	inDouble := false
+	inSingle := false
+
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		switch {
+		case inDouble:
+			if c == '\\' && i+1 < len(s) {
+				next := s[i+1]
+				if next == '"' || next == '\\' || next == '$' || next == '`' || next == '\n' {
+					current.WriteByte(next)
+					i++
+				} else {
+					current.WriteByte(c)
+				}
+			} else if c == '"' {
+				inDouble = false
+			} else {
+				current.WriteByte(c)
+			}
+		case inSingle:
+			if c == '\'' {
+				inSingle = false
+			} else {
+				current.WriteByte(c)
+			}
+		case c == '"':
+			inDouble = true
+		case c == '\'':
+			inSingle = true
+		case c == '\\' && i+1 < len(s):
+			current.WriteByte(s[i+1])
+			i++
+		case c == ' ' || c == '\t' || c == '\n' || c == '\r':
+			if current.Len() > 0 {
+				tokens = append(tokens, current.String())
+				current.Reset()
+			}
+		default:
+			current.WriteByte(c)
+		}
+	}
+
+	if inDouble {
+		return nil, errors.New("unterminated double quote in entrypoint_command")
+	}
+	if inSingle {
+		return nil, errors.New("unterminated single quote in entrypoint_command")
+	}
+	if current.Len() > 0 {
+		tokens = append(tokens, current.String())
+	}
+	if len(tokens) == 0 {
+		return nil, errors.New("entrypoint_command is empty after parsing")
+	}
+	return tokens, nil
+}
+
+func resolveTrainCommand(cfg projectConfig) ([]string, error) {
+	if cmd := strings.TrimSpace(cfg.EntrypointCommand); cmd != "" {
+		return parseShellCommand(cmd)
+	}
+	return defaultTrainCommand(cfg.TrainEntrypoint), nil
 }
 
 func projectConfigFromEnvironment(env environmentResponse) projectConfig {

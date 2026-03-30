@@ -1260,5 +1260,7 @@ func mustLoadRunOutputDir() string {
 func mustLoadRunCommand() []string {
 	cfg, err := loadProjectConfig()
 	must(err)
-	return defaultTrainCommand(cfg.TrainEntrypoint)
+	cmd, err := resolveTrainCommand(cfg)
+	must(err)
+	return cmd
 }
