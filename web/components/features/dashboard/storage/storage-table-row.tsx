@@ -54,6 +54,12 @@ function StorageTableRow({
   const isBusy = artifactRenameBusyId === item.id
   const runLabel = item.run?.name || "—"
   const environmentLabel = item.environment?.name || "—"
+  const displayName = item.object_kind === "data_manifest" ? "Primary synced data" : item.name
+  const sourceLabel = item.object_kind === "data_manifest"
+    ? "Primary synced data"
+    : item.source === "data"
+      ? "Data upload"
+      : "Run artifact"
 
   return (
     <TableRow
@@ -96,7 +102,7 @@ function StorageTableRow({
             </Button>
           </form>
         ) : (
-          <TruncatedTooltip className="text-foreground">{item.name}</TruncatedTooltip>
+          <TruncatedTooltip className="text-foreground">{displayName}</TruncatedTooltip>
         )}
       </TableCell>
 
@@ -113,7 +119,7 @@ function StorageTableRow({
       </TableCell>
 
       <TableCell className="text-muted-foreground">
-        {item.source === "data" ? "Data upload" : "Run artifact"}
+        {sourceLabel}
       </TableCell>
 
       <TableCell className="text-muted-foreground">

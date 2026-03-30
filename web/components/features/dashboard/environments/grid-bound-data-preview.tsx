@@ -1,6 +1,8 @@
 "use client"
 
-import type { DataBlobRow, EnvironmentRow } from "@/components/features/dashboard-model"
+import Link from "next/link"
+
+import { primarySyncedDataHref, type DataBlobRow, type EnvironmentRow } from "@/components/features/dashboard-model"
 import { Badge } from "@/components/ui/badge"
 
 type GridBoundDataPreviewProps = {
@@ -17,7 +19,9 @@ function GridBoundDataPreview({
   return (
     <div className="mt-3 flex flex-wrap items-center gap-1">
       {hasPrimaryData ? (
-        <Badge variant="data">Primary synced data</Badge>
+        <Link href={primarySyncedDataHref(environment.data_id)}>
+          <Badge variant="data" className="cursor-pointer hover:opacity-80">Primary synced data</Badge>
+        </Link>
       ) : null}
 
       {environment.bound_data_ids.slice(0, 2).map((dataId) => {

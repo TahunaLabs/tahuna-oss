@@ -34,6 +34,7 @@ const resourceRefValidator = v.object({
 const storageItemValidator = v.object({
   id: v.string(),
   source: v.union(v.literal("data"), v.literal("run_artifact")),
+  object_kind: objectKindValidator,
   visibility: v.union(v.literal("shared"), v.literal("private")),
   key: v.string(),
   name: v.string(),
@@ -90,6 +91,7 @@ const indexedStorageListValidator = v.object({
 type StorageItem = {
   id: string;
   source: "data" | "run_artifact";
+  object_kind: "data_upload" | "data_manifest" | "run_artifact";
   visibility: "shared" | "private";
   key: string;
   name: string;
@@ -255,6 +257,7 @@ function toStorageItem(row: IndexedStorageRow): StorageItem {
   return {
     id: `storage:${row.id}`,
     source: row.source,
+    object_kind: row.object_kind,
     visibility: row.visibility,
     key: row.key,
     name: row.name,

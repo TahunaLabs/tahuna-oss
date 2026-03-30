@@ -1,6 +1,8 @@
 "use client"
 
-import type { DataBlobRow, EnvironmentRow } from "@/components/features/dashboard-model"
+import Link from "next/link"
+
+import { primarySyncedDataHref, type DataBlobRow, type EnvironmentRow } from "@/components/features/dashboard-model"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Select } from "@/components/ui/select"
@@ -38,7 +40,9 @@ function EnvironmentBindingCell({
       {hasAnyData ? (
         <div className="flex flex-wrap items-center gap-1">
           {hasPrimaryData ? (
-            <Badge variant="data">Primary synced data</Badge>
+            <Link href={primarySyncedDataHref(environment.data_id)}>
+              <Badge variant="data" className="cursor-pointer hover:opacity-80">Primary synced data</Badge>
+            </Link>
           ) : null}
 
           {environment.bound_data_ids.map((dataId) => {
