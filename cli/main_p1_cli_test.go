@@ -153,3 +153,65 @@ func TestEnvironmentDataBind_UsesLinkedEnvironmentWhenOmitted(t *testing.T) {
 		t.Fatalf("expected two data ids in payload, got: %#v", posted)
 	}
 }
+
+func TestValidateProjectRootRelativePath_RejectsEscapingPaths(t *testing.T) {
+	if err := validateProjectRootRelativePath("project.data_dir", "../outside"); err == nil {
+		t.Fatal("expected escaping path to be rejected")
+	}
+	if err := validateProjectRootRelativePath("project.data_dir", "/tmp/outside"); err == nil {
+		t.Fatal("expected absolute path to be rejected")
+	}
+	if err := validateProjectRootRelativePath("project.data_dir", "data"); err != nil {
+		t.Fatalf("expected relative project path to be accepted, got: %v", err)
+	}
+}
+
+func TestDefaultPyProjectTemplate_UsesTrainAndServeDependencyGroups(t *testing.T) {
+	template := defaultPyProjectTemplate("pt")
+	if !strings.Contains(template, "[dependency-groups]") {
+		t.Fatalf("expected dependency groups in template, got: %s", template)
+	}
+	if !strings.Contains(template, "train = [") || !strings.Contains(template, "\"torch\"") {
+		t.Fatalf("expected torch in train dependency group, got: %s", template)
+	}
+	if !strings.Contains(template, "serve = []") {
+		t.Fatalf("expected empty serve dependency group, got: %s", template)
+	}
+}
+
+func TestParseProjectConfigTOML_RejectsUnknownKeys(t *testing.T) {
+	_, _, err := parseProjectConfigTOML(`
+[project]
+data_dir = "data"
+output_dir = "outputs"
+unexpected = "value"
+`)
+	if err == nil {
+		t.Fatal("expected unknown TOML key to be rejected")
+	}
+	if !strings.Contains(err.Error(), "unsupported key") || !strings.Contains(err.Error(), "project.unexpected") {
+		t.Fatalf("expected unsupported key error, got: %v", err)
+	}
+}
+
+func TestParseProjectConfigTOML_RejectsZeroPositiveInts(t *testing.T) {
+	_, _, err := parseProjectConfigTOML(`
+[project]
+data_dir = "data"
+output_dir = "outputs"
+
+[environment]
+framework = "pt"
+version = "2.8.0-cu128"
+python_version = "3.11"
+gpu_type = "NVIDIA A100 80GB"
+gpu_count = 0
+volume_gb = 80
+`)
+	if err == nil {
+		t.Fatal("expected zero gpu_count to be rejected")
+	}
+	if !strings.Contains(err.Error(), "environment.gpu_count") {
+		t.Fatalf("expected environment.gpu_count validation error, got: %v", err)
+	}
+}

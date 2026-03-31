@@ -160,7 +160,7 @@ func TestRunSyncWithStatus_RefreshesAndReportsEnvironmentSync(t *testing.T) {
 	}
 }
 
-func TestRunSyncWithStatus_EnvironmentOnlyConfigDoesNotFailOrInventProjectBindings(t *testing.T) {
+func TestRunSyncWithStatus_EnvironmentOnlyConfigFails(t *testing.T) {
 	mock := newSyncBackendMock()
 	installSyncStubs(t, mock)
 	setupTestProject(t, false)
@@ -181,29 +181,30 @@ func TestRunSyncWithStatus_EnvironmentOnlyConfigDoesNotFailOrInventProjectBindin
 
 	t.Setenv("TAHUNA_API_URL", server.URL)
 
-	output := captureStdout(t, func() {
-		if err := runSyncWithStatus("env-test", syncScope{code: true}); err != nil {
-			t.Fatalf("runSyncWithStatus failed: %v", err)
-		}
-	})
+	err := runSyncWithStatus("env-test", syncScope{code: true})
+	if err == nil {
+		t.Fatal("expected runSyncWithStatus to fail for env-only root config")
+	}
+	if !strings.Contains(err.Error(), "missing [project]") {
+		t.Fatalf("expected missing [project] error, got: %v", err)
+	}
+}
 
-	if !strings.Contains(output, "syncing environment") {
-		t.Fatalf("expected sync output to include environment sync phase, got: %s", output)
-	}
-	if envIndex, finalizeIndex := strings.Index(output, "syncing environment"), strings.Index(output, "finalizing sync"); envIndex < 0 || finalizeIndex < 0 || envIndex > finalizeIndex {
-		t.Fatalf("expected environment sync to be reported before finalizing sync, got: %s", output)
+func TestPreRunSync_ConfigValidationDetectsMissingInferenceEntrypoint(t *testing.T) {
+	mock := newSyncBackendMock()
+	installSyncStubs(t, mock)
+	setupTestProject(t, true)
+
+	if err := os.Remove("inference.py"); err != nil {
+		t.Fatalf("failed to remove inference.py: %v", err)
 	}
 
-	raw, err := os.ReadFile(projectConfigFilePath())
-	if err != nil {
-		t.Fatalf("expected project config to be written: %v", err)
+	err := preRunSync("env-test")
+	if err == nil {
+		t.Fatal("expected preRunSync to fail when inference.py is missing")
 	}
-	text := string(raw)
-	if strings.Contains(text, "[project]") {
-		t.Fatalf("expected env-only config to remain env-only during sync, got: %s", text)
-	}
-	if !strings.Contains(text, "framework = \"pt\"") || !strings.Contains(text, "gpu_type = \"NVIDIA A100 80GB\"") {
-		t.Fatalf("expected environment fields to refresh in env-only config, got: %s", text)
+	if !strings.Contains(err.Error(), "missing required project file \"inference.py\"") {
+		t.Fatalf("expected missing inference.py error, got: %v", err)
 	}
 }
 

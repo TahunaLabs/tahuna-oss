@@ -7,9 +7,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
-	"strconv"
 	"strings"
+
+	"github.com/BurntSushi/toml"
 )
 
 func resolveEnvironmentID() (string, error) {
@@ -60,6 +60,46 @@ type projectConfig struct {
 	ServeGracefulShutdownSeconds int
 }
 
+type projectConfigDocument struct {
+	Project     *projectConfigProjectSection     `toml:"project,omitempty"`
+	Environment *projectConfigEnvironmentSection `toml:"environment,omitempty"`
+	Train       *projectConfigTrainSection       `toml:"train,omitempty"`
+	Serve       *projectConfigServeSection       `toml:"serve,omitempty"`
+}
+
+type projectConfigProjectSection struct {
+	DataDir   *string `toml:"data_dir,omitempty"`
+	OutputDir *string `toml:"output_dir,omitempty"`
+}
+
+type projectConfigEnvironmentSection struct {
+	Framework        *string `toml:"framework,omitempty"`
+	FrameworkVersion *string `toml:"version,omitempty"`
+	PythonVersion    *string `toml:"python_version,omitempty"`
+	GPUType          *string `toml:"gpu_type,omitempty"`
+	GPUCount         *int    `toml:"gpu_count,omitempty"`
+	VolumeGB         *int    `toml:"volume_gb,omitempty"`
+}
+
+type projectConfigTrainSection struct {
+	OutputModelPath *string `toml:"output_model_path,omitempty"`
+}
+
+type projectConfigServeSection struct {
+	PythonVersion           *string `toml:"python_version,omitempty"`
+	GPUType                 *string `toml:"gpu_type,omitempty"`
+	GPUCount                *int    `toml:"gpu_count,omitempty"`
+	VolumeGB                *int    `toml:"volume_gb,omitempty"`
+	Port                    *int    `toml:"port,omitempty"`
+	HealthPath              *string `toml:"health_path,omitempty"`
+	DefaultModelPath        *string `toml:"default_model_path,omitempty"`
+	StartupTimeoutSeconds   *int    `toml:"startup_timeout_seconds,omitempty"`
+	HealthIntervalSeconds   *int    `toml:"health_interval_seconds,omitempty"`
+	HealthTimeoutSeconds    *int    `toml:"health_timeout_seconds,omitempty"`
+	HealthFailureThreshold  *int    `toml:"health_failure_threshold,omitempty"`
+	GracefulShutdownSeconds *int    `toml:"graceful_shutdown_seconds,omitempty"`
+}
+
 type projectConfigKeySpec struct {
 	section string
 	name    string
@@ -76,10 +116,16 @@ var requiredProjectConfigKeys = []projectConfigKeySpec{
 	{section: "environment", name: "volume_gb"},
 }
 
-var tomlPositiveIntPattern = regexp.MustCompile(`^\d+$`)
-
 func (spec projectConfigKeySpec) fullKey() string {
 	return spec.section + "." + spec.name
+}
+
+func stringPtr(value string) *string {
+	return &value
+}
+
+func intPtr(value int) *int {
+	return &value
 }
 
 func normalizeProjectPath(value string) string {
@@ -96,6 +142,17 @@ func defaultTrainOutputModelPath(outputDir string) string {
 		resolvedOutputDir = "outputs"
 	}
 	return normalizeProjectPath(filepath.Join(filepath.FromSlash(resolvedOutputDir), "model"))
+}
+
+func validateProjectRootRelativePath(field, value string) error {
+	cleaned := strings.TrimSpace(value)
+	if cleaned == "" {
+		return fmt.Errorf("%s is required", field)
+	}
+	if !isRelativeProjectPath(cleaned) {
+		return fmt.Errorf("%s must be a workspace-relative path inside the project root: %q", field, cleaned)
+	}
+	return nil
 }
 
 func defaultProjectConfig() projectConfig {
@@ -152,6 +209,12 @@ func collectProjectInitConfig() (projectConfig, string, error) {
 	}
 	cfg.DataDir = normalizeProjectPath(cfg.DataDir)
 	cfg.OutputDir = normalizeProjectPath(cfg.OutputDir)
+	if err := validateProjectRootRelativePath("project.data_dir", cfg.DataDir); err != nil {
+		return cfg, "", err
+	}
+	if err := validateProjectRootRelativePath("project.output_dir", cfg.OutputDir); err != nil {
+		return cfg, "", err
+	}
 	cfg.TrainOutputModelPath = defaultTrainOutputModelPath(cfg.OutputDir)
 	cfg.ServeDefaultModelPath = cfg.TrainOutputModelPath
 
@@ -315,21 +378,32 @@ func saveProjectConfig(cfg projectConfig) error {
 			return err
 		}
 	}
-	return os.WriteFile(path, []byte(renderProjectConfig(cfg)), 0o600)
+	rendered, err := renderProjectConfig(cfg)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, []byte(rendered), 0o600)
+}
+
+func readProjectConfigFile(path string) (projectConfig, projectConfigDocument, error) {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return projectConfig{}, projectConfigDocument{}, err
+	}
+	parsed, doc, err := parseProjectConfigTOML(string(raw))
+	if err != nil {
+		return projectConfig{}, projectConfigDocument{}, fmt.Errorf("failed to parse %s: %w", path, err)
+	}
+	return parsed, doc, nil
 }
 
 func loadPersistedProjectConfig() (projectConfig, error) {
-	raw, err := os.ReadFile(projectConfigFilePath())
+	parsed, _, err := readProjectConfigFile(projectConfigFilePath())
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return projectConfig{}, nil
 		}
 		return projectConfig{}, err
-	}
-
-	parsed, _, err := parseProjectConfigTOML(string(raw))
-	if err != nil {
-		return projectConfig{}, fmt.Errorf("failed to parse %s: %w", projectConfigFilePath(), err)
 	}
 	return parsed, nil
 }
@@ -337,7 +411,7 @@ func loadPersistedProjectConfig() (projectConfig, error) {
 func loadProjectConfig() (projectConfig, error) {
 	cfg := defaultProjectConfig()
 
-	raw, err := os.ReadFile(projectConfigFilePath())
+	parsed, _, err := readProjectConfigFile(projectConfigFilePath())
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return cfg, nil
@@ -345,30 +419,22 @@ func loadProjectConfig() (projectConfig, error) {
 		return cfg, err
 	}
 
-	parsed, _, err := parseProjectConfigTOML(string(raw))
-	if err != nil {
-		return cfg, fmt.Errorf("failed to parse %s: %w", projectConfigFilePath(), err)
-	}
-
 	return applyProjectConfigDefaults(parsed), nil
 }
 
 func validateProjectConfigBindings(environmentID string) (projectConfig, error) {
-	cfg, err := loadProjectConfig()
-	if err != nil {
-		return cfg, err
-	}
 	path := projectConfigFilePath()
-	values, err := loadRawProjectConfigValues(path)
+	parsed, doc, err := readProjectConfigFile(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return cfg, fmt.Errorf("missing %s; run `tahuna init .` to restore project bindings", path)
+			return projectConfig{}, fmt.Errorf("missing %s; run `tahuna init .` to restore project bindings", path)
 		}
-		return cfg, err
+		return projectConfig{}, err
 	}
-	if err := validateRequiredProjectConfigValues(path, values); err != nil {
-		return cfg, err
+	if err := validateRequiredProjectConfigValues(path, doc); err != nil {
+		return parsed, err
 	}
+	cfg := applyProjectConfigDefaults(parsed)
 	if err := validateProjectConfigRuntimeValues(path, cfg); err != nil {
 		return cfg, err
 	}
@@ -379,6 +445,9 @@ func validateProjectConfigBindings(environmentID string) (projectConfig, error) 
 		return cfg, err
 	}
 	if err := validateCanonicalProjectFile("train.py"); err != nil {
+		return cfg, err
+	}
+	if err := validateCanonicalProjectFile("inference.py"); err != nil {
 		return cfg, err
 	}
 	if err := validateCanonicalProjectFile("pyproject.toml"); err != nil {
@@ -504,18 +573,6 @@ func validateProjectConfigBindings(environmentID string) (projectConfig, error) 
 	return resolved, nil
 }
 
-func loadRawProjectConfigValues(path string) (map[string]string, error) {
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		return nil, err
-	}
-	_, values, err := parseProjectConfigTOML(string(raw))
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse %s: %w", path, err)
-	}
-	return values, nil
-}
-
 func mergeProjectConfig(base, next projectConfig) projectConfig {
 	if value := strings.TrimSpace(next.DataDir); value != "" {
 		base.DataDir = normalizeProjectPath(value)
@@ -616,293 +673,45 @@ func hasServeSection(cfg projectConfig) bool {
 		cfg.ServeGracefulShutdownSeconds > 0
 }
 
-func escapeProjectConfigValue(value string) string {
-	replacer := strings.NewReplacer(
-		"\\", "\\\\",
-		"\"", "\\\"",
-		"\n", "\\n",
-		"\r", "\\r",
-		"\t", "\\t",
-	)
-	return replacer.Replace(value)
+func renderProjectConfig(cfg projectConfig) (string, error) {
+	doc := projectConfigDocumentFromConfig(cfg)
+	body, err := toml.Marshal(doc)
+	if err != nil {
+		return "", fmt.Errorf("failed to render %s: %w", projectConfigFilePath(), err)
+	}
+	rendered := "# Generated from local Tahuna project state.\n" + string(body)
+	if !strings.HasSuffix(rendered, "\n") {
+		rendered += "\n"
+	}
+	return rendered, nil
 }
 
-func renderProjectConfig(cfg projectConfig) string {
-	lines := []string{"# Generated from local Tahuna project state."}
-	if hasProjectSection(cfg) {
-		lines = append(lines, "[project]")
-		if value := strings.TrimSpace(cfg.DataDir); value != "" {
-			lines = append(lines, fmt.Sprintf("data_dir = \"%s\"", escapeProjectConfigValue(value)))
-		}
-		if value := strings.TrimSpace(cfg.OutputDir); value != "" {
-			lines = append(lines, fmt.Sprintf("output_dir = \"%s\"", escapeProjectConfigValue(value)))
-		}
+func parseProjectConfigTOML(text string) (projectConfig, projectConfigDocument, error) {
+	var doc projectConfigDocument
+	meta, err := toml.Decode(text, &doc)
+	if err != nil {
+		return projectConfig{}, projectConfigDocument{}, err
 	}
-	if hasEnvironmentSection(cfg) {
-		if len(lines) > 1 {
-			lines = append(lines, "")
-		}
-		lines = append(lines, "[environment]")
-		if value := strings.TrimSpace(cfg.Framework); value != "" {
-			lines = append(lines, fmt.Sprintf("framework = \"%s\"", escapeProjectConfigValue(value)))
-		}
-		if value := strings.TrimSpace(cfg.FrameworkVersion); value != "" {
-			lines = append(lines, fmt.Sprintf("version = \"%s\"", escapeProjectConfigValue(value)))
-		}
-		if value := strings.TrimSpace(cfg.PythonVersion); value != "" {
-			lines = append(lines, fmt.Sprintf("python_version = \"%s\"", escapeProjectConfigValue(value)))
-		}
-		if value := strings.TrimSpace(cfg.GPUType); value != "" {
-			lines = append(lines, fmt.Sprintf("gpu_type = \"%s\"", escapeProjectConfigValue(value)))
-		}
-		if cfg.GPUCount > 0 {
-			lines = append(lines, fmt.Sprintf("gpu_count = %d", cfg.GPUCount))
-		}
-		if cfg.VolumeGB > 0 {
-			lines = append(lines, fmt.Sprintf("volume_gb = %d", cfg.VolumeGB))
-		}
+	if undecoded := meta.Undecoded(); len(undecoded) > 0 {
+		return projectConfig{}, projectConfigDocument{}, fmt.Errorf("unsupported key in %s: %s", projectConfigFilePath(), formatUndecodedTomlKeys(undecoded))
 	}
-	if hasTrainSection(cfg) {
-		if len(lines) > 1 {
-			lines = append(lines, "")
-		}
-		lines = append(lines, "[train]")
-		if value := strings.TrimSpace(cfg.TrainOutputModelPath); value != "" {
-			lines = append(lines, fmt.Sprintf("output_model_path = \"%s\"", escapeProjectConfigValue(value)))
-		}
+	if err := validateProjectConfigDocument(doc); err != nil {
+		return projectConfig{}, projectConfigDocument{}, err
 	}
-	if hasServeSection(cfg) {
-		if len(lines) > 1 {
-			lines = append(lines, "")
-		}
-		lines = append(lines, "[serve]")
-		if value := strings.TrimSpace(cfg.ServePythonVersion); value != "" && value != strings.TrimSpace(cfg.PythonVersion) {
-			lines = append(lines, fmt.Sprintf("python_version = \"%s\"", escapeProjectConfigValue(value)))
-		}
-		if value := strings.TrimSpace(cfg.ServeGPUType); value != "" {
-			lines = append(lines, fmt.Sprintf("gpu_type = \"%s\"", escapeProjectConfigValue(value)))
-		}
-		if cfg.ServeGPUCount > 0 {
-			lines = append(lines, fmt.Sprintf("gpu_count = %d", cfg.ServeGPUCount))
-		}
-		if cfg.ServeVolumeGB > 0 {
-			lines = append(lines, fmt.Sprintf("volume_gb = %d", cfg.ServeVolumeGB))
-		}
-		if cfg.ServePort > 0 && cfg.ServePort != defaultProjectConfig().ServePort {
-			lines = append(lines, fmt.Sprintf("port = %d", cfg.ServePort))
-		}
-		if value := strings.TrimSpace(cfg.ServeHealthPath); value != "" && value != defaultProjectConfig().ServeHealthPath {
-			lines = append(lines, fmt.Sprintf("health_path = \"%s\"", escapeProjectConfigValue(value)))
-		}
-		if value := strings.TrimSpace(cfg.ServeDefaultModelPath); value != "" && value != defaultProjectConfig().ServeDefaultModelPath {
-			lines = append(lines, fmt.Sprintf("default_model_path = \"%s\"", escapeProjectConfigValue(value)))
-		}
-		if cfg.ServeStartupTimeoutSeconds > 0 && cfg.ServeStartupTimeoutSeconds != defaultProjectConfig().ServeStartupTimeoutSeconds {
-			lines = append(lines, fmt.Sprintf("startup_timeout_seconds = %d", cfg.ServeStartupTimeoutSeconds))
-		}
-		if cfg.ServeHealthIntervalSeconds > 0 && cfg.ServeHealthIntervalSeconds != defaultProjectConfig().ServeHealthIntervalSeconds {
-			lines = append(lines, fmt.Sprintf("health_interval_seconds = %d", cfg.ServeHealthIntervalSeconds))
-		}
-		if cfg.ServeHealthTimeoutSeconds > 0 && cfg.ServeHealthTimeoutSeconds != defaultProjectConfig().ServeHealthTimeoutSeconds {
-			lines = append(lines, fmt.Sprintf("health_timeout_seconds = %d", cfg.ServeHealthTimeoutSeconds))
-		}
-		if cfg.ServeHealthFailureThreshold > 0 && cfg.ServeHealthFailureThreshold != defaultProjectConfig().ServeHealthFailureThreshold {
-			lines = append(lines, fmt.Sprintf("health_failure_threshold = %d", cfg.ServeHealthFailureThreshold))
-		}
-		if cfg.ServeGracefulShutdownSeconds > 0 && cfg.ServeGracefulShutdownSeconds != defaultProjectConfig().ServeGracefulShutdownSeconds {
-			lines = append(lines, fmt.Sprintf("graceful_shutdown_seconds = %d", cfg.ServeGracefulShutdownSeconds))
-		}
-	}
-	return strings.Join(lines, "\n") + "\n"
+	return projectConfigFromDocument(doc), doc, nil
 }
 
-func parseTomlStringValue(raw string, lineNumber int) (string, error) {
-	if len(raw) < 2 {
-		return "", fmt.Errorf("line %d: expected quoted string value", lineNumber)
-	}
-	quote := raw[0]
-	if (quote != '"' && quote != '\'') || raw[len(raw)-1] != quote {
-		return "", fmt.Errorf("line %d: expected quoted string value", lineNumber)
-	}
-	inner := raw[1 : len(raw)-1]
-	if quote == '\'' {
-		return inner, nil
-	}
-	return strings.NewReplacer(
-		`\\`, `\`,
-		`\"`, `"`,
-		`\n`, "\n",
-		`\r`, "\r",
-		`\t`, "\t",
-	).Replace(inner), nil
-}
-
-func parseTomlPositiveIntValue(raw string, lineNumber int) (int, error) {
-	if !tomlPositiveIntPattern.MatchString(raw) {
-		return 0, fmt.Errorf("line %d: expected a positive integer", lineNumber)
-	}
-	value, err := strconv.Atoi(raw)
-	if err != nil || value < 1 {
-		return 0, fmt.Errorf("line %d: expected a positive integer", lineNumber)
-	}
-	return value, nil
-}
-
-func parseProjectConfigTOML(text string) (projectConfig, map[string]string, error) {
-	cfg := projectConfig{}
-	values := map[string]string{}
-	seen := map[string]struct{}{}
-	section := ""
-
-	for index, rawLine := range strings.Split(text, "\n") {
-		lineNumber := index + 1
-		line := strings.TrimSpace(rawLine)
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
-			section = strings.TrimSpace(line[1 : len(line)-1])
-			if section != "project" && section != "environment" && section != "train" && section != "serve" {
-				return cfg, nil, fmt.Errorf("line %d: unsupported section [%s]", lineNumber, section)
-			}
-			continue
-		}
-		if section == "" {
-			return cfg, nil, fmt.Errorf("line %d: expected [project], [environment], [train], or [serve] section before config values", lineNumber)
-		}
-
-		separator := strings.Index(line, "=")
-		if separator < 0 {
-			return cfg, nil, fmt.Errorf("line %d: expected key = value", lineNumber)
-		}
-		key := strings.TrimSpace(line[:separator])
-		rawValue := strings.TrimSpace(line[separator+1:])
-		fullKey := section + "." + key
-		if _, exists := seen[fullKey]; exists {
-			return cfg, nil, fmt.Errorf("line %d: duplicate key %s", lineNumber, fullKey)
-		}
-		seen[fullKey] = struct{}{}
-
-		switch section {
-		case "project":
-			value, err := parseTomlStringValue(rawValue, lineNumber)
-			if err != nil {
-				return cfg, nil, err
-			}
-			switch key {
-			case "data_dir":
-				cfg.DataDir = normalizeProjectPath(value)
-			case "output_dir":
-				cfg.OutputDir = normalizeProjectPath(value)
-			default:
-				return cfg, nil, fmt.Errorf("line %d: unsupported key %s in [project]", lineNumber, key)
-			}
-			values[fullKey] = strings.TrimSpace(value)
-		case "environment":
-			switch key {
-			case "framework", "version", "python_version", "gpu_type":
-				value, err := parseTomlStringValue(rawValue, lineNumber)
-				if err != nil {
-					return cfg, nil, err
-				}
-				values[fullKey] = strings.TrimSpace(value)
-				switch key {
-				case "framework":
-					cfg.Framework = value
-				case "version":
-					cfg.FrameworkVersion = value
-				case "python_version":
-					cfg.PythonVersion = value
-				case "gpu_type":
-					cfg.GPUType = value
-				}
-			case "gpu_count", "volume_gb":
-				value, err := parseTomlPositiveIntValue(rawValue, lineNumber)
-				if err != nil {
-					return cfg, nil, err
-				}
-				values[fullKey] = strconv.Itoa(value)
-				if key == "gpu_count" {
-					cfg.GPUCount = value
-				} else {
-					cfg.VolumeGB = value
-				}
-			default:
-				return cfg, nil, fmt.Errorf("line %d: unsupported key %s in [environment]", lineNumber, key)
-			}
-		case "train":
-			value, err := parseTomlStringValue(rawValue, lineNumber)
-			if err != nil {
-				return cfg, nil, err
-			}
-			if key != "output_model_path" {
-				return cfg, nil, fmt.Errorf("line %d: unsupported key %s in [train]", lineNumber, key)
-			}
-			cfg.TrainOutputModelPath = normalizeProjectPath(value)
-			values[fullKey] = strings.TrimSpace(value)
-		case "serve":
-			switch key {
-			case "python_version", "gpu_type", "health_path", "default_model_path":
-				value, err := parseTomlStringValue(rawValue, lineNumber)
-				if err != nil {
-					return cfg, nil, err
-				}
-				values[fullKey] = strings.TrimSpace(value)
-				switch key {
-				case "python_version":
-					cfg.ServePythonVersion = value
-				case "gpu_type":
-					cfg.ServeGPUType = value
-				case "health_path":
-					cfg.ServeHealthPath = value
-				case "default_model_path":
-					cfg.ServeDefaultModelPath = normalizeProjectPath(value)
-				}
-			case "gpu_count", "volume_gb", "port", "startup_timeout_seconds", "health_interval_seconds", "health_timeout_seconds", "health_failure_threshold", "graceful_shutdown_seconds":
-				value, err := parseTomlPositiveIntValue(rawValue, lineNumber)
-				if err != nil {
-					return cfg, nil, err
-				}
-				values[fullKey] = strconv.Itoa(value)
-				switch key {
-				case "gpu_count":
-					cfg.ServeGPUCount = value
-				case "volume_gb":
-					cfg.ServeVolumeGB = value
-				case "port":
-					cfg.ServePort = value
-				case "startup_timeout_seconds":
-					cfg.ServeStartupTimeoutSeconds = value
-				case "health_interval_seconds":
-					cfg.ServeHealthIntervalSeconds = value
-				case "health_timeout_seconds":
-					cfg.ServeHealthTimeoutSeconds = value
-				case "health_failure_threshold":
-					cfg.ServeHealthFailureThreshold = value
-				case "graceful_shutdown_seconds":
-					cfg.ServeGracefulShutdownSeconds = value
-				}
-			default:
-				return cfg, nil, fmt.Errorf("line %d: unsupported key %s in [serve]", lineNumber, key)
-			}
-		}
-	}
-
-	return cfg, values, nil
-}
-
-func validateRequiredProjectConfigValues(path string, values map[string]string) error {
+func validateRequiredProjectConfigValues(path string, doc projectConfigDocument) error {
 	missing := make([]string, 0, len(requiredProjectConfigKeys))
 	empty := make([]string, 0, len(requiredProjectConfigKeys))
 	for _, field := range requiredProjectConfigKeys {
-		fullKey := field.fullKey()
-		value, ok := values[fullKey]
+		value, ok := lookupProjectConfigValue(doc, field)
 		if !ok {
-			missing = append(missing, fullKey)
+			missing = append(missing, field.fullKey())
 			continue
 		}
 		if strings.TrimSpace(value) == "" {
-			empty = append(empty, fullKey)
+			empty = append(empty, field.fullKey())
 		}
 	}
 	if len(missing) > 0 {
@@ -912,6 +721,252 @@ func validateRequiredProjectConfigValues(path string, values map[string]string) 
 		return fmt.Errorf("%s has empty required binding values: %s; run `tahuna init .` to restore project bindings", path, strings.Join(empty, ", "))
 	}
 	return nil
+}
+
+func projectConfigFromDocument(doc projectConfigDocument) projectConfig {
+	cfg := projectConfig{}
+	if doc.Project != nil {
+		if doc.Project.DataDir != nil {
+			cfg.DataDir = normalizeProjectPath(*doc.Project.DataDir)
+		}
+		if doc.Project.OutputDir != nil {
+			cfg.OutputDir = normalizeProjectPath(*doc.Project.OutputDir)
+		}
+	}
+	if doc.Environment != nil {
+		if doc.Environment.Framework != nil {
+			cfg.Framework = *doc.Environment.Framework
+		}
+		if doc.Environment.FrameworkVersion != nil {
+			cfg.FrameworkVersion = *doc.Environment.FrameworkVersion
+		}
+		if doc.Environment.PythonVersion != nil {
+			cfg.PythonVersion = *doc.Environment.PythonVersion
+		}
+		if doc.Environment.GPUType != nil {
+			cfg.GPUType = *doc.Environment.GPUType
+		}
+		if doc.Environment.GPUCount != nil {
+			cfg.GPUCount = *doc.Environment.GPUCount
+		}
+		if doc.Environment.VolumeGB != nil {
+			cfg.VolumeGB = *doc.Environment.VolumeGB
+		}
+	}
+	if doc.Train != nil && doc.Train.OutputModelPath != nil {
+		cfg.TrainOutputModelPath = normalizeProjectPath(*doc.Train.OutputModelPath)
+	}
+	if doc.Serve != nil {
+		if doc.Serve.PythonVersion != nil {
+			cfg.ServePythonVersion = *doc.Serve.PythonVersion
+		}
+		if doc.Serve.GPUType != nil {
+			cfg.ServeGPUType = *doc.Serve.GPUType
+		}
+		if doc.Serve.GPUCount != nil {
+			cfg.ServeGPUCount = *doc.Serve.GPUCount
+		}
+		if doc.Serve.VolumeGB != nil {
+			cfg.ServeVolumeGB = *doc.Serve.VolumeGB
+		}
+		if doc.Serve.Port != nil {
+			cfg.ServePort = *doc.Serve.Port
+		}
+		if doc.Serve.HealthPath != nil {
+			cfg.ServeHealthPath = *doc.Serve.HealthPath
+		}
+		if doc.Serve.DefaultModelPath != nil {
+			cfg.ServeDefaultModelPath = normalizeProjectPath(*doc.Serve.DefaultModelPath)
+		}
+		if doc.Serve.StartupTimeoutSeconds != nil {
+			cfg.ServeStartupTimeoutSeconds = *doc.Serve.StartupTimeoutSeconds
+		}
+		if doc.Serve.HealthIntervalSeconds != nil {
+			cfg.ServeHealthIntervalSeconds = *doc.Serve.HealthIntervalSeconds
+		}
+		if doc.Serve.HealthTimeoutSeconds != nil {
+			cfg.ServeHealthTimeoutSeconds = *doc.Serve.HealthTimeoutSeconds
+		}
+		if doc.Serve.HealthFailureThreshold != nil {
+			cfg.ServeHealthFailureThreshold = *doc.Serve.HealthFailureThreshold
+		}
+		if doc.Serve.GracefulShutdownSeconds != nil {
+			cfg.ServeGracefulShutdownSeconds = *doc.Serve.GracefulShutdownSeconds
+		}
+	}
+	return cfg
+}
+
+func projectConfigDocumentFromConfig(cfg projectConfig) projectConfigDocument {
+	defaults := defaultProjectConfig()
+	doc := projectConfigDocument{}
+	if hasProjectSection(cfg) {
+		doc.Project = &projectConfigProjectSection{}
+		if value := strings.TrimSpace(cfg.DataDir); value != "" {
+			doc.Project.DataDir = stringPtr(value)
+		}
+		if value := strings.TrimSpace(cfg.OutputDir); value != "" {
+			doc.Project.OutputDir = stringPtr(value)
+		}
+	}
+	if hasEnvironmentSection(cfg) {
+		doc.Environment = &projectConfigEnvironmentSection{}
+		if value := strings.TrimSpace(cfg.Framework); value != "" {
+			doc.Environment.Framework = stringPtr(value)
+		}
+		if value := strings.TrimSpace(cfg.FrameworkVersion); value != "" {
+			doc.Environment.FrameworkVersion = stringPtr(value)
+		}
+		if value := strings.TrimSpace(cfg.PythonVersion); value != "" {
+			doc.Environment.PythonVersion = stringPtr(value)
+		}
+		if value := strings.TrimSpace(cfg.GPUType); value != "" {
+			doc.Environment.GPUType = stringPtr(value)
+		}
+		if cfg.GPUCount > 0 {
+			doc.Environment.GPUCount = intPtr(cfg.GPUCount)
+		}
+		if cfg.VolumeGB > 0 {
+			doc.Environment.VolumeGB = intPtr(cfg.VolumeGB)
+		}
+	}
+	if hasTrainSection(cfg) {
+		doc.Train = &projectConfigTrainSection{}
+		if value := strings.TrimSpace(cfg.TrainOutputModelPath); value != "" {
+			doc.Train.OutputModelPath = stringPtr(value)
+		}
+	}
+	if hasServeSection(cfg) {
+		doc.Serve = &projectConfigServeSection{}
+		if value := strings.TrimSpace(cfg.ServePythonVersion); value != "" && value != strings.TrimSpace(cfg.PythonVersion) {
+			doc.Serve.PythonVersion = stringPtr(value)
+		}
+		if value := strings.TrimSpace(cfg.ServeGPUType); value != "" {
+			doc.Serve.GPUType = stringPtr(value)
+		}
+		if cfg.ServeGPUCount > 0 {
+			doc.Serve.GPUCount = intPtr(cfg.ServeGPUCount)
+		}
+		if cfg.ServeVolumeGB > 0 {
+			doc.Serve.VolumeGB = intPtr(cfg.ServeVolumeGB)
+		}
+		if cfg.ServePort > 0 && cfg.ServePort != defaults.ServePort {
+			doc.Serve.Port = intPtr(cfg.ServePort)
+		}
+		if value := strings.TrimSpace(cfg.ServeHealthPath); value != "" && value != defaults.ServeHealthPath {
+			doc.Serve.HealthPath = stringPtr(value)
+		}
+		if value := strings.TrimSpace(cfg.ServeDefaultModelPath); value != "" && value != defaults.ServeDefaultModelPath {
+			doc.Serve.DefaultModelPath = stringPtr(value)
+		}
+		if cfg.ServeStartupTimeoutSeconds > 0 && cfg.ServeStartupTimeoutSeconds != defaults.ServeStartupTimeoutSeconds {
+			doc.Serve.StartupTimeoutSeconds = intPtr(cfg.ServeStartupTimeoutSeconds)
+		}
+		if cfg.ServeHealthIntervalSeconds > 0 && cfg.ServeHealthIntervalSeconds != defaults.ServeHealthIntervalSeconds {
+			doc.Serve.HealthIntervalSeconds = intPtr(cfg.ServeHealthIntervalSeconds)
+		}
+		if cfg.ServeHealthTimeoutSeconds > 0 && cfg.ServeHealthTimeoutSeconds != defaults.ServeHealthTimeoutSeconds {
+			doc.Serve.HealthTimeoutSeconds = intPtr(cfg.ServeHealthTimeoutSeconds)
+		}
+		if cfg.ServeHealthFailureThreshold > 0 && cfg.ServeHealthFailureThreshold != defaults.ServeHealthFailureThreshold {
+			doc.Serve.HealthFailureThreshold = intPtr(cfg.ServeHealthFailureThreshold)
+		}
+		if cfg.ServeGracefulShutdownSeconds > 0 && cfg.ServeGracefulShutdownSeconds != defaults.ServeGracefulShutdownSeconds {
+			doc.Serve.GracefulShutdownSeconds = intPtr(cfg.ServeGracefulShutdownSeconds)
+		}
+	}
+	return doc
+}
+
+func validateProjectConfigDocument(doc projectConfigDocument) error {
+	if doc.Environment != nil {
+		if err := validateConfiguredPositiveInt("environment.gpu_count", doc.Environment.GPUCount); err != nil {
+			return err
+		}
+		if err := validateConfiguredPositiveInt("environment.volume_gb", doc.Environment.VolumeGB); err != nil {
+			return err
+		}
+	}
+	if doc.Serve != nil {
+		if err := validateConfiguredPositiveInt("serve.gpu_count", doc.Serve.GPUCount); err != nil {
+			return err
+		}
+		if err := validateConfiguredPositiveInt("serve.volume_gb", doc.Serve.VolumeGB); err != nil {
+			return err
+		}
+		if err := validateConfiguredPositiveInt("serve.port", doc.Serve.Port); err != nil {
+			return err
+		}
+		if err := validateConfiguredPositiveInt("serve.startup_timeout_seconds", doc.Serve.StartupTimeoutSeconds); err != nil {
+			return err
+		}
+		if err := validateConfiguredPositiveInt("serve.health_interval_seconds", doc.Serve.HealthIntervalSeconds); err != nil {
+			return err
+		}
+		if err := validateConfiguredPositiveInt("serve.health_timeout_seconds", doc.Serve.HealthTimeoutSeconds); err != nil {
+			return err
+		}
+		if err := validateConfiguredPositiveInt("serve.health_failure_threshold", doc.Serve.HealthFailureThreshold); err != nil {
+			return err
+		}
+		if err := validateConfiguredPositiveInt("serve.graceful_shutdown_seconds", doc.Serve.GracefulShutdownSeconds); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateConfiguredPositiveInt(field string, value *int) error {
+	if value != nil && *value < 1 {
+		return fmt.Errorf("invalid %s in %s: expected a positive integer", field, projectConfigFilePath())
+	}
+	return nil
+}
+
+func lookupProjectConfigValue(doc projectConfigDocument, spec projectConfigKeySpec) (string, bool) {
+	switch spec.fullKey() {
+	case "project.data_dir":
+		if doc.Project != nil && doc.Project.DataDir != nil {
+			return *doc.Project.DataDir, true
+		}
+	case "project.output_dir":
+		if doc.Project != nil && doc.Project.OutputDir != nil {
+			return *doc.Project.OutputDir, true
+		}
+	case "environment.framework":
+		if doc.Environment != nil && doc.Environment.Framework != nil {
+			return *doc.Environment.Framework, true
+		}
+	case "environment.version":
+		if doc.Environment != nil && doc.Environment.FrameworkVersion != nil {
+			return *doc.Environment.FrameworkVersion, true
+		}
+	case "environment.python_version":
+		if doc.Environment != nil && doc.Environment.PythonVersion != nil {
+			return *doc.Environment.PythonVersion, true
+		}
+	case "environment.gpu_type":
+		if doc.Environment != nil && doc.Environment.GPUType != nil {
+			return *doc.Environment.GPUType, true
+		}
+	case "environment.gpu_count":
+		if doc.Environment != nil && doc.Environment.GPUCount != nil {
+			return fmt.Sprintf("%d", *doc.Environment.GPUCount), true
+		}
+	case "environment.volume_gb":
+		if doc.Environment != nil && doc.Environment.VolumeGB != nil {
+			return fmt.Sprintf("%d", *doc.Environment.VolumeGB), true
+		}
+	}
+	return "", false
+}
+
+func formatUndecodedTomlKeys(keys []toml.Key) string {
+	parts := make([]string, 0, len(keys))
+	for _, key := range keys {
+		parts = append(parts, key.String())
+	}
+	return strings.Join(parts, ", ")
 }
 
 func validateProjectConfigRuntimeValues(path string, cfg projectConfig) error {
@@ -1113,7 +1168,18 @@ func defaultPyProjectTemplate(framework string) string {
 	if framework == "tf" {
 		dependency = "tensorflow"
 	}
-	return fmt.Sprintf("[project]\nname = %q\nversion = \"0.1.0\"\nrequires-python = \">=3.11\"\ndependencies = [\n  %q,\n]\n", filepath.Base(mustGetwd()), dependency)
+	return fmt.Sprintf(`[project]
+name = %q
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = []
+
+[dependency-groups]
+train = [
+  %q,
+]
+serve = []
+`, filepath.Base(mustGetwd()), dependency)
 }
 
 func ensureUVLockFile() error {
@@ -1206,6 +1272,10 @@ func syncLocalProjectConfig(environmentID string) error {
 	if err != nil {
 		return err
 	}
+	if !hasProjectSection(cfg) {
+		return fmt.Errorf("local project config %s is missing [project]; run `tahuna init .` to restore project bindings", projectConfigFilePath())
+	}
+	cfg = applyProjectConfigDefaults(cfg)
 	return saveProjectConfig(mergeProjectConfig(cfg, projectConfigFromEnvironment(env)))
 }
 
