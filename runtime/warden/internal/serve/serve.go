@@ -1,7 +1,6 @@
 package serve
 
 import (
-	"bufio"
 	"context"
 	"errors"
 	"fmt"
@@ -11,7 +10,6 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
 	"warden/internal/pythonenv"
@@ -88,13 +86,8 @@ func RunEntrypoint(ctx context.Context, cfg Config, hooks Hooks) error {
 	})
 	cmd.Env = commandEnv
 
-	stdout, err := cmd.StdoutPipe()
+	supervisor, err := startProcessSupervisor(cmd)
 	if err != nil {
-		return fmt.Errorf("create stdout pipe: %w", err)
-	}
-	cmd.Stderr = cmd.Stdout
-
-	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("start serve command: %w", err)
 	}
 	if hooks.EmitStatus != nil {
@@ -102,28 +95,12 @@ func RunEntrypoint(ctx context.Context, cfg Config, hooks Hooks) error {
 			Status:  runtimeapi.StatusStarting,
 			Message: "serve process started",
 		}); err != nil {
-			stopProcess(cmd)
-			return fmt.Errorf("emit starting status: %w", err)
+			return joinServeError(
+				fmt.Errorf("emit starting status: %w", err),
+				stopServeProcess(supervisor, gracefulShutdownTimeout, hooks),
+			)
 		}
 	}
-
-	lineCh := make(chan string, 128)
-	scanErrCh := make(chan error, 1)
-	go func() {
-		scanner := bufio.NewScanner(stdout)
-		buf := make([]byte, 0, 64*1024)
-		scanner.Buffer(buf, 4*1024*1024)
-		for scanner.Scan() {
-			lineCh <- scanner.Text()
-		}
-		scanErrCh <- scanner.Err()
-		close(lineCh)
-	}()
-
-	waitCh := make(chan error, 1)
-	go func() {
-		waitCh <- cmd.Wait()
-	}()
 
 	healthURL := fmt.Sprintf("http://127.0.0.1:%d%s", cfg.Port, healthPath)
 	healthTicker := time.NewTicker(healthInterval)
@@ -132,31 +109,27 @@ func RunEntrypoint(ctx context.Context, cfg Config, hooks Hooks) error {
 	healthy := false
 	consecutiveFailures := 0
 	stopRequested := false
-	forceKillAt := time.Time{}
 	immediateProbeCh := make(chan struct{}, 1)
 	immediateProbeCh <- struct{}{}
 
 	for {
 		select {
-		case line, ok := <-lineCh:
+		case line, ok := <-supervisor.Lines():
 			if !ok {
 				continue
 			}
-			text := strings.TrimRight(line, "\n")
-			if text != "" {
-				emitLog(hooks, "info", "serve", text)
+			if line != "" {
+				emitLog(hooks, "info", "serve", line)
 			}
-		case waitErr := <-waitCh:
-			for buffered := range lineCh {
-				text := strings.TrimRight(buffered, "\n")
-				if text != "" {
-					emitLog(hooks, "info", "serve", text)
+		case <-supervisor.Exited():
+			if drainErr := supervisor.DrainOutput(func(line string) {
+				if line != "" {
+					emitLog(hooks, "info", "serve", line)
 				}
+			}); drainErr != nil {
+				return fmt.Errorf("stream serve output: %w", drainErr)
 			}
-			if scanErr := <-scanErrCh; scanErr != nil && !isBenignStreamReadError(scanErr) {
-				stopProcess(cmd)
-				return fmt.Errorf("stream serve output: %w", scanErr)
-			}
+			waitErr := supervisor.WaitErr()
 			if stopRequested {
 				emitLog(hooks, "info", "serve", "serve stopped")
 				if hooks.EmitStatus != nil {
@@ -183,23 +156,21 @@ func RunEntrypoint(ctx context.Context, cfg Config, hooks Hooks) error {
 			return fmt.Errorf("serve command exited before readiness with status %d", exitErr.ExitCode())
 		case <-immediateProbeCh:
 			if err := probeServeHealth(ctx, healthURL, healthTimeout, startupDeadline, healthFailureThreshold, hooks, &healthy, &consecutiveFailures); err != nil {
-				stopProcess(cmd)
-				return err
+				return joinServeError(err, stopServeProcess(supervisor, gracefulShutdownTimeout, hooks))
 			}
 		case <-healthTicker.C:
 			if stopRequested {
-				if !forceKillAt.IsZero() && time.Now().After(forceKillAt) {
+				killed, err := supervisor.ForceStopIfExpired(time.Now())
+				if err != nil {
+					return fmt.Errorf("force kill serve command: %w", err)
+				}
+				if killed {
 					emitLog(hooks, "warn", "serve", "grace period expired, force killing serve command")
-					if cmd.Process != nil {
-						_ = cmd.Process.Kill()
-					}
-					forceKillAt = time.Time{}
 				}
 				continue
 			}
 			if err := probeServeHealth(ctx, healthURL, healthTimeout, startupDeadline, healthFailureThreshold, hooks, &healthy, &consecutiveFailures); err != nil {
-				stopProcess(cmd)
-				return err
+				return joinServeError(err, stopServeProcess(supervisor, gracefulShutdownTimeout, hooks))
 			}
 		case <-ctx.Done():
 			if stopRequested {
@@ -218,10 +189,9 @@ func RunEntrypoint(ctx context.Context, cfg Config, hooks Hooks) error {
 					Message: "serve stopping",
 				})
 			}
-			if cmd.Process != nil {
-				_ = cmd.Process.Signal(syscall.SIGTERM)
+			if err := supervisor.RequestStop(gracefulShutdownTimeout); err != nil {
+				return fmt.Errorf("stop serve command: %w", err)
 			}
-			forceKillAt = time.Now().Add(gracefulShutdownTimeout)
 		}
 	}
 }
@@ -331,21 +301,23 @@ func emitLog(hooks Hooks, level, source, message string) {
 	}
 }
 
-func stopProcess(cmd *exec.Cmd) {
-	if cmd == nil || cmd.Process == nil {
-		return
+func stopServeProcess(supervisor *processSupervisor, grace time.Duration, hooks Hooks) error {
+	if supervisor == nil {
+		return nil
 	}
-	_ = cmd.Process.Signal(syscall.SIGTERM)
-	_ = cmd.Process.Kill()
+	if err := supervisor.StopAndWait(grace); err != nil {
+		return err
+	}
+	return supervisor.DrainOutput(func(line string) {
+		if line != "" {
+			emitLog(hooks, "info", "serve", line)
+		}
+	})
 }
 
-func isBenignStreamReadError(err error) bool {
-	if err == nil {
-		return false
+func joinServeError(primaryErr, cleanupErr error) error {
+	if cleanupErr == nil {
+		return primaryErr
 	}
-	if errors.Is(err, os.ErrClosed) || errors.Is(err, io.ErrClosedPipe) {
-		return true
-	}
-	normalized := strings.ToLower(err.Error())
-	return strings.Contains(normalized, "file already closed")
+	return errors.Join(primaryErr, fmt.Errorf("stop serve command: %w", cleanupErr))
 }
