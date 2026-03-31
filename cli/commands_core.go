@@ -809,7 +809,10 @@ func environmentUpdate(args []string) {
 	}
 
 	if cmd := strings.TrimSpace(*entrypointCmd); cmd != "" {
-		must(projectConfigSet("entrypoint_command", cmd))
+		cfg, err := loadPersistedProjectConfig()
+		must(err)
+		cfg.EntrypointCommand = normalizeCommandString(cmd)
+		must(saveProjectConfig(cfg))
 		fmt.Printf("%s✓%s entrypoint_command updated in %s\n", cAmpGreen, cReset, projectConfigFilePath())
 	}
 
@@ -1276,56 +1279,3 @@ func mustLoadRunCommand() []string {
 	return cmd
 }
 
-func handleConfig(args []string) {
-	if len(args) == 0 {
-		configUsage()
-		os.Exit(1)
-	}
-	switch args[0] {
-	case "-h", "--help", "help":
-		configUsage()
-	case "set":
-		require(len(args) >= 3, "usage: tahuna config set <key> <value>")
-		must(projectConfigSet(args[1], strings.Join(args[2:], " ")))
-		fmt.Printf("%s✓%s %s updated\n", cAmpGreen, cReset, args[1])
-	case "get":
-		require(len(args) == 2, "usage: tahuna config get <key>")
-		val, err := projectConfigGet(args[1])
-		must(err)
-		fmt.Println(val)
-	case "list":
-		must(projectConfigList())
-	case "unset":
-		require(len(args) == 2, "usage: tahuna config unset <key>")
-		must(projectConfigSet(args[1], ""))
-		fmt.Printf("%s✓%s %s unset\n", cAmpGreen, cReset, args[1])
-	default:
-		fmt.Printf("unknown config subcommand: %s\n", args[0])
-		configUsage()
-		os.Exit(1)
-	}
-}
-
-func configUsage() {
-	fmt.Print(`tahuna config — manage local project configuration (.tahuna/tahuna.toml)
-
-Usage:
-  tahuna config set <key> <value>
-  tahuna config get <key>
-  tahuna config list
-  tahuna config unset <key>
-
-Keys:
-  entrypoint            Train entrypoint script path
-  entrypoint_command    Full launch command (overrides default uv wrapper)
-  data_dir              Local data directory
-  output_dir            Local output directory
-  python_project_file   Python project file (pyproject.toml)
-  uv_lock_file          UV lock file
-
-Examples:
-  tahuna config set entrypoint_command "uv run torchrun --standalone --nproc_per_node=2 train.py"
-  tahuna config get entrypoint_command
-  tahuna config unset entrypoint_command
-`)
-}
