@@ -17,15 +17,19 @@ This section is non-normative. It records rollout status in the current codebase
 - PR2 is in progress, with canonical root config and local-authoritative sync already landed.
   Root `tahuna.toml` support and `[train]` / `[serve]` parsing and validation exist in `cli/project.go`, `tahuna init` scaffolds `train.py`, `inference.py`, `pyproject.toml`, and `uv.lock` in `cli/commands_core.go`, and `tahuna sync` / `tahuna env update` now push resolved environment, train, and serve config from local `tahuna.toml` instead of refreshing that file from the remote environment first.
 - PR3 is done.
-  `runtime/warden/internal/deps` now owns Python dependency installation with explicit `train` and `serve` modes, `runtime/warden/internal/bootstrap` currently installs with `deps.ModeTrain`, and shared virtualenv environment handling lives in `runtime/warden/internal/pythonenv`.
+  `runtime/warden/internal/deps` now owns Python dependency installation with explicit `train` and `serve` modes, `runtime/warden/internal/bootstrap` dispatches separate run and serve orchestration paths, and shared virtualenv environment handling lives in `runtime/warden/internal/pythonenv`.
   The protected-package lockfile check reads `uv.lock` with `github.com/BurntSushi/toml` instead of manual line parsing.
 - PR4 is done.
   The control plane now has canonical `serves`, `serveEvents`, and `serveRuntimeLogs` records, serve lifecycle status transitions, serve runtime log/status ingestion, and `/api/serves` HTTP routes including runtime callback endpoints.
-- PR5 through PR8 are still pending.
+- PR5 is done.
+  Serve creation now requires exactly one model source (`from_run_id` or `from_storage_prefix`), copies model objects into a serve-owned immutable prefix under `serves/<environmentId>/.../model`, writes a pinned snapshot manifest JSON, and persists `objectPrefix`, `manifestKey`, `manifestHash`, `objectCount`, and `totalBytes` on the serve row.
+- PR6 is done.
+  Serve bootstrap now resolves concrete model download entries from the pinned snapshot manifest, `runtime/warden` materializes `/workspace/model`, installs base dependencies plus the `serve` group only, launches the serve command, sets serve runtime env vars, and supervises readiness/liveness with serve status callbacks.
+- PR7 and PR8 are still pending.
 - PR9 is in progress.
   The dashboard already exposes synced serving config, but end-to-end serve workflows, examples, and final documentation are still incomplete.
-- The next implementation step is PR5.
-  The product still lacks immutable serve-time model snapshot resolution and pinned snapshot metadata on the serve record.
+- The next implementation step is PR7.
+  The product still lacks full serve provisioning orchestration and CLI `tahuna serve ...` flows.
 
 ## Scope
 
@@ -440,7 +444,7 @@ Training callback surface remains the run-specific contract and is separate from
 
 The exact payloads may be specified separately, but the serving contract requires:
 
-- bootstrap delivery of the materialization plan and runtime settings
+- bootstrap delivery of the code, optional data, and pinned model materialization plan plus runtime settings
 - status updates for serve lifecycle transitions
 - log streaming or batched log upload from the supervised process
 
@@ -607,10 +611,10 @@ This section is non-normative. It exists to guide implementation sequencing.
 4. PR4: Serve control-plane primitives. Status: done.
    Add serve records, serve events, serve runtime logs, serve status transitions, and serve HTTP routes.
 
-5. PR5: Immutable model snapshots. Status: pending.
+5. PR5: Immutable model snapshots. Status: done.
    Add serve-time model snapshot resolution from runs or storage and pin that snapshot in control-plane state.
 
-6. PR6: Warden serve mode. Status: pending.
+6. PR6: Warden serve mode. Status: done.
    Generalize the runtime bootstrap path to support serving, model materialization, process supervision, readiness polling, liveness polling, and stop semantics.
 
 7. PR7: Serve provisioning backend. Status: pending.

@@ -2,6 +2,10 @@
 
 ## Scope
 
+For Python application serving, this document is historical context only.
+
+The canonical contract is `specs/python-inference-app-contract.md`.
+
 `tahuna serve` provisions long-lived inference compute for a model and keeps a serving process healthy until the user stops it or the process fails.
 
 This spec defines the MVP serving contract for a small Tahuna-managed engine matrix:

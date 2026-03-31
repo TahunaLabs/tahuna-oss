@@ -2,7 +2,9 @@
 
 ## Scope
 
-The pod bootstrap is the sequence that runs inside a Runpod GPU pod from startup to training completion. It materializes code/data, installs dependencies, runs the entrypoint, extracts metrics, uploads artifacts, and reports status back to the Tahuna backend.
+This document describes the run-mode bootstrap path that runs inside a Runpod GPU pod from startup to training completion. It materializes code/data, installs dependencies, runs the entrypoint, extracts metrics, uploads artifacts, and reports status back to the Tahuna backend.
+
+Warden now also has a serve mode. The serving lifecycle, serve runtime callback contract, readiness/liveness behavior, and `/workspace/model` materialization are defined in `specs/python-inference-app-contract.md`.
 
 ## Elements
 
@@ -31,7 +33,7 @@ The pod bootstrap is the sequence that runs inside a Runpod GPU pod from startup
   uv.lock               # locked dependency graph (from code manifest)
   ...                   # other code files
   data/                 # extracted data directory
-  outputs/              # training outputs (user writes here)
+  outputs/              # training outputs (or configured project output dir)
 ```
 
 ## Lifecycle
@@ -42,22 +44,23 @@ The pod bootstrap is the sequence that runs inside a Runpod GPU pod from startup
 POD STARTS
     |
     v
-1. FETCH BOOTSTRAP PLAN
+1. REPORT STATUS: provisioning
+   POST /api/runs/{RUN_ID}/runtime/status
+   Body: { status: "provisioning", message: "warden bootstrap started" }
+    |
+    v
+2. FETCH BOOTSTRAP PLAN
    GET /api/runs/{RUN_ID}/runtime/bootstrap
    Headers: Authorization: Bearer {RUNTIME_TOKEN}
    Response: {
-     code: { entries: [...], download_urls: {...} },
-     data: { entries: [...], download_urls: {...} },
+     code: { entries: [...] },
+     data: { entries: [...] },
      command: [...],   # pinned at run creation from environment.command — never empty
      output_dir: "..." # pinned at run creation from environment.outputDir
    }
+   - each bootstrap entry already carries a signed download URL
    - command is always provided by the backend. Warden has no default and will fail
      if command is empty — this indicates a provisioning bug, not a warden concern.
-    |
-    v
-2. REPORT STATUS: provisioning -> running
-   POST /api/runs/{RUN_ID}/runtime/status
-   Body: { status: "running" }
     |
     v
 3. MATERIALIZE CODE
@@ -79,8 +82,10 @@ POD STARTS
     v
 5. INSTALL DEPENDENCIES
    - Use uv as the default runtime package manager.
-   - If `uv.lock` exists: `uv sync --frozen --no-dev`
-   - If `uv.lock` missing but `pyproject.toml` exists: `uv sync --no-dev`
+   - Training runtime installs the base dependency set plus the fixed `train` group.
+   - If `uv.lock` exists: `uv sync --frozen --no-dev --inexact --group train`
+   - If `uv.lock` missing but `pyproject.toml` exists: `uv sync --no-dev --inexact --group train`
+   - If Warden is running inside a prebaked virtualenv, include `--active`.
    - If `pyproject.toml` missing: report FAILED (bootstrap contract violation)
    - Stream install output to:
      POST /api/runs/{RUN_ID}/runtime/logs
@@ -88,7 +93,12 @@ POD STARTS
    - On install failure: report FAILED status and exit
     |
     v
-6. RUN ENTRYPOINT
+6. REPORT STATUS: running
+   POST /api/runs/{RUN_ID}/runtime/status
+   Body: { status: "running", message: "workspace materialized" }
+    |
+    v
+7. RUN ENTRYPOINT
    - Use the pinned bootstrap `command`
    - Execute with subprocess, capture stdout + stderr
    - Stream output to backend as logs:
@@ -96,7 +106,7 @@ POD STARTS
      Body: { level: "info"/"error", source: "training", message: "..." }
     |
     v
-7. EXTRACT METRICS (concurrent with step 6)
+8. EXTRACT METRICS (concurrent with step 7)
    Two modes, tried in order:
    a. Tahuna tracking SDK (future):
       - Training code calls tahuna_track.log({"loss": 0.42})
@@ -107,7 +117,7 @@ POD STARTS
         Body: { name: "loss", value: 0.42, step: N, timestamp: "..." }
     |
     v
-8. PERIODIC OUTPUT SYNC (future)
+9. PERIODIC OUTPUT SYNC (future)
    - Every configured interval (`RUN_OUTPUT_SYNC_INTERVAL_SECONDS`):
      a. Walk /workspace/outputs/
      b. Upload new/changed files to R2
@@ -115,9 +125,9 @@ POD STARTS
    - If this sync stops (pod crash), backend detects and terminates pod
     |
     v
-9. ENTRYPOINT EXITS
+10. ENTRYPOINT EXITS
    |
-   +-- exit 0 -----> UPLOAD ARTIFACTS (step 10)
+   +-- exit 0 -----> UPLOAD ARTIFACTS (step 11)
    |
    +-- exit != 0 --> REPORT FAILED
                      POST /api/runs/{RUN_ID}/runtime/status
@@ -125,7 +135,7 @@ POD STARTS
                      TERMINATE
     |
     v
-10. UPLOAD ARTIFACTS
+11. UPLOAD ARTIFACTS
     Walk /workspace/outputs/:
     For each file:
       a. POST /api/runs/{RUN_ID}/runtime/artifacts/upload-url
@@ -137,7 +147,7 @@ POD STARTS
     Note: upload failures emit warnings but do NOT change run status.
     |
     v
-11. REPORT COMPLETED
+12. REPORT COMPLETED
     POST /api/runs/{RUN_ID}/runtime/status
     Body: { status: "completed" }
     |

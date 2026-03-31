@@ -1,6 +1,6 @@
 # R2 Storage Structure and IO Flows (Current)
 
-Audit date: 2026-03-18
+Audit date: 2026-04-01
 
 This document describes how Tahuna currently structures Cloudflare R2 object keys and how storage read/write paths work after the storage index refactor.
 
@@ -29,6 +29,8 @@ Tahuna now uses a canonical Convex index table (`storageObjects`) for storage li
 | Sync blobs (dedup) | `blobs/<sha256>` | CLI sync (`/api/sync/blobs/upload-url`) | Runtime bootstrap materialization |
 | Code manifests | `environments/<environmentId>/manifests/code/<manifestHash>.json` | CLI sync (`/api/sync/manifests/upload-url`) | Runtime bootstrap planner |
 | Data manifests | `data/<dataId>/manifests/<manifestHash>.json` | CLI sync (`/api/sync/manifests/upload-url`) + sync commit index upsert | Runtime bootstrap planner, storage data surface |
+| Serve model snapshot objects | `serves/<environmentId>/<timestamp>-<suffix>/model/<relativePath>` | Serve creation snapshot copy | Serve runtime bootstrap planner |
+| Serve model snapshot manifests | `serves/<environmentId>/<timestamp>-<suffix>/model-manifest.json` | Serve creation snapshot copy | Serve runtime bootstrap planner |
 | Direct uploaded data file | `data/<blobId>__<urlEncodedFilename>` | Dashboard data upload (`api.data.generateUploadUrl`) | Dashboard data list, CLI `/api/data`, storage data surface |
 | Run artifact | `runs/<environmentId>/<runCreatedAtMs>/output/<sanitizedName>` | Runtime callback (`/api/runs/{runId}/runtime/artifacts/upload-url`) | Storage artifact surface, run detail |
 
@@ -84,7 +86,7 @@ Tahuna now uses a canonical Convex index table (`storageObjects`) for storage li
 
 ## Read Flows
 
-### 1) Runtime bootstrap
+### 1) Run runtime bootstrap
 
 1. Runtime requests:
    - `GET /api/runs/{runId}/runtime/bootstrap`
@@ -93,7 +95,18 @@ Tahuna now uses a canonical Convex index table (`storageObjects`) for storage li
 4. Blob keys (`blobs/<sha256>`) are resolved to signed download URLs.
 5. Runtime materializes workspace/data from explicit entries.
 
-### 2) Storage list (`api.storage.list`)
+### 2) Serve runtime bootstrap
+
+1. Runtime requests:
+   - `GET /api/serves/{serveId}/runtime/bootstrap`
+2. Backend loads pinned code/data manifest hashes plus pinned serve model snapshot metadata from the serve row.
+3. Code/data sync manifests are fetched from R2 and hash-verified.
+4. The serve snapshot manifest is fetched from the serve-owned `model-manifest.json` key and hash-verified.
+5. Blob keys (`blobs/<sha256>`) are resolved to signed download URLs for code/data entries.
+6. Serve snapshot object keys under `serves/<environmentId>/.../model/` are resolved to signed download URLs for model entries.
+7. Runtime materializes workspace/data/model from explicit entries.
+
+### 3) Storage list (`api.storage.list`)
 
 Storage list is now index-backed:
 
@@ -106,7 +119,7 @@ Important:
 - `storageObjects` is the canonical list surface.
 - No R2-wide scan/merge of environment/run tables during list.
 
-### 3) CLI `/api/data` read path
+### 4) CLI `/api/data` read path
 
 `/api/data` and `/api/data/{id}` use `internal.data.internalList`, which reads indexed `data_upload` rows from `storageObjects` and resolves download URLs from R2.
 
