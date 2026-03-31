@@ -8,6 +8,19 @@ For Python app serving, it supersedes the engine-matrix model described in `spec
 
 `specs/serve.md` remains historical context only unless it is rewritten to align with this document.
 
+## Implementation Status
+
+This section is non-normative. It records rollout status in the current codebase as of 2026-03-31.
+
+- PR1 is done.
+  This document is the canonical Python app serving contract and supersedes `specs/serve.md` for Python app serving.
+- PR2 is in progress, with core CLI and config work already landed.
+  Root `tahuna.toml` support and `[train]` / `[serve]` parsing and validation exist in `cli/project.go`, and `tahuna init` scaffolds `train.py`, `inference.py`, `pyproject.toml`, and `uv.lock` in `cli/commands_core.go`.
+- PR3 is done.
+  `runtime/warden/internal/deps` now owns Python dependency installation with explicit `train` and `serve` modes, `runtime/warden/internal/bootstrap` currently installs with `deps.ModeTrain`, and shared virtualenv environment handling lives in `runtime/warden/internal/pythonenv`.
+  The protected-package lockfile check reads `uv.lock` with `github.com/BurntSushi/toml` instead of manual line parsing.
+- PR4 through PR9 are still pending.
+
 ## Scope
 
 This contract defines the project, runtime, and lifecycle requirements for Tahuna projects where:
@@ -561,29 +574,29 @@ The implementation satisfies this contract only if all of the following are true
 
 This section is non-normative. It exists to guide implementation sequencing.
 
-1. PR1: Spec alignment.
+1. PR1: Spec alignment. Status: done.
    Rewrite the Python serving contract, mark `specs/serve.md` as superseded for Python app serving, and align product language.
 
-2. PR2: Config contract and migration.
+2. PR2: Config contract and migration. Status: in progress.
    Add root `tahuna.toml` support, introduce `[train]` and `[serve]`, migrate from legacy `.tahuna/tahuna.toml`, and update project scaffolding.
 
-3. PR3: Mode-aware dependency installation.
+3. PR3: Mode-aware dependency installation. Status: done.
    Refactor runtime dependency installation so training installs base plus `train`, and serving installs base plus `serve`.
 
-4. PR4: Serve control-plane primitives.
+4. PR4: Serve control-plane primitives. Status: pending.
    Add serve records, serve events, serve runtime logs, serve status transitions, and serve HTTP routes.
 
-5. PR5: Immutable model snapshots.
+5. PR5: Immutable model snapshots. Status: pending.
    Add serve-time model snapshot resolution from runs or storage and pin that snapshot in control-plane state.
 
-6. PR6: Warden serve mode.
+6. PR6: Warden serve mode. Status: pending.
    Generalize the runtime bootstrap path to support serving, model materialization, process supervision, readiness polling, liveness polling, and stop semantics.
 
-7. PR7: Serve provisioning backend.
+7. PR7: Serve provisioning backend. Status: pending.
    Add backend provisioning orchestration for create, start, stop, failure handling, and runtime callbacks.
 
-8. PR8: CLI serve commands.
+8. PR8: CLI serve commands. Status: pending.
    Add `tahuna serve create`, `list`, `show`, `logs`, and `stop`.
 
-9. PR9: Docs, examples, and dashboard.
+9. PR9: Docs, examples, and dashboard. Status: pending.
    Update docs, examples, and UI only after the backend and runtime path are working.
