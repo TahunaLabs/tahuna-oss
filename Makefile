@@ -69,7 +69,4 @@ test-warden:
 validate-warden: lint-warden test-warden
 
 run-cli:
-	@set -a; \
-	if [ -f cli/.env.local ]; then . cli/.env.local; fi; \
-	set +a; \
 	cd cli && go run .
