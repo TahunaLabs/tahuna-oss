@@ -180,7 +180,8 @@ func buildVirtualEnvEnvironment(baseEnv []string, venvPath string) []string {
 		pathValue = pathValue + string(os.PathListSeparator) + existingPath
 	}
 	withVirtualEnv := setEnvValue(baseEnv, "VIRTUAL_ENV", venvPath)
-	return setEnvValue(withVirtualEnv, "PATH", pathValue)
+	withProjectEnv := setEnvValue(withVirtualEnv, "UV_PROJECT_ENVIRONMENT", venvPath)
+	return setEnvValue(withProjectEnv, "PATH", pathValue)
 }
 
 func resolveProtectedPackages(baseEnv []string) []string {
