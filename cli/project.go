@@ -463,20 +463,8 @@ func validateProjectConfigBindings(environmentID string) (projectConfig, error) 
 			return cfg, err
 		}
 	}
-	if strings.TrimSpace(cfg.ServeGPUType) != "" {
-		if cfg.ServeGPUCount < 1 {
-			return cfg, fmt.Errorf("invalid serve.gpu_count in %s: expected a positive integer", path)
-		}
-		if cfg.ServeVolumeGB < 1 {
-			return cfg, fmt.Errorf("invalid serve.volume_gb in %s: expected a positive integer", path)
-		}
-	} else if cfg.ServeGPUCount > 0 || cfg.ServeVolumeGB > 0 {
-		return cfg, fmt.Errorf("serve.gpu_type, serve.gpu_count, and serve.volume_gb must be set together in %s", path)
-	}
-	if strings.TrimSpace(cfg.ServeGPUType) == "" && cfg.ServeGPUCount == 0 && cfg.ServeVolumeGB == 0 {
-		// Serving is implemented in later PRs; allow migrated projects to omit explicit serve compute for now.
-	} else if strings.TrimSpace(cfg.ServeGPUType) == "" || cfg.ServeGPUCount == 0 || cfg.ServeVolumeGB == 0 {
-		return cfg, fmt.Errorf("serve.gpu_type, serve.gpu_count, and serve.volume_gb must be set together in %s", path)
+	if err := validateServeComputeConfig(path, cfg); err != nil {
+		return cfg, err
 	}
 	if !strings.HasPrefix(strings.TrimSpace(cfg.ServeHealthPath), "/") {
 		return cfg, fmt.Errorf("invalid serve.health_path in %s: expected an absolute HTTP path beginning with /", path)
@@ -931,6 +919,13 @@ func validateProjectConfigFile(file projectConfigFile, defined map[string]struct
 func validateConfiguredPositiveInt(defined map[string]struct{}, field string, value int) error {
 	if tomlKeyDefined(defined, field) && value < 1 {
 		return fmt.Errorf("invalid %s in %s: expected a positive integer", field, projectConfigFilePath())
+	}
+	return nil
+}
+
+func validateServeComputeConfig(path string, cfg projectConfig) error {
+	if strings.TrimSpace(cfg.ServeGPUType) == "" || cfg.ServeGPUCount < 1 || cfg.ServeVolumeGB < 1 {
+		return fmt.Errorf("serve.gpu_type, serve.gpu_count, and serve.volume_gb must be set together in %s", path)
 	}
 	return nil
 }

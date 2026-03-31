@@ -829,24 +829,21 @@ func environmentUpdate(args []string) {
 		must(errors.New("--gpu-count, --volume-gb, --serve-gpu-count, and --serve-volume-gb must be positive"))
 	}
 
-	localUpdates := []string{}
+	trainCommandUpdate := strings.TrimSpace(*entrypointCmd) != ""
+	serveCommandUpdate := strings.TrimSpace(*serveEntrypointCmd) != ""
 	serveComputeUpdate := strings.TrimSpace(*serveGPUType) != "" || *serveGPUCount > 0 || *serveVolumeGB > 0
-	if cmd := strings.TrimSpace(*entrypointCmd); cmd != "" ||
-		strings.TrimSpace(*serveEntrypointCmd) != "" ||
-		serveComputeUpdate {
+	if trainCommandUpdate || serveCommandUpdate || serveComputeUpdate {
 		cfg, err := loadPersistedProjectConfig()
 		must(err)
-		if cmd != "" {
-			parsedCommand, err := parseShellCommand(normalizeCommandString(cmd))
+		if trainCommandUpdate {
+			parsedCommand, err := parseShellCommand(normalizeCommandString(strings.TrimSpace(*entrypointCmd)))
 			must(err)
 			cfg.TrainCommand = parsedCommand
-			localUpdates = append(localUpdates, "train.command")
 		}
-		if cmd := strings.TrimSpace(*serveEntrypointCmd); cmd != "" {
-			parsedCommand, err := parseShellCommand(normalizeCommandString(cmd))
+		if serveCommandUpdate {
+			parsedCommand, err := parseShellCommand(normalizeCommandString(strings.TrimSpace(*serveEntrypointCmd)))
 			must(err)
 			cfg.ServeCommand = parsedCommand
-			localUpdates = append(localUpdates, "serve.command")
 		}
 		if value := strings.TrimSpace(*serveGPUType); value != "" {
 			cfg.ServeGPUType = value
@@ -857,22 +854,18 @@ func environmentUpdate(args []string) {
 		if *serveVolumeGB > 0 {
 			cfg.ServeVolumeGB = *serveVolumeGB
 		}
-		if serveComputeUpdate {
-			if err := validateLocalServeComputeConfig(cfg); err != nil {
-				must(err)
-			}
-			localUpdates = append(localUpdates, "serve.compute")
+		if serveCommandUpdate || serveComputeUpdate {
+			must(validateServeComputeConfig(projectConfigFilePath(), cfg))
 		}
 		must(saveProjectConfig(cfg))
-		for _, update := range localUpdates {
-			switch update {
-			case "train.command":
-				fmt.Printf("%s✓%s train.command updated in %s\n", cAmpGreen, cReset, projectConfigFilePath())
-			case "serve.command":
-				fmt.Printf("%s✓%s serve.command updated in %s\n", cAmpGreen, cReset, projectConfigFilePath())
-			case "serve.compute":
-				fmt.Printf("%s✓%s serve compute updated in %s\n", cAmpGreen, cReset, projectConfigFilePath())
-			}
+		if trainCommandUpdate {
+			fmt.Printf("%s✓%s train.command updated in %s\n", cAmpGreen, cReset, projectConfigFilePath())
+		}
+		if serveCommandUpdate {
+			fmt.Printf("%s✓%s serve.command updated in %s\n", cAmpGreen, cReset, projectConfigFilePath())
+		}
+		if serveComputeUpdate {
+			fmt.Printf("%s✓%s serve compute updated in %s\n", cAmpGreen, cReset, projectConfigFilePath())
 		}
 	}
 
@@ -888,7 +881,7 @@ func environmentUpdate(args []string) {
 	}
 
 	// Local-only project config updates should not require a linked environment.
-	if len(payload) == 0 && len(localUpdates) > 0 {
+	if len(payload) == 0 && (trainCommandUpdate || serveCommandUpdate || serveComputeUpdate) {
 		return
 	}
 
@@ -949,13 +942,6 @@ func environmentUpdate(args []string) {
 	must(err)
 	must(syncLinkedLocalProjectConfig(environmentID))
 	printJSON(resp)
-}
-
-func validateLocalServeComputeConfig(cfg projectConfig) error {
-	if strings.TrimSpace(cfg.ServeGPUType) == "" || cfg.ServeGPUCount < 1 || cfg.ServeVolumeGB < 1 {
-		return fmt.Errorf("serve.gpu_type, serve.gpu_count, and serve.volume_gb must be set together in %s", projectConfigFilePath())
-	}
-	return nil
 }
 
 func runCreate(args []string) {
