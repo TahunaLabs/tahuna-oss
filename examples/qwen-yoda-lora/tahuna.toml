@@ -7,14 +7,16 @@ output_dir = "outputs"
 framework = "pt"
 version = "2.2.0-cu121"
 python_version = "3.11"
-gpu_type = "NVIDIA L4"
+gpu_type = "NVIDIA RTX A4500"
 gpu_count = 1
-volume_gb = 10
+volume_gb = 80
 
 [train]
+command = ["uv", "run", "--active", "--no-sync", "python", "-u", "train.py"]
 output_model_path = "outputs/model"
 
 [serve]
-gpu_type = "NVIDIA L4"
+command = ["uvicorn", "app:server", "--host", "0.0.0.0", "--port", "8000"]
+gpu_type = "NVIDIA A100 82GB"
 gpu_count = 1
-volume_gb = 10
+volume_gb = 80
