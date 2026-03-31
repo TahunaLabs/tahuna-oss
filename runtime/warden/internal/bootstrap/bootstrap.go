@@ -12,6 +12,7 @@ import (
 
 	"warden/internal/artifacts"
 	"warden/internal/config"
+	"warden/internal/deps"
 	"warden/internal/materialize"
 	"warden/internal/runtimeapi"
 	"warden/internal/train"
@@ -119,19 +120,24 @@ func (r *Runner) Run(ctx context.Context) error {
 	// Run data materialization + extraction and dependency install in parallel.
 	// Data writes to /workspace/data/ while uv sync reads pyproject.toml from
 	// /workspace/ — no file conflicts.
-	hooks := train.Hooks{
-		EmitLog: func(level, source, message string) {
-			_, _ = r.api.EmitLogs(ctx, []runtimeapi.LogLine{
-				{
-					Message: message,
-					Level:   level,
-					Source:  source,
-				},
-			})
-		},
-		EmitMetrics: func(samples []runtimeapi.MetricSample) {
-			_, _ = r.api.EmitMetrics(ctx, samples)
-		},
+	emitLog := func(level, source, message string) {
+		_, _ = r.api.EmitLogs(ctx, []runtimeapi.LogLine{
+			{
+				Message: message,
+				Level:   level,
+				Source:  source,
+			},
+		})
+	}
+	emitMetrics := func(samples []runtimeapi.MetricSample) {
+		_, _ = r.api.EmitMetrics(ctx, samples)
+	}
+	trainHooks := train.Hooks{
+		EmitLog:     emitLog,
+		EmitMetrics: emitMetrics,
+	}
+	installHooks := deps.Hooks{
+		EmitLog: emitLog,
 	}
 
 	dataResultCh := make(chan dataMaterializeResult, 1)
@@ -140,7 +146,7 @@ func (r *Runner) Run(ctx context.Context) error {
 	}()
 
 	r.transition(StateInstall)
-	installErr := train.InstallDependencies(ctx, r.cfg.WorkspaceRoot, hooks)
+	installErr := deps.InstallDependencies(ctx, r.cfg.WorkspaceRoot, deps.ModeTrain, installHooks)
 
 	dataRes := <-dataResultCh
 
@@ -242,14 +248,14 @@ func (r *Runner) Run(ctx context.Context) error {
 		r.cfg.WorkspaceRoot,
 		plan.Command,
 		time.Duration(r.cfg.CancellationGraceSec)*time.Second,
-		hooks,
+		trainHooks,
 	)
 	if err != nil {
 		return r.failWithError(ctx, err)
 	}
 	if cancelled {
 		r.transition(StateArtifacts)
-		r.syncArtifacts(ctx, hooks)
+		r.syncArtifacts(ctx, trainHooks)
 		_ = r.api.EmitStatus(ctx, runtimeapi.StatusUpdate{
 			Status:  runtimeapi.StatusCancelled,
 			Message: "run cancelled by user",
@@ -261,7 +267,7 @@ func (r *Runner) Run(ctx context.Context) error {
 	}
 
 	r.transition(StateArtifacts)
-	r.syncArtifacts(ctx, hooks)
+	r.syncArtifacts(ctx, trainHooks)
 	r.transition(StateCompleted)
 	_ = r.api.EmitStatus(ctx, runtimeapi.StatusUpdate{
 		Status:  runtimeapi.StatusCompleted,
