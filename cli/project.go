@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"errors"
 	"fmt"
 	"net/http"
@@ -84,27 +83,6 @@ func collectProjectInitConfig() (projectConfig, string, error) {
 	} else {
 		fmt.Printf("%s?%s No train.py found\n", cAmpGold, cReset)
 		cfg.TrainEntrypoint = choosePathWhenMissing("Entrypoint script", "train.py")
-	}
-
-	defaultCmd := strings.Join(defaultTrainCommand(cfg.TrainEntrypoint), " ")
-	launchChoice := promptChoice("Launch command", []string{
-		fmt.Sprintf("Default (%s)", defaultCmd),
-		"Custom (torchrun, multi-GPU, extra args, ...)",
-	}, 0)
-	if launchChoice != fmt.Sprintf("Default (%s)", defaultCmd) {
-		fmt.Printf("%s  Paste your command (multi-line ok — press Enter twice to confirm):%s\n", cAmpGold, cReset)
-		var lines []string
-		scanner := bufio.NewScanner(os.Stdin)
-		for scanner.Scan() {
-			line := scanner.Text()
-			if line == "" {
-				break
-			}
-			lines = append(lines, line)
-		}
-		if normalized := normalizeCommandString(strings.Join(lines, " ")); normalized != "" {
-			cfg.EntrypointCommand = normalized
-		}
 	}
 
 	if dirExists(cfg.DataDir) {
@@ -1113,6 +1091,82 @@ func clearLinkedEnvironmentIDIfMatches(environmentID string) error {
 	}
 	if err := os.RemoveAll(projectStateDir); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
+	}
+	return nil
+}
+
+var writableProjectConfigKeys = []string{
+	"entrypoint",
+	"entrypoint_command",
+	"data_dir",
+	"output_dir",
+	"python_project_file",
+	"uv_lock_file",
+}
+
+func projectConfigSet(key, value string) error {
+	cfg, err := loadPersistedProjectConfig()
+	if err != nil {
+		return err
+	}
+	switch key {
+	case "entrypoint":
+		cfg.TrainEntrypoint = value
+	case "entrypoint_command":
+		cfg.EntrypointCommand = normalizeCommandString(value)
+	case "data_dir":
+		cfg.DataDir = value
+	case "output_dir":
+		cfg.OutputDir = value
+	case "python_project_file":
+		cfg.PythonProjectFile = value
+	case "uv_lock_file":
+		cfg.UVLockFile = value
+	default:
+		return fmt.Errorf("unknown key %q; writable keys: %s", key, strings.Join(writableProjectConfigKeys, ", "))
+	}
+	return saveProjectConfig(cfg)
+}
+
+func projectConfigGet(key string) (string, error) {
+	cfg, err := loadPersistedProjectConfig()
+	if err != nil {
+		return "", err
+	}
+	switch key {
+	case "entrypoint":
+		return cfg.TrainEntrypoint, nil
+	case "entrypoint_command":
+		return cfg.EntrypointCommand, nil
+	case "data_dir":
+		return cfg.DataDir, nil
+	case "output_dir":
+		return cfg.OutputDir, nil
+	case "python_project_file":
+		return cfg.PythonProjectFile, nil
+	case "uv_lock_file":
+		return cfg.UVLockFile, nil
+	default:
+		return "", fmt.Errorf("unknown key %q; readable keys: %s", key, strings.Join(writableProjectConfigKeys, ", "))
+	}
+}
+
+func projectConfigList() error {
+	raw, err := os.ReadFile(projectConfigFilePath())
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("no project config found; run `tahuna init .` first")
+		}
+		return err
+	}
+	_, values, err := parseProjectConfigTOML(string(raw))
+	if err != nil {
+		return err
+	}
+	for _, key := range writableProjectConfigKeys {
+		if v, ok := values[key]; ok {
+			fmt.Printf("%s=%s\n", key, v)
+		}
 	}
 	return nil
 }
