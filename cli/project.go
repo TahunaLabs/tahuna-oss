@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"errors"
 	"fmt"
 	"net/http"
@@ -91,9 +92,17 @@ func collectProjectInitConfig() (projectConfig, string, error) {
 		"Custom (torchrun, multi-GPU, extra args, ...)",
 	}, 0)
 	if launchChoice != fmt.Sprintf("Default (%s)", defaultCmd) {
-		fmt.Printf("%s  Paste or type your command as a single line%s\n", cAmpGold, cReset)
-		raw := strings.TrimSpace(promptString("Command", ""))
-		if normalized := normalizeCommandString(raw); normalized != "" {
+		fmt.Printf("%s  Paste your command (multi-line ok — press Enter twice to confirm):%s\n", cAmpGold, cReset)
+		var lines []string
+		scanner := bufio.NewScanner(os.Stdin)
+		for scanner.Scan() {
+			line := scanner.Text()
+			if line == "" {
+				break
+			}
+			lines = append(lines, line)
+		}
+		if normalized := normalizeCommandString(strings.Join(lines, " ")); normalized != "" {
 			cfg.EntrypointCommand = normalized
 		}
 	}
