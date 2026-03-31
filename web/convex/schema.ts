@@ -119,6 +119,8 @@ export default defineSchema({
       sourceObjectPrefix: v.optional(v.string()),
       sourceModelPath: v.optional(v.string()),
       objectPrefix: v.string(),
+      manifestKey: v.string(),
+      manifestHash: v.string(),
       objectCount: v.number(),
       totalBytes: v.number(),
     }),

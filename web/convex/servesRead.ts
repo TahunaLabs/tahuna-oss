@@ -14,6 +14,8 @@ function toServeModelSnapshotResponse(row: Doc<"serves">) {
     source_object_prefix: row.modelSnapshot.sourceObjectPrefix || null,
     source_model_path: row.modelSnapshot.sourceModelPath || null,
     object_prefix: row.modelSnapshot.objectPrefix,
+    manifest_key: row.modelSnapshot.manifestKey,
+    manifest_hash: row.modelSnapshot.manifestHash,
     object_count: row.modelSnapshot.objectCount,
     total_bytes: row.modelSnapshot.totalBytes,
   }

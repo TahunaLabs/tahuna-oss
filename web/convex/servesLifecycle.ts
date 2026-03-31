@@ -10,28 +10,32 @@ export async function createServeForUserId(
   args: {
     userId: string;
     environmentId: Id<"environments">;
-    command: string[];
-    outputDir: string;
-    codeManifestHash: string;
-    dataManifestHash?: string;
-    pythonVersion: string;
-    gpuType: string;
-    gpuCount: number;
-    volumeGb: number;
-    port: number;
-    healthPath: string;
-    defaultModelPath: string;
-    startupTimeoutSeconds: number;
-    healthIntervalSeconds: number;
-    healthTimeoutSeconds: number;
-    healthFailureThreshold: number;
-    gracefulShutdownSeconds: number;
+    serveConfig: {
+      command: string[];
+      outputDir: string;
+      codeManifestHash: string;
+      dataManifestHash: string | null;
+      pythonVersion: string;
+      gpuType: string;
+      gpuCount: number;
+      volumeGb: number;
+      port: number;
+      healthPath: string;
+      defaultModelPath: string;
+      startupTimeoutSeconds: number;
+      healthIntervalSeconds: number;
+      healthTimeoutSeconds: number;
+      healthFailureThreshold: number;
+      gracefulShutdownSeconds: number;
+    };
     modelSnapshot: {
       sourceType: "run" | "storage";
       sourceRunId?: Id<"runs">;
       sourceObjectPrefix?: string;
       sourceModelPath?: string;
       objectPrefix: string;
+      manifestKey: string;
+      manifestHash: string;
       objectCount: number;
       totalBytes: number;
     };
@@ -41,24 +45,10 @@ export async function createServeForUserId(
   const serveId = await ctx.db.insert("serves", {
     userId: args.userId,
     environmentId: args.environmentId,
-    command: args.command,
-    outputDir: args.outputDir,
+    ...args.serveConfig,
+    dataManifestHash: args.serveConfig.dataManifestHash || undefined,
     logs: `serves/${args.environmentId}/${now}/logs`,
     status: SERVE_STATUS.QUEUED,
-    codeManifestHash: args.codeManifestHash,
-    dataManifestHash: args.dataManifestHash,
-    pythonVersion: args.pythonVersion,
-    gpuType: args.gpuType,
-    gpuCount: args.gpuCount,
-    volumeGb: args.volumeGb,
-    port: args.port,
-    healthPath: args.healthPath,
-    defaultModelPath: args.defaultModelPath,
-    startupTimeoutSeconds: args.startupTimeoutSeconds,
-    healthIntervalSeconds: args.healthIntervalSeconds,
-    healthTimeoutSeconds: args.healthTimeoutSeconds,
-    healthFailureThreshold: args.healthFailureThreshold,
-    gracefulShutdownSeconds: args.gracefulShutdownSeconds,
     modelSnapshot: args.modelSnapshot,
   })
 
@@ -67,23 +57,25 @@ export async function createServeForUserId(
     status: SERVE_STATUS.QUEUED,
     message: "serve queued",
     metadata: {
-      command: args.command,
+      command: args.serveConfig.command,
       model_snapshot: {
         source_type: args.modelSnapshot.sourceType,
         source_run_id: args.modelSnapshot.sourceRunId ? String(args.modelSnapshot.sourceRunId) : null,
         source_object_prefix: args.modelSnapshot.sourceObjectPrefix || null,
         source_model_path: args.modelSnapshot.sourceModelPath || null,
         object_prefix: args.modelSnapshot.objectPrefix,
+        manifest_key: args.modelSnapshot.manifestKey,
+        manifest_hash: args.modelSnapshot.manifestHash,
         object_count: args.modelSnapshot.objectCount,
         total_bytes: args.modelSnapshot.totalBytes,
       },
-      code_manifest_hash: args.codeManifestHash,
-      data_manifest_hash: args.dataManifestHash || null,
-      gpu_type: args.gpuType,
-      gpu_count: args.gpuCount,
-      volume_gb: args.volumeGb,
-      port: args.port,
-      health_path: args.healthPath,
+      code_manifest_hash: args.serveConfig.codeManifestHash,
+      data_manifest_hash: args.serveConfig.dataManifestHash || null,
+      gpu_type: args.serveConfig.gpuType,
+      gpu_count: args.serveConfig.gpuCount,
+      volume_gb: args.serveConfig.volumeGb,
+      port: args.serveConfig.port,
+      health_path: args.serveConfig.healthPath,
     },
   })
 
