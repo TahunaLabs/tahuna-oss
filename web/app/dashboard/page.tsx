@@ -7,6 +7,7 @@ import { MachinesContainer } from "@/components/features/dashboard/machines-cont
 import { ProvidersContainer } from "@/components/features/dashboard/providers-container"
 import { RunsContainer } from "@/components/features/dashboard/runs-container"
 import { SettingsContainer } from "@/components/features/dashboard/settings-container"
+import { ServingContainer } from "@/components/features/dashboard/serving-container"
 import { StorageContainer } from "@/components/features/dashboard/storage-container"
 import { ShareDialog } from "@/components/features/dashboard/share-dialog"
 import { Sidebar } from "@/components/features/dashboard/sidebar"
@@ -125,6 +126,8 @@ export default function DashboardPage() {
         return <StorageContainer shouldLoadQueries={shouldLoadQueries} onOpenShareDialog={openShareDialog} />
       case "environments":
         return <EnvironmentsContainer shouldLoadQueries={shouldLoadQueries} onOpenShareDialog={openShareDialog} />
+      case "serving":
+        return <ServingContainer shouldLoadQueries={shouldLoadQueries} />
       case "runs":
         return <RunsContainer shouldLoadQueries={shouldLoadQueries} onOpenShareDialog={openShareDialog} />
       case "billing":

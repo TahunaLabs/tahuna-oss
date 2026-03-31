@@ -3,12 +3,12 @@
 import { Button } from "@/components/ui/button"
 import type { Id } from "@convex/_generated/dataModel"
 import { ACTIVE_STATUSES, TERMINAL_STATUSES as _TERMINAL_STATUSES } from "@convex/runsConstants"
-import { Database, Play, Server, type LucideIcon } from "lucide-react"
+import { Database, Play, Rocket, Server, type LucideIcon } from "lucide-react"
 import type { ReactNode } from "react"
 
 export type MainSection = "data" | "environments" | "runs"
 
-export const DASHBOARD_VIEW_VALUES = ["storage", "environments", "runs", "machines", "billing", "audit_logs", "settings", "providers"] as const
+export const DASHBOARD_VIEW_VALUES = ["storage", "environments", "serving", "runs", "machines", "billing", "audit_logs", "settings", "providers"] as const
 export type DashboardView = (typeof DASHBOARD_VIEW_VALUES)[number]
 
 export const STORAGE_SOURCE_FILTER_VALUES = ["all", "shared", "private"] as const
@@ -62,6 +62,22 @@ export function primarySyncedDataHref(dataId: string) {
   return `/dashboard?${params.toString()}`
 }
 
+export type ServeSnapshot = {
+  command: string[]
+  python_version: string
+  gpu_type: string
+  gpu_count: number
+  volume_gb: number
+  port: number
+  health_path: string
+  default_model_path: string
+  startup_timeout_seconds: number
+  health_interval_seconds: number
+  health_timeout_seconds: number
+  health_failure_threshold: number
+  graceful_shutdown_seconds: number
+}
+
 export type EnvironmentRow = {
   environment_id: Id<"environments">
   data_id: string
@@ -78,6 +94,7 @@ export type EnvironmentRow = {
   python_version: string
   framework: string
   version: string
+  serve_snapshot: ServeSnapshot | null
 }
 
 export type EnvironmentConfigDetail = {
@@ -306,6 +323,7 @@ export const PAGE_TITLES: Record<MainSection, string> = {
 export const FEATURE_ITEMS: SidebarItem[] = [
   { id: "data", label: "Storage", icon: Database, section: "data" },
   { id: "environments", label: "Environments", icon: Server, section: "environments" },
+  { id: "serving", label: "Serving", icon: Rocket, section: "environments" },
   { id: "runs", label: "Runs", icon: Play, section: "runs" },
 ]
 

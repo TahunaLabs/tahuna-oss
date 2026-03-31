@@ -133,6 +133,12 @@ func finalizeSyncWithStatus(environmentID string, prepared []preparedManifest, o
 		} else {
 			commitPayload["output_dir"] = "outputs"
 		}
+		serveSnapshot, serveErr := resolveServeSnapshot(cfg)
+		if serveErr != nil {
+			commitSpinner.StopError()
+			return serveErr
+		}
+		commitPayload["serve_snapshot"] = serveSnapshot
 	}
 
 	for _, item := range prepared {

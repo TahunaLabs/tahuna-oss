@@ -67,6 +67,67 @@ async function fetchManifestFromR2(
   return manifest;
 }
 
+function normalizeServeSnapshot(raw: unknown) {
+  if (!raw || typeof raw !== "object") {
+    return undefined;
+  }
+  const snapshot = raw as Record<string, unknown>;
+  const command = Array.isArray(snapshot.command)
+    ? snapshot.command.filter((part): part is string => typeof part === "string" && part.trim() !== "")
+    : null;
+  const pythonVersion = typeof snapshot.python_version === "string" ? snapshot.python_version.trim() : "";
+  const gpuType = typeof snapshot.gpu_type === "string" ? snapshot.gpu_type.trim() : "";
+  const gpuCount = typeof snapshot.gpu_count === "number" ? snapshot.gpu_count : null;
+  const volumeGb = typeof snapshot.volume_gb === "number" ? snapshot.volume_gb : null;
+  const port = typeof snapshot.port === "number" ? snapshot.port : null;
+  const healthPath = typeof snapshot.health_path === "string" ? snapshot.health_path.trim() : "";
+  const defaultModelPath = typeof snapshot.default_model_path === "string" ? snapshot.default_model_path.trim() : "";
+  const startupTimeoutSeconds =
+    typeof snapshot.startup_timeout_seconds === "number" ? snapshot.startup_timeout_seconds : null;
+  const healthIntervalSeconds =
+    typeof snapshot.health_interval_seconds === "number" ? snapshot.health_interval_seconds : null;
+  const healthTimeoutSeconds =
+    typeof snapshot.health_timeout_seconds === "number" ? snapshot.health_timeout_seconds : null;
+  const healthFailureThreshold =
+    typeof snapshot.health_failure_threshold === "number" ? snapshot.health_failure_threshold : null;
+  const gracefulShutdownSeconds =
+    typeof snapshot.graceful_shutdown_seconds === "number" ? snapshot.graceful_shutdown_seconds : null;
+
+  if (
+    !command || command.length === 0 ||
+    !pythonVersion ||
+    !gpuType ||
+    gpuCount === null || gpuCount < 1 ||
+    volumeGb === null || volumeGb < 1 ||
+    port === null || port < 1 || port > 65535 ||
+    !healthPath || !healthPath.startsWith("/") ||
+    !defaultModelPath ||
+    startupTimeoutSeconds === null || startupTimeoutSeconds < 1 ||
+    healthIntervalSeconds === null || healthIntervalSeconds < 1 ||
+    healthTimeoutSeconds === null || healthTimeoutSeconds < 1 ||
+    healthFailureThreshold === null || healthFailureThreshold < 1 ||
+    gracefulShutdownSeconds === null || gracefulShutdownSeconds < 1
+  ) {
+    throw new Error("serve_snapshot must include command, runtime, device, port, health, and model fields");
+  }
+
+  return {
+    command,
+    python_version: pythonVersion,
+    gpu_type: gpuType,
+    gpu_count: gpuCount,
+    volume_gb: volumeGb,
+    port,
+    health_path: healthPath,
+    default_model_path: defaultModelPath,
+    startup_timeout_seconds: startupTimeoutSeconds,
+    health_interval_seconds: healthIntervalSeconds,
+    health_timeout_seconds: healthTimeoutSeconds,
+    health_failure_threshold: healthFailureThreshold,
+    graceful_shutdown_seconds: gracefulShutdownSeconds,
+  };
+}
+
 export const listMissingBlobHashes = httpAction(async (ctx, request) => {
   const userId = await authenticateApiRequest(ctx, request);
   if (!userId) {
@@ -426,6 +487,16 @@ export const commitSync = httpAction(async (ctx, request) => {
   const outputDir = typeof body?.output_dir === "string" && body.output_dir.trim() !== ""
     ? body.output_dir.trim()
     : undefined;
+  let serveSnapshot;
+  try {
+    serveSnapshot = normalizeServeSnapshot(body?.serve_snapshot);
+  } catch (err) {
+    const detail = toClientErrorDetail(err, "invalid serve snapshot");
+    return new Response(JSON.stringify({ detail }), {
+      status: 400,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
 
   try {
     const data = await ctx.runMutation(internal.environments.internalCommitSyncPointers, {
@@ -435,6 +506,7 @@ export const commitSync = httpAction(async (ctx, request) => {
       data_manifest_hash: dataManifestHash,
       command,
       output_dir: outputDir,
+      serve_snapshot: serveSnapshot,
     });
     return new Response(JSON.stringify(data), {
       status: 200,

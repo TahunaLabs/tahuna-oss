@@ -280,7 +280,15 @@ func TestPreRunSync_ConfigValidationDetectsMissingBindingAfterSync(t *testing.T)
 	installSyncStubs(t, mock)
 	setupTestProject(t, true)
 
-	if err := os.WriteFile(projectConfigFilePath(), []byte("[project]\ndata_dir = \"data\"\n"), 0o600); err != nil {
+	brokenConfig := `[project]
+data_dir = "data"
+
+[serve]
+gpu_type = "NVIDIA A100 80GB"
+gpu_count = 1
+volume_gb = 80
+`
+	if err := os.WriteFile(projectConfigFilePath(), []byte(brokenConfig), 0o600); err != nil {
 		t.Fatalf("failed to write broken project config: %v", err)
 	}
 

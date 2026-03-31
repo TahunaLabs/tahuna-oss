@@ -18,6 +18,22 @@ import { R2 } from "@convex-dev/r2";
 import { PYTHON_CONFIG } from "@convex/appConfig";
 import { ENVIRONMENT_CONFIG_FILE_NAME, parseEnvironmentConfig, renderEnvironmentConfig } from "@/lib/environment-config";
 
+const serveSnapshotResponseValidator = v.object({
+  command: v.array(v.string()),
+  python_version: v.string(),
+  gpu_type: v.string(),
+  gpu_count: v.number(),
+  volume_gb: v.number(),
+  port: v.number(),
+  health_path: v.string(),
+  default_model_path: v.string(),
+  startup_timeout_seconds: v.number(),
+  health_interval_seconds: v.number(),
+  health_timeout_seconds: v.number(),
+  health_failure_threshold: v.number(),
+  graceful_shutdown_seconds: v.number(),
+});
+
 const environmentResponseValidator = v.object({
   environment_id: v.string(),
   data_id: v.string(),
@@ -37,6 +53,7 @@ const environmentResponseValidator = v.object({
   version: v.string(),
   command: v.array(v.string()),
   output_dir: v.string(),
+  serve_snapshot: v.union(serveSnapshotResponseValidator, v.null()),
 });
 
 const listEnvironmentsResponseValidator = v.object({
@@ -404,6 +421,23 @@ function toEnvironmentResponse(
   access: "private" | "shared" = "private",
 ) {
   const dataId = row.dataId || String(row._id);
+  const serveSnapshot = row.serveSnapshot
+    ? {
+        command: row.serveSnapshot.command,
+        python_version: row.serveSnapshot.pythonVersion,
+        gpu_type: row.serveSnapshot.gpuType,
+        gpu_count: row.serveSnapshot.gpuCount,
+        volume_gb: row.serveSnapshot.volumeGb,
+        port: row.serveSnapshot.port,
+        health_path: row.serveSnapshot.healthPath,
+        default_model_path: row.serveSnapshot.defaultModelPath,
+        startup_timeout_seconds: row.serveSnapshot.startupTimeoutSeconds,
+        health_interval_seconds: row.serveSnapshot.healthIntervalSeconds,
+        health_timeout_seconds: row.serveSnapshot.healthTimeoutSeconds,
+        health_failure_threshold: row.serveSnapshot.healthFailureThreshold,
+        graceful_shutdown_seconds: row.serveSnapshot.gracefulShutdownSeconds,
+      }
+    : null;
   return {
     environment_id: String(row._id),
     data_id: dataId,
@@ -423,6 +457,7 @@ function toEnvironmentResponse(
     version: row.version,
     command: row.command,
     output_dir: row.outputDir ?? "outputs",
+    serve_snapshot: serveSnapshot,
   };
 }
 
@@ -1055,6 +1090,7 @@ export const internalCommitSyncPointers = internalMutation({
     data_manifest_hash: v.optional(v.string()),
     command: v.optional(v.array(v.string())),
     output_dir: v.optional(v.string()),
+    serve_snapshot: v.optional(serveSnapshotResponseValidator),
   },
   returns: commitSyncPointersResponseValidator,
   handler: async (ctx, args) => {
@@ -1065,6 +1101,7 @@ export const internalCommitSyncPointers = internalMutation({
       latestDataManifestHash?: string;
       command?: string[];
       outputDir?: string;
+      serveSnapshot?: Doc<"environments">["serveSnapshot"];
     } = { latestSyncAt: Date.now() };
 
     if (args.code_manifest_hash) {
@@ -1078,6 +1115,23 @@ export const internalCommitSyncPointers = internalMutation({
     }
     if (typeof args.output_dir === "string" && args.output_dir.trim() !== "") {
       patch.outputDir = args.output_dir.trim();
+    }
+    if (args.serve_snapshot) {
+      patch.serveSnapshot = {
+        command: args.serve_snapshot.command,
+        pythonVersion: args.serve_snapshot.python_version,
+        gpuType: args.serve_snapshot.gpu_type,
+        gpuCount: args.serve_snapshot.gpu_count,
+        volumeGb: args.serve_snapshot.volume_gb,
+        port: args.serve_snapshot.port,
+        healthPath: args.serve_snapshot.health_path,
+        defaultModelPath: args.serve_snapshot.default_model_path,
+        startupTimeoutSeconds: args.serve_snapshot.startup_timeout_seconds,
+        healthIntervalSeconds: args.serve_snapshot.health_interval_seconds,
+        healthTimeoutSeconds: args.serve_snapshot.health_timeout_seconds,
+        healthFailureThreshold: args.serve_snapshot.health_failure_threshold,
+        gracefulShutdownSeconds: args.serve_snapshot.graceful_shutdown_seconds,
+      };
     }
 
     await ctx.db.patch("environments", args.environmentId, patch);

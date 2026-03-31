@@ -33,6 +33,21 @@ export default defineSchema({
     latestSyncAt: v.optional(v.number()),
     command: v.array(v.string()),
     outputDir: v.string(),
+    serveSnapshot: v.optional(v.object({
+      command: v.array(v.string()),
+      pythonVersion: v.string(),
+      gpuType: v.string(),
+      gpuCount: v.number(),
+      volumeGb: v.number(),
+      port: v.number(),
+      healthPath: v.string(),
+      defaultModelPath: v.string(),
+      startupTimeoutSeconds: v.number(),
+      healthIntervalSeconds: v.number(),
+      healthTimeoutSeconds: v.number(),
+      healthFailureThreshold: v.number(),
+      gracefulShutdownSeconds: v.number(),
+    })),
   }).index("by_user", ["userId"]),
 
   runs: defineTable({

@@ -1486,6 +1486,35 @@ func resolveServeCommand(cfg projectConfig) ([]string, error) {
 	return defaultServeCommand(), nil
 }
 
+func resolveServeSnapshot(cfg projectConfig) (*serveSnapshotResponse, error) {
+	if err := validateServeComputeConfig(projectConfigFilePath(), cfg); err != nil {
+		return nil, err
+	}
+	command, err := resolveServeCommand(cfg)
+	if err != nil {
+		return nil, err
+	}
+	pythonVersion := strings.TrimSpace(cfg.ServePythonVersion)
+	if pythonVersion == "" {
+		pythonVersion = strings.TrimSpace(cfg.PythonVersion)
+	}
+	return &serveSnapshotResponse{
+		Command:                 command,
+		PythonVersion:           pythonVersion,
+		GPUType:                 strings.TrimSpace(cfg.ServeGPUType),
+		GPUCount:                int64(cfg.ServeGPUCount),
+		VolumeGB:                int64(cfg.ServeVolumeGB),
+		Port:                    int64(cfg.ServePort),
+		HealthPath:              strings.TrimSpace(cfg.ServeHealthPath),
+		DefaultModelPath:        strings.TrimSpace(cfg.ServeDefaultModelPath),
+		StartupTimeoutSeconds:   int64(cfg.ServeStartupTimeoutSeconds),
+		HealthIntervalSeconds:   int64(cfg.ServeHealthIntervalSeconds),
+		HealthTimeoutSeconds:    int64(cfg.ServeHealthTimeoutSeconds),
+		HealthFailureThreshold:  int64(cfg.ServeHealthFailureThreshold),
+		GracefulShutdownSeconds: int64(cfg.ServeGracefulShutdownSeconds),
+	}, nil
+}
+
 func projectConfigFromEnvironment(env environmentResponse) projectConfig {
 	cfg := projectConfig{
 		Framework:        strings.TrimSpace(env.Framework),
@@ -1504,6 +1533,39 @@ func projectConfigFromEnvironment(env environmentResponse) projectConfig {
 	}
 	if outputDir := strings.TrimSpace(env.OutputDir); outputDir != "" && outputDir != "outputs" {
 		cfg.OutputDir = outputDir
+	}
+	if env.ServeSnapshot != nil {
+		if command := normalizeCommandTokens(env.ServeSnapshot.Command); len(command) > 0 {
+			cfg.ServeCommand = command
+		}
+		cfg.ServePythonVersion = strings.TrimSpace(env.ServeSnapshot.PythonVersion)
+		cfg.ServeGPUType = strings.TrimSpace(env.ServeSnapshot.GPUType)
+		if env.ServeSnapshot.GPUCount > 0 {
+			cfg.ServeGPUCount = int(env.ServeSnapshot.GPUCount)
+		}
+		if env.ServeSnapshot.VolumeGB > 0 {
+			cfg.ServeVolumeGB = int(env.ServeSnapshot.VolumeGB)
+		}
+		if env.ServeSnapshot.Port > 0 {
+			cfg.ServePort = int(env.ServeSnapshot.Port)
+		}
+		cfg.ServeHealthPath = strings.TrimSpace(env.ServeSnapshot.HealthPath)
+		cfg.ServeDefaultModelPath = normalizeProjectPath(env.ServeSnapshot.DefaultModelPath)
+		if env.ServeSnapshot.StartupTimeoutSeconds > 0 {
+			cfg.ServeStartupTimeoutSeconds = int(env.ServeSnapshot.StartupTimeoutSeconds)
+		}
+		if env.ServeSnapshot.HealthIntervalSeconds > 0 {
+			cfg.ServeHealthIntervalSeconds = int(env.ServeSnapshot.HealthIntervalSeconds)
+		}
+		if env.ServeSnapshot.HealthTimeoutSeconds > 0 {
+			cfg.ServeHealthTimeoutSeconds = int(env.ServeSnapshot.HealthTimeoutSeconds)
+		}
+		if env.ServeSnapshot.HealthFailureThreshold > 0 {
+			cfg.ServeHealthFailureThreshold = int(env.ServeSnapshot.HealthFailureThreshold)
+		}
+		if env.ServeSnapshot.GracefulShutdownSeconds > 0 {
+			cfg.ServeGracefulShutdownSeconds = int(env.ServeSnapshot.GracefulShutdownSeconds)
+		}
 	}
 	return cfg
 }

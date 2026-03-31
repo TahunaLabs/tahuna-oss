@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { HardDrive, Server, Play, Monitor, LogOut, ClipboardList, Settings, BookOpen, FileText, Layers, ChevronsUpDown, ChevronRight, Wallet, Cloud } from "lucide-react"
+import { HardDrive, Server, Play, Monitor, LogOut, ClipboardList, Settings, BookOpen, FileText, Layers, ChevronsUpDown, ChevronRight, Wallet, Cloud, Rocket } from "lucide-react"
 import {
   SidebarContent,
   SidebarFooter,
@@ -59,6 +59,7 @@ interface SidebarProps {
 const DEFAULT_NAV_PLATFORM: NavItem[] = [
   { icon: HardDrive, label: "Storage", view: "storage" },
   { icon: Server, label: "Environments", view: "environments" },
+  { icon: Rocket, label: "Serving", view: "serving" },
   { icon: Play, label: "Runs", view: "runs" },
 ]
 
