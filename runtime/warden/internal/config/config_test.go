@@ -6,6 +6,7 @@ import (
 
 func TestLoadFromEnvDefaultsWorkspaceRoot(t *testing.T) {
 	t.Setenv("TAHUNA_RUN_ID", "run_123")
+	t.Setenv("TAHUNA_SERVE_ID", "")
 	t.Setenv("TAHUNA_API_BASE", "https://api.example.com/")
 	t.Setenv("TAHUNA_RUNTIME_TOKEN", "secret")
 	t.Setenv("TAHUNA_WORKSPACE_ROOT", "")
@@ -29,10 +30,14 @@ func TestLoadFromEnvDefaultsWorkspaceRoot(t *testing.T) {
 	if cfg.CancellationGraceSec != 30 {
 		t.Fatalf("expected default cancellation grace 30, got %d", cfg.CancellationGraceSec)
 	}
+	if cfg.Mode != ModeRun {
+		t.Fatalf("expected run mode, got %q", cfg.Mode)
+	}
 }
 
 func TestLoadFromEnvFailsWhenRequiredVarsMissing(t *testing.T) {
 	t.Setenv("TAHUNA_RUN_ID", "")
+	t.Setenv("TAHUNA_SERVE_ID", "")
 	t.Setenv("TAHUNA_API_BASE", "")
 	t.Setenv("TAHUNA_RUNTIME_TOKEN", "")
 
@@ -44,6 +49,7 @@ func TestLoadFromEnvFailsWhenRequiredVarsMissing(t *testing.T) {
 
 func TestLoadFromEnvSupportsRuntimeRequestTimeoutOverride(t *testing.T) {
 	t.Setenv("TAHUNA_RUN_ID", "run_123")
+	t.Setenv("TAHUNA_SERVE_ID", "")
 	t.Setenv("TAHUNA_API_BASE", "https://api.example.com")
 	t.Setenv("TAHUNA_RUNTIME_TOKEN", "secret")
 	t.Setenv("TAHUNA_RUNTIME_REQUEST_TIMEOUT_SECONDS", "15")
@@ -58,5 +64,35 @@ func TestLoadFromEnvSupportsRuntimeRequestTimeoutOverride(t *testing.T) {
 	}
 	if cfg.CancellationGraceSec != 45 {
 		t.Fatalf("expected cancellation grace 45, got %d", cfg.CancellationGraceSec)
+	}
+}
+
+func TestLoadFromEnvSupportsServeMode(t *testing.T) {
+	t.Setenv("TAHUNA_RUN_ID", "")
+	t.Setenv("TAHUNA_SERVE_ID", "serve_123")
+	t.Setenv("TAHUNA_API_BASE", "https://api.example.com")
+	t.Setenv("TAHUNA_RUNTIME_TOKEN", "secret")
+
+	cfg, err := LoadFromEnv()
+	if err != nil {
+		t.Fatalf("LoadFromEnv returned error: %v", err)
+	}
+	if cfg.Mode != ModeServe {
+		t.Fatalf("expected serve mode, got %q", cfg.Mode)
+	}
+	if cfg.ResourceID() != "serve_123" {
+		t.Fatalf("expected serve resource id, got %q", cfg.ResourceID())
+	}
+}
+
+func TestLoadFromEnvRejectsMultipleTargets(t *testing.T) {
+	t.Setenv("TAHUNA_RUN_ID", "run_123")
+	t.Setenv("TAHUNA_SERVE_ID", "serve_123")
+	t.Setenv("TAHUNA_API_BASE", "https://api.example.com")
+	t.Setenv("TAHUNA_RUNTIME_TOKEN", "secret")
+
+	_, err := LoadFromEnv()
+	if err == nil {
+		t.Fatal("expected error when both runtime targets are set")
 	}
 }

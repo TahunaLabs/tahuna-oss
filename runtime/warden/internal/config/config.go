@@ -8,8 +8,17 @@ import (
 	"time"
 )
 
+type Mode string
+
+const (
+	ModeRun   Mode = "run"
+	ModeServe Mode = "serve"
+)
+
 type Config struct {
+	Mode                 Mode
 	RunID                string
+	ServeID              string
 	APIBase              string
 	RuntimeToken         string
 	WorkspaceRoot        string
@@ -39,8 +48,17 @@ func LoadFromEnv() (Config, error) {
 		cancellationGraceSec = parsed
 	}
 
+	runID := strings.TrimSpace(os.Getenv("TAHUNA_RUN_ID"))
+	serveID := strings.TrimSpace(os.Getenv("TAHUNA_SERVE_ID"))
+	mode, err := resolveMode(runID, serveID)
+	if err != nil {
+		return Config{}, err
+	}
+
 	cfg := Config{
-		RunID:                strings.TrimSpace(os.Getenv("TAHUNA_RUN_ID")),
+		Mode:                 mode,
+		RunID:                runID,
+		ServeID:              serveID,
 		APIBase:              strings.TrimRight(strings.TrimSpace(os.Getenv("TAHUNA_API_BASE")), "/"),
 		RuntimeToken:         strings.TrimSpace(os.Getenv("TAHUNA_RUNTIME_TOKEN")),
 		WorkspaceRoot:        strings.TrimSpace(os.Getenv("TAHUNA_WORKSPACE_ROOT")),
@@ -54,12 +72,31 @@ func LoadFromEnv() (Config, error) {
 	if cfg.OutputDir == "" {
 		cfg.OutputDir = "outputs"
 	}
-	if cfg.RunID == "" || cfg.APIBase == "" || cfg.RuntimeToken == "" {
-		return Config{}, fmt.Errorf("missing required env vars: TAHUNA_RUN_ID / TAHUNA_API_BASE / TAHUNA_RUNTIME_TOKEN")
+	if cfg.APIBase == "" || cfg.RuntimeToken == "" {
+		return Config{}, fmt.Errorf("missing required env vars: TAHUNA_API_BASE / TAHUNA_RUNTIME_TOKEN")
 	}
 	return cfg, nil
 }
 
 func (c Config) RequestTimeout() time.Duration {
 	return time.Duration(c.RequestTimeoutSec) * time.Second
+}
+
+func (c Config) ResourceID() string {
+	if c.Mode == ModeServe {
+		return c.ServeID
+	}
+	return c.RunID
+}
+
+func resolveMode(runID, serveID string) (Mode, error) {
+	hasRunID := runID != ""
+	hasServeID := serveID != ""
+	if hasRunID == hasServeID {
+		return "", fmt.Errorf("exactly one runtime target is required: TAHUNA_RUN_ID or TAHUNA_SERVE_ID")
+	}
+	if hasServeID {
+		return ModeServe, nil
+	}
+	return ModeRun, nil
 }

@@ -61,7 +61,7 @@ export async function handleServeRuntimeGet(ctx: ActionCtx, request: Request, ro
 
   if (route.action === "bootstrap") {
     try {
-      const plan = await ctx.runQuery(internal.serves.internalGetRuntimeBootstrapPlan, { serveId })
+      const plan = await ctx.runAction(internal.serves.internalGetRuntimeBootstrapPlan, { serveId })
       return new Response(JSON.stringify(plan), {
         status: 200,
         headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),

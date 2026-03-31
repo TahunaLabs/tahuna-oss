@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 
@@ -17,12 +16,8 @@ func Run(ctx context.Context, stdout, stderr io.Writer) int {
 		return 2
 	}
 
-	fmt.Fprintf(stdout, "warden startup run_id=%s workspace=%s\n", cfg.RunID, cfg.WorkspaceRoot)
+	fmt.Fprintf(stdout, "warden startup mode=%s id=%s workspace=%s\n", cfg.Mode, cfg.ResourceID(), cfg.WorkspaceRoot)
 	if err := bootstrap.Run(ctx, cfg); err != nil {
-		if errors.Is(err, bootstrap.ErrNotImplemented) {
-			fmt.Fprintln(stderr, "warden bootstrap not implemented yet")
-			return 3
-		}
 		fmt.Fprintf(stderr, "warden bootstrap failed: %v\n", err)
 		return 1
 	}

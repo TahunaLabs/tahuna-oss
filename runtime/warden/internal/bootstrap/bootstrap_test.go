@@ -48,6 +48,7 @@ func TestRunnerEmitsFailedStatusWhenBootstrapErrors(t *testing.T) {
 	defer server.Close()
 
 	cfg := config.Config{
+		Mode:              config.ModeRun,
 		RunID:             "run_123",
 		APIBase:           server.URL,
 		RuntimeToken:      "token_123",

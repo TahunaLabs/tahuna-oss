@@ -17,6 +17,17 @@ const (
 	StatusCompleted    = "completed"
 	StatusFailed       = "failed"
 	StatusCancelled    = "cancelled"
+	StatusStarting     = "starting"
+	StatusServing      = "serving"
+	StatusStopping     = "stopping"
+	StatusStopped      = "stopped"
+)
+
+type TargetType string
+
+const (
+	TargetTypeRun   TargetType = "runs"
+	TargetTypeServe TargetType = "serves"
 )
 
 type BootstrapEntry struct {
@@ -27,19 +38,45 @@ type BootstrapEntry struct {
 	DownloadURL string `json:"download_url"`
 }
 
-type BootstrapPlan struct {
-	RunID           string   `json:"run_id"`
-	ContractVersion string   `json:"contract_version"`
-	WorkspaceRoot   string   `json:"workspace_root"`
-	Command         []string `json:"command"`
-	Code            struct {
-		ManifestHash string           `json:"manifest_hash"`
-		Entries      []BootstrapEntry `json:"entries"`
-	} `json:"code"`
-	Data struct {
-		ManifestHash *string          `json:"manifest_hash"`
-		Entries      []BootstrapEntry `json:"entries"`
-	} `json:"data"`
+type BootstrapManifest struct {
+	ManifestHash string           `json:"manifest_hash"`
+	Entries      []BootstrapEntry `json:"entries"`
+}
+
+type OptionalBootstrapManifest struct {
+	ManifestHash *string          `json:"manifest_hash"`
+	Entries      []BootstrapEntry `json:"entries"`
+}
+
+type RunBootstrapPlan struct {
+	RunID           string                    `json:"run_id"`
+	ContractVersion string                    `json:"contract_version"`
+	WorkspaceRoot   string                    `json:"workspace_root"`
+	Command         []string                  `json:"command"`
+	Code            BootstrapManifest         `json:"code"`
+	Data            OptionalBootstrapManifest `json:"data"`
+}
+
+type ServeBootstrapPlan struct {
+	ServeID                 string                    `json:"serve_id"`
+	ContractVersion         string                    `json:"contract_version"`
+	EnvironmentID           string                    `json:"environment_id"`
+	WorkspaceRoot           string                    `json:"workspace_root"`
+	ModelRoot               string                    `json:"model_root"`
+	OutputDir               string                    `json:"output_dir"`
+	LogsPath                string                    `json:"logs_path"`
+	Command                 []string                  `json:"command"`
+	Code                    BootstrapManifest         `json:"code"`
+	Data                    OptionalBootstrapManifest `json:"data"`
+	Model                   BootstrapManifest         `json:"model"`
+	PythonVersion           string                    `json:"python_version"`
+	Port                    int                       `json:"port"`
+	HealthPath              string                    `json:"health_path"`
+	StartupTimeoutSeconds   int                       `json:"startup_timeout_seconds"`
+	HealthIntervalSeconds   int                       `json:"health_interval_seconds"`
+	HealthTimeoutSeconds    int                       `json:"health_timeout_seconds"`
+	HealthFailureThreshold  int                       `json:"health_failure_threshold"`
+	GracefulShutdownSeconds int                       `json:"graceful_shutdown_seconds"`
 }
 
 type StatusUpdate struct {
@@ -80,30 +117,48 @@ type clientResponseAccepted struct {
 }
 
 type Client struct {
-	baseURL string
-	runID   string
-	token   string
-	http    *http.Client
+	baseURL    string
+	targetType TargetType
+	targetID   string
+	token      string
+	http       *http.Client
 }
 
-func New(baseURL, runID, runtimeToken string, timeout time.Duration) *Client {
+func NewRun(baseURL, runID, runtimeToken string, timeout time.Duration) *Client {
+	return newClient(baseURL, TargetTypeRun, runID, runtimeToken, timeout)
+}
+
+func NewServe(baseURL, serveID, runtimeToken string, timeout time.Duration) *Client {
+	return newClient(baseURL, TargetTypeServe, serveID, runtimeToken, timeout)
+}
+
+func newClient(baseURL string, targetType TargetType, targetID, runtimeToken string, timeout time.Duration) *Client {
 	if timeout <= 0 {
 		timeout = 120 * time.Second
 	}
 	return &Client{
-		baseURL: strings.TrimRight(strings.TrimSpace(baseURL), "/"),
-		runID:   strings.TrimSpace(runID),
-		token:   strings.TrimSpace(runtimeToken),
+		baseURL:    strings.TrimRight(strings.TrimSpace(baseURL), "/"),
+		targetType: targetType,
+		targetID:   strings.TrimSpace(targetID),
+		token:      strings.TrimSpace(runtimeToken),
 		http: &http.Client{
 			Timeout: timeout,
 		},
 	}
 }
 
-func (c *Client) GetBootstrapPlan(ctx context.Context) (BootstrapPlan, error) {
-	var plan BootstrapPlan
+func (c *Client) GetRunBootstrapPlan(ctx context.Context) (RunBootstrapPlan, error) {
+	var plan RunBootstrapPlan
 	if err := c.doJSON(ctx, http.MethodGet, c.path("bootstrap"), nil, &plan); err != nil {
-		return BootstrapPlan{}, err
+		return RunBootstrapPlan{}, err
+	}
+	return plan, nil
+}
+
+func (c *Client) GetServeBootstrapPlan(ctx context.Context) (ServeBootstrapPlan, error) {
+	var plan ServeBootstrapPlan
+	if err := c.doJSON(ctx, http.MethodGet, c.path("bootstrap"), nil, &plan); err != nil {
+		return ServeBootstrapPlan{}, err
 	}
 	return plan, nil
 }
@@ -167,7 +222,7 @@ func (c *Client) CommitArtifacts(ctx context.Context, keys []string) (int, error
 }
 
 func (c *Client) path(action string) string {
-	return fmt.Sprintf("%s/api/runs/%s/runtime/%s", c.baseURL, c.runID, action)
+	return fmt.Sprintf("%s/api/%s/%s/runtime/%s", c.baseURL, c.targetType, c.targetID, action)
 }
 
 func (c *Client) doJSON(ctx context.Context, method, url string, payload any, out any) error {

@@ -20,7 +20,7 @@ import {
   type RuntimeCompatibilityFingerprint,
 } from "@/lib/runtime-incompatibility";
 import { images } from "@convex/catalog";
-import { PYTHON_CONFIG, RUN_CONFIG, SYNC_CONFIG } from "@convex/appConfig";
+import { PYTHON_CONFIG, RUN_CONFIG } from "@convex/appConfig";
 import { applyStorageDeltaCredits, USAGE_EVENT_TYPE, upsertLedgerDebitTotal } from "@convex/credits";
 import type { ComputeSettlementResult } from "@convex/runBilling";
 import {
@@ -34,6 +34,11 @@ import {
 import { getAccessibleRun } from "@convex/runsAccess";
 import { listByUserId, toRunLogsOnlyResponse, toRunLogsResponse, toRunMetricsOnlyResponse, toRunResponse } from "@convex/runsRead";
 import {
+  fetchSyncManifest,
+  resolveSyncManifestDownloadEntries,
+  type RuntimeBootstrapEntry,
+} from "@convex/runtimeBootstrap";
+import {
   cancelRunForUserId,
   createRunForUserId,
   deleteRunDataBatch,
@@ -41,14 +46,7 @@ import {
   renameRunForUserId,
   scheduleForcedPodTermination,
 } from "@convex/runsLifecycle";
-import {
-  parseManifest,
-  sha256Hex,
-  type ManifestEntry,
-  type SyncKind,
-  type SyncManifestPayload,
-} from "@convex/syncManifest";
-import { sleepMs } from "@convex/sleep";
+import { sha256Hex } from "@convex/syncManifest";
 import { ACTIVE_STATUSES, RUN_STATUS, TERMINAL_STATUSES } from "@convex/runsConstants";
 import { fetchRunpodGpuTypes, resolveRunpodApiKeyByCredentialId } from "@convex/runpodCredentials";
 const runResponseValidator = v.object({
@@ -279,7 +277,6 @@ const startupTimeoutStateValidator = v.union(
 
 const r2 = new R2(components.r2);
 
-type RuntimeBootstrapEntry = ManifestEntry & { download_url: string };
 type ProvisioningPayload = {
   run_id: string;
   environment_id: string;
@@ -450,50 +447,6 @@ function toProvisioningPayload(row: Doc<"runs">): ProvisioningPayload {
   };
 }
 
-async function fetchObjectBytes(_ctx: ActionCtx, key: string): Promise<ArrayBuffer> {
-  const downloadUrl = await r2.getUrl(key);
-  const response = await fetch(downloadUrl);
-  if (response.status === 404) {
-    throw new Error(`object not found: ${key}`);
-  }
-  if (!response.ok) {
-    throw new Error(`failed to fetch object ${key}: http ${response.status}`);
-  }
-  return await response.arrayBuffer();
-}
-
-async function fetchManifest(
-  ctx: ActionCtx,
-  kind: SyncKind,
-  key: string,
-  expectedHash: string,
-) {
-  const rawBytes = await fetchObjectBytes(ctx, key);
-  const rawText = new TextDecoder().decode(rawBytes);
-  const actualHash = await sha256Hex(rawText);
-  if (actualHash !== expectedHash) {
-    throw new Error(`${kind} manifest hash mismatch`);
-  }
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(rawText);
-  } catch {
-    throw new Error(`${kind} manifest is not valid JSON`);
-  }
-  const manifest = parseManifest(parsed, kind);
-  if (!manifest) {
-    throw new Error(`${kind} manifest payload is invalid`);
-  }
-  return manifest;
-}
-
-function blobKeys(
-  _kind: SyncKind,
-  sha256: string,
-) {
-  return [`blobs/${sha256}`];
-}
-
 function isS3NotFoundError(error: unknown) {
   if (!error || typeof error !== "object") {
     return false;
@@ -517,81 +470,6 @@ async function getSignedDownloadUrlByHead(key: string): Promise<string | null> {
     }
     throw error;
   }
-}
-
-async function getDownloadUrlWithMetadataSync(ctx: ActionCtx, key: string): Promise<string | null> {
-  const immediate = await r2.getMetadata(ctx, key);
-  if (immediate?.url) {
-    return immediate.url;
-  }
-  const direct = await getSignedDownloadUrlByHead(key);
-  if (direct) {
-    return direct;
-  }
-  let delay = SYNC_CONFIG.objectMetadataPollInitialBackoffMs;
-  for (let attempt = 0; attempt < SYNC_CONFIG.objectMetadataPollAttempts; attempt += 1) {
-    const metadata = await r2.getMetadata(ctx, key);
-    if (metadata?.url) {
-      return metadata.url;
-    }
-    const signedUrl = await getSignedDownloadUrlByHead(key);
-    if (signedUrl) {
-      return signedUrl;
-    }
-    if (attempt < SYNC_CONFIG.objectMetadataPollAttempts - 1) {
-      await sleepMs(delay);
-      if (delay < SYNC_CONFIG.objectMetadataPollMaxBackoffMs) {
-        delay *= 2;
-      }
-    }
-  }
-  return null;
-}
-
-async function resolveManifestDownloadEntries(
-  ctx: ActionCtx,
-  kind: SyncKind,
-  manifest: SyncManifestPayload,
-): Promise<RuntimeBootstrapEntry[]> {
-  const entries: RuntimeBootstrapEntry[] = [];
-  const keyUrlCache = new Map<string, string | null>();
-  for (const entry of manifest.entries) {
-    const candidateKeys = blobKeys(kind, entry.sha256);
-    let downloadUrl: string | null = null;
-    for (const key of candidateKeys) {
-      if (keyUrlCache.has(key)) {
-        downloadUrl = keyUrlCache.get(key) || null;
-      } else {
-        const quickMetadata = await r2.getMetadata(ctx, key);
-        if (quickMetadata?.url) {
-          downloadUrl = quickMetadata.url;
-        } else {
-          downloadUrl = await getSignedDownloadUrlByHead(key);
-        }
-        keyUrlCache.set(key, downloadUrl);
-      }
-      if (downloadUrl) {
-        break;
-      }
-    }
-    if (!downloadUrl) {
-      for (const key of candidateKeys) {
-        downloadUrl = await getDownloadUrlWithMetadataSync(ctx, key);
-        if (downloadUrl) {
-          keyUrlCache.set(key, downloadUrl);
-          break;
-        }
-      }
-    }
-    if (!downloadUrl) {
-      throw new Error(`${kind} blob is missing from object storage: ${entry.sha256}`);
-    }
-    entries.push({
-      ...entry,
-      download_url: downloadUrl,
-    });
-  }
-  return entries;
 }
 
 function resolveImageName(framework: string, version: string, pythonVersion: string) {
@@ -1391,12 +1269,12 @@ export const internalGetRuntimeBootstrapPlan = internalAction({
       throw new Error("missing pinned code manifest hash/key in provisioning payload");
     }
 
-    const codeManifest = await fetchManifest(ctx, "code", codeManifestKey, codeManifestHash);
-    const codeEntries = await resolveManifestDownloadEntries(ctx, "code", codeManifest);
+    const codeManifest = await fetchSyncManifest(ctx, "code", codeManifestKey, codeManifestHash);
+    const codeEntries = await resolveSyncManifestDownloadEntries(ctx, "code", codeManifest);
     let dataEntries: RuntimeBootstrapEntry[] = [];
     if (dataManifestHash && dataManifestKey) {
-      const dataManifest = await fetchManifest(ctx, "data", dataManifestKey, dataManifestHash);
-      dataEntries = await resolveManifestDownloadEntries(ctx, "data", dataManifest);
+      const dataManifest = await fetchSyncManifest(ctx, "data", dataManifestKey, dataManifestHash);
+      dataEntries = await resolveSyncManifestDownloadEntries(ctx, "data", dataManifest);
     }
 
     return {
@@ -1615,9 +1493,9 @@ export const provisionRun = internalAction({
         throw new Error("missing pinned code manifest hash/key in provisioning payload");
       }
 
-      await fetchManifest(ctx, "code", codeManifestKey, codeManifestHash);
+      await fetchSyncManifest(ctx, "code", codeManifestKey, codeManifestHash);
       if (dataManifestHash && dataManifestKey) {
-        await fetchManifest(ctx, "data", dataManifestKey, dataManifestHash);
+        await fetchSyncManifest(ctx, "data", dataManifestKey, dataManifestHash);
       }
       const runtimeToken = generateRuntimeToken();
       const runtimeTokenHash = await sha256Hex(runtimeToken);

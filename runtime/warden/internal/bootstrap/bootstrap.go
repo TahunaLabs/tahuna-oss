@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"os/signal"
 	"path/filepath"
 	"strings"
@@ -15,10 +16,9 @@ import (
 	"warden/internal/deps"
 	"warden/internal/materialize"
 	"warden/internal/runtimeapi"
+	"warden/internal/serve"
 	"warden/internal/train"
 )
-
-var ErrNotImplemented = errors.New("warden runtime bootstrap is not implemented yet")
 
 const maxURLRefreshRetries = 1
 
@@ -30,6 +30,7 @@ const (
 	StateMaterialize  State = "materialize"
 	StateInstall      State = "install"
 	StateTraining     State = "training"
+	StateServing      State = "serving"
 	StateArtifacts    State = "artifacts"
 	StateCompleted    State = "completed"
 	StateFailed       State = "failed"
@@ -44,9 +45,16 @@ type Runner struct {
 func NewRunner(cfg config.Config) *Runner {
 	return &Runner{
 		state: StateInit,
-		api:   runtimeapi.New(cfg.APIBase, cfg.RunID, cfg.RuntimeToken, cfg.RequestTimeout()),
+		api:   newRuntimeClient(cfg),
 		cfg:   cfg,
 	}
+}
+
+func newRuntimeClient(cfg config.Config) *runtimeapi.Client {
+	if cfg.Mode == config.ModeServe {
+		return runtimeapi.NewServe(cfg.APIBase, cfg.ServeID, cfg.RuntimeToken, cfg.RequestTimeout())
+	}
+	return runtimeapi.NewRun(cfg.APIBase, cfg.RunID, cfg.RuntimeToken, cfg.RequestTimeout())
 }
 
 func (r *Runner) transition(next State) {
@@ -54,72 +62,51 @@ func (r *Runner) transition(next State) {
 }
 
 func (r *Runner) Run(ctx context.Context) error {
-	r.transition(StateProvisioning)
-	if err := r.api.EmitStatus(ctx, runtimeapi.StatusUpdate{
-		Status:  runtimeapi.StatusProvisioning,
-		Message: "warden bootstrap started",
-	}); err != nil {
-		return fmt.Errorf("emit provisioning status: %w", err)
+	switch r.cfg.Mode {
+	case config.ModeServe:
+		return r.runServe(ctx)
+	case config.ModeRun:
+		return r.runTraining(ctx)
+	default:
+		return fmt.Errorf("unsupported runtime mode %q", strings.TrimSpace(string(r.cfg.Mode)))
 	}
-	if _, err := r.api.EmitLogs(ctx, []runtimeapi.LogLine{
-		{
-			Message: "bootstrap: requesting materialization plan",
-			Level:   "info",
-			Source:  "bootstrap",
-		},
-	}); err != nil {
-		return fmt.Errorf("emit startup log: %w", err)
+}
+
+func (r *Runner) runTraining(ctx context.Context) error {
+	if err := r.emitProvisioning(ctx, "warden bootstrap started"); err != nil {
+		return err
 	}
 
-	plan, err := r.api.GetBootstrapPlan(ctx)
+	plan, err := r.api.GetRunBootstrapPlan(ctx)
 	if err != nil {
 		return r.failWithError(ctx, fmt.Errorf("fetch bootstrap plan: %w", err))
 	}
 
 	r.transition(StateMaterialize)
 	downloader := materialize.NewDownloader(r.cfg.RequestTimeout())
-
-	// Materialize code — retry once with fresh signed URLs on 403.
-	var codeStats materialize.Stats
-	for attempt := 0; ; attempt++ {
-		codeTotalBytes := sumEntryBytes(plan.Code.Entries)
-		_, _ = r.api.EmitLogs(ctx, []runtimeapi.LogLine{
-			{
-				Message: fmt.Sprintf(
-					"bootstrap: materializing code files=%d bytes=%s",
-					len(plan.Code.Entries),
-					formatBytes(codeTotalBytes),
-				),
-				Level:  "info",
-				Source: "bootstrap",
-			},
-		})
-		codeStats, err = materialize.WriteManifestEntries(
-			ctx,
-			downloader,
-			plan.Code.Entries,
-			r.cfg.WorkspaceRoot,
-			"code",
-			r.newProgressReporter(ctx, "code"),
-		)
-		if err == nil {
-			break
-		}
-		if !errors.Is(err, materialize.ErrSignedURLExpired) || attempt >= maxURLRefreshRetries {
-			return r.failWithError(ctx, err)
-		}
-		_, _ = r.api.EmitLogs(ctx, []runtimeapi.LogLine{
-			{Message: "bootstrap: signed URLs expired, re-fetching plan", Level: "warn", Source: "bootstrap"},
-		})
-		plan, err = r.api.GetBootstrapPlan(ctx)
-		if err != nil {
-			return r.failWithError(ctx, fmt.Errorf("re-fetch bootstrap plan: %w", err))
-		}
+	codeStats, err := r.materializeEntries(
+		ctx,
+		downloader,
+		"code",
+		r.cfg.WorkspaceRoot,
+		plan.Code.Entries,
+		func(ctx context.Context) ([]runtimeapi.BootstrapEntry, error) {
+			refreshed, err := r.api.GetRunBootstrapPlan(ctx)
+			if err != nil {
+				return nil, err
+			}
+			return refreshed.Code.Entries, nil
+		},
+	)
+	if err != nil {
+		return r.failWithError(ctx, err)
 	}
 
-	// Run data materialization + extraction and dependency install in parallel.
-	// Data writes to /workspace/data/ while uv sync reads pyproject.toml from
-	// /workspace/ — no file conflicts.
+	dataRoot, outputRoot, err := ensureSharedWorkspacePaths(r.cfg.WorkspaceRoot, r.cfg.OutputDir)
+	if err != nil {
+		return r.failWithError(ctx, err)
+	}
+
 	emitLog := func(level, source, message string) {
 		_, _ = r.api.EmitLogs(ctx, []runtimeapi.LogLine{
 			{
@@ -142,14 +129,24 @@ func (r *Runner) Run(ctx context.Context) error {
 
 	dataResultCh := make(chan dataMaterializeResult, 1)
 	go func() {
-		dataResultCh <- r.materializeData(ctx, downloader, plan.Data.Entries)
+		dataResultCh <- r.materializeData(
+			ctx,
+			downloader,
+			dataRoot,
+			plan.Data.Entries,
+			func(ctx context.Context) ([]runtimeapi.BootstrapEntry, error) {
+				refreshed, err := r.api.GetRunBootstrapPlan(ctx)
+				if err != nil {
+					return nil, err
+				}
+				return refreshed.Data.Entries, nil
+			},
+		)
 	}()
 
 	r.transition(StateInstall)
 	installErr := deps.InstallDependencies(ctx, r.cfg.WorkspaceRoot, deps.ModeTrain, installHooks)
-
 	dataRes := <-dataResultCh
-
 	if installErr != nil {
 		return r.failWithError(ctx, installErr)
 	}
@@ -200,38 +197,14 @@ func (r *Runner) Run(ctx context.Context) error {
 			},
 		})
 	}
-	_, _ = r.api.EmitLogs(ctx, []runtimeapi.LogLine{
-		{
-			Message: fmt.Sprintf(
-				"bootstrap: materialized code files=%d data files=%d",
-				codeStats.FileCount,
-				dataStats.FileCount,
-			),
-			Level:  "info",
-			Source: "bootstrap",
-		},
+
+	r.emitMaterializedLogs(ctx, map[string]materialize.Stats{
+		"code": codeStats,
+		"data": dataStats,
 	})
-	_, _ = r.api.EmitMetrics(ctx, []runtimeapi.MetricSample{
-		{
-			Name:   "bootstrap_code_files",
-			Value:  float64(codeStats.FileCount),
-			Source: "bootstrap",
-		},
-		{
-			Name:   "bootstrap_code_bytes",
-			Value:  float64(codeStats.TotalBytes),
-			Source: "bootstrap",
-		},
-		{
-			Name:   "bootstrap_data_files",
-			Value:  float64(dataStats.FileCount),
-			Source: "bootstrap",
-		},
-		{
-			Name:   "bootstrap_data_bytes",
-			Value:  float64(dataStats.TotalBytes),
-			Source: "bootstrap",
-		},
+	r.emitMaterializedMetrics(ctx, map[string]materialize.Stats{
+		"code": codeStats,
+		"data": dataStats,
 	})
 	if err := r.api.EmitStatus(ctx, runtimeapi.StatusUpdate{
 		Status:  runtimeapi.StatusRunning,
@@ -255,7 +228,7 @@ func (r *Runner) Run(ctx context.Context) error {
 	}
 	if cancelled {
 		r.transition(StateArtifacts)
-		r.syncArtifacts(ctx, trainHooks)
+		r.syncArtifacts(ctx, trainHooks, outputRoot)
 		_ = r.api.EmitStatus(ctx, runtimeapi.StatusUpdate{
 			Status:  runtimeapi.StatusCancelled,
 			Message: "run cancelled by user",
@@ -267,13 +240,177 @@ func (r *Runner) Run(ctx context.Context) error {
 	}
 
 	r.transition(StateArtifacts)
-	r.syncArtifacts(ctx, trainHooks)
+	r.syncArtifacts(ctx, trainHooks, outputRoot)
 	r.transition(StateCompleted)
 	_ = r.api.EmitStatus(ctx, runtimeapi.StatusUpdate{
 		Status:  runtimeapi.StatusCompleted,
 		Message: "entrypoint completed",
 	})
 	return nil
+}
+
+func (r *Runner) runServe(ctx context.Context) error {
+	if err := r.emitProvisioning(ctx, "serve bootstrap started"); err != nil {
+		return err
+	}
+
+	plan, err := r.api.GetServeBootstrapPlan(ctx)
+	if err != nil {
+		return r.failWithError(ctx, fmt.Errorf("fetch serve bootstrap plan: %w", err))
+	}
+
+	r.transition(StateMaterialize)
+	downloader := materialize.NewDownloader(r.cfg.RequestTimeout())
+	codeStats, err := r.materializeEntries(
+		ctx,
+		downloader,
+		"code",
+		r.cfg.WorkspaceRoot,
+		plan.Code.Entries,
+		func(ctx context.Context) ([]runtimeapi.BootstrapEntry, error) {
+			refreshed, err := r.api.GetServeBootstrapPlan(ctx)
+			if err != nil {
+				return nil, err
+			}
+			return refreshed.Code.Entries, nil
+		},
+	)
+	if err != nil {
+		return r.failWithError(ctx, err)
+	}
+
+	dataRoot, outputRoot, err := ensureSharedWorkspacePaths(r.cfg.WorkspaceRoot, plan.OutputDir)
+	if err != nil {
+		return r.failWithError(ctx, err)
+	}
+	if err := os.MkdirAll(plan.ModelRoot, 0o755); err != nil {
+		return r.failWithError(ctx, fmt.Errorf("create model root %s: %w", plan.ModelRoot, err))
+	}
+
+	emitLog := func(level, source, message string) {
+		_, _ = r.api.EmitLogs(ctx, []runtimeapi.LogLine{
+			{
+				Message: message,
+				Level:   level,
+				Source:  source,
+			},
+		})
+	}
+	installHooks := deps.Hooks{
+		EmitLog: emitLog,
+	}
+	serveHooks := serve.Hooks{
+		EmitLog: emitLog,
+		EmitStatus: func(update runtimeapi.StatusUpdate) error {
+			return r.api.EmitStatus(ctx, update)
+		},
+	}
+
+	dataResultCh := make(chan dataMaterializeResult, 1)
+	go func() {
+		dataResultCh <- r.materializeData(
+			ctx,
+			downloader,
+			dataRoot,
+			plan.Data.Entries,
+			func(ctx context.Context) ([]runtimeapi.BootstrapEntry, error) {
+				refreshed, err := r.api.GetServeBootstrapPlan(ctx)
+				if err != nil {
+					return nil, err
+				}
+				return refreshed.Data.Entries, nil
+			},
+		)
+	}()
+
+	modelResultCh := make(chan materializeResult, 1)
+	go func() {
+		stats, err := r.materializeEntries(
+			ctx,
+			downloader,
+			"model",
+			plan.ModelRoot,
+			plan.Model.Entries,
+			func(ctx context.Context) ([]runtimeapi.BootstrapEntry, error) {
+				refreshed, err := r.api.GetServeBootstrapPlan(ctx)
+				if err != nil {
+					return nil, err
+				}
+				return refreshed.Model.Entries, nil
+			},
+		)
+		modelResultCh <- materializeResult{stats: stats, err: err}
+	}()
+
+	r.transition(StateInstall)
+	installErr := deps.InstallDependencies(ctx, r.cfg.WorkspaceRoot, deps.ModeServe, installHooks)
+	dataRes := <-dataResultCh
+	modelRes := <-modelResultCh
+	if installErr != nil {
+		return r.failWithError(ctx, installErr)
+	}
+	if dataRes.err != nil {
+		return r.failWithError(ctx, dataRes.err)
+	}
+	if modelRes.err != nil {
+		return r.failWithError(ctx, modelRes.err)
+	}
+
+	dataStats := dataRes.stats
+	if dataRes.bundleFiles > 0 {
+		dataStats.FileCount = maxInt(0, dataStats.FileCount-1) + dataRes.bundleFiles
+		dataStats.TotalBytes = maxInt64(0, dataStats.TotalBytes-dataRes.bundleArchiveBytes) + dataRes.bundleBytes
+		_, _ = r.api.EmitLogs(ctx, []runtimeapi.LogLine{
+			{
+				Message: fmt.Sprintf(
+					"bootstrap: extracted data bundle files=%d bytes=%s duration=%s",
+					dataRes.bundleFiles,
+					formatBytes(dataRes.bundleBytes),
+					dataRes.bundleExtractDuration.Round(10*time.Millisecond).String(),
+				),
+				Level:  "info",
+				Source: "bootstrap",
+			},
+		})
+	}
+	r.emitMaterializedLogs(ctx, map[string]materialize.Stats{
+		"code":  codeStats,
+		"data":  dataStats,
+		"model": modelRes.stats,
+	})
+
+	r.transition(StateServing)
+	serveCtx, stopSignals := signal.NotifyContext(ctx, syscall.SIGTERM, syscall.SIGINT)
+	defer stopSignals()
+	if err := serve.RunEntrypoint(
+		serveCtx,
+		serve.Config{
+			ServeID:                 plan.ServeID,
+			WorkspaceRoot:           r.cfg.WorkspaceRoot,
+			DataDir:                 dataRoot,
+			OutputDir:               outputRoot,
+			ModelRoot:               plan.ModelRoot,
+			Command:                 plan.Command,
+			Port:                    plan.Port,
+			HealthPath:              plan.HealthPath,
+			StartupTimeout:          time.Duration(plan.StartupTimeoutSeconds) * time.Second,
+			HealthInterval:          time.Duration(plan.HealthIntervalSeconds) * time.Second,
+			HealthTimeout:           time.Duration(plan.HealthTimeoutSeconds) * time.Second,
+			HealthFailureThreshold:  plan.HealthFailureThreshold,
+			GracefulShutdownTimeout: time.Duration(plan.GracefulShutdownSeconds) * time.Second,
+		},
+		serveHooks,
+	); err != nil {
+		return r.failWithError(ctx, err)
+	}
+
+	r.transition(StateCompleted)
+	return nil
+}
+
+type materializeResult struct {
+	stats materialize.Stats
+	err   error
 }
 
 type dataMaterializeResult struct {
@@ -285,23 +422,45 @@ type dataMaterializeResult struct {
 	err                   error
 }
 
-func (r *Runner) materializeData(
+func (r *Runner) emitProvisioning(ctx context.Context, message string) error {
+	r.transition(StateProvisioning)
+	if err := r.api.EmitStatus(ctx, runtimeapi.StatusUpdate{
+		Status:  runtimeapi.StatusProvisioning,
+		Message: message,
+	}); err != nil {
+		return fmt.Errorf("emit provisioning status: %w", err)
+	}
+	if _, err := r.api.EmitLogs(ctx, []runtimeapi.LogLine{
+		{
+			Message: "bootstrap: requesting materialization plan",
+			Level:   "info",
+			Source:  "bootstrap",
+		},
+	}); err != nil {
+		return fmt.Errorf("emit startup log: %w", err)
+	}
+	return nil
+}
+
+func (r *Runner) materializeEntries(
 	ctx context.Context,
 	downloader *materialize.Downloader,
-	dataEntries []runtimeapi.BootstrapEntry,
-) dataMaterializeResult {
-	dataRoot := filepath.Join(r.cfg.WorkspaceRoot, "data")
-
+	kind string,
+	rootDir string,
+	entries []runtimeapi.BootstrapEntry,
+	reload func(context.Context) ([]runtimeapi.BootstrapEntry, error),
+) (materialize.Stats, error) {
 	var stats materialize.Stats
 	var err error
 	for attempt := 0; ; attempt++ {
-		dataTotalBytes := sumEntryBytes(dataEntries)
+		totalBytes := sumEntryBytes(entries)
 		_, _ = r.api.EmitLogs(ctx, []runtimeapi.LogLine{
 			{
 				Message: fmt.Sprintf(
-					"bootstrap: materializing data files=%d bytes=%s",
-					len(dataEntries),
-					formatBytes(dataTotalBytes),
+					"bootstrap: materializing %s files=%d bytes=%s",
+					kind,
+					len(entries),
+					formatBytes(totalBytes),
 				),
 				Level:  "info",
 				Source: "bootstrap",
@@ -310,25 +469,37 @@ func (r *Runner) materializeData(
 		stats, err = materialize.WriteManifestEntries(
 			ctx,
 			downloader,
-			dataEntries,
-			dataRoot,
-			"data",
-			r.newProgressReporter(ctx, "data"),
+			entries,
+			rootDir,
+			kind,
+			r.newProgressReporter(ctx, kind),
 		)
 		if err == nil {
-			break
+			return stats, nil
 		}
 		if !errors.Is(err, materialize.ErrSignedURLExpired) || attempt >= maxURLRefreshRetries {
-			return dataMaterializeResult{err: err}
+			return materialize.Stats{}, err
 		}
 		_, _ = r.api.EmitLogs(ctx, []runtimeapi.LogLine{
 			{Message: "bootstrap: signed URLs expired, re-fetching plan", Level: "warn", Source: "bootstrap"},
 		})
-		plan, planErr := r.api.GetBootstrapPlan(ctx)
-		if planErr != nil {
-			return dataMaterializeResult{err: fmt.Errorf("re-fetch bootstrap plan: %w", planErr)}
+		entries, err = reload(ctx)
+		if err != nil {
+			return materialize.Stats{}, fmt.Errorf("re-fetch bootstrap plan: %w", err)
 		}
-		dataEntries = plan.Data.Entries
+	}
+}
+
+func (r *Runner) materializeData(
+	ctx context.Context,
+	downloader *materialize.Downloader,
+	dataRoot string,
+	dataEntries []runtimeapi.BootstrapEntry,
+	reload func(context.Context) ([]runtimeapi.BootstrapEntry, error),
+) dataMaterializeResult {
+	stats, err := r.materializeEntries(ctx, downloader, "data", dataRoot, dataEntries, reload)
+	if err != nil {
+		return dataMaterializeResult{err: err}
 	}
 
 	bundleStart := time.Now()
@@ -345,6 +516,59 @@ func (r *Runner) materializeData(
 		bundleArchiveBytes:    bundleArchiveBytes,
 		bundleExtractDuration: bundleDuration,
 	}
+}
+
+func (r *Runner) emitMaterializedLogs(ctx context.Context, statsByKind map[string]materialize.Stats) {
+	parts := make([]string, 0, len(statsByKind))
+	for _, kind := range []string{"code", "data", "model"} {
+		stats, ok := statsByKind[kind]
+		if !ok {
+			continue
+		}
+		parts = append(parts, fmt.Sprintf("%s files=%d", kind, stats.FileCount))
+	}
+	if len(parts) == 0 {
+		return
+	}
+	_, _ = r.api.EmitLogs(ctx, []runtimeapi.LogLine{
+		{
+			Message: "bootstrap: materialized " + strings.Join(parts, " "),
+			Level:   "info",
+			Source:  "bootstrap",
+		},
+	})
+}
+
+func (r *Runner) emitMaterializedMetrics(ctx context.Context, statsByKind map[string]materialize.Stats) {
+	samples := []runtimeapi.MetricSample{}
+	for kind, stats := range statsByKind {
+		samples = append(samples,
+			runtimeapi.MetricSample{
+				Name:   "bootstrap_" + kind + "_files",
+				Value:  float64(stats.FileCount),
+				Source: "bootstrap",
+			},
+			runtimeapi.MetricSample{
+				Name:   "bootstrap_" + kind + "_bytes",
+				Value:  float64(stats.TotalBytes),
+				Source: "bootstrap",
+			},
+		)
+	}
+	if len(samples) > 0 {
+		_, _ = r.api.EmitMetrics(ctx, samples)
+	}
+}
+
+func ensureSharedWorkspacePaths(workspaceRoot, outputDir string) (string, string, error) {
+	dataRoot := filepath.Clean(filepath.Join(workspaceRoot, "data"))
+	outputRoot := filepath.Clean(filepath.Join(workspaceRoot, outputDir))
+	for _, path := range []string{dataRoot, outputRoot} {
+		if err := os.MkdirAll(path, 0o755); err != nil {
+			return "", "", fmt.Errorf("create workspace path %s: %w", path, err)
+		}
+	}
+	return dataRoot, outputRoot, nil
 }
 
 func (r *Runner) failWithError(ctx context.Context, reason error) error {
@@ -365,8 +589,7 @@ func (r *Runner) failWithError(ctx context.Context, reason error) error {
 	return reason
 }
 
-func (r *Runner) syncArtifacts(ctx context.Context, hooks train.Hooks) {
-	outputDir := filepath.Clean(filepath.Join(r.cfg.WorkspaceRoot, r.cfg.OutputDir))
+func (r *Runner) syncArtifacts(ctx context.Context, hooks train.Hooks, outputDir string) {
 	result := artifacts.Sync(
 		ctx,
 		r.api,

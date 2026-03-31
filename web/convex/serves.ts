@@ -5,6 +5,14 @@ import type { Id } from "@convex/_generated/dataModel"
 import { internalAction, internalMutation, internalQuery } from "@convex/_generated/server"
 import { R2 } from "@convex-dev/r2"
 import { RUN_STATUS } from "@convex/runsConstants"
+import { buildManifestObjectKey } from "@convex/cli/shared"
+import {
+  fetchServeSnapshotManifest,
+  fetchSyncManifest,
+  resolveServeSnapshotDownloadEntries,
+  resolveSyncManifestDownloadEntries,
+  type RuntimeBootstrapEntry,
+} from "@convex/runtimeBootstrap"
 import { getAccessibleEnvironment, getAccessibleRun } from "@convex/runsAccess"
 import { getAccessibleServe } from "@convex/servesAccess"
 import { SERVE_STATUS, TERMINAL_SERVE_STATUSES } from "@convex/servesConstants"
@@ -103,6 +111,38 @@ type RuntimeBootstrapPlan = {
   serve_id: string
   contract_version: string
   environment_id: string
+  workspace_root: string
+  model_root: string
+  output_dir: string
+  logs_path: string
+  command: string[]
+  code: {
+    manifest_hash: string
+    entries: RuntimeBootstrapEntry[]
+  }
+  data: {
+    manifest_hash: string | null
+    entries: RuntimeBootstrapEntry[]
+  }
+  model: {
+    manifest_hash: string
+    entries: RuntimeBootstrapEntry[]
+  }
+  python_version: string
+  port: number
+  health_path: string
+  startup_timeout_seconds: number
+  health_interval_seconds: number
+  health_timeout_seconds: number
+  health_failure_threshold: number
+  graceful_shutdown_seconds: number
+  model_snapshot: ServeModelSnapshotResponse
+}
+
+type RuntimeBootstrapContext = {
+  serve_id: string
+  environment_id: string
+  environment_data_id: string
   workspace_root: string
   model_root: string
   output_dir: string
@@ -264,6 +304,36 @@ const createServePreparationValidator = v.object({
   source_entries: v.array(snapshotSourceEntryValidator),
 })
 
+const runtimeBootstrapEntryValidator = v.object({
+  path: v.string(),
+  sha256: v.string(),
+  size: v.number(),
+  mode: v.number(),
+  download_url: v.string(),
+})
+
+const runtimeBootstrapContextValidator = v.object({
+  serve_id: v.string(),
+  environment_id: v.string(),
+  environment_data_id: v.string(),
+  workspace_root: v.string(),
+  model_root: v.string(),
+  output_dir: v.string(),
+  logs_path: v.string(),
+  command: v.array(v.string()),
+  code_manifest_hash: v.union(v.string(), v.null()),
+  data_manifest_hash: v.union(v.string(), v.null()),
+  python_version: v.string(),
+  port: v.number(),
+  health_path: v.string(),
+  startup_timeout_seconds: v.number(),
+  health_interval_seconds: v.number(),
+  health_timeout_seconds: v.number(),
+  health_failure_threshold: v.number(),
+  graceful_shutdown_seconds: v.number(),
+  model_snapshot: serveModelSnapshotResponseValidator,
+})
+
 const runtimeBootstrapPlanValidator = v.object({
   serve_id: v.string(),
   contract_version: v.string(),
@@ -273,8 +343,18 @@ const runtimeBootstrapPlanValidator = v.object({
   output_dir: v.string(),
   logs_path: v.string(),
   command: v.array(v.string()),
-  code_manifest_hash: v.union(v.string(), v.null()),
-  data_manifest_hash: v.union(v.string(), v.null()),
+  code: v.object({
+    manifest_hash: v.string(),
+    entries: v.array(runtimeBootstrapEntryValidator),
+  }),
+  data: v.object({
+    manifest_hash: v.union(v.string(), v.null()),
+    entries: v.array(runtimeBootstrapEntryValidator),
+  }),
+  model: v.object({
+    manifest_hash: v.string(),
+    entries: v.array(runtimeBootstrapEntryValidator),
+  }),
   python_version: v.string(),
   port: v.number(),
   health_path: v.string(),
@@ -690,18 +770,22 @@ export const internalValidateRuntimeToken = internalQuery({
   },
 })
 
-export const internalGetRuntimeBootstrapPlan = internalQuery({
+export const internalGetRuntimeBootstrapContext = internalQuery({
   args: { serveId: v.id("serves") },
-  returns: runtimeBootstrapPlanValidator,
-  handler: async (ctx, args): Promise<RuntimeBootstrapPlan> => {
+  returns: runtimeBootstrapContextValidator,
+  handler: async (ctx, args): Promise<RuntimeBootstrapContext> => {
     const row = await ctx.db.get("serves", args.serveId)
     if (!row) {
       throw new ConvexError("serve not found")
     }
+    const environment = await ctx.db.get(row.environmentId)
+    if (!environment) {
+      throw new ConvexError("environment not found")
+    }
     return {
       serve_id: String(row._id),
-      contract_version: "serve.v1",
       environment_id: String(row.environmentId),
+      environment_data_id: environment.dataId || String(environment._id),
       workspace_root: "/workspace",
       model_root: "/workspace/model",
       output_dir: row.outputDir,
@@ -718,6 +802,87 @@ export const internalGetRuntimeBootstrapPlan = internalQuery({
       health_failure_threshold: row.healthFailureThreshold,
       graceful_shutdown_seconds: row.gracefulShutdownSeconds,
       model_snapshot: toServeResponse(row).model_snapshot,
+    }
+  },
+})
+
+export const internalGetRuntimeBootstrapPlan = internalAction({
+  args: { serveId: v.id("serves") },
+  returns: runtimeBootstrapPlanValidator,
+  handler: async (ctx, args): Promise<RuntimeBootstrapPlan> => {
+    const bootstrap: RuntimeBootstrapContext = await ctx.runQuery(internal.serves.internalGetRuntimeBootstrapContext, {
+      serveId: args.serveId,
+    })
+    if (!bootstrap.code_manifest_hash) {
+      throw new Error("missing pinned code manifest hash on serve")
+    }
+
+    const codeManifest = await fetchSyncManifest(
+      ctx,
+      "code",
+      buildManifestObjectKey(
+        bootstrap.environment_id,
+        bootstrap.environment_data_id,
+        "code",
+        bootstrap.code_manifest_hash,
+      ),
+      bootstrap.code_manifest_hash,
+    )
+    const codeEntries = await resolveSyncManifestDownloadEntries(ctx, "code", codeManifest)
+
+    let dataEntries: RuntimeBootstrapEntry[] = []
+    if (bootstrap.data_manifest_hash) {
+      const dataManifest = await fetchSyncManifest(
+        ctx,
+        "data",
+        buildManifestObjectKey(
+          bootstrap.environment_id,
+          bootstrap.environment_data_id,
+          "data",
+          bootstrap.data_manifest_hash,
+        ),
+        bootstrap.data_manifest_hash,
+      )
+      dataEntries = await resolveSyncManifestDownloadEntries(ctx, "data", dataManifest)
+    }
+
+    const modelManifest = await fetchServeSnapshotManifest(
+      ctx,
+      bootstrap.model_snapshot.manifest_key,
+      bootstrap.model_snapshot.manifest_hash,
+    )
+    const modelEntries = await resolveServeSnapshotDownloadEntries(ctx, modelManifest)
+
+    return {
+      serve_id: bootstrap.serve_id,
+      contract_version: "serve.v1",
+      environment_id: bootstrap.environment_id,
+      workspace_root: bootstrap.workspace_root,
+      model_root: bootstrap.model_root,
+      output_dir: bootstrap.output_dir,
+      logs_path: bootstrap.logs_path,
+      command: bootstrap.command,
+      code: {
+        manifest_hash: bootstrap.code_manifest_hash,
+        entries: codeEntries,
+      },
+      data: {
+        manifest_hash: bootstrap.data_manifest_hash,
+        entries: dataEntries,
+      },
+      model: {
+        manifest_hash: bootstrap.model_snapshot.manifest_hash,
+        entries: modelEntries,
+      },
+      python_version: bootstrap.python_version,
+      port: bootstrap.port,
+      health_path: bootstrap.health_path,
+      startup_timeout_seconds: bootstrap.startup_timeout_seconds,
+      health_interval_seconds: bootstrap.health_interval_seconds,
+      health_timeout_seconds: bootstrap.health_timeout_seconds,
+      health_failure_threshold: bootstrap.health_failure_threshold,
+      graceful_shutdown_seconds: bootstrap.graceful_shutdown_seconds,
+      model_snapshot: bootstrap.model_snapshot,
     }
   },
 })
