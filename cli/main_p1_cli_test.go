@@ -180,7 +180,7 @@ func TestDefaultPyProjectTemplate_UsesTrainAndServeDependencyGroups(t *testing.T
 }
 
 func TestParseProjectConfigTOML_RejectsUnknownKeys(t *testing.T) {
-	_, _, err := parseProjectConfigTOML(`
+	_, err := parseProjectConfigTOML(`
 [project]
 data_dir = "data"
 output_dir = "outputs"
@@ -195,7 +195,7 @@ unexpected = "value"
 }
 
 func TestParseProjectConfigTOML_RejectsZeroPositiveInts(t *testing.T) {
-	_, _, err := parseProjectConfigTOML(`
+	_, err := parseProjectConfigTOML(`
 [project]
 data_dir = "data"
 output_dir = "outputs"
