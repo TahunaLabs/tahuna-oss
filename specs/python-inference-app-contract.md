@@ -14,12 +14,16 @@ This section is non-normative. It records rollout status in the current codebase
 
 - PR1 is done.
   This document is the canonical Python app serving contract and supersedes `specs/serve.md` for Python app serving.
-- PR2 is in progress, with core CLI and config work already landed.
-  Root `tahuna.toml` support and `[train]` / `[serve]` parsing and validation exist in `cli/project.go`, and `tahuna init` scaffolds `train.py`, `inference.py`, `pyproject.toml`, and `uv.lock` in `cli/commands_core.go`.
+- PR2 is in progress, with canonical root config and local-authoritative sync already landed.
+  Root `tahuna.toml` support and `[train]` / `[serve]` parsing and validation exist in `cli/project.go`, `tahuna init` scaffolds `train.py`, `inference.py`, `pyproject.toml`, and `uv.lock` in `cli/commands_core.go`, and `tahuna sync` / `tahuna env update` now push resolved environment, train, and serve config from local `tahuna.toml` instead of refreshing that file from the remote environment first.
 - PR3 is done.
   `runtime/warden/internal/deps` now owns Python dependency installation with explicit `train` and `serve` modes, `runtime/warden/internal/bootstrap` currently installs with `deps.ModeTrain`, and shared virtualenv environment handling lives in `runtime/warden/internal/pythonenv`.
   The protected-package lockfile check reads `uv.lock` with `github.com/BurntSushi/toml` instead of manual line parsing.
-- PR4 through PR9 are still pending.
+- PR4 through PR8 are still pending.
+- PR9 is in progress.
+  The dashboard already exposes synced serving config, but end-to-end serve workflows, examples, and final documentation are still incomplete.
+- The next implementation step is PR4.
+  The product still lacks serve records, serve events, serve status transitions, and serve HTTP/API primitives.
 
 ## Scope
 
@@ -55,19 +59,22 @@ The user owns:
 2. One canonical project layout.
    Tahuna expects root-level project files and does not rely on `.tahuna/tahuna.toml` for new projects.
 
-3. Separate dependency surfaces.
+3. Local project config is authoritative.
+   Root `tahuna.toml` is the source of truth for synced environment, train, and serve config. `tahuna sync` and `tahuna env update` push resolved values from this file to the backend.
+
+4. Separate dependency surfaces.
    Training installs the `train` dependency group. Serving installs the `serve` dependency group. Shared dependencies live in base project dependencies.
 
-4. User-defined Python inference stack.
+5. User-defined Python inference stack.
    Tahuna does not care whether `inference.py` uses `vllm`, `sglang`, `transformers`, `fastapi`, `uvicorn`, `litserve`, or plain HTTP code, as long as it satisfies this runtime contract.
 
-5. Tahuna-managed lifecycle.
+6. Tahuna-managed lifecycle.
    The Python app is user-defined, but readiness gating, health enforcement, stop semantics, and snapshot pinning are Tahuna-managed.
 
-6. Snapshot, not mutable prefix.
+7. Snapshot, not mutable prefix.
    Serving always runs from a pinned model snapshot resolved at serve creation time.
 
-7. Python apps only.
+8. Python apps only.
    This contract covers Python entrypoints executed by `python -u ...`. It does not cover non-Python serving binaries.
 
 ## Canonical Project Files
@@ -84,9 +91,19 @@ Optional project files may exist, but these files define the Tahuna contract.
 
 Legacy `.tahuna/tahuna.toml` is migration-only and is not part of the canonical contract for new projects.
 
+`.tahuna/` is reserved for local state such as links and sync cache. It is not the canonical source of project runtime intent.
+
 ## Project Config
 
 Projects define runtime intent in a root `tahuna.toml`.
+
+This file is the source of truth for synced environment, train, and serve config.
+
+Rules:
+
+- `tahuna env update` edits local `tahuna.toml`
+- `tahuna sync` pushes resolved config from local `tahuna.toml` to the backend
+- sync must not overwrite local `tahuna.toml` from remote environment state during normal operation
 
 Example:
 
@@ -580,7 +597,7 @@ This section is non-normative. It exists to guide implementation sequencing.
    Rewrite the Python serving contract, mark `specs/serve.md` as superseded for Python app serving, and align product language.
 
 2. PR2: Config contract and migration. Status: in progress.
-   Add root `tahuna.toml` support, introduce `[train]` and `[serve]`, migrate from legacy `.tahuna/tahuna.toml`, and update project scaffolding.
+   Add root `tahuna.toml` support, introduce `[train]` and `[serve]`, migrate from legacy `.tahuna/tahuna.toml`, update project scaffolding, and make local `tahuna.toml` the source of truth for synced config.
 
 3. PR3: Mode-aware dependency installation. Status: done.
    Refactor runtime dependency installation so training installs base plus `train`, and serving installs base plus `serve`.
@@ -600,5 +617,5 @@ This section is non-normative. It exists to guide implementation sequencing.
 8. PR8: CLI serve commands. Status: pending.
    Add `tahuna serve create`, `list`, `show`, `logs`, and `stop`.
 
-9. PR9: Docs, examples, and dashboard. Status: pending.
-   Update docs, examples, and UI only after the backend and runtime path are working.
+9. PR9: Docs, examples, and dashboard. Status: in progress.
+   The dashboard already shows synced serving config, but examples and end-to-end serve UX should only be finalized after the backend and runtime path are working.

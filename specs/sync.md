@@ -4,10 +4,13 @@
 
 Content-addressed incremental sync of project code and data from local machine to R2 object storage. Sync produces versioned manifests that are pinned on runs for reproducibility. Pod-produced outputs are synced separately to Storage and are last-write snapshots (not manifest-versioned).
 
+Root `tahuna.toml` is the source of truth for synced environment, train, and serve config. `.tahuna/` stores local state such as sync cache and links, but it is not the canonical config source.
+
 ## Elements
 
 | Element | Type | Description |
 |---------|------|-------------|
+| Project config | Local file | Root `tahuna.toml`, authoritative for synced environment/train/serve config |
 | Blob | R2 object | Content-addressed file, keyed by SHA256 hash |
 | Manifest | R2 JSON object | Ordered list of file entries (path, hash, mode, size) |
 | Manifest hash | String | SHA256 of the manifest JSON content |
@@ -54,6 +57,7 @@ Content-addressed incremental sync of project code and data from local machine t
 | `tahuna sync` | code + data | Manual full sync |
 | `tahuna sync code` | code only | Manual code-only sync |
 | `tahuna sync data` | data only | Manual data-only sync |
+| `tahuna env update` | config only | Update local `tahuna.toml`, then apply synced config without requiring code/data changes |
 | `tahuna train` | code + data | Automatic preflight sync before run creation |
 | `tahuna run create` | code + data | Automatic preflight sync before run creation |
 
@@ -61,6 +65,11 @@ Content-addressed incremental sync of project code and data from local machine t
 
 ```
 syncIncremental(environmentID, scope):
+
+  0. VALIDATE LOCAL PROJECT CONFIG
+     - Load root tahuna.toml
+     - Resolve canonical environment/train/serve config from local file
+     - Do not refresh local config from remote environment state
 
   FOR EACH kind IN scope (code, data):
 
@@ -106,14 +115,22 @@ syncIncremental(environmentID, scope):
            environment_id: "...",
            code_manifest_hash: "..." (if code synced),
            data_manifest_hash: "..." (if data synced),
+           framework: "pt",
+           version: "2.8.0-cu128",
+           python_version: "3.11",
+           gpu_type: "NVIDIA A100 80GB",
+           gpu_count: 1,
+           volume_gb: 80,
            command: ["uv", "run", ...] (always — resolved from local tahuna.toml),
-           output_dir: "outputs" (always — resolved from local tahuna.toml)
+           output_dir: "outputs" (always — resolved from local tahuna.toml),
+           serve_snapshot: { ... } (always — resolved from local tahuna.toml)
          }
        - Backend validates:
-         a. Manifest exists in R2 (with metadata sync + bounded polling for propagation)
-         b. Manifest JSON schema is valid
-         c. Updates environment latestCodeManifestHash / latestDataManifestHash
-         d. Updates environment command / outputDir
+         a. Manifest exists in R2 if a manifest hash was provided (with metadata sync + bounded polling for propagation)
+         b. Manifest JSON schema is valid if a manifest hash was provided
+         c. Updates environment latestCodeManifestHash / latestDataManifestHash when provided
+         d. Updates environment runtime config, command, outputDir, and serveSnapshot from local tahuna.toml
+         e. Allows config-only commits when no code/data manifest changed (for example after `tahuna env update`)
        - Retry logic: bounded attempts and exponential backoff from shared config
          for transient "manifest not found" errors (R2 propagation delay)
 
@@ -129,8 +146,8 @@ Code sync excludes:
   - .git/              (always)
   - node_modules/      (always)
   - __pycache__/       (always)
-  - configured data directory (from `.tahuna/tahuna.toml`)
-  - configured output directory (from `.tahuna/tahuna.toml`)
+  - configured data directory (from root `tahuna.toml`)
+  - configured output directory (from root `tahuna.toml`)
   - patterns from .gitignore (if file exists)
 
 Data sync includes:
@@ -172,7 +189,7 @@ Output sync rules:
 | `/api/sync/blobs/missing` | POST | Given hash list, return hashes not in R2 |
 | `/api/sync/blobs/upload-url` | POST | Generate signed PUT URL for a blob |
 | `/api/sync/manifests/upload-url` | POST | Generate signed PUT URL for a manifest |
-| `/api/sync/commit` | POST | Validate manifest, update environment pointers |
+| `/api/sync/commit` | POST | Validate manifest/config payload and update synced environment state |
 
 ## Invariants
 
@@ -180,8 +197,10 @@ Output sync rules:
 - Blobs are shared across environments (content-addressed deduplication).
 - Manifests are immutable once committed. Rollback changes the pointer, not the manifest.
 - Sync commit is atomic: either both pointers update or neither does (when syncing both scopes).
+- Root `tahuna.toml` is authoritative for synced environment/train/serve config.
 - The sync cache (`.tahuna/sync_*_manifest.json`) is advisory. Deleting it forces a full re-check but not a full re-upload (missing-blob check handles dedup).
 - Manual sync (`tahuna sync`) is a convenience command. `train` and `run create` always auto-sync.
+- `tahuna env update` may issue a config-only sync commit even when code and data are unchanged.
 - Local output directories are excluded from local sync and cannot override pod-synced output artifacts.
 
 ## Shared Defaults & Constants
