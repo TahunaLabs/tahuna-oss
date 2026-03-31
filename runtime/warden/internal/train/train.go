@@ -92,12 +92,15 @@ func RunEntrypoint(
 	gracePeriod time.Duration,
 	hooks Hooks,
 ) (exitCode int, cancelled bool, err error) {
-	normalized := NormalizeCommand(command)
+	normalized, normErr := NormalizeCommand(command)
+	if normErr != nil {
+		return 0, false, normErr
+	}
 	emitLog(hooks, "info", "train", "using command: "+strings.Join(normalized, " "))
 
 	entrypoint := resolveEntrypoint(normalized)
-	entrypointPath := filepath.Join(workspaceRoot, entrypoint)
-	if strings.HasSuffix(entrypoint, ".py") {
+	if entrypoint != "" {
+		entrypointPath := filepath.Join(workspaceRoot, entrypoint)
 		if _, statErr := os.Stat(entrypointPath); statErr != nil {
 			emitLog(hooks, "info", "train", "no entrypoint found at "+entrypointPath+" (bootstrap only)")
 			return 0, false, nil
@@ -226,57 +229,16 @@ func emitTrainOutputLine(
 	return step + 1
 }
 
-func NormalizeCommand(command []string) []string {
+func NormalizeCommand(command []string) ([]string, error) {
+	//
 	if len(command) == 0 {
-		return []string{"uv", "run", "--active", "--no-sync", "python", "-u", "train.py"}
+		return nil, fmt.Errorf("command is required: environment has no command configured")
 	}
-	resolved := append([]string(nil), command...)
-	first := strings.ToLower(strings.TrimSpace(resolved[0]))
-	if first == "uv" {
-		if len(resolved) > 1 && strings.EqualFold(strings.TrimSpace(resolved[1]), "run") {
-			return ensureUVRunFlags(resolved)
-		}
-		return resolved
-	}
-	if first == "python" || first == "python3" {
-		tail := append([]string(nil), resolved[1:]...)
-		if len(tail) == 0 || tail[0] != "-u" {
-			tail = append([]string{"-u"}, tail...)
-		}
-		return append([]string{"uv", "run", "--active", "--no-sync", "python"}, tail...)
-	}
-	return resolved
-}
-
-func ensureUVRunFlags(command []string) []string {
-	if len(command) < 2 {
-		return command
-	}
-	hasActive := false
-	hasNoSync := false
-	for _, token := range command[2:] {
-		switch strings.TrimSpace(token) {
-		case "--active":
-			hasActive = true
-		case "--no-sync":
-			hasNoSync = true
-		}
-	}
-
-	normalized := []string{command[0], command[1]}
-	if !hasActive {
-		normalized = append(normalized, "--active")
-	}
-	if !hasNoSync {
-		normalized = append(normalized, "--no-sync")
-	}
-	return append(normalized, command[2:]...)
+	normalized := append([]string(nil), command...)
+	return normalized, nil
 }
 
 func resolveEntrypoint(command []string) string {
-	if len(command) == 0 {
-		return "train.py"
-	}
 	for i, token := range command {
 		if i == 0 {
 			continue
@@ -285,7 +247,7 @@ func resolveEntrypoint(command []string) string {
 			return strings.TrimSpace(token)
 		}
 	}
-	return "train.py"
+	return ""
 }
 
 func extractMetrics(pattern *regexp.Regexp, line string, step int64) []runtimeapi.MetricSample {

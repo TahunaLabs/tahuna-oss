@@ -19,7 +19,6 @@ import {
   resolveRunpodCloudType,
   type RuntimeCompatibilityFingerprint,
 } from "@/lib/runtime-incompatibility";
-import { buildDefaultRunCommand } from "@/lib/run-command";
 import { images } from "@convex/catalog";
 import { PYTHON_CONFIG, RUN_CONFIG, SYNC_CONFIG } from "@convex/appConfig";
 import { applyStorageDeltaCredits, USAGE_EVENT_TYPE, upsertLedgerDebitTotal } from "@convex/credits";
@@ -438,8 +437,8 @@ function toProvisioningPayload(row: Doc<"runs">): ProvisioningPayload {
     run_id: String(row._id),
     environment_id: String(row.environmentId),
     user_id: row.userId,
-    command: Array.isArray(row.command) && row.command.length > 0 ? row.command : buildDefaultRunCommand(""),
-    output_dir: typeof row.outputDir === "string" && row.outputDir.trim() !== "" ? row.outputDir.trim() : "outputs",
+    command: row.command ?? [],
+    output_dir: row.outputDir ?? "outputs",
     input_path: row.input,
     output_path: row.output,
     logs_path: row.logs,
@@ -870,8 +869,6 @@ export const create = mutation({
   args: {
     environmentId: v.id("environments"),
     name: v.optional(v.string()),
-    command: v.optional(v.array(v.string())),
-    output_dir: v.optional(v.string()),
     gpu_type: v.optional(v.string()),
     gpu_count: v.optional(v.number()),
     volume_gb: v.optional(v.number()),
@@ -883,8 +880,6 @@ export const create = mutation({
       userId: String(user._id),
       environmentId: args.environmentId,
       name: args.name,
-      command: args.command,
-      output_dir: args.output_dir,
       gpu_type: args.gpu_type,
       gpu_count: args.gpu_count,
       volume_gb: args.volume_gb,
@@ -965,8 +960,6 @@ export const internalCreate = internalMutation({
     userId: v.string(),
     environmentId: v.id("environments"),
     name: v.optional(v.string()),
-    command: v.optional(v.array(v.string())),
-    output_dir: v.optional(v.string()),
     gpu_type: v.optional(v.string()),
     gpu_count: v.optional(v.number()),
     volume_gb: v.optional(v.number()),

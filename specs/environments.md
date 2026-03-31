@@ -31,6 +31,8 @@ An environment is a named, user-scoped container that holds runtime configuratio
 | `latestDataManifestHash` | string? | SHA256 of latest data manifest |
 | `boundDataManifestHashes` | string[] | Additional data manifests bound to this environment |
 | `latestSyncAt` | number? | Timestamp of last sync commit |
+| `command` | string[] | Pinned entrypoint command (set at init, updated by sync commit) |
+| `outputDir` | string | Output directory name relative to workspace root (default: `"outputs"`) |
 | `artifacts` | string? | Legacy field (R2 artifact prefix) |
 | `dataId` | string? | Legacy field (data blob ID) |
 
@@ -64,6 +66,7 @@ An environment is a named, user-scoped container that holds runtime configuratio
   - `gpu_count` must not exceed max for that GPU type
   - `volume_gb` must be positive
 - Manifest pointers (`latestCodeManifestHash`, `latestDataManifestHash`) are updated only by the sync commit endpoint, never by direct user commands.
+- `command` and `outputDir` are set at environment creation (from local project config) and updated on every sync commit. They are the single source of truth for run execution config — run creation reads them from the environment, not from CLI payload.
 - Additional data bindings are metadata links only (no blob copy).
 
 ### Deletion

@@ -10,35 +10,25 @@ import (
 	"warden/internal/pythonenv"
 )
 
-func TestNormalizeCommandDefaultsToUVTrain(t *testing.T) {
-	got := NormalizeCommand(nil)
-	want := []string{"uv", "run", "--active", "--no-sync", "python", "-u", "train.py"}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("unexpected default command: %#v", got)
-	}
-}
-
-func TestNormalizeCommandWrapsPythonWithUV(t *testing.T) {
-	got := NormalizeCommand([]string{"python", "train.py"})
-	want := []string{"uv", "run", "--active", "--no-sync", "python", "-u", "train.py"}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("unexpected normalized command: %#v", got)
-	}
-}
-
-func TestNormalizeCommandAddsUVRunFlags(t *testing.T) {
-	got := NormalizeCommand([]string{"uv", "run", "python", "train.py"})
-	want := []string{"uv", "run", "--active", "--no-sync", "python", "train.py"}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("unexpected normalized uv run command: %#v", got)
-	}
-}
-
-func TestNormalizeCommandLeavesNonUVCommandUntouched(t *testing.T) {
+func TestNormalizeCommandPassesThroughNonEmpty(t *testing.T) {
 	input := []string{"bash", "-lc", "python train.py"}
-	got := NormalizeCommand(input)
+	got, err := NormalizeCommand(input)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if !reflect.DeepEqual(got, input) {
 		t.Fatalf("unexpected normalized command: %#v", got)
+	}
+}
+
+func TestNormalizeCommandRejectsEmpty(t *testing.T) {
+	_, err := NormalizeCommand(nil)
+	if err == nil {
+		t.Fatal("expected error for nil command")
+	}
+	_, err = NormalizeCommand([]string{})
+	if err == nil {
+		t.Fatal("expected error for empty command")
 	}
 }
 

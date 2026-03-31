@@ -116,6 +116,49 @@ func TestSyncIncremental_DataScopeOnlyCommitsDataManifest(t *testing.T) {
 	}
 }
 
+func TestSyncIncremental_CodeCommitIncludesConfiguredTrainCommand(t *testing.T) {
+	mock := newSyncBackendMock()
+	installSyncStubs(t, mock)
+	setupTestProject(t, false)
+
+	cfg, err := loadProjectConfig()
+	if err != nil {
+		t.Fatalf("failed to load project config: %v", err)
+	}
+	cfg.TrainCommand = []string{"torchrun", "--nproc-per-node", "2", "train.py"}
+	if err := saveProjectConfig(cfg); err != nil {
+		t.Fatalf("failed to save project config: %v", err)
+	}
+
+	if err := syncIncremental("env-test", syncScope{code: true}, syncOptions{}); err != nil {
+		t.Fatalf("syncIncremental failed: %v", err)
+	}
+
+	mock.mu.Lock()
+	defer mock.mu.Unlock()
+
+	if len(mock.commitBodies) == 0 {
+		t.Fatalf("expected at least one commit payload")
+	}
+	lastCommit := mock.commitBodies[len(mock.commitBodies)-1]
+	command, ok := lastCommit["command"].([]string)
+	if !ok {
+		t.Fatalf("expected command payload as []string, got %#v", lastCommit["command"])
+	}
+	want := []string{"torchrun", "--nproc-per-node", "2", "train.py"}
+	if len(command) != len(want) {
+		t.Fatalf("expected %d command tokens, got %d: %#v", len(want), len(command), command)
+	}
+	for i, token := range want {
+		if command[i] != token {
+			t.Fatalf("expected command token %d=%q, got %q", i, token, command[i])
+		}
+	}
+	if got := asString(lastCommit["output_dir"]); got != "outputs" {
+		t.Fatalf("expected output_dir=outputs in sync commit, got %q", got)
+	}
+}
+
 func TestRunSyncWithStatus_RefreshesAndReportsEnvironmentSync(t *testing.T) {
 	mock := newSyncBackendMock()
 	installSyncStubs(t, mock)

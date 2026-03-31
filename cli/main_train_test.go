@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -82,20 +81,11 @@ func TestTrainDetached_EndToEndPreflightAndRunCreation(t *testing.T) {
 	if asString(runCreatePayload["gpu_type"]) != "nvidia-a100" {
 		t.Fatalf("expected gpu_type override in run payload, got %v", runCreatePayload["gpu_type"])
 	}
-	if asString(runCreatePayload["output_dir"]) != "outputs" {
-		t.Fatalf("expected output_dir=outputs in run payload, got %v", runCreatePayload["output_dir"])
+	if _, hasCommand := runCreatePayload["command"]; hasCommand {
+		t.Fatalf("run create payload must not contain command (should come from environment)")
 	}
-	commandAny, ok := runCreatePayload["command"].([]any)
-	if !ok {
-		t.Fatalf("expected command array in run payload, got %#v", runCreatePayload["command"])
-	}
-	gotCommand := make([]string, 0, len(commandAny))
-	for _, item := range commandAny {
-		gotCommand = append(gotCommand, asString(item))
-	}
-	wantCommand := []string{"uv", "run", "--active", "--no-sync", "python", "-u", "train.py"}
-	if !reflect.DeepEqual(gotCommand, wantCommand) {
-		t.Fatalf("expected command=%v in run payload, got %v", wantCommand, gotCommand)
+	if _, hasOutputDir := runCreatePayload["output_dir"]; hasOutputDir {
+		t.Fatalf("run create payload must not contain output_dir (should come from environment)")
 	}
 	if asInt64(runCreatePayload["gpu_count"]) != 2 {
 		t.Fatalf("expected gpu_count=2 in run payload, got %v", runCreatePayload["gpu_count"])

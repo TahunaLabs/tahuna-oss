@@ -168,6 +168,31 @@ func TestEnvironmentUpdate_VolumeOnly_PatchesVolumeGB(t *testing.T) {
 	}
 }
 
+func TestEnvironmentUpdate_EntrypointCommandOnly_UpdatesLocalTrainCommand(t *testing.T) {
+	setupTestProject(t, false)
+
+	output := captureStdout(t, func() {
+		environmentUpdate([]string{"--id", "env-test", "--entrypoint-command", `torchrun --nproc-per-node 2 train.py --run-name "hello world"`})
+	})
+
+	cfg, err := loadProjectConfig()
+	if err != nil {
+		t.Fatalf("failed to load project config: %v", err)
+	}
+	want := []string{"torchrun", "--nproc-per-node", "2", "train.py", "--run-name", "hello world"}
+	if len(cfg.TrainCommand) != len(want) {
+		t.Fatalf("expected %d train command tokens, got %d: %#v", len(want), len(cfg.TrainCommand), cfg.TrainCommand)
+	}
+	for i, token := range want {
+		if cfg.TrainCommand[i] != token {
+			t.Fatalf("expected train command token %d=%q, got %q", i, token, cfg.TrainCommand[i])
+		}
+	}
+	if !strings.Contains(output, "train.command updated") {
+		t.Fatalf("expected local train command update message, got: %s", output)
+	}
+}
+
 func TestEnvironmentUpdate_LinkedEnvironmentRefreshesLocalProjectConfig(t *testing.T) {
 	setupTestProject(t, false)
 	if err := saveLinkedEnvironmentID("env-test"); err != nil {

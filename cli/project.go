@@ -45,6 +45,7 @@ type projectConfig struct {
 	GPUType                      string
 	GPUCount                     int
 	VolumeGB                     int
+	TrainCommand                 []string
 	TrainOutputModelPath         string
 	ServePythonVersion           string
 	ServeGPUType                 string
@@ -88,7 +89,8 @@ type projectConfigEnvironmentSection struct {
 }
 
 type projectConfigTrainSection struct {
-	OutputModelPath string `toml:"output_model_path,omitempty"`
+	Command         []string `toml:"command,omitempty"`
+	OutputModelPath string   `toml:"output_model_path,omitempty"`
 }
 
 type projectConfigServeSection struct {
@@ -112,6 +114,24 @@ func normalizeProjectPath(value string) string {
 		return ""
 	}
 	return filepath.ToSlash(filepath.Clean(trimmed))
+}
+
+func normalizeCommandTokens(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		trimmed := strings.TrimSpace(value)
+		if trimmed == "" {
+			continue
+		}
+		out = append(out, trimmed)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 func defaultTrainOutputModelPath(outputDir string) string {
@@ -169,7 +189,6 @@ func collectProjectInitConfig() (projectConfig, string, error) {
 	} else {
 		fmt.Printf("%s?%s No inference.py found\n", cAmpGold, cReset)
 	}
-
 	if dirExists(cfg.DataDir) {
 		fmt.Printf("✓ Found %s%s/%s\n", cAmpGold, cfg.DataDir, cReset)
 		cfg.DataDir = choosePathWhenFound("Data directory", cfg.DataDir, "data")
@@ -576,6 +595,9 @@ func mergeProjectConfig(base, next projectConfig) projectConfig {
 	if next.VolumeGB > 0 {
 		base.VolumeGB = next.VolumeGB
 	}
+	if len(next.TrainCommand) > 0 {
+		base.TrainCommand = append([]string{}, normalizeCommandTokens(next.TrainCommand)...)
+	}
 	if value := strings.TrimSpace(next.TrainOutputModelPath); value != "" {
 		base.TrainOutputModelPath = normalizeProjectPath(value)
 	}
@@ -633,7 +655,7 @@ func hasProjectSection(cfg projectConfig) bool {
 }
 
 func hasTrainSection(cfg projectConfig) bool {
-	return strings.TrimSpace(cfg.TrainOutputModelPath) != ""
+	return len(cfg.TrainCommand) > 0 || strings.TrimSpace(cfg.TrainOutputModelPath) != ""
 }
 
 func hasServeSection(cfg projectConfig) bool {
@@ -660,6 +682,14 @@ func escapeProjectConfigValue(value string) string {
 		"\t", "\\t",
 	)
 	return replacer.Replace(value)
+}
+
+func renderTomlStringArray(values []string) string {
+	parts := make([]string, 0, len(values))
+	for _, value := range values {
+		parts = append(parts, fmt.Sprintf("\"%s\"", escapeProjectConfigValue(value)))
+	}
+	return "[" + strings.Join(parts, ", ") + "]"
 }
 
 func renderProjectConfig(cfg projectConfig) (string, error) {
@@ -702,6 +732,9 @@ func renderProjectConfig(cfg projectConfig) (string, error) {
 			lines = append(lines, "")
 		}
 		lines = append(lines, "[train]")
+		if len(cfg.TrainCommand) > 0 {
+			lines = append(lines, fmt.Sprintf("command = %s", renderTomlStringArray(cfg.TrainCommand)))
+		}
 		if value := strings.TrimSpace(cfg.TrainOutputModelPath); value != "" {
 			lines = append(lines, fmt.Sprintf("output_model_path = \"%s\"", escapeProjectConfigValue(value)))
 		}
@@ -807,6 +840,7 @@ func projectConfigFromFile(file projectConfigFile) projectConfig {
 		cfg.VolumeGB = file.Environment.VolumeGB
 	}
 	if file.Train != nil {
+		cfg.TrainCommand = normalizeCommandTokens(file.Train.Command)
 		cfg.TrainOutputModelPath = normalizeProjectPath(file.Train.OutputModelPath)
 	}
 	if file.Serve != nil {
@@ -827,6 +861,16 @@ func projectConfigFromFile(file projectConfigFile) projectConfig {
 }
 
 func validateProjectConfigFile(file projectConfigFile, defined map[string]struct{}) error {
+	if file.Train != nil && tomlKeyDefined(defined, "train.command") {
+		if len(file.Train.Command) == 0 {
+			return fmt.Errorf("invalid train.command in %s: expected at least one command token", projectConfigFilePath())
+		}
+		for _, token := range file.Train.Command {
+			if strings.TrimSpace(token) == "" {
+				return fmt.Errorf("invalid train.command in %s: command tokens must be non-empty strings", projectConfigFilePath())
+			}
+		}
+	}
 	if file.Environment != nil {
 		if err := validateConfiguredPositiveInt(defined, "environment.gpu_count", file.Environment.GPUCount); err != nil {
 			return err
@@ -1338,6 +1382,84 @@ func defaultTrainCommand() []string {
 	return []string{"uv", "run", "--active", "--no-sync", "python", "-u", "train.py"}
 }
 
+// normalizeCommandString collapses backslash-newline continuations and
+// redundant whitespace so pasted multi-line shell commands become one line.
+func normalizeCommandString(s string) string {
+	s = strings.ReplaceAll(s, "\\\r\n", " ")
+	s = strings.ReplaceAll(s, "\\\n", " ")
+	return strings.Join(strings.Fields(s), " ")
+}
+
+// parseShellCommand splits a shell-like command string into tokens,
+// respecting single-quoted and double-quoted spans and backslash escapes.
+func parseShellCommand(s string) ([]string, error) {
+	var tokens []string
+	var current strings.Builder
+	inDouble := false
+	inSingle := false
+
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		switch {
+		case inDouble:
+			if c == '\\' && i+1 < len(s) {
+				next := s[i+1]
+				if next == '"' || next == '\\' || next == '$' || next == '`' || next == '\n' {
+					current.WriteByte(next)
+					i++
+				} else {
+					current.WriteByte(c)
+				}
+			} else if c == '"' {
+				inDouble = false
+			} else {
+				current.WriteByte(c)
+			}
+		case inSingle:
+			if c == '\'' {
+				inSingle = false
+			} else {
+				current.WriteByte(c)
+			}
+		case c == '"':
+			inDouble = true
+		case c == '\'':
+			inSingle = true
+		case c == '\\' && i+1 < len(s):
+			current.WriteByte(s[i+1])
+			i++
+		case c == ' ' || c == '\t' || c == '\n' || c == '\r':
+			if current.Len() > 0 {
+				tokens = append(tokens, current.String())
+				current.Reset()
+			}
+		default:
+			current.WriteByte(c)
+		}
+	}
+
+	if inDouble {
+		return nil, errors.New("unterminated double quote in entrypoint command")
+	}
+	if inSingle {
+		return nil, errors.New("unterminated single quote in entrypoint command")
+	}
+	if current.Len() > 0 {
+		tokens = append(tokens, current.String())
+	}
+	if len(tokens) == 0 {
+		return nil, errors.New("entrypoint command is empty after parsing")
+	}
+	return tokens, nil
+}
+
+func resolveTrainCommand(cfg projectConfig) ([]string, error) {
+	if len(cfg.TrainCommand) > 0 {
+		return append([]string{}, cfg.TrainCommand...), nil
+	}
+	return defaultTrainCommand(), nil
+}
+
 func projectConfigFromEnvironment(env environmentResponse) projectConfig {
 	cfg := projectConfig{
 		Framework:        strings.TrimSpace(env.Framework),
@@ -1350,6 +1472,12 @@ func projectConfigFromEnvironment(env environmentResponse) projectConfig {
 	}
 	if env.VolumeGB > 0 {
 		cfg.VolumeGB = int(env.VolumeGB)
+	}
+	if command := normalizeCommandTokens(env.Command); len(command) > 0 {
+		cfg.TrainCommand = command
+	}
+	if outputDir := strings.TrimSpace(env.OutputDir); outputDir != "" && outputDir != "outputs" {
+		cfg.OutputDir = outputDir
 	}
 	return cfg
 }

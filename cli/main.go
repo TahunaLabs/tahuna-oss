@@ -18,12 +18,15 @@ import (
 )
 
 const (
-	defaultAPIURL    = "https://tahuna.app"
-	apiPrefix        = "/api"
-	projectStateDir  = ".tahuna"
-	projectEnvIDFile = "environment_id"
-	projectCfgFile   = "tahuna.toml"
-	cReset           = "\033[0m"
+	defaultAPIURL     = "https://tahuna.app"
+	defaultDevAPIURL  = "http://localhost:3000"
+	apiPrefix         = "/api"
+	projectStateDir   = ".tahuna"
+	projectEnvIDFile  = "environment_id"
+	projectCfgFile    = "tahuna.toml"
+	defaultProdConfig = "tahuna"
+	defaultDevConfig  = "tahuna-dev"
+	cReset            = "\033[0m"
 	// AMP frontend palette mapping:
 	// background #0b1d1f, foreground #e8e0d4, primary/accent #c8a84e, muted #8a9a93
 	cAmpWord  = "\033[38;5;44m"  // blue-green wordmark
@@ -35,11 +38,20 @@ const (
 	cAmpRed   = "\033[38;5;196m"
 )
 
+type cliMode string
+
+const (
+	cliModeProd cliMode = "prod"
+	cliModeDev  cliMode = "dev"
+)
+
 // cliVersion is overridden at release build time via -ldflags.
 var cliVersion = "dev"
 
 func main() {
-	initConfig()
+	if err := initConfig(); err != nil {
+		must(err)
+	}
 
 	if len(os.Args) < 2 {
 		usage()
@@ -114,9 +126,12 @@ Environment:
   tahuna env rm <env_id> | --id <env_id> | --all|-a
 
 Auth:
-  TAHUNA_API_URL      API base URL (default: https://tahuna.app)
-  TAHUNA_SITE_URL     Canonical site URL alias for API base
-  TAHUNA_PUBLIC_SITE_URL Public site URL alias for API base
+  TAHUNA_API_URL      API base URL override
+                      default in tahuna:     https://tahuna.app
+                      default in tahuna-dev: http://localhost:3000
+  TAHUNA_CONFIG_DIR   Config directory override
+                      default in tahuna:     ~/.config/tahuna
+                      default in tahuna-dev: ~/.config/tahuna-dev
   TAHUNA_BROWSER_URL  Browser auth URL base for "tahuna login" (optional)
   TAHUNA_API_KEY      Auth token (set automatically by "tahuna login")
 
@@ -240,7 +255,11 @@ func defaultEnvFilePath() string {
 	if err != nil || strings.TrimSpace(home) == "" {
 		return "tahuna.config.env"
 	}
-	return filepath.Join(home, ".config", "tahuna", "config.env")
+	configName := defaultProdConfig
+	if activeCLIMode() == cliModeDev {
+		configName = defaultDevConfig
+	}
+	return filepath.Join(home, ".config", configName, "config.env")
 }
 
 func saveTokenToEnvFile(token string) error {
@@ -372,14 +391,19 @@ func apiURL() string {
 		return cfg.apiURL
 	}
 	// Fallback for test contexts where initConfig has not been called.
-	if v := lookupConfigValue("TAHUNA_API_URL"); v != "" {
+	if v := strings.TrimSpace(os.Getenv("TAHUNA_API_URL")); v != "" {
 		return strings.TrimRight(v, "/")
 	}
-	if v := lookupConfigValue("TAHUNA_SITE_URL"); v != "" {
-		return strings.TrimRight(v, "/")
-	}
-	if v := lookupConfigValue("TAHUNA_PUBLIC_SITE_URL"); v != "" {
-		return strings.TrimRight(v, "/")
+	if activeCLIMode() == cliModeDev {
+		return defaultDevAPIURL
 	}
 	return defaultAPIURL
+}
+
+func activeCLIMode() cliMode {
+	bin := strings.ToLower(filepath.Base(strings.TrimSpace(os.Args[0])))
+	if strings.HasSuffix(bin, "-dev") {
+		return cliModeDev
+	}
+	return cliModeProd
 }

@@ -35,6 +35,8 @@ const environmentResponseValidator = v.object({
   python_version: v.string(),
   framework: v.string(),
   version: v.string(),
+  command: v.array(v.string()),
+  output_dir: v.string(),
 });
 
 const listEnvironmentsResponseValidator = v.object({
@@ -419,6 +421,8 @@ function toEnvironmentResponse(
     python_version: row.pythonVersion || PYTHON_CONFIG.defaultVersion,
     framework: row.framework,
     version: row.version,
+    command: row.command,
+    output_dir: row.outputDir ?? "outputs",
   };
 }
 
@@ -520,6 +524,8 @@ async function createEnvironmentForUserId(
     python_version: string;
     framework: string;
     version: string;
+    command: string[];
+    output_dir: string;
   },
 ) {
   validateEnvironmentPayload(args);
@@ -537,6 +543,8 @@ async function createEnvironmentForUserId(
     pythonVersion: args.python_version || PYTHON_CONFIG.defaultVersion,
     framework: args.framework,
     version: args.version,
+    command: args.command,
+    outputDir: args.output_dir,
   });
 
   await ctx.db.patch("environments", envId, {
@@ -937,6 +945,8 @@ export const internalCreate = internalMutation({
     python_version: v.optional(v.string()),
     framework: v.string(),
     version: v.string(),
+    command: v.array(v.string()),
+    output_dir: v.string(),
   },
   returns: environmentResponseValidator,
   handler: async (ctx, args) => {
@@ -1043,6 +1053,8 @@ export const internalCommitSyncPointers = internalMutation({
     environmentId: v.id("environments"),
     code_manifest_hash: v.optional(v.string()),
     data_manifest_hash: v.optional(v.string()),
+    command: v.optional(v.array(v.string())),
+    output_dir: v.optional(v.string()),
   },
   returns: commitSyncPointersResponseValidator,
   handler: async (ctx, args) => {
@@ -1051,6 +1063,8 @@ export const internalCommitSyncPointers = internalMutation({
       latestSyncAt: number;
       latestCodeManifestHash?: string;
       latestDataManifestHash?: string;
+      command?: string[];
+      outputDir?: string;
     } = { latestSyncAt: Date.now() };
 
     if (args.code_manifest_hash) {
@@ -1058,6 +1072,12 @@ export const internalCommitSyncPointers = internalMutation({
     }
     if (args.data_manifest_hash) {
       patch.latestDataManifestHash = args.data_manifest_hash;
+    }
+    if (Array.isArray(args.command) && args.command.length > 0) {
+      patch.command = args.command;
+    }
+    if (typeof args.output_dir === "string" && args.output_dir.trim() !== "") {
+      patch.outputDir = args.output_dir.trim();
     }
 
     await ctx.db.patch("environments", args.environmentId, patch);

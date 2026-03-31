@@ -87,7 +87,11 @@ func initProject(target string) error {
 		return fmt.Errorf("failed to create output directory: %w", err)
 	}
 
-	setup, err := guidedSetup(envName, frameworkKey, projectCfg.PythonVersion, gpus, versionsByFramework, pythonsByFrameworkVersion)
+	initCmd, err := resolveTrainCommand(projectCfg)
+	if err != nil {
+		return fmt.Errorf("failed to resolve train command: %w", err)
+	}
+	setup, err := guidedSetup(envName, frameworkKey, projectCfg.PythonVersion, gpus, versionsByFramework, pythonsByFrameworkVersion, initCmd, projectCfg.OutputDir)
 	if err != nil {
 		return err
 	}
@@ -157,7 +161,7 @@ type guidedSetupResult struct {
 	volumeGB         int
 }
 
-func guidedSetup(environmentName, frameworkHint, pythonVersionHint string, gpus []string, versionsByFramework map[string][]string, pythonsByFrameworkVersion map[string]map[string][]string) (guidedSetupResult, error) {
+func guidedSetup(environmentName, frameworkHint, pythonVersionHint string, gpus []string, versionsByFramework map[string][]string, pythonsByFrameworkVersion map[string]map[string][]string, command []string, outputDir string) (guidedSetupResult, error) {
 	frameworks := sortedKeys(versionsByFramework)
 	framework := strings.TrimSpace(frameworkHint)
 	if framework == "" || versionsByFramework[framework] == nil {
@@ -184,6 +188,10 @@ func guidedSetup(environmentName, frameworkHint, pythonVersionHint string, gpus 
 		return guidedSetupResult{}, err
 	}
 
+	resolvedOutputDir := strings.TrimSpace(outputDir)
+	if resolvedOutputDir == "" {
+		resolvedOutputDir = "outputs"
+	}
 	envPayload := map[string]any{
 		"name":           environmentName,
 		"gpu_type":       gpuType,
@@ -192,6 +200,8 @@ func guidedSetup(environmentName, frameworkHint, pythonVersionHint string, gpus 
 		"python_version": pythonVersion,
 		"framework":      framework,
 		"version":        version,
+		"command":        command,
+		"output_dir":     resolvedOutputDir,
 	}
 	env, err := doJSONAs[createEnvironmentResponse](http.MethodPost, "/environments", envPayload)
 	if err != nil {
@@ -200,6 +210,8 @@ func guidedSetup(environmentName, frameworkHint, pythonVersionHint string, gpus 
 
 	envID := env.EnvironmentID
 	fmt.Printf("\n%sEnvironment created%s\n", cAmpWord, cReset)
+	fmt.Printf("%sNote:%s default entrypoint command: %s%s%s\n", cAmpGold, cReset, cAmpMuted, strings.Join(command, " "), cReset)
+	fmt.Printf("      To change it: %stahuna env update --entrypoint-command \"<cmd>\"%s\n", cAmpMuted, cReset)
 	return guidedSetupResult{
 		environmentID:    envID,
 		frameworkVersion: version,
@@ -345,7 +357,7 @@ func environmentUsage() {
   tahuna env help
   tahuna env list [--verbose|-v]
   tahuna env show <env_id> | --id <env_id> [--verbose|-v]
-  tahuna env update [<env_id>] [--gpu-type <gpu>] [--gpu-count <n>] [--volume-gb <n>]
+  tahuna env update [<env_id>] [--gpu-type <gpu>] [--gpu-count <n>] [--volume-gb <n>] [--entrypoint-command <cmd>]
   tahuna env rm <env_id> | --id <env_id> | --all|-a
   tahuna env data bind|unbind ...
 `)
@@ -806,6 +818,7 @@ func environmentUpdate(args []string) {
 	gpuType := fs.String("gpu-type", "", "GPU type")
 	gpuCount := fs.Int("gpu-count", 0, "GPU count")
 	volumeGB := fs.Int("volume-gb", 0, "Volume in GB")
+	entrypointCmd := fs.String("entrypoint-command", "", "Custom train command (saved locally and synced on the next run/sync)")
 	mustParseFlags(fs, args)
 
 	environmentID := strings.TrimSpace(*id)
@@ -822,6 +835,16 @@ func environmentUpdate(args []string) {
 		must(errors.New("--gpu-count and --volume-gb must be positive"))
 	}
 
+	if cmd := strings.TrimSpace(*entrypointCmd); cmd != "" {
+		cfg, err := loadPersistedProjectConfig()
+		must(err)
+		parsedCommand, err := parseShellCommand(normalizeCommandString(cmd))
+		must(err)
+		cfg.TrainCommand = parsedCommand
+		must(saveProjectConfig(cfg))
+		fmt.Printf("%s✓%s train.command updated in %s\n", cAmpGreen, cReset, projectConfigFilePath())
+	}
+
 	payload := map[string]any{}
 	if strings.TrimSpace(*gpuType) != "" {
 		payload["gpu_type"] = strings.TrimSpace(*gpuType)
@@ -831,6 +854,11 @@ func environmentUpdate(args []string) {
 	}
 	if *volumeGB > 0 {
 		payload["volume_gb"] = *volumeGB
+	}
+
+	// entrypoint-command is local-only; if nothing else was passed skip the API call.
+	if len(payload) == 0 && strings.TrimSpace(*entrypointCmd) != "" {
+		return
 	}
 
 	interactive := len(payload) == 0
@@ -902,8 +930,6 @@ func runCreate(args []string) {
 	must(preRunSync(environmentID))
 
 	payload := map[string]any{}
-	payload["output_dir"] = mustLoadRunOutputDir()
-	payload["command"] = mustLoadRunCommand()
 	if strings.TrimSpace(*name) != "" {
 		payload["name"] = strings.TrimSpace(*name)
 	}
@@ -1042,8 +1068,6 @@ func train(args []string) {
 	must(preRunSync(resolvedEnvironmentID))
 
 	payload := map[string]any{}
-	payload["output_dir"] = mustLoadRunOutputDir()
-	payload["command"] = mustLoadRunCommand()
 	if *gpuType != "" {
 		payload["gpu_type"] = *gpuType
 	}
@@ -1260,18 +1284,4 @@ func preRunSync(environmentID string) error {
 		return fmt.Errorf("project preflight validation failed: %w", err)
 	}
 	return nil
-}
-
-func mustLoadRunOutputDir() string {
-	cfg, err := loadProjectConfig()
-	must(err)
-	outputDir := strings.TrimSpace(cfg.OutputDir)
-	if outputDir == "" {
-		return "outputs"
-	}
-	return outputDir
-}
-
-func mustLoadRunCommand() []string {
-	return defaultTrainCommand()
 }

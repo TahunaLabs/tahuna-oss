@@ -31,6 +31,8 @@ export default defineSchema({
     latestCodeManifestHash: v.optional(v.string()),
     latestDataManifestHash: v.optional(v.string()),
     latestSyncAt: v.optional(v.number()),
+    command: v.array(v.string()),
+    outputDir: v.string(),
   }).index("by_user", ["userId"]),
 
   runs: defineTable({

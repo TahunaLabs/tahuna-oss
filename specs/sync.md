@@ -105,12 +105,15 @@ syncIncremental(environmentID, scope):
          {
            environment_id: "...",
            code_manifest_hash: "..." (if code synced),
-           data_manifest_hash: "..." (if data synced)
+           data_manifest_hash: "..." (if data synced),
+           command: ["uv", "run", ...] (always — resolved from local tahuna.toml),
+           output_dir: "outputs" (always — resolved from local tahuna.toml)
          }
        - Backend validates:
          a. Manifest exists in R2 (with metadata sync + bounded polling for propagation)
          b. Manifest JSON schema is valid
          c. Updates environment latestCodeManifestHash / latestDataManifestHash
+         d. Updates environment command / outputDir
        - Retry logic: bounded attempts and exponential backoff from shared config
          for transient "manifest not found" errors (R2 propagation delay)
 

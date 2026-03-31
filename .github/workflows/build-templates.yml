@@ -9,6 +9,7 @@ on:
     paths:
       - runtime/images/**
       - runtime/images/prebake/**
+      - runtime/warden/**
       - web/convex/runtime-images.json
       - .github/workflows/build-templates.yml
   workflow_dispatch:

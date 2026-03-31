@@ -118,9 +118,9 @@ Contract fixes applied on 2026-03-06:
    - GPU list uses dynamic Runpod data when available, with a fallback value.
 
 Current operational note:
-- CLI API URL resolution order is: `TAHUNA_API_URL` -> `TAHUNA_SITE_URL` -> `TAHUNA_PUBLIC_SITE_URL` -> default `https://tahuna.app`.
+- CLI API URL resolution is: `TAHUNA_API_URL` override, otherwise mode default by binary name (`tahuna` -> `https://tahuna.app`, `tahuna-dev` -> `http://localhost:3000`).
 - CLI browser login URL can be explicitly set with `TAHUNA_BROWSER_URL`; if missing, CLI auto-detects a working browser base and persists it.
-- CLI auth token is read from env vars or global config file `~/.config/tahuna/config.env`.
+- CLI auth token is read from env vars or global config file (`~/.config/tahuna/config.env` for `tahuna`, `~/.config/tahuna-dev/config.env` for `tahuna-dev`).
 
 ## 5) What Does What (Code Map)
 
