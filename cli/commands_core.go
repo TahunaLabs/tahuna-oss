@@ -198,6 +198,8 @@ func guidedSetup(environmentName, frameworkHint, pythonVersionHint string, gpus 
 
 	envID := env.EnvironmentID
 	fmt.Printf("\n%sEnvironment created%s\n", cAmpWord, cReset)
+	fmt.Printf("%sNote:%s default entrypoint command: %s%s%s\n", cAmpGold, cReset, cAmpMuted, strings.Join(command, " "), cReset)
+	fmt.Printf("      To change it: %stahuna env update --entrypoint-command \"<cmd>\"%s\n", cAmpMuted, cReset)
 	return guidedSetupResult{
 		environmentID:    envID,
 		frameworkVersion: version,
