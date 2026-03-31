@@ -1,0 +1,589 @@
+# Spec: Python Inference App Contract
+
+## Status
+
+This document is the canonical Tahuna contract for Python application serving.
+
+For Python app serving, it supersedes the engine-matrix model described in `specs/serve.md`.
+
+`specs/serve.md` remains historical context only unless it is rewritten to align with this document.
+
+## Scope
+
+This contract defines the project, runtime, and lifecycle requirements for Tahuna projects where:
+
+- the user owns the Python application code
+- `train.py` is the canonical training entrypoint
+- `inference.py` is the canonical serving entrypoint
+- training and serving install separate dependency groups from one Python project
+
+This contract is intentionally app-centric rather than engine-centric.
+
+Tahuna owns:
+
+- environment provisioning
+- code, data, and model snapshot materialization
+- runtime lifecycle supervision
+- status and log collection
+- readiness and liveness enforcement
+
+The user owns:
+
+- Python application code
+- dependency declarations
+- model loading logic
+- inference request and response handling
+
+## Principles
+
+1. One canonical entrypoint per mode.
+   Training runs `python -u train.py`. Serving runs `python -u inference.py`.
+
+2. One canonical project layout.
+   Tahuna expects root-level project files and does not rely on `.tahuna/tahuna.toml` for new projects.
+
+3. Separate dependency surfaces.
+   Training installs the `train` dependency group. Serving installs the `serve` dependency group. Shared dependencies live in base project dependencies.
+
+4. User-defined Python inference stack.
+   Tahuna does not care whether `inference.py` uses `vllm`, `sglang`, `transformers`, `fastapi`, `uvicorn`, `litserve`, or plain HTTP code, as long as it satisfies this runtime contract.
+
+5. Tahuna-managed lifecycle.
+   The Python app is user-defined, but readiness gating, health enforcement, stop semantics, and snapshot pinning are Tahuna-managed.
+
+6. Snapshot, not mutable prefix.
+   Serving always runs from a pinned model snapshot resolved at serve creation time.
+
+7. Python apps only.
+   This contract covers Python entrypoints executed by `python -u ...`. It does not cover non-Python serving binaries.
+
+## Canonical Project Files
+
+Canonical root-level files:
+
+- `tahuna.toml`
+- `pyproject.toml`
+- `uv.lock`
+- `train.py`
+- `inference.py`
+
+Optional project files may exist, but these files define the Tahuna contract.
+
+Legacy `.tahuna/tahuna.toml` is migration-only and is not part of the canonical contract for new projects.
+
+## Project Config
+
+Projects define runtime intent in a root `tahuna.toml`.
+
+Example:
+
+```toml
+[project]
+data_dir = "data"
+output_dir = "outputs"
+
+[environment]
+framework = "pt"
+version = "2.8.0"
+python_version = "3.11"
+gpu_type = "NVIDIA A100-SXM4-80GB"
+gpu_count = 1
+volume_gb = 120
+
+[train]
+output_model_path = "outputs/model"
+
+[serve]
+python_version = "3.11"
+gpu_type = "NVIDIA L40S"
+gpu_count = 1
+volume_gb = 120
+port = 8000
+health_path = "/health"
+default_model_path = "outputs/model"
+startup_timeout_seconds = 900
+health_interval_seconds = 5
+health_timeout_seconds = 2
+health_failure_threshold = 3
+graceful_shutdown_seconds = 30
+```
+
+## Config Semantics
+
+### `[project]`
+
+Shared workspace bindings:
+
+- `data_dir`
+- `output_dir`
+
+Rules:
+
+- both values are relative project paths
+- neither value may escape the workspace root
+- Tahuna materializes and uses these directories inside `/workspace`
+
+### `[environment]`
+
+Training-oriented environment settings:
+
+- `framework`
+- `version`
+- `python_version`
+- `gpu_type`
+- `gpu_count`
+- `volume_gb`
+
+Rules:
+
+- `[environment]` governs training by default
+- these fields do not implicitly define serving behavior
+- serving compute is configured separately in `[serve]`
+
+### `[train]`
+
+Training-specific config:
+
+- `output_model_path`
+
+Defaults:
+
+- `output_model_path = "outputs/model"`
+
+Rules:
+
+- `train.py` is fixed and is not configurable in MVP
+- the training dependency group is fixed to `train`
+- `output_model_path` is a workspace-relative path under `[project].output_dir`
+
+### `[serve]`
+
+Serving-specific config:
+
+- `python_version`
+- `gpu_type`
+- `gpu_count`
+- `volume_gb`
+- `port`
+- `health_path`
+- `default_model_path`
+- `startup_timeout_seconds`
+- `health_interval_seconds`
+- `health_timeout_seconds`
+- `health_failure_threshold`
+- `graceful_shutdown_seconds`
+
+Defaults:
+
+- `python_version = [environment].python_version`
+- `port = 8000`
+- `health_path = "/health"`
+- `default_model_path = "outputs/model"`
+- `startup_timeout_seconds = 900`
+- `health_interval_seconds = 5`
+- `health_timeout_seconds = 2`
+- `health_failure_threshold = 3`
+- `graceful_shutdown_seconds = 30`
+
+Rules:
+
+- `inference.py` is fixed and is not configurable in MVP
+- the serving dependency group is fixed to `serve`
+- `default_model_path` is only a default lookup path inside a run output tree
+- serving compute must be explicit and must not be inferred from `[environment]` except for the `python_version` default
+
+## Dependency Contract
+
+Tahuna uses one Python project with separate dependency groups.
+
+Canonical dependency sources:
+
+- `pyproject.toml`
+- `uv.lock`
+
+Recommended shape:
+
+```toml
+[project]
+dependencies = [
+  "huggingface-hub",
+  "safetensors",
+]
+
+[dependency-groups]
+train = [
+  "torch",
+  "transformers",
+  "datasets",
+  "peft",
+]
+serve = [
+  "vllm",
+  "fastapi",
+  "uvicorn",
+]
+```
+
+Rules:
+
+- base project dependencies are shared across training and serving
+- `train` dependencies are installed only for `tahuna train`
+- `serve` dependencies are installed only for `tahuna serve`
+- dependency group names are fixed to `train` and `serve`
+- the lockfile must pin both dependency surfaces
+- Tahuna must not infer dependencies by scanning imports
+
+### Install Semantics
+
+Training runtime installs the base dependency set plus the `train` group.
+
+Serving runtime installs the base dependency set plus the `serve` group.
+
+Reference commands:
+
+```text
+uv sync --active --frozen --group train
+uv sync --active --frozen --group serve
+```
+
+The exact flag spelling may evolve, but the normative contract is:
+
+- install from `pyproject.toml` and `uv.lock`
+- honor the lockfile
+- install only the dependency set for the active mode
+
+## Training Contract
+
+### Entrypoint
+
+Tahuna launches training with:
+
+```text
+python -u train.py
+```
+
+No alternate training entrypoint is part of the MVP contract.
+
+### Runtime Expectations
+
+`train.py`:
+
+- reads code and data from the materialized workspace
+- writes outputs under `[project].output_dir`
+- may write a serveable model directory under `[train].output_model_path`
+
+Training is one-shot:
+
+- the process starts
+- the process runs to completion
+- exit code `0` is success
+- non-zero exit is failure
+
+Tahuna does not require a specific training framework inside `train.py` beyond what the configured environment supports.
+
+## Serving Contract
+
+### Entrypoint
+
+Tahuna launches serving with:
+
+```text
+python -u inference.py
+```
+
+No alternate serving entrypoint is part of the MVP contract.
+
+### Runtime Expectations
+
+`inference.py` must:
+
+- start exactly one long-lived HTTP server process tree
+- bind to `0.0.0.0:$TAHUNA_SERVE_PORT`
+- return HTTP `200` on `$TAHUNA_SERVE_HEALTH_PATH` when ready
+- remain running until it is stopped or fails
+
+`inference.py` may:
+
+- load the model from `TAHUNA_MODEL_ROOT`
+- use any Python inference library declared in the `serve` dependency group
+- expose any request and response protocol the user wants
+
+Tahuna does not define the inference payload schema in this contract. Tahuna only defines readiness and lifecycle.
+
+### Process Ownership
+
+Tahuna supervises the process tree rooted at `python -u inference.py`.
+
+Rules:
+
+- the serve process must not depend on a separate unmanaged long-lived daemon
+- the user app may fork worker processes if they remain part of the supervised process tree
+- process exit after the serve becomes healthy is a runtime failure unless the stop was user-initiated
+
+## Model Contract
+
+Serving is snapshot-based.
+
+At serve creation time Tahuna resolves a model source to a pinned model snapshot.
+
+Allowed model sources:
+
+- a model directory produced by a successful training run
+- a model directory already stored in Tahuna-managed object storage
+
+MVP serve creation must require exactly one model source.
+
+Supported source selectors:
+
+- `--from-run <run_id>`
+- `--from-storage <object-prefix>`
+
+Tahuna must never infer "latest successful run" or any equivalent implicit source.
+
+When `--from-run <run_id>` is used and no explicit model subpath is provided, Tahuna resolves the model from `[serve].default_model_path` inside that run output tree.
+
+Tahuna materializes the pinned model snapshot under:
+
+```text
+/workspace/model
+```
+
+and sets:
+
+- `TAHUNA_MODEL_ROOT=/workspace/model`
+
+Rules:
+
+- the snapshot must not change after serve creation
+- running serves must not read directly from mutable run artifact prefixes
+- renaming or deleting the source run artifacts or source storage objects must not mutate a running serve
+- `inference.py` must treat `TAHUNA_MODEL_ROOT` as read-only model input
+
+## Runtime Environment Variables
+
+### Shared
+
+| Variable | Description |
+|----------|-------------|
+| `TAHUNA_WORKSPACE_ROOT` | Workspace root. Always `/workspace`. |
+| `TAHUNA_DATA_DIR` | Materialized data directory under `/workspace/<project.data_dir>`. |
+| `TAHUNA_OUTPUT_DIR` | Output directory under `/workspace/<project.output_dir>`. |
+| `TAHUNA_API_BASE` | Backend URL for runtime callbacks. |
+| `TAHUNA_RUNTIME_TOKEN` | Runtime bearer token for runtime callbacks. |
+
+Rules:
+
+- `TAHUNA_DATA_DIR` and `TAHUNA_OUTPUT_DIR` must exist before launching the entrypoint
+- all Tahuna-provided paths are absolute paths inside `/workspace`
+
+### Training
+
+| Variable | Description |
+|----------|-------------|
+| `TAHUNA_RUN_ID` | Training run ID. |
+
+### Serving
+
+| Variable | Description |
+|----------|-------------|
+| `TAHUNA_SERVE_ID` | Serve ID. |
+| `TAHUNA_MODEL_ROOT` | Materialized model snapshot root. Always `/workspace/model`. |
+| `TAHUNA_SERVE_PORT` | Port the app must bind to. |
+| `TAHUNA_SERVE_HEALTH_PATH` | Readiness and liveness path. |
+
+## Runtime Callback Contract
+
+The runtime must communicate with the Tahuna control plane using a one-time runtime token.
+
+Serving callback surface:
+
+- `GET /api/serves/{serve_id}/runtime/bootstrap`
+- `POST /api/serves/{serve_id}/runtime/status`
+- `POST /api/serves/{serve_id}/runtime/logs`
+
+Training callback surface remains the run-specific contract and is separate from serving.
+
+The exact payloads may be specified separately, but the serving contract requires:
+
+- bootstrap delivery of the materialization plan and runtime settings
+- status updates for serve lifecycle transitions
+- log streaming or batched log upload from the supervised process
+
+## Readiness And Health
+
+Serving status is health-driven.
+
+Tahuna probes:
+
+```text
+http://127.0.0.1:{TAHUNA_SERVE_PORT}{TAHUNA_SERVE_HEALTH_PATH}
+```
+
+Probe success is defined as:
+
+- HTTP status `200`
+
+Probe response body is ignored by the contract.
+
+### Startup
+
+Startup rules:
+
+- the serve enters `starting` after provisioning completes and before readiness succeeds
+- if readiness does not succeed before `[serve].startup_timeout_seconds`, the serve fails
+- if the process exits before the first successful readiness probe, the serve fails
+
+### Healthy Operation
+
+After readiness succeeds:
+
+- the serve enters `serving`
+- Tahuna continues local health probing
+- process exit is immediate failure unless a stop was requested
+- `health_failure_threshold` consecutive failed probes mark the serve failed
+
+### Health Ownership Boundary
+
+Tahuna owns:
+
+- the probe loop
+- state transitions
+- stop and fail handling
+
+The user owns:
+
+- implementing the health endpoint in `inference.py`
+- deciding when the app is actually ready to answer traffic
+
+## Serve Lifecycle
+
+### State Machine
+
+Serving uses the following states:
+
+- `queued`
+- `provisioning`
+- `starting`
+- `serving`
+- `stopping`
+- `stopped`
+- `failed`
+
+### Transition Semantics
+
+Allowed lifecycle semantics:
+
+- create request inserts `queued`
+- compute allocation and materialization transition to `provisioning`
+- process launch transitions to `starting`
+- first successful readiness probe transitions to `serving`
+- user stop request transitions to `stopping`
+- graceful stop completion transitions to `stopped`
+- unrecoverable runtime error, process exit, startup timeout, or sustained health failure transitions to `failed`
+
+### Stop Semantics
+
+On user stop:
+
+1. Tahuna transitions the serve to `stopping`.
+2. Tahuna sends `SIGTERM` to the supervised process tree.
+3. Tahuna waits up to `[serve].graceful_shutdown_seconds`.
+4. If the process tree is still alive, Tahuna force kills it.
+5. Tahuna transitions the serve to `stopped`.
+
+If the process exits on its own after a stop request, the terminal state is still `stopped`, not `failed`.
+
+## Image And Runtime Resolution
+
+This contract is not engine-matrix-based.
+
+Tahuna is responsible for selecting a compatible Python runtime image that satisfies:
+
+- the requested Python version
+- the requested compute shape
+- the runtime requirements for GPU execution
+
+Rules:
+
+- user libraries such as `vllm`, `sglang`, `transformers`, `fastapi`, or `uvicorn` come from `pyproject.toml` and `uv.lock`
+- Tahuna must not require the user to select a serving engine in `tahuna.toml`
+- Tahuna must not infer serving behavior from dependency names
+
+## Clarification On `triton`
+
+This contract allows arbitrary Python dependencies.
+
+That means a Python package named `triton` may appear in dependencies.
+
+This contract does not mean Tahuna supports NVIDIA Triton Inference Server.
+
+The binary `tritonserver` is a different runtime contract and is out of scope for MVP.
+
+## Explicit Non-Goals
+
+- non-Python serving binaries such as `tritonserver`
+- user-provided Docker images
+- arbitrary shell entrypoints
+- model serving by pointing directly at mutable run artifacts
+- automatic inference payload schema
+- artifact upload from serve pods in MVP
+- autoscaling in MVP
+- rolling updates or blue-green deployment in MVP
+- multi-model serving in MVP
+
+## Invariants
+
+- `train.py` is the canonical training entrypoint
+- `inference.py` is the canonical serving entrypoint
+- canonical project files live at repo root
+- training and serving dependency sets are separate and fixed to `train` and `serve`
+- Tahuna installs dependencies from `pyproject.toml` and `uv.lock`
+- serving uses a pinned model snapshot at `TAHUNA_MODEL_ROOT`
+- serving health is determined by a local HTTP probe
+- Tahuna manages infrastructure and lifecycle; the user manages Python app behavior
+
+## Acceptance Criteria
+
+The implementation satisfies this contract only if all of the following are true:
+
+- a project with root `tahuna.toml`, `pyproject.toml`, `uv.lock`, `train.py`, and `inference.py` can train and serve without any path overrides
+- training installs base dependencies plus `train`, but not `serve`
+- serving installs base dependencies plus `serve`, but not `train`
+- `tahuna serve create --from-run <run_id>` snapshots the model directory and starts `inference.py`
+- a running serve remains healthy if the source run artifacts are renamed or deleted after snapshot creation
+- a serve that never returns HTTP `200` on the health endpoint fails after `[serve].startup_timeout_seconds`
+- a serve that exits after becoming healthy transitions to `failed`
+- a stopped serve transitions to `stopped`, not `failed`
+- `TAHUNA_WORKSPACE_ROOT`, `TAHUNA_MODEL_ROOT`, `TAHUNA_DATA_DIR`, and `TAHUNA_OUTPUT_DIR` are absolute paths inside `/workspace`
+- the implementation does not require engine selection in `tahuna.toml`
+
+## Suggested Implementation PR Order
+
+This section is non-normative. It exists to guide implementation sequencing.
+
+1. PR1: Spec alignment.
+   Rewrite the Python serving contract, mark `specs/serve.md` as superseded for Python app serving, and align product language.
+
+2. PR2: Config contract and migration.
+   Add root `tahuna.toml` support, introduce `[train]` and `[serve]`, migrate from legacy `.tahuna/tahuna.toml`, and update project scaffolding.
+
+3. PR3: Mode-aware dependency installation.
+   Refactor runtime dependency installation so training installs base plus `train`, and serving installs base plus `serve`.
+
+4. PR4: Serve control-plane primitives.
+   Add serve records, serve events, serve runtime logs, serve status transitions, and serve HTTP routes.
+
+5. PR5: Immutable model snapshots.
+   Add serve-time model snapshot resolution from runs or storage and pin that snapshot in control-plane state.
+
+6. PR6: Warden serve mode.
+   Generalize the runtime bootstrap path to support serving, model materialization, process supervision, readiness polling, liveness polling, and stop semantics.
+
+7. PR7: Serve provisioning backend.
+   Add backend provisioning orchestration for create, start, stop, failure handling, and runtime callbacks.
+
+8. PR8: CLI serve commands.
+   Add `tahuna serve create`, `list`, `show`, `logs`, and `stop`.
+
+9. PR9: Docs, examples, and dashboard.
+   Update docs, examples, and UI only after the backend and runtime path are working.
