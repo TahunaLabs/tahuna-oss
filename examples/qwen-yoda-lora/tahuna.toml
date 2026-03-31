@@ -1,0 +1,20 @@
+# Generated from local Tahuna project state.
+[project]
+data_dir = "data"
+output_dir = "outputs"
+
+[environment]
+framework = "pt"
+version = "2.2.0-cu121"
+python_version = "3.11"
+gpu_type = "NVIDIA L4"
+gpu_count = 1
+volume_gb = 10
+
+[train]
+output_model_path = "outputs/model"
+
+[serve]
+gpu_type = "NVIDIA L4"
+gpu_count = 1
+volume_gb = 10
