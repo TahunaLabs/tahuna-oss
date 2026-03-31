@@ -651,6 +651,7 @@ func emitTrainOutputLine(
 }
 
 func NormalizeCommand(command []string) ([]string, error) {
+	// Command must come from the pinned run payload; no implicit fallback.
 	if len(command) == 0 {
 		return nil, fmt.Errorf("command is required: environment has no command configured")
 	}
