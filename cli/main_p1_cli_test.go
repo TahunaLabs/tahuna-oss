@@ -248,3 +248,45 @@ func TestResolveServeCommand_DefaultAndOverride(t *testing.T) {
 		}
 	}
 }
+
+func TestRenderProjectConfig_WritesExplicitTrainAndServeDefaults(t *testing.T) {
+	rendered, err := renderProjectConfig(projectConfig{
+		DataDir:              "data",
+		OutputDir:            "outputs",
+		Framework:            "pt",
+		FrameworkVersion:     "2.2.0-cu121",
+		PythonVersion:        "3.11",
+		GPUType:              "NVIDIA L4",
+		GPUCount:             1,
+		VolumeGB:             5,
+		TrainOutputModelPath: "outputs/model",
+		ServeGPUType:         "NVIDIA L4",
+		ServeGPUCount:        1,
+		ServeVolumeGB:        5,
+	})
+	if err != nil {
+		t.Fatalf("renderProjectConfig failed: %v", err)
+	}
+
+	requiredSnippets := []string{
+		"[train]",
+		`command = ["uv", "run", "--active", "--no-sync", "python", "-u", "train.py"]`,
+		`output_model_path = "outputs/model"`,
+		"[serve]",
+		`command = ["uv", "run", "--active", "--no-sync", "python", "-u", "inference.py"]`,
+		`python_version = "3.11"`,
+		`port = 8000`,
+		`health_path = "/health"`,
+		`default_model_path = "outputs/model"`,
+		`startup_timeout_seconds = 900`,
+		`health_interval_seconds = 5`,
+		`health_timeout_seconds = 2`,
+		`health_failure_threshold = 3`,
+		`graceful_shutdown_seconds = 30`,
+	}
+	for _, snippet := range requiredSnippets {
+		if !strings.Contains(rendered, snippet) {
+			t.Fatalf("expected rendered config to contain %q, got:\n%s", snippet, rendered)
+		}
+	}
+}

@@ -699,25 +699,40 @@ func renderProjectConfig(cfg projectConfig) (string, error) {
 			lines = append(lines, "")
 		}
 		lines = append(lines, "[train]")
-		if len(cfg.TrainCommand) > 0 {
-			lines = append(lines, fmt.Sprintf("command = %s", renderTomlStringArray(cfg.TrainCommand)))
+		trainCommand, err := resolveTrainCommand(cfg)
+		if err != nil {
+			return "", err
 		}
-		if value := strings.TrimSpace(cfg.TrainOutputModelPath); value != "" {
-			lines = append(lines, fmt.Sprintf("output_model_path = \"%s\"", escapeProjectConfigValue(value)))
+		lines = append(lines, fmt.Sprintf("command = %s", renderTomlStringArray(trainCommand)))
+		trainOutputModelPath := strings.TrimSpace(cfg.TrainOutputModelPath)
+		if trainOutputModelPath == "" {
+			outputDir := strings.TrimSpace(cfg.OutputDir)
+			if outputDir == "" {
+				outputDir = defaultProjectConfig().OutputDir
+			}
+			trainOutputModelPath = defaultTrainOutputModelPath(outputDir)
 		}
+		lines = append(lines, fmt.Sprintf("output_model_path = \"%s\"", escapeProjectConfigValue(trainOutputModelPath)))
 	}
 	if hasServeSection(cfg) {
-		defaults := defaultProjectConfig()
 		if len(lines) > 1 {
 			lines = append(lines, "")
 		}
 		lines = append(lines, "[serve]")
-		if len(cfg.ServeCommand) > 0 {
-			lines = append(lines, fmt.Sprintf("command = %s", renderTomlStringArray(cfg.ServeCommand)))
+		defaults := defaultProjectConfig()
+		serveCommand, err := resolveServeCommand(cfg)
+		if err != nil {
+			return "", err
 		}
-		if value := strings.TrimSpace(cfg.ServePythonVersion); value != "" && value != strings.TrimSpace(cfg.PythonVersion) {
-			lines = append(lines, fmt.Sprintf("python_version = \"%s\"", escapeProjectConfigValue(value)))
+		lines = append(lines, fmt.Sprintf("command = %s", renderTomlStringArray(serveCommand)))
+		servePythonVersion := strings.TrimSpace(cfg.ServePythonVersion)
+		if servePythonVersion == "" {
+			servePythonVersion = strings.TrimSpace(cfg.PythonVersion)
 		}
+		if servePythonVersion == "" {
+			servePythonVersion = defaults.PythonVersion
+		}
+		lines = append(lines, fmt.Sprintf("python_version = \"%s\"", escapeProjectConfigValue(servePythonVersion)))
 		if value := strings.TrimSpace(cfg.ServeGPUType); value != "" {
 			lines = append(lines, fmt.Sprintf("gpu_type = \"%s\"", escapeProjectConfigValue(value)))
 		}
@@ -727,30 +742,50 @@ func renderProjectConfig(cfg projectConfig) (string, error) {
 		if cfg.ServeVolumeGB > 0 {
 			lines = append(lines, fmt.Sprintf("volume_gb = %d", cfg.ServeVolumeGB))
 		}
-		if cfg.ServePort > 0 && cfg.ServePort != defaults.ServePort {
-			lines = append(lines, fmt.Sprintf("port = %d", cfg.ServePort))
+		servePort := cfg.ServePort
+		if servePort == 0 {
+			servePort = defaults.ServePort
 		}
-		if value := strings.TrimSpace(cfg.ServeHealthPath); value != "" && value != defaults.ServeHealthPath {
-			lines = append(lines, fmt.Sprintf("health_path = \"%s\"", escapeProjectConfigValue(value)))
+		lines = append(lines, fmt.Sprintf("port = %d", servePort))
+		serveHealthPath := strings.TrimSpace(cfg.ServeHealthPath)
+		if serveHealthPath == "" {
+			serveHealthPath = defaults.ServeHealthPath
 		}
-		if value := strings.TrimSpace(cfg.ServeDefaultModelPath); value != "" && value != defaults.ServeDefaultModelPath {
-			lines = append(lines, fmt.Sprintf("default_model_path = \"%s\"", escapeProjectConfigValue(value)))
+		lines = append(lines, fmt.Sprintf("health_path = \"%s\"", escapeProjectConfigValue(serveHealthPath)))
+		serveDefaultModelPath := strings.TrimSpace(cfg.ServeDefaultModelPath)
+		if serveDefaultModelPath == "" {
+			outputDir := strings.TrimSpace(cfg.OutputDir)
+			if outputDir == "" {
+				outputDir = defaults.OutputDir
+			}
+			serveDefaultModelPath = defaultTrainOutputModelPath(outputDir)
 		}
-		if cfg.ServeStartupTimeoutSeconds > 0 && cfg.ServeStartupTimeoutSeconds != defaults.ServeStartupTimeoutSeconds {
-			lines = append(lines, fmt.Sprintf("startup_timeout_seconds = %d", cfg.ServeStartupTimeoutSeconds))
+		lines = append(lines, fmt.Sprintf("default_model_path = \"%s\"", escapeProjectConfigValue(serveDefaultModelPath)))
+		serveStartupTimeoutSeconds := cfg.ServeStartupTimeoutSeconds
+		if serveStartupTimeoutSeconds == 0 {
+			serveStartupTimeoutSeconds = defaults.ServeStartupTimeoutSeconds
 		}
-		if cfg.ServeHealthIntervalSeconds > 0 && cfg.ServeHealthIntervalSeconds != defaults.ServeHealthIntervalSeconds {
-			lines = append(lines, fmt.Sprintf("health_interval_seconds = %d", cfg.ServeHealthIntervalSeconds))
+		lines = append(lines, fmt.Sprintf("startup_timeout_seconds = %d", serveStartupTimeoutSeconds))
+		serveHealthIntervalSeconds := cfg.ServeHealthIntervalSeconds
+		if serveHealthIntervalSeconds == 0 {
+			serveHealthIntervalSeconds = defaults.ServeHealthIntervalSeconds
 		}
-		if cfg.ServeHealthTimeoutSeconds > 0 && cfg.ServeHealthTimeoutSeconds != defaults.ServeHealthTimeoutSeconds {
-			lines = append(lines, fmt.Sprintf("health_timeout_seconds = %d", cfg.ServeHealthTimeoutSeconds))
+		lines = append(lines, fmt.Sprintf("health_interval_seconds = %d", serveHealthIntervalSeconds))
+		serveHealthTimeoutSeconds := cfg.ServeHealthTimeoutSeconds
+		if serveHealthTimeoutSeconds == 0 {
+			serveHealthTimeoutSeconds = defaults.ServeHealthTimeoutSeconds
 		}
-		if cfg.ServeHealthFailureThreshold > 0 && cfg.ServeHealthFailureThreshold != defaults.ServeHealthFailureThreshold {
-			lines = append(lines, fmt.Sprintf("health_failure_threshold = %d", cfg.ServeHealthFailureThreshold))
+		lines = append(lines, fmt.Sprintf("health_timeout_seconds = %d", serveHealthTimeoutSeconds))
+		serveHealthFailureThreshold := cfg.ServeHealthFailureThreshold
+		if serveHealthFailureThreshold == 0 {
+			serveHealthFailureThreshold = defaults.ServeHealthFailureThreshold
 		}
-		if cfg.ServeGracefulShutdownSeconds > 0 && cfg.ServeGracefulShutdownSeconds != defaults.ServeGracefulShutdownSeconds {
-			lines = append(lines, fmt.Sprintf("graceful_shutdown_seconds = %d", cfg.ServeGracefulShutdownSeconds))
+		lines = append(lines, fmt.Sprintf("health_failure_threshold = %d", serveHealthFailureThreshold))
+		serveGracefulShutdownSeconds := cfg.ServeGracefulShutdownSeconds
+		if serveGracefulShutdownSeconds == 0 {
+			serveGracefulShutdownSeconds = defaults.ServeGracefulShutdownSeconds
 		}
+		lines = append(lines, fmt.Sprintf("graceful_shutdown_seconds = %d", serveGracefulShutdownSeconds))
 	}
 	return strings.Join(lines, "\n") + "\n", nil
 }
