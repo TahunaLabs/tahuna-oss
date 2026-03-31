@@ -84,7 +84,11 @@ func initProject(target string) error {
 		return fmt.Errorf("failed to create output directory: %w", err)
 	}
 
-	setup, err := guidedSetup(envName, frameworkKey, projectCfg.PythonVersion, gpus, versionsByFramework, pythonsByFrameworkVersion)
+	initCmd, err := resolveTrainCommand(projectCfg)
+	if err != nil {
+		return fmt.Errorf("failed to resolve train command: %w", err)
+	}
+	setup, err := guidedSetup(envName, frameworkKey, projectCfg.PythonVersion, gpus, versionsByFramework, pythonsByFrameworkVersion, initCmd, projectCfg.OutputDir)
 	if err != nil {
 		return err
 	}
@@ -145,7 +149,7 @@ type guidedSetupResult struct {
 	pythonVersion    string
 }
 
-func guidedSetup(environmentName, frameworkHint, pythonVersionHint string, gpus []string, versionsByFramework map[string][]string, pythonsByFrameworkVersion map[string]map[string][]string) (guidedSetupResult, error) {
+func guidedSetup(environmentName, frameworkHint, pythonVersionHint string, gpus []string, versionsByFramework map[string][]string, pythonsByFrameworkVersion map[string]map[string][]string, command []string, outputDir string) (guidedSetupResult, error) {
 	frameworks := sortedKeys(versionsByFramework)
 	framework := strings.TrimSpace(frameworkHint)
 	if framework == "" || versionsByFramework[framework] == nil {
@@ -172,6 +176,10 @@ func guidedSetup(environmentName, frameworkHint, pythonVersionHint string, gpus 
 		return guidedSetupResult{}, err
 	}
 
+	resolvedOutputDir := strings.TrimSpace(outputDir)
+	if resolvedOutputDir == "" {
+		resolvedOutputDir = "outputs"
+	}
 	envPayload := map[string]any{
 		"name":           environmentName,
 		"gpu_type":       gpuType,
@@ -180,6 +188,8 @@ func guidedSetup(environmentName, frameworkHint, pythonVersionHint string, gpus 
 		"python_version": pythonVersion,
 		"framework":      framework,
 		"version":        version,
+		"command":        command,
+		"output_dir":     resolvedOutputDir,
 	}
 	env, err := doJSONAs[createEnvironmentResponse](http.MethodPost, "/environments", envPayload)
 	if err != nil {
@@ -901,8 +911,6 @@ func runCreate(args []string) {
 	must(preRunSync(environmentID))
 
 	payload := map[string]any{}
-	payload["output_dir"] = mustLoadRunOutputDir()
-	payload["command"] = mustLoadRunCommand()
 	if strings.TrimSpace(*name) != "" {
 		payload["name"] = strings.TrimSpace(*name)
 	}
@@ -1041,8 +1049,6 @@ func train(args []string) {
 	must(preRunSync(resolvedEnvironmentID))
 
 	payload := map[string]any{}
-	payload["output_dir"] = mustLoadRunOutputDir()
-	payload["command"] = mustLoadRunCommand()
 	if *gpuType != "" {
 		payload["gpu_type"] = *gpuType
 	}
@@ -1260,22 +1266,3 @@ func preRunSync(environmentID string) error {
 	}
 	return nil
 }
-
-func mustLoadRunOutputDir() string {
-	cfg, err := loadProjectConfig()
-	must(err)
-	outputDir := strings.TrimSpace(cfg.OutputDir)
-	if outputDir == "" {
-		return "outputs"
-	}
-	return outputDir
-}
-
-func mustLoadRunCommand() []string {
-	cfg, err := loadProjectConfig()
-	must(err)
-	cmd, err := resolveTrainCommand(cfg)
-	must(err)
-	return cmd
-}
-

@@ -419,12 +419,22 @@ export const commitSync = httpAction(async (ctx, request) => {
     }
   }
 
+  const commandRaw = body?.command;
+  const command = Array.isArray(commandRaw)
+    ? commandRaw.filter((p: unknown) => typeof p === "string" && (p as string).trim() !== "")
+    : undefined;
+  const outputDir = typeof body?.output_dir === "string" && body.output_dir.trim() !== ""
+    ? body.output_dir.trim()
+    : undefined;
+
   try {
     const data = await ctx.runMutation(internal.environments.internalCommitSyncPointers, {
       userId,
       environmentId: typedEnvironmentId,
       code_manifest_hash: codeManifestHash,
       data_manifest_hash: dataManifestHash,
+      command,
+      output_dir: outputDir,
     });
     return new Response(JSON.stringify(data), {
       status: 200,

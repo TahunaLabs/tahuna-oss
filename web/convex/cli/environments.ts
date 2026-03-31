@@ -46,6 +46,12 @@ export const createEnvironment = httpAction(async (ctx, request) => {
     const gpuType = body?.gpu_type?.trim() || "";
     const gpuCount = typeof body?.gpu_count === "number" ? body.gpu_count : 0;
     await validateGpuCountLimit(ctx, userId, gpuType, gpuCount);
+    const command = Array.isArray(body?.command)
+      ? body.command.filter((p: unknown) => typeof p === "string" && p.trim() !== "")
+      : [];
+    const outputDir = typeof body?.output_dir === "string" && body.output_dir.trim() !== ""
+      ? body.output_dir.trim()
+      : "outputs";
     const data = await ctx.runMutation(internal.environments.internalCreate, {
       userId,
       name: body?.name?.trim() || "",
@@ -55,6 +61,8 @@ export const createEnvironment = httpAction(async (ctx, request) => {
       python_version: body?.python_version?.trim() || undefined,
       framework: body?.framework?.trim() || "",
       version: body?.version?.trim() || "",
+      command,
+      output_dir: outputDir,
     });
     return new Response(JSON.stringify(data), {
       status: 200,
@@ -404,8 +412,6 @@ export const createRunFromEnvironment = httpAction(async (ctx, request) => {
       userId,
       environmentId: environmentId as Id<"environments">,
       name: typeof body?.name === "string" ? body.name : undefined,
-      command: Array.isArray(body?.command) ? body.command.filter((item: unknown) => typeof item === "string") : undefined,
-      output_dir: typeof body?.output_dir === "string" ? body.output_dir : undefined,
       gpu_type: body?.gpu_type,
       gpu_count: body?.gpu_count,
       volume_gb: body?.volume_gb,

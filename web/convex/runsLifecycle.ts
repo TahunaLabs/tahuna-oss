@@ -3,7 +3,6 @@ import { ConvexError } from "convex/values";
 import { components, internal } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import type { MutationCtx } from "@convex/_generated/server";
-import { buildDefaultRunCommand } from "@/lib/run-command";
 import { resolveRunComputePricing } from "@/lib/run-compute-pricing";
 import { buildRuntimeCompatibilityKey, resolveRunpodCloudType } from "@/lib/runtime-incompatibility";
 import { PYTHON_CONFIG, RUN_CONFIG } from "@convex/appConfig";
@@ -60,16 +59,17 @@ export async function createRunForUserId(
     userId: string;
     environmentId: Id<"environments">;
     name?: string;
-    command?: string[];
-    output_dir?: string;
     gpu_type?: string;
     gpu_count?: number;
     volume_gb?: number;
     enqueue_provisioning?: boolean;
   },
 ) {
-  const command = normalizePinnedRunCommand(args.command);
   const env = await getAccessibleEnvironment(ctx, args.userId, args.environmentId);
+  const command = env.command;
+  if (!Array.isArray(command) || command.length === 0) {
+    throw new ConvexError("environment has no command configured; run `tahuna sync` before creating a run");
+  }
   const effectiveGpuType = args.gpu_type ?? env.gpuType;
   const effectiveGpuCount = args.gpu_count ?? env.gpuCount;
   const effectiveVolumeGb = args.volume_gb ?? env.volumeGb;
@@ -85,9 +85,7 @@ export async function createRunForUserId(
     throw new ConvexError("environment code is not synced; run `tahuna sync` before creating a run");
   }
   const userRuns = await listRunsForUser(ctx, args.userId);
-  const outputDir = typeof args.output_dir === "string" && args.output_dir.trim() !== ""
-    ? args.output_dir.trim()
-    : "outputs";
+  const outputDir = env.outputDir;
   let runName = "";
   if (typeof args.name === "string" && args.name.trim() !== "") {
     runName = validateRunName(args.name);
@@ -179,18 +177,6 @@ export async function createRunForUserId(
   return toRunResponse(row);
 }
 
-function normalizePinnedRunCommand(command: string[] | undefined) {
-  if (!Array.isArray(command) || command.length === 0) {
-    return buildDefaultRunCommand("");
-  }
-  const normalized = command
-    .map((part) => part.trim())
-    .filter((part) => part.length > 0);
-  if (normalized.length === 0) {
-    throw new ConvexError("run command is required");
-  }
-  return normalized;
-}
 
 export async function cancelRunForUserId(
   ctx: MutationCtx,

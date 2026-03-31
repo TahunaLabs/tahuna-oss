@@ -48,9 +48,11 @@ POD STARTS
    Response: {
      code: { entries: [...], download_urls: {...} },
      data: { entries: [...], download_urls: {...} },
-     command: ["uv", "run", "--active", "--no-sync", "python", "-u", "train.py"],
-     output_dir: "outputs"
+     command: [...],   # pinned at run creation from environment.command — never empty
+     output_dir: "..." # pinned at run creation from environment.outputDir
    }
+   - command is always provided by the backend. Warden has no default and will fail
+     if command is empty — this indicates a provisioning bug, not a warden concern.
     |
     v
 2. REPORT STATUS: provisioning -> running

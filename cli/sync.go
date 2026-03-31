@@ -122,6 +122,18 @@ func finalizeSyncWithStatus(environmentID string, prepared []preparedManifest, o
 	for _, item := range prepared {
 		commitPayload[item.kind+"_manifest_hash"] = item.hash
 	}
+	cfg, err := loadProjectConfig()
+	if err == nil {
+		cmd, cmdErr := resolveTrainCommand(cfg)
+		if cmdErr == nil && len(cmd) > 0 {
+			commitPayload["command"] = cmd
+		}
+		if outputDir := strings.TrimSpace(cfg.OutputDir); outputDir != "" {
+			commitPayload["output_dir"] = outputDir
+		} else {
+			commitPayload["output_dir"] = "outputs"
+		}
+	}
 
 	for _, item := range prepared {
 		if err := uploadManifest(environmentID, item); err != nil {

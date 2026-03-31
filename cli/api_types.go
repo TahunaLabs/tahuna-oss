@@ -12,6 +12,8 @@ type environmentResponse struct {
 	PythonVersion string   `json:"python_version"`
 	Artifacts     string   `json:"artifacts"`
 	BoundDataIDs  []string `json:"bound_data_ids"`
+	Command       []string `json:"command"`
+	OutputDir     string   `json:"output_dir"`
 }
 
 // environmentsResponse is the response from GET /environments.

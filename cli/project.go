@@ -1013,6 +1013,9 @@ func projectConfigFromEnvironment(env environmentResponse) projectConfig {
 	if env.VolumeGB > 0 {
 		cfg.VolumeGB = int(env.VolumeGB)
 	}
+	if outputDir := strings.TrimSpace(env.OutputDir); outputDir != "" && outputDir != "outputs" {
+		cfg.OutputDir = outputDir
+	}
 	return cfg
 }
 
@@ -1094,4 +1097,3 @@ func clearLinkedEnvironmentIDIfMatches(environmentID string) error {
 	}
 	return nil
 }
-
