@@ -44,10 +44,10 @@ git push origin v0.1.1
 To work with both prod and dev CLIs side by side, install the dev build as a separate `tahuna-dev` binary:
 
 ```bash
-make install-cli-dev && source ~/.zshrc
+make install-cli-dev
 ```
 
-The target builds the CLI to `tahuna-dev` and adds a shell alias to `~/.zshrc` that sets `TAHUNA_API_URL` (localhost) and `TAHUNA_CONFIG_DIR` (separate from prod). Then log in once:
+The target builds a standalone `tahuna-dev` binary (no shell alias required). Then log in once:
 
 ```bash
 tahuna-dev login

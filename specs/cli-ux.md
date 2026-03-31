@@ -179,13 +179,13 @@ Error: Not authenticated. Run `tahuna login` first.
 ### API URL Resolution Order
 
 1. `TAHUNA_API_URL` environment variable
-2. `TAHUNA_SITE_URL` environment variable
-3. `TAHUNA_PUBLIC_SITE_URL` environment variable
-4. Default: `https://tahuna.app`
+2. Mode default by binary name:
+   - `tahuna`: `https://tahuna.app`
+   - `tahuna-dev`: `http://localhost:3000`
 
 - If URL ends with `/api`, CLI does not double-prefix.
 - CLI auto-prefixes requests with `/api`.
-- Legacy provider-specific env aliases may still be read for migration, but they are not documented or displayed.
+- No legacy URL alias env vars are part of CLI config resolution.
 
 ### Browser URL Resolution
 

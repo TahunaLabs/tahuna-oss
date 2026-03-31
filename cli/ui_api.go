@@ -37,23 +37,47 @@ var cfg cliConfig
 
 // initConfig resolves all configuration values from environment variables and
 // config files. Call once at the start of main before any command dispatch.
-func initConfig() {
+func initConfig() error {
+	mode := activeCLIMode()
 	cfg.apiKey = lookupConfigValue("TAHUNA_API_KEY")
 	cfg.browserURL = lookupConfigValue("TAHUNA_BROWSER_URL")
 
 	if v := lookupConfigValue("TAHUNA_API_URL"); v != "" {
 		cfg.apiURL = strings.TrimRight(v, "/")
-	} else if v := lookupConfigValue("TAHUNA_SITE_URL"); v != "" {
-		cfg.apiURL = strings.TrimRight(v, "/")
-	} else if v := lookupConfigValue("TAHUNA_PUBLIC_SITE_URL"); v != "" {
-		cfg.apiURL = strings.TrimRight(v, "/")
+	} else if mode == cliModeDev {
+		cfg.apiURL = defaultDevAPIURL
 	} else {
 		cfg.apiURL = defaultAPIURL
 	}
+
+	if mode == cliModeDev && isProdTahunaURL(cfg.apiURL) {
+		return errors.New("tahuna-dev cannot target production API; unset TAHUNA_API_URL or point it to a non-prod endpoint")
+	}
+	if mode == cliModeProd && isLocalTahunaURL(cfg.apiURL) {
+		return errors.New("tahuna cannot target localhost; use tahuna-dev for local development")
+	}
+	return nil
 }
 
 func printSuccessLine(message string) {
 	fmt.Printf("%s✓%s %s\n", cAmpGreen, cReset, message)
+}
+
+func isLocalTahunaURL(raw string) bool {
+	parsed, err := neturl.Parse(strings.TrimSpace(raw))
+	if err != nil {
+		return false
+	}
+	host := strings.ToLower(parsed.Hostname())
+	return host == "localhost" || host == "127.0.0.1" || host == "::1"
+}
+
+func isProdTahunaURL(raw string) bool {
+	parsed, err := neturl.Parse(strings.TrimSpace(raw))
+	if err != nil {
+		return false
+	}
+	return strings.EqualFold(parsed.Hostname(), "tahuna.app")
 }
 
 // logWarn prints a colored warning.

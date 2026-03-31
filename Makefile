@@ -44,13 +44,7 @@ install-cli:
 
 install-cli-dev:
 	cd cli && go build -o "$$(go env GOPATH)/bin/tahuna-dev" .
-	@ALIAS_LINE="alias tahuna-dev='TAHUNA_API_URL=http://localhost:3000 TAHUNA_CONFIG_DIR=\$$HOME/.config/tahuna-dev tahuna-dev'"; \
-	if ! grep -qF "alias tahuna-dev=" ~/.zshrc 2>/dev/null; then \
-		echo "" >> ~/.zshrc; \
-		echo "$$ALIAS_LINE" >> ~/.zshrc; \
-		echo "Added tahuna-dev alias to ~/.zshrc — run: source ~/.zshrc"; \
-	fi
-	@echo "Installed tahuna-dev ✔"
+	@echo "Installed tahuna-dev ✔ (standalone binary; no shell alias required)"
 
 install-cli-tools:
 	cd cli && GOBIN="$$(go env GOPATH)/bin" go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.8
