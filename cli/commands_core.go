@@ -68,14 +68,17 @@ func initProject(target string) error {
 		envName = "tahuna-project"
 	}
 
-	if err := ensureProjectFile(projectCfg.PythonProjectFile, defaultPyProjectTemplate(frameworkKey)); err != nil {
+	if err := ensureProjectFile("pyproject.toml", defaultPyProjectTemplate(frameworkKey)); err != nil {
 		return fmt.Errorf("failed to create pyproject.toml: %w", err)
 	}
-	if err := ensureUVLockFile(projectCfg.PythonProjectFile, projectCfg.UVLockFile); err != nil {
+	if err := ensureUVLockFile(); err != nil {
 		return fmt.Errorf("failed to create uv.lock: %w", err)
 	}
-	if err := ensureProjectFile(projectCfg.TrainEntrypoint, defaultTrainEntrypointTemplate(projectCfg)); err != nil {
+	if err := ensureProjectFile("train.py", defaultTrainEntrypointTemplate(projectCfg)); err != nil {
 		return fmt.Errorf("failed to create train entrypoint: %w", err)
+	}
+	if err := ensureProjectFile("inference.py", defaultInferenceEntrypointTemplate(projectCfg)); err != nil {
+		return fmt.Errorf("failed to create inference entrypoint: %w", err)
 	}
 	if err := os.MkdirAll(projectCfg.DataDir, 0o755); err != nil {
 		return fmt.Errorf("failed to create data directory: %w", err)
@@ -90,6 +93,12 @@ func initProject(target string) error {
 	}
 	projectCfg.PythonVersion = setup.pythonVersion
 	projectCfg.FrameworkVersion = setup.frameworkVersion
+	projectCfg.GPUType = setup.gpuType
+	projectCfg.GPUCount = setup.gpuCount
+	projectCfg.VolumeGB = setup.volumeGB
+	projectCfg.ServeGPUType = setup.gpuType
+	projectCfg.ServeGPUCount = setup.gpuCount
+	projectCfg.ServeVolumeGB = setup.volumeGB
 	if err := saveProjectConfig(projectCfg); err != nil {
 		return fmt.Errorf("failed to save project config: %w", err)
 	}
@@ -143,6 +152,9 @@ type guidedSetupResult struct {
 	environmentID    string
 	frameworkVersion string
 	pythonVersion    string
+	gpuType          string
+	gpuCount         int
+	volumeGB         int
 }
 
 func guidedSetup(environmentName, frameworkHint, pythonVersionHint string, gpus []string, versionsByFramework map[string][]string, pythonsByFrameworkVersion map[string]map[string][]string) (guidedSetupResult, error) {
@@ -192,6 +204,9 @@ func guidedSetup(environmentName, frameworkHint, pythonVersionHint string, gpus 
 		environmentID:    envID,
 		frameworkVersion: version,
 		pythonVersion:    pythonVersion,
+		gpuType:          gpuType,
+		gpuCount:         gpuCount,
+		volumeGB:         volumeGB,
 	}, nil
 }
 
@@ -1258,9 +1273,5 @@ func mustLoadRunOutputDir() string {
 }
 
 func mustLoadRunCommand() []string {
-	cfg, err := loadProjectConfig()
-	must(err)
-	cmd, err := resolveTrainCommand(cfg)
-	must(err)
-	return cmd
+	return defaultTrainCommand()
 }

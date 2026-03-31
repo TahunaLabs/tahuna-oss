@@ -233,14 +233,11 @@ func TestEnvironmentUpdate_LinkedEnvironmentRefreshesLocalProjectConfig(t *testi
 	if !strings.Contains(text, "[project]") {
 		t.Fatalf("expected project section in local config, got: %s", text)
 	}
-	if !strings.Contains(text, "entrypoint = \"train.py\"") || !strings.Contains(text, "uv_lock_file = \"uv.lock\"") {
+	if !strings.Contains(text, "data_dir = \"data\"") || !strings.Contains(text, "output_dir = \"outputs\"") {
 		t.Fatalf("expected project bindings to be preserved, got: %s", text)
 	}
 	if !strings.Contains(text, "[environment]") {
 		t.Fatalf("expected environment section in local config, got: %s", text)
-	}
-	if !strings.Contains(text, "name = \"linked-env\"") {
-		t.Fatalf("expected environment name in local config, got: %s", text)
 	}
 	if !strings.Contains(text, "version = \"2.8.0-cu128\"") {
 		t.Fatalf("expected environment version in local config, got: %s", text)
@@ -250,6 +247,12 @@ func TestEnvironmentUpdate_LinkedEnvironmentRefreshesLocalProjectConfig(t *testi
 	}
 	if !strings.Contains(text, "gpu_count = 2") || !strings.Contains(text, "volume_gb = 160") {
 		t.Fatalf("expected hardware fields in local config, got: %s", text)
+	}
+	if !strings.Contains(text, "[train]") || !strings.Contains(text, "output_model_path = \"outputs/model\"") {
+		t.Fatalf("expected train section in local config, got: %s", text)
+	}
+	if !strings.Contains(text, "[serve]") || !strings.Contains(text, "gpu_count = 1") {
+		t.Fatalf("expected preserved serve section in local config, got: %s", text)
 	}
 	if strings.Contains(text, "framework_version") || strings.Contains(text, "requirements") {
 		t.Fatalf("local project config leaked legacy fields: %s", text)

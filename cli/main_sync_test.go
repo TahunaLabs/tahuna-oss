@@ -152,8 +152,8 @@ func TestRunSyncWithStatus_RefreshesAndReportsEnvironmentSync(t *testing.T) {
 		t.Fatalf("expected project config to be written: %v", err)
 	}
 	text := string(raw)
-	if !strings.Contains(text, "name = \"test\"") {
-		t.Fatalf("expected synced environment name in project config, got: %s", text)
+	if !strings.Contains(text, "framework = \"pt\"") || !strings.Contains(text, "version = \"2.8.0-cu128\"") {
+		t.Fatalf("expected synced environment runtime config, got: %s", text)
 	}
 	if !strings.Contains(text, "gpu_type = \"NVIDIA A100 80GB\"") || !strings.Contains(text, "gpu_count = 1") {
 		t.Fatalf("expected synced environment hardware in project config, got: %s", text)
@@ -167,7 +167,7 @@ func TestRunSyncWithStatus_EnvironmentOnlyConfigDoesNotFailOrInventProjectBindin
 	if err := saveLinkedEnvironmentID("env-test"); err != nil {
 		t.Fatalf("failed to save linked environment id: %v", err)
 	}
-	if err := os.WriteFile(projectConfigFilePath(), []byte("# Generated from the remote Tahuna environment record.\n[environment]\nname = \"broken-env\"\nframework = \"pt\"\nversion = \"2.8.0-cu128\"\npython_version = \"3.11\"\ngpu_type = \"NVIDIA RTX A5000\"\ngpu_count = 1\nvolume_gb = 80\n"), 0o600); err != nil {
+	if err := os.WriteFile(projectConfigFilePath(), []byte("# Generated from the remote Tahuna environment record.\n[environment]\nframework = \"pt\"\nversion = \"2.8.0-cu128\"\npython_version = \"3.11\"\ngpu_type = \"NVIDIA RTX A5000\"\ngpu_count = 1\nvolume_gb = 80\n"), 0o600); err != nil {
 		t.Fatalf("failed to write env-only project config: %v", err)
 	}
 
@@ -202,7 +202,7 @@ func TestRunSyncWithStatus_EnvironmentOnlyConfigDoesNotFailOrInventProjectBindin
 	if strings.Contains(text, "[project]") {
 		t.Fatalf("expected env-only config to remain env-only during sync, got: %s", text)
 	}
-	if !strings.Contains(text, "name = \"test\"") || !strings.Contains(text, "gpu_type = \"NVIDIA A100 80GB\"") {
+	if !strings.Contains(text, "framework = \"pt\"") || !strings.Contains(text, "gpu_type = \"NVIDIA A100 80GB\"") {
 		t.Fatalf("expected environment fields to refresh in env-only config, got: %s", text)
 	}
 }
@@ -266,10 +266,10 @@ func TestPreRunSync_ConfigValidationDetectsMissingEntrypointPath(t *testing.T) {
 
 	err := preRunSync("env-test")
 	if err == nil {
-		t.Fatal("expected preRunSync to fail when entrypoint binding path is missing")
+		t.Fatal("expected preRunSync to fail when train.py is missing")
 	}
-	if !strings.Contains(err.Error(), "entrypoint binding points to missing path") {
-		t.Fatalf("expected missing entrypoint binding error, got: %v", err)
+	if !strings.Contains(err.Error(), "missing required project file \"train.py\"") {
+		t.Fatalf("expected missing train.py error, got: %v", err)
 	}
 }
 

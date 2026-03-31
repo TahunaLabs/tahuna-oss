@@ -425,11 +425,17 @@ func TestPersistFallbackEnvironmentGPU_RefreshesLocalProjectConfig(t *testing.T)
 	if !strings.Contains(text, "[project]") {
 		t.Fatalf("expected project section in local config, got: %s", text)
 	}
-	if !strings.Contains(text, "entrypoint = \"train.py\"") || !strings.Contains(text, "uv_lock_file = \"uv.lock\"") {
+	if !strings.Contains(text, "data_dir = \"data\"") || !strings.Contains(text, "output_dir = \"outputs\"") {
 		t.Fatalf("expected project bindings to be preserved, got: %s", text)
 	}
 	if !strings.Contains(text, "[environment]") {
 		t.Fatalf("expected environment section in local config, got: %s", text)
+	}
+	if !strings.Contains(text, "[train]") || !strings.Contains(text, "output_model_path = \"outputs/model\"") {
+		t.Fatalf("expected train section in local config, got: %s", text)
+	}
+	if !strings.Contains(text, "[serve]") || !strings.Contains(text, "gpu_type = \"NVIDIA A100 80GB\"") {
+		t.Fatalf("expected serve section in local config, got: %s", text)
 	}
 	if !strings.Contains(text, "gpu_type = \"NVIDIA RTX A5000\"") {
 		t.Fatalf("expected fallback gpu in local config, got: %s", text)
