@@ -9,14 +9,23 @@ version = "2.2.0-cu121"
 python_version = "3.11"
 gpu_type = "NVIDIA RTX A4500"
 gpu_count = 1
-volume_gb = 80
+volume_gb = 2
 
 [train]
 command = ["uv", "run", "--active", "--no-sync", "python", "-u", "train.py"]
 output_model_path = "outputs/model"
 
 [serve]
-command = ["uvicorn", "app:server", "--host", "0.0.0.0", "--port", "8000"]
-gpu_type = "NVIDIA A100 82GB"
+command = ["uv", "run", "--active", "--no-sync", "python", "-u", "inference.py"]
+python_version = "3.11"
+gpu_type = "NVIDIA RTX A4500"
 gpu_count = 1
-volume_gb = 80
+volume_gb = 2
+port = 8000
+health_path = "/health"
+default_model_path = "outputs/model"
+startup_timeout_seconds = 90
+health_interval_seconds = 5
+health_timeout_seconds = 2
+health_failure_threshold = 3
+graceful_shutdown_seconds = 30
