@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/BurntSushi/toml"
 	"warden/internal/pythonenv"
 )
 
@@ -208,29 +209,7 @@ func resolveProtectedPackages(baseEnv []string) []string {
 	return packages
 }
 
-func parseTOMLQuotedValue(line, prefix string) (string, bool) {
-	trimmed := strings.TrimSpace(line)
-	if !strings.HasPrefix(trimmed, prefix) {
-		return "", false
-	}
-	raw := strings.TrimSpace(strings.TrimPrefix(trimmed, prefix))
-	if len(raw) < 2 || raw[0] != '"' {
-		return "", false
-	}
-	for i := 1; i < len(raw); i++ {
-		if raw[i] == '"' && raw[i-1] != '\\' {
-			return raw[1:i], true
-		}
-	}
-	return "", false
-}
-
 func readLockedPackageVersions(lockPath string, packageNames []string) (map[string]string, error) {
-	blob, err := os.ReadFile(lockPath)
-	if err != nil {
-		return nil, fmt.Errorf("read uv.lock: %w", err)
-	}
-
 	targets := map[string]struct{}{}
 	for _, pkg := range packageNames {
 		name := strings.ToLower(strings.TrimSpace(pkg))
@@ -240,52 +219,30 @@ func readLockedPackageVersions(lockPath string, packageNames []string) (map[stri
 		targets[name] = struct{}{}
 	}
 
+	var lockfile struct {
+		Packages []struct {
+			Name    string `toml:"name"`
+			Version string `toml:"version"`
+		} `toml:"package"`
+	}
+	if _, err := toml.DecodeFile(lockPath, &lockfile); err != nil {
+		return nil, fmt.Errorf("decode uv.lock: %w", err)
+	}
+
 	versions := map[string]string{}
-	currentName := ""
-	currentVersion := ""
-	inPackage := false
-
-	flush := func() {
-		if currentName == "" || currentVersion == "" {
-			return
-		}
-		if _, ok := targets[currentName]; ok {
-			versions[currentName] = currentVersion
-		}
-	}
-
-	for _, line := range strings.Split(string(blob), "\n") {
-		trimmed := strings.TrimSpace(line)
-		switch {
-		case trimmed == "[[package]]":
-			if inPackage {
-				flush()
-			}
-			inPackage = true
-			currentName = ""
-			currentVersion = ""
-		case strings.HasPrefix(trimmed, "[["):
-			if inPackage {
-				flush()
-			}
-			inPackage = false
-			currentName = ""
-			currentVersion = ""
-		case !inPackage:
+	for _, pkg := range lockfile.Packages {
+		name := strings.ToLower(strings.TrimSpace(pkg.Name))
+		if name == "" {
 			continue
-		default:
-			if name, ok := parseTOMLQuotedValue(trimmed, "name = "); ok {
-				currentName = strings.ToLower(strings.TrimSpace(name))
-				continue
-			}
-			if version, ok := parseTOMLQuotedValue(trimmed, "version = "); ok {
-				currentVersion = strings.TrimSpace(version)
-				continue
-			}
 		}
-	}
-	if inPackage {
-		flush()
+		if _, ok := targets[name]; !ok {
+			continue
+		}
+		version := strings.TrimSpace(pkg.Version)
+		if version == "" {
+			continue
+		}
+		versions[name] = version
 	}
 
 	return versions, nil
