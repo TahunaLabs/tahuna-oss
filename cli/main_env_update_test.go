@@ -218,6 +218,54 @@ func TestEnvironmentUpdate_ServeEntrypointCommandOnly_UpdatesLocalServeCommand(t
 	}
 }
 
+func TestEnvironmentUpdate_ServeComputeOnly_UpdatesLocalServeConfigWithoutPatch(t *testing.T) {
+	setupTestProject(t, false)
+
+	requestCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestCount++
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{})
+	}))
+	defer server.Close()
+
+	t.Setenv("TAHUNA_API_URL", server.URL)
+
+	output := captureStdout(t, func() {
+		environmentUpdate([]string{"--serve-gpu-type", "nvidia-a100", "--serve-gpu-count", "2", "--serve-volume-gb", "160"})
+	})
+
+	if requestCount != 0 {
+		t.Fatalf("expected serve-only local update to avoid API calls, got %d requests", requestCount)
+	}
+
+	cfg, err := loadProjectConfig()
+	if err != nil {
+		t.Fatalf("failed to load project config: %v", err)
+	}
+	if cfg.ServeGPUType != "nvidia-a100" {
+		t.Fatalf("expected serve gpu_type to be updated, got %q", cfg.ServeGPUType)
+	}
+	if cfg.ServeGPUCount != 2 {
+		t.Fatalf("expected serve gpu_count=2, got %d", cfg.ServeGPUCount)
+	}
+	if cfg.ServeVolumeGB != 160 {
+		t.Fatalf("expected serve volume_gb=160, got %d", cfg.ServeVolumeGB)
+	}
+	if cfg.GPUType != "NVIDIA A100 80GB" {
+		t.Fatalf("expected environment gpu_type to remain unchanged, got %q", cfg.GPUType)
+	}
+	if cfg.GPUCount != 1 {
+		t.Fatalf("expected environment gpu_count to remain 1, got %d", cfg.GPUCount)
+	}
+	if cfg.VolumeGB != 80 {
+		t.Fatalf("expected environment volume_gb to remain 80, got %d", cfg.VolumeGB)
+	}
+	if !strings.Contains(output, "serve compute updated") {
+		t.Fatalf("expected local serve compute update message, got: %s", output)
+	}
+}
+
 func TestEnvironmentUpdate_LinkedEnvironmentRefreshesLocalProjectConfig(t *testing.T) {
 	setupTestProject(t, false)
 	if err := saveLinkedEnvironmentID("env-test"); err != nil {
