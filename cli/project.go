@@ -86,9 +86,16 @@ func collectProjectInitConfig() (projectConfig, string, error) {
 	}
 
 	defaultCmd := strings.Join(defaultTrainCommand(cfg.TrainEntrypoint), " ")
-	customCmd := strings.TrimSpace(promptString("Launch command", defaultCmd))
-	if customCmd != defaultCmd && customCmd != "" {
-		cfg.EntrypointCommand = customCmd
+	launchChoice := promptChoice("Launch command", []string{
+		fmt.Sprintf("Default (%s)", defaultCmd),
+		"Custom (torchrun, multi-GPU, extra args, ...)",
+	}, 0)
+	if launchChoice != fmt.Sprintf("Default (%s)", defaultCmd) {
+		fmt.Printf("%s  Paste or type your command as a single line%s\n", cAmpGold, cReset)
+		raw := strings.TrimSpace(promptString("Command", ""))
+		if normalized := normalizeCommandString(raw); normalized != "" {
+			cfg.EntrypointCommand = normalized
+		}
 	}
 
 	if dirExists(cfg.DataDir) {
@@ -925,6 +932,14 @@ func defaultTrainCommand(entrypoint string) []string {
 		resolvedEntrypoint = "train.py"
 	}
 	return []string{"uv", "run", "--active", "--no-sync", "python", "-u", resolvedEntrypoint}
+}
+
+// normalizeCommandString collapses backslash-newline continuations and
+// redundant whitespace so pasted multi-line shell commands become one line.
+func normalizeCommandString(s string) string {
+	s = strings.ReplaceAll(s, "\\\r\n", " ")
+	s = strings.ReplaceAll(s, "\\\n", " ")
+	return strings.Join(strings.Fields(s), " ")
 }
 
 // parseShellCommand splits a shell-like command string into tokens,
