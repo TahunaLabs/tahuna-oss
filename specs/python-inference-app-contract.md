@@ -10,7 +10,7 @@ For Python app serving, it supersedes the engine-matrix model described in `spec
 
 ## Implementation Status
 
-This section is non-normative. It records rollout status in the current codebase as of 2026-03-31.
+This section is non-normative. It records rollout status in the current codebase as of 2026-04-01.
 
 - PR1 is done.
   This document is the canonical Python app serving contract and supersedes `specs/serve.md` for Python app serving.
@@ -19,11 +19,13 @@ This section is non-normative. It records rollout status in the current codebase
 - PR3 is done.
   `runtime/warden/internal/deps` now owns Python dependency installation with explicit `train` and `serve` modes, `runtime/warden/internal/bootstrap` currently installs with `deps.ModeTrain`, and shared virtualenv environment handling lives in `runtime/warden/internal/pythonenv`.
   The protected-package lockfile check reads `uv.lock` with `github.com/BurntSushi/toml` instead of manual line parsing.
-- PR4 through PR8 are still pending.
+- PR4 is done.
+  The control plane now has canonical `serves`, `serveEvents`, and `serveRuntimeLogs` records, serve lifecycle status transitions, serve runtime log/status ingestion, and `/api/serves` HTTP routes including runtime callback endpoints.
+- PR5 through PR8 are still pending.
 - PR9 is in progress.
   The dashboard already exposes synced serving config, but end-to-end serve workflows, examples, and final documentation are still incomplete.
-- The next implementation step is PR4.
-  The product still lacks serve records, serve events, serve status transitions, and serve HTTP/API primitives.
+- The next implementation step is PR5.
+  The product still lacks immutable serve-time model snapshot resolution and pinned snapshot metadata on the serve record.
 
 ## Scope
 
@@ -602,7 +604,7 @@ This section is non-normative. It exists to guide implementation sequencing.
 3. PR3: Mode-aware dependency installation. Status: done.
    Refactor runtime dependency installation so training installs base plus `train`, and serving installs base plus `serve`.
 
-4. PR4: Serve control-plane primitives. Status: pending.
+4. PR4: Serve control-plane primitives. Status: done.
    Add serve records, serve events, serve runtime logs, serve status transitions, and serve HTTP routes.
 
 5. PR5: Immutable model snapshots. Status: pending.
