@@ -193,6 +193,31 @@ func TestEnvironmentUpdate_EntrypointCommandOnly_UpdatesLocalTrainCommand(t *tes
 	}
 }
 
+func TestEnvironmentUpdate_ServeEntrypointCommandOnly_UpdatesLocalServeCommand(t *testing.T) {
+	setupTestProject(t, false)
+
+	output := captureStdout(t, func() {
+		environmentUpdate([]string{"--id", "env-test", "--serve-entrypoint-command", `uv run --active --no-sync python -u inference.py --port 9000`})
+	})
+
+	cfg, err := loadProjectConfig()
+	if err != nil {
+		t.Fatalf("failed to load project config: %v", err)
+	}
+	want := []string{"uv", "run", "--active", "--no-sync", "python", "-u", "inference.py", "--port", "9000"}
+	if len(cfg.ServeCommand) != len(want) {
+		t.Fatalf("expected %d serve command tokens, got %d: %#v", len(want), len(cfg.ServeCommand), cfg.ServeCommand)
+	}
+	for i, token := range want {
+		if cfg.ServeCommand[i] != token {
+			t.Fatalf("expected serve command token %d=%q, got %q", i, token, cfg.ServeCommand[i])
+		}
+	}
+	if !strings.Contains(output, "serve.command updated") {
+		t.Fatalf("expected local serve command update message, got: %s", output)
+	}
+}
+
 func TestEnvironmentUpdate_LinkedEnvironmentRefreshesLocalProjectConfig(t *testing.T) {
 	setupTestProject(t, false)
 	if err := saveLinkedEnvironmentID("env-test"); err != nil {

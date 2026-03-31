@@ -215,3 +215,36 @@ volume_gb = 80
 		t.Fatalf("expected environment.gpu_count validation error, got: %v", err)
 	}
 }
+
+func TestResolveServeCommand_DefaultAndOverride(t *testing.T) {
+	got, err := resolveServeCommand(projectConfig{})
+	if err != nil {
+		t.Fatalf("resolveServeCommand default failed: %v", err)
+	}
+	wantDefault := []string{"uv", "run", "--active", "--no-sync", "python", "-u", "inference.py"}
+	if len(got) != len(wantDefault) {
+		t.Fatalf("expected %d default serve command tokens, got %d: %#v", len(wantDefault), len(got), got)
+	}
+	for i, token := range wantDefault {
+		if got[i] != token {
+			t.Fatalf("expected default serve command token %d=%q, got %q", i, token, got[i])
+		}
+	}
+
+	override := projectConfig{
+		ServeCommand: []string{"uvicorn", "app:server", "--host", "0.0.0.0", "--port", "8000"},
+	}
+	got, err = resolveServeCommand(override)
+	if err != nil {
+		t.Fatalf("resolveServeCommand override failed: %v", err)
+	}
+	wantOverride := override.ServeCommand
+	if len(got) != len(wantOverride) {
+		t.Fatalf("expected %d override serve command tokens, got %d: %#v", len(wantOverride), len(got), got)
+	}
+	for i, token := range wantOverride {
+		if got[i] != token {
+			t.Fatalf("expected override serve command token %d=%q, got %q", i, token, got[i])
+		}
+	}
+}

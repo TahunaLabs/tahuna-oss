@@ -357,7 +357,7 @@ func environmentUsage() {
   tahuna env help
   tahuna env list [--verbose|-v]
   tahuna env show <env_id> | --id <env_id> [--verbose|-v]
-  tahuna env update [<env_id>] [--gpu-type <gpu>] [--gpu-count <n>] [--volume-gb <n>] [--entrypoint-command <cmd>]
+  tahuna env update [<env_id>] [--gpu-type <gpu>] [--gpu-count <n>] [--volume-gb <n>] [--entrypoint-command <cmd>] [--serve-entrypoint-command <cmd>]
   tahuna env rm <env_id> | --id <env_id> | --all|-a
   tahuna env data bind|unbind ...
 `)
@@ -819,6 +819,7 @@ func environmentUpdate(args []string) {
 	gpuCount := fs.Int("gpu-count", 0, "GPU count")
 	volumeGB := fs.Int("volume-gb", 0, "Volume in GB")
 	entrypointCmd := fs.String("entrypoint-command", "", "Custom train command (saved locally and synced on the next run/sync)")
+	serveEntrypointCmd := fs.String("serve-entrypoint-command", "", "Custom serve command (saved locally for future serve execution)")
 	mustParseFlags(fs, args)
 
 	environmentID := strings.TrimSpace(*id)
@@ -844,6 +845,15 @@ func environmentUpdate(args []string) {
 		must(saveProjectConfig(cfg))
 		fmt.Printf("%s✓%s train.command updated in %s\n", cAmpGreen, cReset, projectConfigFilePath())
 	}
+	if cmd := strings.TrimSpace(*serveEntrypointCmd); cmd != "" {
+		cfg, err := loadPersistedProjectConfig()
+		must(err)
+		parsedCommand, err := parseShellCommand(normalizeCommandString(cmd))
+		must(err)
+		cfg.ServeCommand = parsedCommand
+		must(saveProjectConfig(cfg))
+		fmt.Printf("%s✓%s serve.command updated in %s\n", cAmpGreen, cReset, projectConfigFilePath())
+	}
 
 	payload := map[string]any{}
 	if strings.TrimSpace(*gpuType) != "" {
@@ -857,7 +867,7 @@ func environmentUpdate(args []string) {
 	}
 
 	// entrypoint-command is local-only; if nothing else was passed skip the API call.
-	if len(payload) == 0 && strings.TrimSpace(*entrypointCmd) != "" {
+	if len(payload) == 0 && (strings.TrimSpace(*entrypointCmd) != "" || strings.TrimSpace(*serveEntrypointCmd) != "") {
 		return
 	}
 

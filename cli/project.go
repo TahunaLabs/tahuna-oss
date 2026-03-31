@@ -47,6 +47,7 @@ type projectConfig struct {
 	VolumeGB                     int
 	TrainCommand                 []string
 	TrainOutputModelPath         string
+	ServeCommand                 []string
 	ServePythonVersion           string
 	ServeGPUType                 string
 	ServeGPUCount                int
@@ -94,18 +95,19 @@ type projectConfigTrainSection struct {
 }
 
 type projectConfigServeSection struct {
-	PythonVersion           string `toml:"python_version,omitempty"`
-	GPUType                 string `toml:"gpu_type,omitempty"`
-	GPUCount                int    `toml:"gpu_count,omitempty"`
-	VolumeGB                int    `toml:"volume_gb,omitempty"`
-	Port                    int    `toml:"port,omitempty"`
-	HealthPath              string `toml:"health_path,omitempty"`
-	DefaultModelPath        string `toml:"default_model_path,omitempty"`
-	StartupTimeoutSeconds   int    `toml:"startup_timeout_seconds,omitempty"`
-	HealthIntervalSeconds   int    `toml:"health_interval_seconds,omitempty"`
-	HealthTimeoutSeconds    int    `toml:"health_timeout_seconds,omitempty"`
-	HealthFailureThreshold  int    `toml:"health_failure_threshold,omitempty"`
-	GracefulShutdownSeconds int    `toml:"graceful_shutdown_seconds,omitempty"`
+	Command                 []string `toml:"command,omitempty"`
+	PythonVersion           string   `toml:"python_version,omitempty"`
+	GPUType                 string   `toml:"gpu_type,omitempty"`
+	GPUCount                int      `toml:"gpu_count,omitempty"`
+	VolumeGB                int      `toml:"volume_gb,omitempty"`
+	Port                    int      `toml:"port,omitempty"`
+	HealthPath              string   `toml:"health_path,omitempty"`
+	DefaultModelPath        string   `toml:"default_model_path,omitempty"`
+	StartupTimeoutSeconds   int      `toml:"startup_timeout_seconds,omitempty"`
+	HealthIntervalSeconds   int      `toml:"health_interval_seconds,omitempty"`
+	HealthTimeoutSeconds    int      `toml:"health_timeout_seconds,omitempty"`
+	HealthFailureThreshold  int      `toml:"health_failure_threshold,omitempty"`
+	GracefulShutdownSeconds int      `toml:"graceful_shutdown_seconds,omitempty"`
 }
 
 func normalizeProjectPath(value string) string {
@@ -601,6 +603,9 @@ func mergeProjectConfig(base, next projectConfig) projectConfig {
 	if value := strings.TrimSpace(next.TrainOutputModelPath); value != "" {
 		base.TrainOutputModelPath = normalizeProjectPath(value)
 	}
+	if len(next.ServeCommand) > 0 {
+		base.ServeCommand = append([]string{}, normalizeCommandTokens(next.ServeCommand)...)
+	}
 	if value := strings.TrimSpace(next.ServePythonVersion); value != "" {
 		base.ServePythonVersion = value
 	}
@@ -659,7 +664,8 @@ func hasTrainSection(cfg projectConfig) bool {
 }
 
 func hasServeSection(cfg projectConfig) bool {
-	return strings.TrimSpace(cfg.ServePythonVersion) != "" ||
+	return len(cfg.ServeCommand) > 0 ||
+		strings.TrimSpace(cfg.ServePythonVersion) != "" ||
 		strings.TrimSpace(cfg.ServeGPUType) != "" ||
 		cfg.ServeGPUCount > 0 ||
 		cfg.ServeVolumeGB > 0 ||
@@ -745,6 +751,9 @@ func renderProjectConfig(cfg projectConfig) (string, error) {
 			lines = append(lines, "")
 		}
 		lines = append(lines, "[serve]")
+		if len(cfg.ServeCommand) > 0 {
+			lines = append(lines, fmt.Sprintf("command = %s", renderTomlStringArray(cfg.ServeCommand)))
+		}
 		if value := strings.TrimSpace(cfg.ServePythonVersion); value != "" && value != strings.TrimSpace(cfg.PythonVersion) {
 			lines = append(lines, fmt.Sprintf("python_version = \"%s\"", escapeProjectConfigValue(value)))
 		}
@@ -844,6 +853,7 @@ func projectConfigFromFile(file projectConfigFile) projectConfig {
 		cfg.TrainOutputModelPath = normalizeProjectPath(file.Train.OutputModelPath)
 	}
 	if file.Serve != nil {
+		cfg.ServeCommand = normalizeCommandTokens(file.Serve.Command)
 		cfg.ServePythonVersion = file.Serve.PythonVersion
 		cfg.ServeGPUType = file.Serve.GPUType
 		cfg.ServeGPUCount = file.Serve.GPUCount
@@ -880,6 +890,16 @@ func validateProjectConfigFile(file projectConfigFile, defined map[string]struct
 		}
 	}
 	if file.Serve != nil {
+		if tomlKeyDefined(defined, "serve.command") {
+			if len(file.Serve.Command) == 0 {
+				return fmt.Errorf("invalid serve.command in %s: expected at least one command token", projectConfigFilePath())
+			}
+			for _, token := range file.Serve.Command {
+				if strings.TrimSpace(token) == "" {
+					return fmt.Errorf("invalid serve.command in %s: command tokens must be non-empty strings", projectConfigFilePath())
+				}
+			}
+		}
 		if err := validateConfiguredPositiveInt(defined, "serve.gpu_count", file.Serve.GPUCount); err != nil {
 			return err
 		}
@@ -1382,6 +1402,10 @@ func defaultTrainCommand() []string {
 	return []string{"uv", "run", "--active", "--no-sync", "python", "-u", "train.py"}
 }
 
+func defaultServeCommand() []string {
+	return []string{"uv", "run", "--active", "--no-sync", "python", "-u", "inference.py"}
+}
+
 // normalizeCommandString collapses backslash-newline continuations and
 // redundant whitespace so pasted multi-line shell commands become one line.
 func normalizeCommandString(s string) string {
@@ -1458,6 +1482,13 @@ func resolveTrainCommand(cfg projectConfig) ([]string, error) {
 		return append([]string{}, cfg.TrainCommand...), nil
 	}
 	return defaultTrainCommand(), nil
+}
+
+func resolveServeCommand(cfg projectConfig) ([]string, error) {
+	if len(cfg.ServeCommand) > 0 {
+		return append([]string{}, cfg.ServeCommand...), nil
+	}
+	return defaultServeCommand(), nil
 }
 
 func projectConfigFromEnvironment(env environmentResponse) projectConfig {

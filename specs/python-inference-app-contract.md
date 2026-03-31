@@ -200,7 +200,8 @@ Defaults:
 
 Rules:
 
-- `inference.py` is fixed and is not configurable in MVP
+- the default serve command is `python -u inference.py`
+- `[serve].command` may override the exact serving launch command
 - the serving dependency group is fixed to `serve`
 - `default_model_path` is only a default lookup path inside a run output tree
 - serving compute must be explicit and must not be inferred from `[environment]` except for the `python_version` default
@@ -304,7 +305,9 @@ Tahuna launches serving with:
 python -u inference.py
 ```
 
-No alternate serving entrypoint is part of the MVP contract.
+This is the default serve command.
+
+If `[serve].command` is configured, Tahuna launches serving with that command instead.
 
 ### Runtime Expectations
 
@@ -325,7 +328,7 @@ Tahuna does not define the inference payload schema in this contract. Tahuna onl
 
 ### Process Ownership
 
-Tahuna supervises the process tree rooted at `python -u inference.py`.
+Tahuna supervises the process tree rooted at the resolved serve command.
 
 Rules:
 
@@ -536,7 +539,6 @@ The binary `tritonserver` is a different runtime contract and is out of scope fo
 
 - non-Python serving binaries such as `tritonserver`
 - user-provided Docker images
-- arbitrary shell entrypoints
 - model serving by pointing directly at mutable run artifacts
 - automatic inference payload schema
 - artifact upload from serve pods in MVP
