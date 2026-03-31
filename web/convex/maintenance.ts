@@ -18,6 +18,9 @@ const CLEANUP_TABLES = [
   "runRuntimeLogs",
   "runRuntimeMetrics",
   "runs",
+  "serveEvents",
+  "serveRuntimeLogs",
+  "serves",
   "shareLinks",
   "storageObjects",
   "usageEvents",
@@ -36,6 +39,9 @@ type CleanupDocId =
   | Id<"runRuntimeLogs">
   | Id<"runRuntimeMetrics">
   | Id<"runs">
+  | Id<"serveEvents">
+  | Id<"serveRuntimeLogs">
+  | Id<"serves">
   | Id<"shareLinks">
   | Id<"storageObjects">
   | Id<"usageEvents">
@@ -62,6 +68,9 @@ const cleanupTableValidator = v.union(
   v.literal("runRuntimeLogs"),
   v.literal("runRuntimeMetrics"),
   v.literal("runs"),
+  v.literal("serveEvents"),
+  v.literal("serveRuntimeLogs"),
+  v.literal("serves"),
   v.literal("shareLinks"),
   v.literal("storageObjects"),
   v.literal("usageEvents"),
@@ -145,6 +154,15 @@ async function loadTableBatchIds(ctx: MutationCtx, table: CleanupTable, batchSiz
   if (table === "runs") {
     return (await ctx.db.query("runs").take(batchSize)).map((row) => row._id);
   }
+  if (table === "serveEvents") {
+    return (await ctx.db.query("serveEvents").take(batchSize)).map((row) => row._id);
+  }
+  if (table === "serveRuntimeLogs") {
+    return (await ctx.db.query("serveRuntimeLogs").take(batchSize)).map((row) => row._id);
+  }
+  if (table === "serves") {
+    return (await ctx.db.query("serves").take(batchSize)).map((row) => row._id);
+  }
   if (table === "shareLinks") {
     return (await ctx.db.query("shareLinks").take(batchSize)).map((row) => row._id);
   }
@@ -190,6 +208,18 @@ async function deleteTableIds(ctx: MutationCtx, table: CleanupTable, ids: Cleanu
   }
   if (table === "runs") {
     await Promise.all(ids.map((id) => ctx.db.delete("runs", id as Id<"runs">)));
+    return;
+  }
+  if (table === "serveEvents") {
+    await Promise.all(ids.map((id) => ctx.db.delete("serveEvents", id as Id<"serveEvents">)));
+    return;
+  }
+  if (table === "serveRuntimeLogs") {
+    await Promise.all(ids.map((id) => ctx.db.delete("serveRuntimeLogs", id as Id<"serveRuntimeLogs">)));
+    return;
+  }
+  if (table === "serves") {
+    await Promise.all(ids.map((id) => ctx.db.delete("serves", id as Id<"serves">)));
     return;
   }
   if (table === "shareLinks") {
@@ -300,6 +330,30 @@ export const internalCountTable = internalMutation({
     }
     if (args.table === "runs") {
       const result = await ctx.db.query("runs").paginate({ cursor: args.cursor, numItems: batchSize });
+      return {
+        count: result.page.length,
+        has_more: !result.isDone,
+        next_cursor: result.isDone ? null : result.continueCursor,
+      };
+    }
+    if (args.table === "serveEvents") {
+      const result = await ctx.db.query("serveEvents").paginate({ cursor: args.cursor, numItems: batchSize });
+      return {
+        count: result.page.length,
+        has_more: !result.isDone,
+        next_cursor: result.isDone ? null : result.continueCursor,
+      };
+    }
+    if (args.table === "serveRuntimeLogs") {
+      const result = await ctx.db.query("serveRuntimeLogs").paginate({ cursor: args.cursor, numItems: batchSize });
+      return {
+        count: result.page.length,
+        has_more: !result.isDone,
+        next_cursor: result.isDone ? null : result.continueCursor,
+      };
+    }
+    if (args.table === "serves") {
+      const result = await ctx.db.query("serves").paginate({ cursor: args.cursor, numItems: batchSize });
       return {
         count: result.page.length,
         has_more: !result.isDone,

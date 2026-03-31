@@ -89,6 +89,47 @@ export default defineSchema({
     .index("by_status", ["status"])
     .index("by_runtime_token_hash", ["runtimeTokenHash"]),
 
+  serves: defineTable({
+    userId: v.string(),
+    environmentId: v.id("environments"),
+    command: v.array(v.string()),
+    outputDir: v.string(),
+    logs: v.string(),
+    status: v.string(),
+    error: v.optional(v.string()),
+    podId: v.optional(v.string()),
+    runtimeTokenHash: v.optional(v.string()),
+    codeManifestHash: v.optional(v.string()),
+    dataManifestHash: v.optional(v.string()),
+    pythonVersion: v.string(),
+    gpuType: v.string(),
+    gpuCount: v.number(),
+    volumeGb: v.number(),
+    port: v.number(),
+    healthPath: v.string(),
+    defaultModelPath: v.string(),
+    startupTimeoutSeconds: v.number(),
+    healthIntervalSeconds: v.number(),
+    healthTimeoutSeconds: v.number(),
+    healthFailureThreshold: v.number(),
+    gracefulShutdownSeconds: v.number(),
+    modelSource: v.union(
+      v.object({
+        type: v.literal("run"),
+        runId: v.id("runs"),
+        modelPath: v.string(),
+      }),
+      v.object({
+        type: v.literal("storage"),
+        objectPrefix: v.string(),
+      }),
+    ),
+  })
+    .index("by_user", ["userId"])
+    .index("by_user_and_environment", ["userId", "environmentId"])
+    .index("by_status", ["status"])
+    .index("by_runtime_token_hash", ["runtimeTokenHash"]),
+
   runpodCredentials: defineTable({
     userId: v.string(),
     keyCiphertext: v.string(),
@@ -206,6 +247,21 @@ export default defineSchema({
     source: v.string(),
     message: v.string(),
   }).index("by_run", ["runId"]),
+
+  serveEvents: defineTable({
+    serveId: v.id("serves"),
+    status: v.string(),
+    message: v.string(),
+    metadata: v.optional(v.any()),
+  }).index("by_serve", ["serveId"]),
+
+  serveRuntimeLogs: defineTable({
+    serveId: v.id("serves"),
+    timestamp: v.number(),
+    level: v.string(),
+    source: v.string(),
+    message: v.string(),
+  }).index("by_serve", ["serveId"]),
 
   runRuntimeMetrics: defineTable({
     runId: v.id("runs"),

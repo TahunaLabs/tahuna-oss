@@ -17,6 +17,7 @@ import {
   updateEnvironmentSpecs,
 } from "@convex/cli/environments";
 import { createRun, getRunOrLogs, listRuns, postRunRuntime, removeRun, renameRun } from "@convex/cli/runs";
+import { createServe, getServeOrLogs, listServes, postServeAction } from "@convex/cli/serves";
 import { fileStream as wandbFileStream, graphql as wandbGraphql, upload as wandbUpload } from "@convex/monitoring/wandb";
 
 const http = httpRouter();
@@ -57,6 +58,12 @@ http.route({ pathPrefix: "/api/runs/", method: "GET", handler: getRunOrLogs });
 http.route({ pathPrefix: "/api/runs/", method: "PATCH", handler: renameRun });
 // Route prefix for deleting runs by ID /api/runs/{run_id}
 http.route({ pathPrefix: "/api/runs/", method: "DELETE", handler: removeRun });
+
+// Serves (REST)
+http.route({ path: "/api/serves", method: "GET", handler: listServes });
+http.route({ path: "/api/serves", method: "POST", handler: createServe });
+http.route({ pathPrefix: "/api/serves/", method: "POST", handler: postServeAction });
+http.route({ pathPrefix: "/api/serves/", method: "GET", handler: getServeOrLogs });
 
 // Monitoring (W&B-compatible)
 http.route({ path: "/api/monitoring/wandb/graphql", method: "POST", handler: wandbGraphql });

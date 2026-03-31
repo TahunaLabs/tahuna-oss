@@ -280,6 +280,12 @@ type RunCleanupRows = {
   wandbMetrics: Array<Doc<"wandbMetrics">>;
 };
 
+type ServeCleanupRows = {
+  serveId: Id<"serves">;
+  events: Array<Doc<"serveEvents">>;
+  runtimeLogs: Array<Doc<"serveRuntimeLogs">>;
+};
+
 async function loadRunCleanupRows(
   ctx: MutationCtx,
   runIds: Array<Id<"runs">>,
@@ -369,6 +375,62 @@ async function deleteRunCleanupRows(ctx: MutationCtx, rows: RunCleanupRows[]) {
   for (let start = 0; start < runIds.length; start += RUN_CLEANUP_DELETE_BATCH_SIZE) {
     const chunk = runIds.slice(start, start + RUN_CLEANUP_DELETE_BATCH_SIZE);
     await Promise.all(chunk.map((id) => ctx.db.delete("runs", id)));
+  }
+}
+
+async function loadServeCleanupRows(
+  ctx: MutationCtx,
+  serveIds: Array<Id<"serves">>,
+): Promise<ServeCleanupRows[]> {
+  const out: ServeCleanupRows[] = [];
+  for (let start = 0; start < serveIds.length; start += RUN_CLEANUP_QUERY_BATCH_SIZE) {
+    const chunk = serveIds.slice(start, start + RUN_CLEANUP_QUERY_BATCH_SIZE);
+    const chunkRows = await Promise.all(
+      chunk.map(async (serveId) => {
+        const [events, runtimeLogs] = await Promise.all([
+          ctx.db
+            .query("serveEvents")
+            .withIndex("by_serve", (q) => q.eq("serveId", serveId))
+            .collect(),
+          ctx.db
+            .query("serveRuntimeLogs")
+            .withIndex("by_serve", (q) => q.eq("serveId", serveId))
+            .collect(),
+        ]);
+        return { serveId, events, runtimeLogs };
+      }),
+    );
+    out.push(...chunkRows);
+  }
+  return out;
+}
+
+async function deleteServeCleanupRows(ctx: MutationCtx, rows: ServeCleanupRows[]) {
+  const eventIds: Array<Id<"serveEvents">> = [];
+  const runtimeLogIds: Array<Id<"serveRuntimeLogs">> = [];
+  const serveIds: Array<Id<"serves">> = [];
+
+  for (const row of rows) {
+    serveIds.push(row.serveId);
+    for (const event of row.events) {
+      eventIds.push(event._id);
+    }
+    for (const log of row.runtimeLogs) {
+      runtimeLogIds.push(log._id);
+    }
+  }
+
+  for (let start = 0; start < eventIds.length; start += RUN_CLEANUP_DELETE_BATCH_SIZE) {
+    const chunk = eventIds.slice(start, start + RUN_CLEANUP_DELETE_BATCH_SIZE);
+    await Promise.all(chunk.map((id) => ctx.db.delete("serveEvents", id)));
+  }
+  for (let start = 0; start < runtimeLogIds.length; start += RUN_CLEANUP_DELETE_BATCH_SIZE) {
+    const chunk = runtimeLogIds.slice(start, start + RUN_CLEANUP_DELETE_BATCH_SIZE);
+    await Promise.all(chunk.map((id) => ctx.db.delete("serveRuntimeLogs", id)));
+  }
+  for (let start = 0; start < serveIds.length; start += RUN_CLEANUP_DELETE_BATCH_SIZE) {
+    const chunk = serveIds.slice(start, start + RUN_CLEANUP_DELETE_BATCH_SIZE);
+    await Promise.all(chunk.map((id) => ctx.db.delete("serves", id)));
   }
 }
 
@@ -793,12 +855,17 @@ async function removeEnvironmentForUserId(ctx: MutationCtx, userId: string, envi
     .query("runs")
     .withIndex("by_user_and_environment", (q) => q.eq("userId", userId).eq("environmentId", environmentId))
     .collect();
+  const serves = await ctx.db
+    .query("serves")
+    .withIndex("by_user_and_environment", (q) => q.eq("userId", userId).eq("environmentId", environmentId))
+    .collect();
   const allRunsForUser = await ctx.db
     .query("runs")
     .withIndex("by_user", (q) => q.eq("userId", userId))
     .collect();
   const otherRuns = allRunsForUser.filter((run) => run.environmentId !== environmentId);
   const runIdsToDelete = runs.map((run) => run._id);
+  const serveIdsToDelete = serves.map((serve) => serve._id);
   const podsToTerminate: Array<{ runId: Id<"runs">; podId: string; runpodCredentialId?: Id<"runpodCredentials"> }> = [];
 
   addManifestRef(deleteRefs, "code", env.latestCodeManifestHash, envIdString, envDataId);
@@ -842,6 +909,8 @@ async function removeEnvironmentForUserId(ctx: MutationCtx, userId: string, envi
   }
   const runCleanupRows = await loadRunCleanupRows(ctx, runIdsToDelete);
   await deleteRunCleanupRows(ctx, runCleanupRows);
+  const serveCleanupRows = await loadServeCleanupRows(ctx, serveIdsToDelete);
+  await deleteServeCleanupRows(ctx, serveCleanupRows);
 
   for (const run of otherRuns) {
     const runDataId = run.dataId || String(run.environmentId);
@@ -857,6 +926,7 @@ async function removeEnvironmentForUserId(ctx: MutationCtx, userId: string, envi
   await deleteIndexedStorageKeys(ctx, userId, indexedDeleteKeys);
   await deleteIndexedStorageByPrefix(ctx, userId, [
     `runs/${envIdString}/`,
+    `serves/${envIdString}/`,
     ...(dataStillReferenced ? [] : [`data/${envDataId}/`]),
   ]);
 
