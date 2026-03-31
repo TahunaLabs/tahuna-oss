@@ -7,17 +7,15 @@ const RUNTIME_LOG_TAIL_LIMIT = RUN_CONFIG.runtimeLogTailLimit
 const RUNTIME_LOG_STARTUP_SCAN_LIMIT = RUN_CONFIG.runtimeLogStartupScanLimit
 const RUNTIME_LOG_PINNED_BOOTSTRAP_LIMIT = RUN_CONFIG.runtimeLogPinnedBootstrapLimit
 
-function toServeModelSourceResponse(row: Doc<"serves">) {
-  if (row.modelSource.type === "run") {
-    return {
-      type: "run" as const,
-      run_id: String(row.modelSource.runId),
-      model_path: row.modelSource.modelPath,
-    }
-  }
+function toServeModelSnapshotResponse(row: Doc<"serves">) {
   return {
-    type: "storage" as const,
-    object_prefix: row.modelSource.objectPrefix,
+    source_type: row.modelSnapshot.sourceType,
+    source_run_id: row.modelSnapshot.sourceRunId ? String(row.modelSnapshot.sourceRunId) : null,
+    source_object_prefix: row.modelSnapshot.sourceObjectPrefix || null,
+    source_model_path: row.modelSnapshot.sourceModelPath || null,
+    object_prefix: row.modelSnapshot.objectPrefix,
+    object_count: row.modelSnapshot.objectCount,
+    total_bytes: row.modelSnapshot.totalBytes,
   }
 }
 
@@ -46,7 +44,7 @@ export function toServeResponse(row: Doc<"serves">) {
     health_timeout_seconds: row.healthTimeoutSeconds,
     health_failure_threshold: row.healthFailureThreshold,
     graceful_shutdown_seconds: row.gracefulShutdownSeconds,
-    model_source: toServeModelSourceResponse(row),
+    model_snapshot: toServeModelSnapshotResponse(row),
   }
 }
 

@@ -54,7 +54,7 @@ export const createServe = httpAction(async (ctx, request) => {
     })
   }
   try {
-    const data = await ctx.runMutation(internal.serves.internalCreate, {
+    const data = await ctx.runAction(internal.serves.internalCreate, {
       userId,
       environmentId: environmentId as Id<"environments">,
       fromRunId: typeof body?.from_run_id === "string" ? (body.from_run_id as Id<"runs">) : undefined,

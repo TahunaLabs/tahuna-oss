@@ -1,102 +1,65 @@
 import { ConvexError } from "convex/values"
 import type { Id } from "@convex/_generated/dataModel"
 import type { MutationCtx } from "@convex/_generated/server"
-import { RUN_STATUS } from "@convex/runsConstants"
-import { getAccessibleEnvironment, getAccessibleRun } from "@convex/runsAccess"
 import { getAccessibleServe } from "@convex/servesAccess"
 import { SERVE_STATUS } from "@convex/servesConstants"
 import { toServeResponse } from "@convex/servesRead"
-
-function normalizeStoragePrefix(value: string) {
-  const normalized = value.trim().replace(/^\/+/, "").replace(/\/+$/, "")
-  if (!normalized) {
-    throw new ConvexError("from_storage_prefix is required")
-  }
-  return normalized
-}
-
-function normalizeModelPath(value: string | undefined, fallback: string) {
-  const normalized = (value || "").trim().replace(/\\/g, "/") || fallback
-  if (!normalized) {
-    throw new ConvexError("model_path is required")
-  }
-  if (normalized.startsWith("/")) {
-    throw new ConvexError("model_path must be a relative workspace path")
-  }
-  if (normalized.split("/").includes("..")) {
-    throw new ConvexError("model_path must not escape the workspace")
-  }
-  return normalized
-}
 
 export async function createServeForUserId(
   ctx: MutationCtx,
   args: {
     userId: string;
     environmentId: Id<"environments">;
-    fromRunId?: Id<"runs">;
-    fromStoragePrefix?: string;
-    modelPath?: string;
+    command: string[];
+    outputDir: string;
+    codeManifestHash: string;
+    dataManifestHash?: string;
+    pythonVersion: string;
+    gpuType: string;
+    gpuCount: number;
+    volumeGb: number;
+    port: number;
+    healthPath: string;
+    defaultModelPath: string;
+    startupTimeoutSeconds: number;
+    healthIntervalSeconds: number;
+    healthTimeoutSeconds: number;
+    healthFailureThreshold: number;
+    gracefulShutdownSeconds: number;
+    modelSnapshot: {
+      sourceType: "run" | "storage";
+      sourceRunId?: Id<"runs">;
+      sourceObjectPrefix?: string;
+      sourceModelPath?: string;
+      objectPrefix: string;
+      objectCount: number;
+      totalBytes: number;
+    };
   },
 ) {
-  const env = await getAccessibleEnvironment(ctx, args.userId, args.environmentId)
-  const serveSnapshot = env.serveSnapshot
-  if (!serveSnapshot || !Array.isArray(serveSnapshot.command) || serveSnapshot.command.length === 0) {
-    throw new ConvexError("environment has no serve config configured; run `tahuna sync` before creating a serve")
-  }
-  if (!env.latestCodeManifestHash) {
-    throw new ConvexError("environment code is not synced; run `tahuna sync` before creating a serve")
-  }
-
-  const hasRunSource = !!args.fromRunId
-  const hasStorageSource = !!args.fromStoragePrefix?.trim()
-  if ((hasRunSource ? 1 : 0) + (hasStorageSource ? 1 : 0) !== 1) {
-    throw new ConvexError("exactly one model source is required")
-  }
-
-  const modelSource = hasRunSource
-    ? (() => {
-        const runId = args.fromRunId as Id<"runs">
-        return getAccessibleRun(ctx, args.userId, runId).then((run) => {
-          if (run.status !== RUN_STATUS.COMPLETED) {
-            throw new ConvexError("source run must be completed")
-          }
-          return {
-            type: "run" as const,
-            runId,
-            modelPath: normalizeModelPath(args.modelPath, serveSnapshot.defaultModelPath),
-          }
-        })
-      })()
-    : Promise.resolve({
-        type: "storage" as const,
-        objectPrefix: normalizeStoragePrefix(args.fromStoragePrefix || ""),
-      })
-
-  const resolvedModelSource = await modelSource
   const now = Date.now()
   const serveId = await ctx.db.insert("serves", {
     userId: args.userId,
     environmentId: args.environmentId,
-    command: serveSnapshot.command,
-    outputDir: env.outputDir,
+    command: args.command,
+    outputDir: args.outputDir,
     logs: `serves/${args.environmentId}/${now}/logs`,
     status: SERVE_STATUS.QUEUED,
-    codeManifestHash: env.latestCodeManifestHash,
-    dataManifestHash: env.latestDataManifestHash || undefined,
-    pythonVersion: serveSnapshot.pythonVersion,
-    gpuType: serveSnapshot.gpuType,
-    gpuCount: serveSnapshot.gpuCount,
-    volumeGb: serveSnapshot.volumeGb,
-    port: serveSnapshot.port,
-    healthPath: serveSnapshot.healthPath,
-    defaultModelPath: serveSnapshot.defaultModelPath,
-    startupTimeoutSeconds: serveSnapshot.startupTimeoutSeconds,
-    healthIntervalSeconds: serveSnapshot.healthIntervalSeconds,
-    healthTimeoutSeconds: serveSnapshot.healthTimeoutSeconds,
-    healthFailureThreshold: serveSnapshot.healthFailureThreshold,
-    gracefulShutdownSeconds: serveSnapshot.gracefulShutdownSeconds,
-    modelSource: resolvedModelSource,
+    codeManifestHash: args.codeManifestHash,
+    dataManifestHash: args.dataManifestHash,
+    pythonVersion: args.pythonVersion,
+    gpuType: args.gpuType,
+    gpuCount: args.gpuCount,
+    volumeGb: args.volumeGb,
+    port: args.port,
+    healthPath: args.healthPath,
+    defaultModelPath: args.defaultModelPath,
+    startupTimeoutSeconds: args.startupTimeoutSeconds,
+    healthIntervalSeconds: args.healthIntervalSeconds,
+    healthTimeoutSeconds: args.healthTimeoutSeconds,
+    healthFailureThreshold: args.healthFailureThreshold,
+    gracefulShutdownSeconds: args.gracefulShutdownSeconds,
+    modelSnapshot: args.modelSnapshot,
   })
 
   await ctx.db.insert("serveEvents", {
@@ -104,25 +67,23 @@ export async function createServeForUserId(
     status: SERVE_STATUS.QUEUED,
     message: "serve queued",
     metadata: {
-      command: serveSnapshot.command,
-      model_source:
-        resolvedModelSource.type === "run"
-          ? {
-              type: "run",
-              run_id: String(resolvedModelSource.runId),
-              model_path: resolvedModelSource.modelPath,
-            }
-          : {
-              type: "storage",
-              object_prefix: resolvedModelSource.objectPrefix,
-            },
-      code_manifest_hash: env.latestCodeManifestHash,
-      data_manifest_hash: env.latestDataManifestHash || null,
-      gpu_type: serveSnapshot.gpuType,
-      gpu_count: serveSnapshot.gpuCount,
-      volume_gb: serveSnapshot.volumeGb,
-      port: serveSnapshot.port,
-      health_path: serveSnapshot.healthPath,
+      command: args.command,
+      model_snapshot: {
+        source_type: args.modelSnapshot.sourceType,
+        source_run_id: args.modelSnapshot.sourceRunId ? String(args.modelSnapshot.sourceRunId) : null,
+        source_object_prefix: args.modelSnapshot.sourceObjectPrefix || null,
+        source_model_path: args.modelSnapshot.sourceModelPath || null,
+        object_prefix: args.modelSnapshot.objectPrefix,
+        object_count: args.modelSnapshot.objectCount,
+        total_bytes: args.modelSnapshot.totalBytes,
+      },
+      code_manifest_hash: args.codeManifestHash,
+      data_manifest_hash: args.dataManifestHash || null,
+      gpu_type: args.gpuType,
+      gpu_count: args.gpuCount,
+      volume_gb: args.volumeGb,
+      port: args.port,
+      health_path: args.healthPath,
     },
   })
 

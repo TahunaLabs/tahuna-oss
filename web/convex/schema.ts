@@ -113,17 +113,15 @@ export default defineSchema({
     healthTimeoutSeconds: v.number(),
     healthFailureThreshold: v.number(),
     gracefulShutdownSeconds: v.number(),
-    modelSource: v.union(
-      v.object({
-        type: v.literal("run"),
-        runId: v.id("runs"),
-        modelPath: v.string(),
-      }),
-      v.object({
-        type: v.literal("storage"),
-        objectPrefix: v.string(),
-      }),
-    ),
+    modelSnapshot: v.object({
+      sourceType: v.union(v.literal("run"), v.literal("storage")),
+      sourceRunId: v.optional(v.id("runs")),
+      sourceObjectPrefix: v.optional(v.string()),
+      sourceModelPath: v.optional(v.string()),
+      objectPrefix: v.string(),
+      objectCount: v.number(),
+      totalBytes: v.number(),
+    }),
   })
     .index("by_user", ["userId"])
     .index("by_user_and_environment", ["userId", "environmentId"])
