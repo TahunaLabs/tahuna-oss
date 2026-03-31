@@ -64,7 +64,7 @@ const environmentConfigResponseValidator = v.object({
   config_name: v.string(),
   config_text: v.string(),
 });
-const commitSyncPointersResponseValidator = v.object({
+const commitSyncResponseValidator = v.object({
   ok: v.boolean(),
   environment_id: v.string(),
   code_manifest_hash: v.optional(v.string()),
@@ -1082,23 +1082,35 @@ export const internalUpdateSpecs = internalMutation({
   },
 });
 
-export const internalCommitSyncPointers = internalMutation({
+export const internalCommitSync = internalMutation({
   args: {
     userId: v.string(),
     environmentId: v.id("environments"),
     code_manifest_hash: v.optional(v.string()),
     data_manifest_hash: v.optional(v.string()),
+    framework: v.optional(v.string()),
+    version: v.optional(v.string()),
+    python_version: v.optional(v.string()),
+    gpu_type: v.optional(v.string()),
+    gpu_count: v.optional(v.number()),
+    volume_gb: v.optional(v.number()),
     command: v.optional(v.array(v.string())),
     output_dir: v.optional(v.string()),
     serve_snapshot: v.optional(serveSnapshotResponseValidator),
   },
-  returns: commitSyncPointersResponseValidator,
+  returns: commitSyncResponseValidator,
   handler: async (ctx, args) => {
     const env = await getAccessibleEnvironment(ctx, args.userId, args.environmentId);
     const patch: {
       latestSyncAt: number;
       latestCodeManifestHash?: string;
       latestDataManifestHash?: string;
+      framework?: string;
+      version?: string;
+      pythonVersion?: string;
+      gpuType?: string;
+      gpuCount?: number;
+      volumeGb?: number;
       command?: string[];
       outputDir?: string;
       serveSnapshot?: Doc<"environments">["serveSnapshot"];
@@ -1109,6 +1121,24 @@ export const internalCommitSyncPointers = internalMutation({
     }
     if (args.data_manifest_hash) {
       patch.latestDataManifestHash = args.data_manifest_hash;
+    }
+    if (typeof args.framework === "string" && args.framework.trim() !== "") {
+      patch.framework = args.framework.trim();
+    }
+    if (typeof args.version === "string" && args.version.trim() !== "") {
+      patch.version = args.version.trim();
+    }
+    if (typeof args.python_version === "string" && args.python_version.trim() !== "") {
+      patch.pythonVersion = args.python_version.trim();
+    }
+    if (typeof args.gpu_type === "string" && args.gpu_type.trim() !== "") {
+      patch.gpuType = args.gpu_type.trim();
+    }
+    if (typeof args.gpu_count === "number" && args.gpu_count > 0) {
+      patch.gpuCount = args.gpu_count;
+    }
+    if (typeof args.volume_gb === "number" && args.volume_gb > 0) {
+      patch.volumeGb = args.volume_gb;
     }
     if (Array.isArray(args.command) && args.command.length > 0) {
       patch.command = args.command;

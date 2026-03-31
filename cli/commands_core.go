@@ -114,8 +114,8 @@ func initProject(target string) error {
 		}
 		return fmt.Errorf("failed to save environment link: %w (rolled back environment %s)", saveErr, setup.environmentID)
 	}
-	if err := syncLinkedLocalProjectConfig(setup.environmentID); err != nil {
-		return fmt.Errorf("failed to save local project config: %w", err)
+	if err := runSyncWithStatus(setup.environmentID, syncScope{}); err != nil {
+		return fmt.Errorf("failed to sync local project config: %w", err)
 	}
 	return nil
 }
@@ -829,83 +829,28 @@ func environmentUpdate(args []string) {
 		must(errors.New("--gpu-count, --volume-gb, --serve-gpu-count, and --serve-volume-gb must be positive"))
 	}
 
+	cfg, err := loadPersistedProjectConfig()
+	must(err)
+
 	trainCommandUpdate := strings.TrimSpace(*entrypointCmd) != ""
 	serveCommandUpdate := strings.TrimSpace(*serveEntrypointCmd) != ""
 	serveComputeUpdate := strings.TrimSpace(*serveGPUType) != "" || *serveGPUCount > 0 || *serveVolumeGB > 0
-	if trainCommandUpdate || serveCommandUpdate || serveComputeUpdate {
-		cfg, err := loadPersistedProjectConfig()
-		must(err)
-		if trainCommandUpdate {
-			parsedCommand, err := parseShellCommand(normalizeCommandString(strings.TrimSpace(*entrypointCmd)))
-			must(err)
-			cfg.TrainCommand = parsedCommand
-		}
-		if serveCommandUpdate {
-			parsedCommand, err := parseShellCommand(normalizeCommandString(strings.TrimSpace(*serveEntrypointCmd)))
-			must(err)
-			cfg.ServeCommand = parsedCommand
-		}
-		if value := strings.TrimSpace(*serveGPUType); value != "" {
-			cfg.ServeGPUType = value
-		}
-		if *serveGPUCount > 0 {
-			cfg.ServeGPUCount = *serveGPUCount
-		}
-		if *serveVolumeGB > 0 {
-			cfg.ServeVolumeGB = *serveVolumeGB
-		}
-		if serveCommandUpdate || serveComputeUpdate {
-			must(validateServeComputeConfig(projectConfigFilePath(), cfg))
-		}
-		must(saveProjectConfig(cfg))
-		if trainCommandUpdate {
-			fmt.Printf("%s✓%s train.command updated in %s\n", cAmpGreen, cReset, projectConfigFilePath())
-		}
-		if serveCommandUpdate {
-			fmt.Printf("%s✓%s serve.command updated in %s\n", cAmpGreen, cReset, projectConfigFilePath())
-		}
-		if serveComputeUpdate {
-			fmt.Printf("%s✓%s serve compute updated in %s\n", cAmpGreen, cReset, projectConfigFilePath())
-		}
-	}
-
-	payload := map[string]any{}
-	if strings.TrimSpace(*gpuType) != "" {
-		payload["gpu_type"] = strings.TrimSpace(*gpuType)
-	}
-	if *gpuCount > 0 {
-		payload["gpu_count"] = *gpuCount
-	}
-	if *volumeGB > 0 {
-		payload["volume_gb"] = *volumeGB
-	}
-
-	// Local-only project config updates should not require a linked environment.
-	if len(payload) == 0 && (trainCommandUpdate || serveCommandUpdate || serveComputeUpdate) {
-		return
-	}
+	environmentComputeUpdate := strings.TrimSpace(*gpuType) != "" || *gpuCount > 0 || *volumeGB > 0
 
 	environmentID := strings.TrimSpace(*id)
 	if environmentID == "" && len(fs.Args()) > 0 {
 		environmentID = strings.TrimSpace(fs.Args()[0])
 	}
-	if environmentID == "" {
-		linkedID, err := resolveEnvironmentID()
-		must(err)
-		environmentID = linkedID
-	}
 
-	interactive := len(payload) == 0
+	interactive := !trainCommandUpdate && !serveCommandUpdate && !serveComputeUpdate && !environmentComputeUpdate
 	if interactive {
-		current, err := doJSONAs[environmentResponse](http.MethodGet, "/environments/"+environmentID, nil)
-		must(err)
-
-		currentGPU := strings.TrimSpace(current.GPUType)
-		currentGPUCount := int(current.GPUCount)
+		effectiveCfg := applyProjectConfigDefaults(cfg)
+		currentGPU := strings.TrimSpace(effectiveCfg.GPUType)
+		currentGPUCount := effectiveCfg.GPUCount
 		if currentGPUCount < 1 {
 			currentGPUCount = 1
 		}
-		currentVolume := int(current.VolumeGB)
+		currentVolume := effectiveCfg.VolumeGB
 		if currentVolume < 1 {
 			currentVolume = 1
 		}
@@ -922,26 +867,76 @@ func environmentUpdate(args []string) {
 			}
 		}
 
-		payload["gpu_type"] = promptChoice("GPU type", gpus, defaultGPUIndex)
-		payload["gpu_count"] = promptInt("GPU count", currentGPUCount)
-		payload["volume_gb"] = promptInt("Volume (GB)", currentVolume)
-	}
-	if gpuCountValue := int(asInt64(payload["gpu_count"])); gpuCountValue > 0 {
-		effectiveGPUType := strings.TrimSpace(asString(payload["gpu_type"]))
-		if effectiveGPUType == "" {
-			current, err := doJSONAs[environmentResponse](http.MethodGet, "/environments/"+environmentID, nil)
-			must(err)
-			effectiveGPUType = strings.TrimSpace(current.GPUType)
-		}
-		if err := validateGPUSelection(effectiveGPUType, gpuCountValue); err != nil {
-			must(err)
-		}
+		cfg.GPUType = promptChoice("GPU type", gpus, defaultGPUIndex)
+		cfg.GPUCount = promptInt("GPU count", currentGPUCount)
+		cfg.VolumeGB = promptInt("Volume (GB)", currentVolume)
+		environmentComputeUpdate = true
 	}
 
-	resp, err := doJSON(http.MethodPatch, "/environments/"+environmentID, payload)
-	must(err)
-	must(syncLinkedLocalProjectConfig(environmentID))
-	printJSON(resp)
+	if trainCommandUpdate {
+		parsedCommand, err := parseShellCommand(normalizeCommandString(strings.TrimSpace(*entrypointCmd)))
+		must(err)
+		cfg.TrainCommand = parsedCommand
+	}
+	if serveCommandUpdate {
+		parsedCommand, err := parseShellCommand(normalizeCommandString(strings.TrimSpace(*serveEntrypointCmd)))
+		must(err)
+		cfg.ServeCommand = parsedCommand
+	}
+	if value := strings.TrimSpace(*gpuType); value != "" {
+		cfg.GPUType = value
+	}
+	if *gpuCount > 0 {
+		cfg.GPUCount = *gpuCount
+	}
+	if *volumeGB > 0 {
+		cfg.VolumeGB = *volumeGB
+	}
+	if value := strings.TrimSpace(*serveGPUType); value != "" {
+		cfg.ServeGPUType = value
+	}
+	if *serveGPUCount > 0 {
+		cfg.ServeGPUCount = *serveGPUCount
+	}
+	if *serveVolumeGB > 0 {
+		cfg.ServeVolumeGB = *serveVolumeGB
+	}
+
+	configChanged := trainCommandUpdate || serveCommandUpdate || serveComputeUpdate || environmentComputeUpdate
+	if !configChanged {
+		return
+	}
+
+	if cfg.GPUCount > 0 {
+		must(validateGPUSelection(strings.TrimSpace(cfg.GPUType), cfg.GPUCount))
+	}
+	if serveCommandUpdate || serveComputeUpdate {
+		must(validateServeComputeConfig(projectConfigFilePath(), cfg))
+	}
+	must(saveProjectConfig(cfg))
+
+	if trainCommandUpdate {
+		fmt.Printf("%s✓%s train.command updated in %s\n", cAmpGreen, cReset, projectConfigFilePath())
+	}
+	if serveCommandUpdate {
+		fmt.Printf("%s✓%s serve.command updated in %s\n", cAmpGreen, cReset, projectConfigFilePath())
+	}
+	if serveComputeUpdate {
+		fmt.Printf("%s✓%s serve compute updated in %s\n", cAmpGreen, cReset, projectConfigFilePath())
+	}
+	if environmentComputeUpdate {
+		fmt.Printf("%s✓%s environment compute updated in %s\n", cAmpGreen, cReset, projectConfigFilePath())
+	}
+
+	if environmentID == "" {
+		linkedID, err := loadLinkedEnvironmentID()
+		must(err)
+		environmentID = strings.TrimSpace(linkedID)
+	}
+	if environmentID == "" {
+		return
+	}
+	must(runSyncWithStatus(environmentID, syncScope{}))
 }
 
 func runCreate(args []string) {
@@ -1250,15 +1245,18 @@ func persistFallbackEnvironmentGPU(path, gpuType string) {
 	if err != nil {
 		return
 	}
-	_, err = doJSON(http.MethodPatch, "/environments/"+environmentID, map[string]any{
-		"gpu_type": selectedGPU,
-	})
+	cfg, err := loadPersistedProjectConfig()
 	if err != nil {
-		logWarn("run created with fallback GPU %q but failed to update environment %s: %v", selectedGPU, environmentID, err)
+		logWarn("run created with fallback GPU %q but failed to load local project config for %s: %v", selectedGPU, environmentID, err)
 		return
 	}
-	if err := syncLinkedLocalProjectConfig(environmentID); err != nil {
-		logWarn("run created with fallback GPU %q but failed to refresh local project config for %s: %v", selectedGPU, environmentID, err)
+	cfg.GPUType = selectedGPU
+	if err := saveProjectConfig(cfg); err != nil {
+		logWarn("run created with fallback GPU %q but failed to save local project config for %s: %v", selectedGPU, environmentID, err)
+		return
+	}
+	if err := syncIncremental(environmentID, syncScope{}, syncOptions{}); err != nil {
+		logWarn("run created with fallback GPU %q but failed to sync environment %s: %v", selectedGPU, environmentID, err)
 	}
 }
 
@@ -1311,11 +1309,5 @@ func inferEnvironmentGPU(path string) (string, error) {
 }
 
 func preRunSync(environmentID string) error {
-	if err := runSyncWithStatus(environmentID, syncScope{code: true, data: true}); err != nil {
-		return err
-	}
-	if _, err := validateProjectConfigBindings(environmentID); err != nil {
-		return fmt.Errorf("project preflight validation failed: %w", err)
-	}
-	return nil
+	return runSyncWithStatus(environmentID, syncScope{code: true, data: true})
 }

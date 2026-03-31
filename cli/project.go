@@ -518,7 +518,7 @@ func validateProjectConfigBindings(environmentID string) (projectConfig, error) 
 	}
 
 	// Validate framework+version+python combo against the catalog.
-	resolved, err := validateAndResolveRuntimeConfig(cfg, environmentID)
+	resolved, err := validateAndResolveRuntimeConfig(cfg)
 	if err != nil {
 		return cfg, err
 	}
@@ -527,33 +527,6 @@ func validateProjectConfigBindings(environmentID string) (projectConfig, error) 
 	if resolved.Framework != cfg.Framework || resolved.FrameworkVersion != cfg.FrameworkVersion || resolved.PythonVersion != cfg.PythonVersion {
 		if saveErr := saveProjectConfig(resolved); saveErr != nil {
 			return resolved, fmt.Errorf("failed to save updated project config: %w", saveErr)
-		}
-	}
-
-	// Sync runtime config to the remote environment if it differs.
-	if environmentID != "" {
-		needsUpdate := false
-		if env, envErr := doJSONAs[environmentResponse](http.MethodGet, "/environments/"+environmentID, nil); envErr == nil {
-			remoteFramework := strings.TrimSpace(env.Framework)
-			remoteVersion := strings.TrimSpace(env.Version)
-			remotePython := strings.TrimSpace(env.PythonVersion)
-			needsUpdate = remoteFramework != resolved.Framework ||
-				remoteVersion != resolved.FrameworkVersion ||
-				remotePython != resolved.PythonVersion
-		}
-		if needsUpdate {
-			payload := map[string]any{
-				"python_version": resolved.PythonVersion,
-				"framework":      resolved.Framework,
-				"version":        resolved.FrameworkVersion,
-			}
-			if _, updateErr := doJSON(http.MethodPatch, "/environments/"+environmentID, payload); updateErr != nil {
-				return resolved, fmt.Errorf("failed to update environment runtime config: %w", updateErr)
-			}
-			fmt.Printf("%s✓%s Environment updated: %s %s, Python %s\n", cAmpGreen, cReset, resolved.Framework, resolved.FrameworkVersion, resolved.PythonVersion)
-		}
-		if err := syncLinkedLocalProjectConfig(environmentID); err != nil {
-			return resolved, fmt.Errorf("failed to refresh local project config: %w", err)
 		}
 	}
 
@@ -1000,7 +973,7 @@ func validateProjectConfigRuntimeValues(path string, cfg projectConfig) error {
 // version, and python version form a supported combination. When the combination is
 // invalid and the session is interactive, the user is prompted to pick a valid one.
 // Returns the (possibly updated) project config.
-func validateAndResolveRuntimeConfig(cfg projectConfig, environmentID string) (projectConfig, error) {
+func validateAndResolveRuntimeConfig(cfg projectConfig) (projectConfig, error) {
 	_, versionsByFramework, pythonsByFrameworkVersion, err := fetchGpusAndImages()
 	if err != nil {
 		// If the catalog is unreachable, skip combo validation. The backend will
@@ -1011,15 +984,6 @@ func validateAndResolveRuntimeConfig(cfg projectConfig, environmentID string) (p
 	framework := strings.TrimSpace(cfg.Framework)
 	frameworkVersion := strings.TrimSpace(cfg.FrameworkVersion)
 	pythonVersion := strings.TrimSpace(cfg.PythonVersion)
-
-	// If version is missing locally (older project), fetch from environment.
-	if frameworkVersion == "" && environmentID != "" {
-		env, envErr := doJSONAs[environmentResponse](http.MethodGet, "/environments/"+environmentID, nil)
-		if envErr == nil {
-			frameworkVersion = strings.TrimSpace(env.Version)
-			cfg.FrameworkVersion = frameworkVersion
-		}
-	}
 
 	// Validate framework exists in catalog.
 	versions, frameworkOK := versionsByFramework[framework]
@@ -1513,96 +1477,6 @@ func resolveServeSnapshot(cfg projectConfig) (*serveSnapshotResponse, error) {
 		HealthFailureThreshold:  int64(cfg.ServeHealthFailureThreshold),
 		GracefulShutdownSeconds: int64(cfg.ServeGracefulShutdownSeconds),
 	}, nil
-}
-
-func projectConfigFromEnvironment(env environmentResponse) projectConfig {
-	cfg := projectConfig{
-		Framework:        strings.TrimSpace(env.Framework),
-		FrameworkVersion: strings.TrimSpace(env.Version),
-		PythonVersion:    strings.TrimSpace(env.PythonVersion),
-		GPUType:          strings.TrimSpace(env.GPUType),
-	}
-	if env.GPUCount > 0 {
-		cfg.GPUCount = int(env.GPUCount)
-	}
-	if env.VolumeGB > 0 {
-		cfg.VolumeGB = int(env.VolumeGB)
-	}
-	if command := normalizeCommandTokens(env.Command); len(command) > 0 {
-		cfg.TrainCommand = command
-	}
-	if outputDir := strings.TrimSpace(env.OutputDir); outputDir != "" && outputDir != "outputs" {
-		cfg.OutputDir = outputDir
-	}
-	if env.ServeSnapshot != nil {
-		if command := normalizeCommandTokens(env.ServeSnapshot.Command); len(command) > 0 {
-			cfg.ServeCommand = command
-		}
-		cfg.ServePythonVersion = strings.TrimSpace(env.ServeSnapshot.PythonVersion)
-		cfg.ServeGPUType = strings.TrimSpace(env.ServeSnapshot.GPUType)
-		if env.ServeSnapshot.GPUCount > 0 {
-			cfg.ServeGPUCount = int(env.ServeSnapshot.GPUCount)
-		}
-		if env.ServeSnapshot.VolumeGB > 0 {
-			cfg.ServeVolumeGB = int(env.ServeSnapshot.VolumeGB)
-		}
-		if env.ServeSnapshot.Port > 0 {
-			cfg.ServePort = int(env.ServeSnapshot.Port)
-		}
-		cfg.ServeHealthPath = strings.TrimSpace(env.ServeSnapshot.HealthPath)
-		cfg.ServeDefaultModelPath = normalizeProjectPath(env.ServeSnapshot.DefaultModelPath)
-		if env.ServeSnapshot.StartupTimeoutSeconds > 0 {
-			cfg.ServeStartupTimeoutSeconds = int(env.ServeSnapshot.StartupTimeoutSeconds)
-		}
-		if env.ServeSnapshot.HealthIntervalSeconds > 0 {
-			cfg.ServeHealthIntervalSeconds = int(env.ServeSnapshot.HealthIntervalSeconds)
-		}
-		if env.ServeSnapshot.HealthTimeoutSeconds > 0 {
-			cfg.ServeHealthTimeoutSeconds = int(env.ServeSnapshot.HealthTimeoutSeconds)
-		}
-		if env.ServeSnapshot.HealthFailureThreshold > 0 {
-			cfg.ServeHealthFailureThreshold = int(env.ServeSnapshot.HealthFailureThreshold)
-		}
-		if env.ServeSnapshot.GracefulShutdownSeconds > 0 {
-			cfg.ServeGracefulShutdownSeconds = int(env.ServeSnapshot.GracefulShutdownSeconds)
-		}
-	}
-	return cfg
-}
-
-func syncLocalProjectConfig(environmentID string) error {
-	environmentID = strings.TrimSpace(environmentID)
-	if environmentID == "" {
-		return errors.New("environment id is empty")
-	}
-	env, err := doJSONAs[environmentResponse](http.MethodGet, "/environments/"+environmentID, nil)
-	if err != nil {
-		return err
-	}
-	cfg, err := loadPersistedProjectConfig()
-	if err != nil {
-		return err
-	}
-	if !hasProjectSection(cfg) {
-		return fmt.Errorf("local project config %s is missing [project]; run `tahuna init .` to restore project bindings", projectConfigFilePath())
-	}
-	cfg = applyProjectConfigDefaults(cfg)
-	return saveProjectConfig(mergeProjectConfig(cfg, projectConfigFromEnvironment(env)))
-}
-
-func syncLinkedLocalProjectConfig(environmentID string) error {
-	environmentID = strings.TrimSpace(environmentID)
-	if environmentID == "" {
-		return nil
-	}
-	linkedEnvironmentID, err := loadLinkedEnvironmentID()
-	if err != nil {
-		return err
-	}
-	if linkedEnvironmentID == "" || linkedEnvironmentID != environmentID {
-		return nil
-	}
-	return syncLocalProjectConfig(environmentID)
 }
 
 func mustGetwd() string {

@@ -30,6 +30,13 @@ func runSyncWithStatus(environmentID string, scope syncScope) error {
 		logProgress:   true,
 		dynamicStatus: dynamic,
 	}
+	cfg, err := validateProjectConfigWithStatus(environmentID, options)
+	if err != nil {
+		if dynamic {
+			clearStatusLine()
+		}
+		return err
+	}
 	prepared, err := prepareSyncManifestsWithStatus(environmentID, scope, options)
 	if err != nil {
 		if dynamic {
@@ -38,13 +45,7 @@ func runSyncWithStatus(environmentID string, scope syncScope) error {
 		return err
 	}
 	defer cleanupPreparedManifests(prepared)
-	if err := syncProjectConfigWithStatus(environmentID, options); err != nil {
-		if dynamic {
-			clearStatusLine()
-		}
-		return err
-	}
-	if err := finalizeSyncWithStatus(environmentID, prepared, options); err != nil {
+	if err := finalizeSyncWithStatus(environmentID, cfg, prepared, options); err != nil {
 		if dynamic {
 			clearStatusLine()
 		}
@@ -57,23 +58,28 @@ func runSyncWithStatus(environmentID string, scope syncScope) error {
 	return nil
 }
 
-func syncProjectConfigWithStatus(environmentID string, options syncOptions) error {
-	configSpinner := newSyncPhaseSpinner("syncing environment...", options)
-	if err := syncLinkedLocalProjectConfig(environmentID); err != nil {
-		configSpinner.StopError()
-		return fmt.Errorf("environment sync failed: %w", err)
-	}
-	configSpinner.StopSuccess("syncing environment")
-	return nil
-}
-
 func syncIncremental(environmentID string, scope syncScope, options syncOptions) error {
+	cfg, err := validateProjectConfigBindings(environmentID)
+	if err != nil {
+		return fmt.Errorf("project config validation failed: %w", err)
+	}
 	prepared, err := prepareSyncManifestsWithStatus(environmentID, scope, options)
 	if err != nil {
 		return err
 	}
 	defer cleanupPreparedManifests(prepared)
-	return finalizeSyncWithStatus(environmentID, prepared, options)
+	return finalizeSyncWithStatus(environmentID, cfg, prepared, options)
+}
+
+func validateProjectConfigWithStatus(environmentID string, options syncOptions) (projectConfig, error) {
+	configSpinner := newSyncPhaseSpinner("validating project config...", options)
+	cfg, err := validateProjectConfigBindings(environmentID)
+	if err != nil {
+		configSpinner.StopError()
+		return projectConfig{}, fmt.Errorf("project config validation failed: %w", err)
+	}
+	configSpinner.StopSuccess("validating project config")
+	return cfg, nil
 }
 
 func prepareSyncManifestsWithStatus(environmentID string, scope syncScope, options syncOptions) ([]preparedManifest, error) {
@@ -114,31 +120,45 @@ func prepareSyncManifestsWithStatus(environmentID string, scope syncScope, optio
 	return prepared, nil
 }
 
-func finalizeSyncWithStatus(environmentID string, prepared []preparedManifest, options syncOptions) error {
-	commitSpinner := newSyncPhaseSpinner("finalizing sync...", options)
+func buildSyncCommitPayload(environmentID string, prepared []preparedManifest, cfg projectConfig) (map[string]any, error) {
 	commitPayload := map[string]any{
 		"environment_id": environmentID,
+		"framework":      strings.TrimSpace(cfg.Framework),
+		"version":        strings.TrimSpace(cfg.FrameworkVersion),
+		"python_version": strings.TrimSpace(cfg.PythonVersion),
+		"gpu_type":       strings.TrimSpace(cfg.GPUType),
+		"gpu_count":      cfg.GPUCount,
+		"volume_gb":      cfg.VolumeGB,
 	}
 	for _, item := range prepared {
 		commitPayload[item.kind+"_manifest_hash"] = item.hash
 	}
-	cfg, err := loadProjectConfig()
-	if err == nil {
-		cmd, cmdErr := resolveTrainCommand(cfg)
-		if cmdErr == nil && len(cmd) > 0 {
-			commitPayload["command"] = cmd
-		}
-		if outputDir := strings.TrimSpace(cfg.OutputDir); outputDir != "" {
-			commitPayload["output_dir"] = outputDir
-		} else {
-			commitPayload["output_dir"] = "outputs"
-		}
-		serveSnapshot, serveErr := resolveServeSnapshot(cfg)
-		if serveErr != nil {
-			commitSpinner.StopError()
-			return serveErr
-		}
-		commitPayload["serve_snapshot"] = serveSnapshot
+	cmd, err := resolveTrainCommand(cfg)
+	if err != nil {
+		return nil, err
+	}
+	if len(cmd) > 0 {
+		commitPayload["command"] = cmd
+	}
+	if outputDir := strings.TrimSpace(cfg.OutputDir); outputDir != "" {
+		commitPayload["output_dir"] = outputDir
+	} else {
+		commitPayload["output_dir"] = "outputs"
+	}
+	serveSnapshot, err := resolveServeSnapshot(cfg)
+	if err != nil {
+		return nil, err
+	}
+	commitPayload["serve_snapshot"] = serveSnapshot
+	return commitPayload, nil
+}
+
+func finalizeSyncWithStatus(environmentID string, cfg projectConfig, prepared []preparedManifest, options syncOptions) error {
+	commitSpinner := newSyncPhaseSpinner("finalizing sync...", options)
+	commitPayload, err := buildSyncCommitPayload(environmentID, prepared, cfg)
+	if err != nil {
+		commitSpinner.StopError()
+		return err
 	}
 
 	for _, item := range prepared {

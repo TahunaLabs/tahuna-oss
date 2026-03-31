@@ -336,23 +336,17 @@ func TestMonitorRunWithLogs_RetriesTransientStatusPollError(t *testing.T) {
 	}
 }
 
-func TestPersistFallbackEnvironmentGPU_UpdatesLinkedEnvironmentGPUType(t *testing.T) {
-	var mu sync.Mutex
-	patchCalls := 0
-	var patchPayload map[string]any
+func TestPersistFallbackEnvironmentGPU_UpdatesLocalConfigAndCommitsSync(t *testing.T) {
+	setupTestProject(t, false)
+	mock := newSyncBackendMock()
+	installSyncStubs(t, mock)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		if r.Method == http.MethodPatch && r.URL.Path == "/api/environments/env-test" {
-			mu.Lock()
-			patchCalls++
-			mu.Unlock()
-			if err := json.NewDecoder(r.Body).Decode(&patchPayload); err != nil {
-				t.Fatalf("failed decoding environment patch payload: %v", err)
-			}
-			_ = json.NewEncoder(w).Encode(map[string]any{"environment_id": "env-test"})
+		if r.Method == http.MethodGet && r.URL.Path == "/api/gpus" {
+			serveGpusAndEnvironment(w, r)
 			return
 		}
+		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusNotFound)
 		_ = json.NewEncoder(w).Encode(map[string]any{"detail": "not found"})
 	}))
@@ -362,44 +356,39 @@ func TestPersistFallbackEnvironmentGPU_UpdatesLinkedEnvironmentGPUType(t *testin
 
 	persistFallbackEnvironmentGPU("/environments/env-test/runs", "NVIDIA RTX A5000")
 
-	mu.Lock()
-	defer mu.Unlock()
-	if patchCalls != 1 {
-		t.Fatalf("expected one environment patch call, got %d", patchCalls)
+	cfg, err := loadProjectConfig()
+	if err != nil {
+		t.Fatalf("failed to load project config: %v", err)
 	}
-	if asString(patchPayload["gpu_type"]) != "NVIDIA RTX A5000" {
-		t.Fatalf("expected gpu_type patch to match selected fallback GPU, got %v", patchPayload["gpu_type"])
+	if cfg.GPUType != "NVIDIA RTX A5000" {
+		t.Fatalf("expected local gpu_type to match selected fallback GPU, got %q", cfg.GPUType)
+	}
+	if len(mock.commitBodies) != 1 {
+		t.Fatalf("expected one config sync commit, got %d", len(mock.commitBodies))
+	}
+	if asString(mock.commitBodies[0]["gpu_type"]) != "NVIDIA RTX A5000" {
+		t.Fatalf("expected gpu_type sync payload to match selected fallback GPU, got %v", mock.commitBodies[0]["gpu_type"])
 	}
 }
 
-func TestPersistFallbackEnvironmentGPU_RefreshesLocalProjectConfig(t *testing.T) {
+func TestPersistFallbackEnvironmentGPU_PreservesServeConfigWithoutEnvironmentRefresh(t *testing.T) {
 	setupTestProject(t, false)
 	if err := saveLinkedEnvironmentID("env-test"); err != nil {
 		t.Fatalf("failed to save linked environment id: %v", err)
 	}
+	mock := newSyncBackendMock()
+	installSyncStubs(t, mock)
 
+	requests := []string{}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests = append(requests, r.Method+" "+r.URL.Path)
 		w.Header().Set("Content-Type", "application/json")
-		switch {
-		case r.Method == http.MethodPatch && r.URL.Path == "/api/environments/env-test":
-			_ = json.NewEncoder(w).Encode(map[string]any{"environment_id": "env-test"})
+		if r.Method == http.MethodGet && r.URL.Path == "/api/gpus" {
+			serveGpusAndEnvironment(w, r)
 			return
-		case r.Method == http.MethodGet && r.URL.Path == "/api/environments/env-test":
-			_ = json.NewEncoder(w).Encode(map[string]any{
-				"environment_id": "env-test",
-				"name":           "fallback-env",
-				"gpu_type":       "NVIDIA RTX A5000",
-				"gpu_count":      1,
-				"volume_gb":      80,
-				"framework":      "pt",
-				"version":        "2.8.0-cu128",
-				"python_version": "3.11",
-			})
-			return
-		default:
-			w.WriteHeader(http.StatusNotFound)
-			_ = json.NewEncoder(w).Encode(map[string]any{"detail": "not found"})
 		}
+		w.WriteHeader(http.StatusNotFound)
+		_ = json.NewEncoder(w).Encode(map[string]any{"detail": "not found"})
 	}))
 	defer server.Close()
 
@@ -435,6 +424,14 @@ func TestPersistFallbackEnvironmentGPU_RefreshesLocalProjectConfig(t *testing.T)
 	}
 	if strings.Contains(text, "framework_version") || strings.Contains(text, "requirements") {
 		t.Fatalf("local project config leaked legacy fields: %s", text)
+	}
+	for _, request := range requests {
+		if request != "GET /api/gpus" {
+			t.Fatalf("expected fallback sync to avoid remote environment refreshes, got %v", requests)
+		}
+	}
+	if len(mock.commitBodies) != 1 {
+		t.Fatalf("expected one config sync commit, got %d", len(mock.commitBodies))
 	}
 }
 

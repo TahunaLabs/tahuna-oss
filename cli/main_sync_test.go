@@ -159,16 +159,27 @@ func TestSyncIncremental_CodeCommitIncludesConfiguredTrainCommand(t *testing.T) 
 	}
 }
 
-func TestRunSyncWithStatus_RefreshesAndReportsEnvironmentSync(t *testing.T) {
+func TestRunSyncWithStatus_ValidatesLocalConfigAndPreservesProjectFile(t *testing.T) {
 	mock := newSyncBackendMock()
 	installSyncStubs(t, mock)
 	setupTestProject(t, false)
 	if err := saveLinkedEnvironmentID("env-test"); err != nil {
 		t.Fatalf("failed to save linked environment id: %v", err)
 	}
+	cfg, err := loadProjectConfig()
+	if err != nil {
+		t.Fatalf("failed to load project config: %v", err)
+	}
+	cfg.GPUType = "NVIDIA RTX A5000"
+	if err := saveProjectConfig(cfg); err != nil {
+		t.Fatalf("failed to save local project config: %v", err)
+	}
 
+	requests := []string{}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if serveGpusAndEnvironment(w, r) {
+		requests = append(requests, r.Method+" "+r.URL.Path)
+		if r.Method == http.MethodGet && r.URL.Path == "/api/gpus" {
+			serveGpusAndEnvironment(w, r)
 			return
 		}
 		w.WriteHeader(http.StatusNotFound)
@@ -183,11 +194,11 @@ func TestRunSyncWithStatus_RefreshesAndReportsEnvironmentSync(t *testing.T) {
 		}
 	})
 
-	if !strings.Contains(output, "syncing environment") {
-		t.Fatalf("expected sync output to include environment sync phase, got: %s", output)
+	if !strings.Contains(output, "validating project config") {
+		t.Fatalf("expected sync output to include local config validation, got: %s", output)
 	}
-	if envIndex, finalizeIndex := strings.Index(output, "syncing environment"), strings.Index(output, "finalizing sync"); envIndex < 0 || finalizeIndex < 0 || envIndex > finalizeIndex {
-		t.Fatalf("expected environment sync to be reported before finalizing sync, got: %s", output)
+	if strings.Contains(output, "syncing environment") {
+		t.Fatalf("did not expect remote environment refresh phase in sync output, got: %s", output)
 	}
 
 	raw, err := os.ReadFile(projectConfigFilePath())
@@ -196,10 +207,15 @@ func TestRunSyncWithStatus_RefreshesAndReportsEnvironmentSync(t *testing.T) {
 	}
 	text := string(raw)
 	if !strings.Contains(text, "framework = \"pt\"") || !strings.Contains(text, "version = \"2.8.0-cu128\"") {
-		t.Fatalf("expected synced environment runtime config, got: %s", text)
+		t.Fatalf("expected local runtime config to remain present, got: %s", text)
 	}
-	if !strings.Contains(text, "gpu_type = \"NVIDIA A100 80GB\"") || !strings.Contains(text, "gpu_count = 1") {
-		t.Fatalf("expected synced environment hardware in project config, got: %s", text)
+	if !strings.Contains(text, "gpu_type = \"NVIDIA RTX A5000\"") || !strings.Contains(text, "gpu_count = 1") {
+		t.Fatalf("expected local environment hardware to remain authoritative, got: %s", text)
+	}
+	for _, request := range requests {
+		if request != "GET /api/gpus" {
+			t.Fatalf("expected sync to avoid remote environment refreshes, got %v", requests)
+		}
 	}
 }
 
@@ -228,8 +244,8 @@ func TestRunSyncWithStatus_EnvironmentOnlyConfigFails(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected runSyncWithStatus to fail for env-only root config")
 	}
-	if !strings.Contains(err.Error(), "missing [project]") {
-		t.Fatalf("expected missing [project] error, got: %v", err)
+	if !strings.Contains(err.Error(), "project.data_dir") || !strings.Contains(err.Error(), "project.output_dir") {
+		t.Fatalf("expected missing project binding error, got: %v", err)
 	}
 }
 
@@ -275,7 +291,7 @@ func TestPreRunSync_SyncsCodeAndData(t *testing.T) {
 	}
 }
 
-func TestPreRunSync_ConfigValidationDetectsMissingBindingAfterSync(t *testing.T) {
+func TestPreRunSync_ConfigValidationFailsBeforeSyncCommit(t *testing.T) {
 	mock := newSyncBackendMock()
 	installSyncStubs(t, mock)
 	setupTestProject(t, true)
@@ -302,8 +318,8 @@ volume_gb = 80
 
 	mock.mu.Lock()
 	defer mock.mu.Unlock()
-	if mock.commitCount == 0 {
-		t.Fatalf("expected sync commit to complete before config validation failure")
+	if mock.commitCount != 0 {
+		t.Fatalf("expected config validation to fail before any sync commit, got %d commits", mock.commitCount)
 	}
 }
 

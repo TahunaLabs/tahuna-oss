@@ -10,92 +10,76 @@ import (
 	"testing"
 )
 
-func TestEnvironmentUpdate_FlagBased_PatchesPayload(t *testing.T) {
+func TestEnvironmentUpdate_FlagBased_UpdatesLocalConfigAndCommitsSync(t *testing.T) {
+	setupTestProject(t, false)
+	mock := newSyncBackendMock()
+	installSyncStubs(t, mock)
+
 	var mu sync.Mutex
-	patchCalls := 0
-	var patchPayload map[string]any
+	requests := []string{}
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if serveGpusAndEnvironment(w, r) {
+		mu.Lock()
+		requests = append(requests, r.Method+" "+r.URL.Path)
+		mu.Unlock()
+		if r.Method == http.MethodGet && r.URL.Path == "/api/gpus" {
+			serveGpusAndEnvironment(w, r)
 			return
 		}
-		w.Header().Set("Content-Type", "application/json")
-		switch {
-		case r.Method == http.MethodPatch && r.URL.Path == "/api/environments/env-test":
-			mu.Lock()
-			patchCalls++
-			mu.Unlock()
-			if err := json.NewDecoder(r.Body).Decode(&patchPayload); err != nil {
-				t.Fatalf("failed decoding patch payload: %v", err)
-			}
-			_ = json.NewEncoder(w).Encode(map[string]any{
-				"environment_id": "env-test",
-				"gpu_type":       "nvidia-a100",
-				"gpu_count":      4,
-				"volume_gb":      200,
-			})
-			return
-		default:
-			w.WriteHeader(http.StatusNotFound)
-			_ = json.NewEncoder(w).Encode(map[string]any{"detail": "not found"})
-			return
-		}
+		w.WriteHeader(http.StatusNotFound)
+		_ = json.NewEncoder(w).Encode(map[string]any{"detail": "not found"})
 	}))
 	defer server.Close()
 
 	t.Setenv("TAHUNA_API_URL", server.URL)
 
-	output := captureStdout(t, func() {
+	captureStdout(t, func() {
 		environmentUpdate([]string{"--id", "env-test", "--gpu-type", "nvidia-a100", "--gpu-count", "4", "--volume-gb", "200"})
 	})
 
+	cfg, err := loadProjectConfig()
+	if err != nil {
+		t.Fatalf("failed to load project config: %v", err)
+	}
+	if cfg.GPUType != "nvidia-a100" || cfg.GPUCount != 4 || cfg.VolumeGB != 200 {
+		t.Fatalf("expected local environment config to be updated, got gpu=%q count=%d volume=%d", cfg.GPUType, cfg.GPUCount, cfg.VolumeGB)
+	}
+
 	mu.Lock()
 	defer mu.Unlock()
-	if patchCalls != 1 {
-		t.Fatalf("expected one PATCH call, got %d", patchCalls)
+	for _, request := range requests {
+		if request != "GET /api/gpus" {
+			t.Fatalf("expected only gpu catalog requests, got %v", requests)
+		}
 	}
-	if asString(patchPayload["gpu_type"]) != "nvidia-a100" {
-		t.Fatalf("expected gpu_type=nvidia-a100 in payload, got %v", patchPayload["gpu_type"])
+
+	if len(mock.commitBodies) != 1 {
+		t.Fatalf("expected one config sync commit, got %d", len(mock.commitBodies))
 	}
-	if asInt64(patchPayload["gpu_count"]) != 4 {
-		t.Fatalf("expected gpu_count=4 in payload, got %v", patchPayload["gpu_count"])
+	commitPayload := mock.commitBodies[0]
+	if asString(commitPayload["gpu_type"]) != "nvidia-a100" {
+		t.Fatalf("expected gpu_type=nvidia-a100 in commit payload, got %v", commitPayload["gpu_type"])
 	}
-	if asInt64(patchPayload["volume_gb"]) != 200 {
-		t.Fatalf("expected volume_gb=200 in payload, got %v", patchPayload["volume_gb"])
+	if asInt64(commitPayload["gpu_count"]) != 4 {
+		t.Fatalf("expected gpu_count=4 in commit payload, got %v", commitPayload["gpu_count"])
 	}
-	if !strings.Contains(output, "\"environment_id\": \"env-test\"") {
-		t.Fatalf("expected JSON response in output, got: %s", output)
+	if asInt64(commitPayload["volume_gb"]) != 200 {
+		t.Fatalf("expected volume_gb=200 in commit payload, got %v", commitPayload["volume_gb"])
 	}
 }
 
-func TestEnvironmentUpdate_GPUTypeOnly_SkipsCountAndVolume(t *testing.T) {
-	var mu sync.Mutex
-	patchCalls := 0
-	var patchPayload map[string]any
+func TestEnvironmentUpdate_GPUTypeOnly_CommitsMergedEnvironmentConfig(t *testing.T) {
+	setupTestProject(t, false)
+	mock := newSyncBackendMock()
+	installSyncStubs(t, mock)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if serveGpusAndEnvironment(w, r) {
+		if r.Method == http.MethodGet && r.URL.Path == "/api/gpus" {
+			serveGpusAndEnvironment(w, r)
 			return
 		}
-		w.Header().Set("Content-Type", "application/json")
-		switch {
-		case r.Method == http.MethodPatch && r.URL.Path == "/api/environments/env-test":
-			mu.Lock()
-			patchCalls++
-			mu.Unlock()
-			if err := json.NewDecoder(r.Body).Decode(&patchPayload); err != nil {
-				t.Fatalf("failed decoding patch payload: %v", err)
-			}
-			_ = json.NewEncoder(w).Encode(map[string]any{
-				"environment_id": "env-test",
-				"gpu_type":       "nvidia-a100",
-			})
-			return
-		default:
-			w.WriteHeader(http.StatusNotFound)
-			_ = json.NewEncoder(w).Encode(map[string]any{"detail": "not found"})
-			return
-		}
+		w.WriteHeader(http.StatusNotFound)
+		_ = json.NewEncoder(w).Encode(map[string]any{"detail": "not found"})
 	}))
 	defer server.Close()
 
@@ -105,47 +89,33 @@ func TestEnvironmentUpdate_GPUTypeOnly_SkipsCountAndVolume(t *testing.T) {
 		environmentUpdate([]string{"--id", "env-test", "--gpu-type", "nvidia-a100"})
 	})
 
-	mu.Lock()
-	defer mu.Unlock()
-	if patchCalls != 1 {
-		t.Fatalf("expected one PATCH call, got %d", patchCalls)
+	if len(mock.commitBodies) != 1 {
+		t.Fatalf("expected one config sync commit, got %d", len(mock.commitBodies))
 	}
-	if _, ok := patchPayload["gpu_count"]; ok {
-		t.Fatalf("did not expect gpu_count in payload when only --gpu-type is set")
+	commitPayload := mock.commitBodies[0]
+	if asString(commitPayload["gpu_type"]) != "nvidia-a100" {
+		t.Fatalf("expected gpu_type update in commit payload, got %v", commitPayload["gpu_type"])
 	}
-	if _, ok := patchPayload["volume_gb"]; ok {
-		t.Fatalf("did not expect volume_gb in payload when only --gpu-type is set")
+	if asInt64(commitPayload["gpu_count"]) != 1 {
+		t.Fatalf("expected existing gpu_count to be preserved in commit payload, got %v", commitPayload["gpu_count"])
+	}
+	if asInt64(commitPayload["volume_gb"]) != 80 {
+		t.Fatalf("expected existing volume_gb to be preserved in commit payload, got %v", commitPayload["volume_gb"])
 	}
 }
 
-func TestEnvironmentUpdate_VolumeOnly_PatchesVolumeGB(t *testing.T) {
-	var mu sync.Mutex
-	patchCalls := 0
-	var patchPayload map[string]any
+func TestEnvironmentUpdate_VolumeOnly_CommitsMergedEnvironmentConfig(t *testing.T) {
+	setupTestProject(t, false)
+	mock := newSyncBackendMock()
+	installSyncStubs(t, mock)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if serveGpusAndEnvironment(w, r) {
+		if r.Method == http.MethodGet && r.URL.Path == "/api/gpus" {
+			serveGpusAndEnvironment(w, r)
 			return
 		}
-		w.Header().Set("Content-Type", "application/json")
-		switch {
-		case r.Method == http.MethodPatch && r.URL.Path == "/api/environments/env-test":
-			mu.Lock()
-			patchCalls++
-			mu.Unlock()
-			if err := json.NewDecoder(r.Body).Decode(&patchPayload); err != nil {
-				t.Fatalf("failed decoding patch payload: %v", err)
-			}
-			_ = json.NewEncoder(w).Encode(map[string]any{
-				"environment_id": "env-test",
-				"volume_gb":      500,
-			})
-			return
-		default:
-			w.WriteHeader(http.StatusNotFound)
-			_ = json.NewEncoder(w).Encode(map[string]any{"detail": "not found"})
-			return
-		}
+		w.WriteHeader(http.StatusNotFound)
+		_ = json.NewEncoder(w).Encode(map[string]any{"detail": "not found"})
 	}))
 	defer server.Close()
 
@@ -155,21 +125,34 @@ func TestEnvironmentUpdate_VolumeOnly_PatchesVolumeGB(t *testing.T) {
 		environmentUpdate([]string{"--id", "env-test", "--volume-gb", "500"})
 	})
 
-	mu.Lock()
-	defer mu.Unlock()
-	if patchCalls != 1 {
-		t.Fatalf("expected one PATCH call, got %d", patchCalls)
+	if len(mock.commitBodies) != 1 {
+		t.Fatalf("expected one config sync commit, got %d", len(mock.commitBodies))
 	}
-	if asInt64(patchPayload["volume_gb"]) != 500 {
-		t.Fatalf("expected volume_gb=500, got %v", patchPayload["volume_gb"])
+	commitPayload := mock.commitBodies[0]
+	if asInt64(commitPayload["volume_gb"]) != 500 {
+		t.Fatalf("expected volume_gb=500 in commit payload, got %v", commitPayload["volume_gb"])
 	}
-	if _, ok := patchPayload["gpu_type"]; ok {
-		t.Fatalf("did not expect gpu_type in volume-only update")
+	if asString(commitPayload["gpu_type"]) != "NVIDIA A100 80GB" {
+		t.Fatalf("expected existing gpu_type to be preserved in commit payload, got %v", commitPayload["gpu_type"])
 	}
 }
 
-func TestEnvironmentUpdate_EntrypointCommandOnly_UpdatesLocalTrainCommand(t *testing.T) {
+func TestEnvironmentUpdate_EntrypointCommandOnly_UpdatesLocalTrainCommandAndCommitsSync(t *testing.T) {
 	setupTestProject(t, false)
+	mock := newSyncBackendMock()
+	installSyncStubs(t, mock)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && r.URL.Path == "/api/gpus" {
+			serveGpusAndEnvironment(w, r)
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+		_ = json.NewEncoder(w).Encode(map[string]any{"detail": "not found"})
+	}))
+	defer server.Close()
+
+	t.Setenv("TAHUNA_API_URL", server.URL)
 
 	output := captureStdout(t, func() {
 		environmentUpdate([]string{"--id", "env-test", "--entrypoint-command", `torchrun --nproc-per-node 2 train.py --run-name "hello world"`})
@@ -191,10 +174,34 @@ func TestEnvironmentUpdate_EntrypointCommandOnly_UpdatesLocalTrainCommand(t *tes
 	if !strings.Contains(output, "train.command updated") {
 		t.Fatalf("expected local train command update message, got: %s", output)
 	}
+	if len(mock.commitBodies) != 1 {
+		t.Fatalf("expected one config sync commit, got %d", len(mock.commitBodies))
+	}
+	command, ok := mock.commitBodies[0]["command"].([]string)
+	if !ok {
+		t.Fatalf("expected command payload as []string, got %#v", mock.commitBodies[0]["command"])
+	}
+	if len(command) != len(want) {
+		t.Fatalf("expected %d synced command tokens, got %d: %#v", len(want), len(command), command)
+	}
 }
 
-func TestEnvironmentUpdate_ServeEntrypointCommandOnly_UpdatesLocalServeCommand(t *testing.T) {
+func TestEnvironmentUpdate_ServeEntrypointCommandOnly_UpdatesLocalServeCommandAndCommitsSync(t *testing.T) {
 	setupTestProject(t, false)
+	mock := newSyncBackendMock()
+	installSyncStubs(t, mock)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && r.URL.Path == "/api/gpus" {
+			serveGpusAndEnvironment(w, r)
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+		_ = json.NewEncoder(w).Encode(map[string]any{"detail": "not found"})
+	}))
+	defer server.Close()
+
+	t.Setenv("TAHUNA_API_URL", server.URL)
 
 	output := captureStdout(t, func() {
 		environmentUpdate([]string{"--id", "env-test", "--serve-entrypoint-command", `uv run --active --no-sync python -u inference.py --port 9000`})
@@ -216,27 +223,45 @@ func TestEnvironmentUpdate_ServeEntrypointCommandOnly_UpdatesLocalServeCommand(t
 	if !strings.Contains(output, "serve.command updated") {
 		t.Fatalf("expected local serve command update message, got: %s", output)
 	}
+	if len(mock.commitBodies) != 1 {
+		t.Fatalf("expected one config sync commit, got %d", len(mock.commitBodies))
+	}
+	serveSnapshot, ok := mock.commitBodies[0]["serve_snapshot"].(*serveSnapshotResponse)
+	if !ok {
+		t.Fatalf("expected serve_snapshot payload, got %#v", mock.commitBodies[0]["serve_snapshot"])
+	}
+	if len(serveSnapshot.Command) != len(want) {
+		t.Fatalf("expected %d synced serve command tokens, got %d: %#v", len(want), len(serveSnapshot.Command), serveSnapshot.Command)
+	}
 }
 
-func TestEnvironmentUpdate_ServeComputeOnly_UpdatesLocalServeConfigWithoutPatch(t *testing.T) {
+func TestEnvironmentUpdate_ServeComputeOnly_UpdatesLocalServeConfigAndCommitsSync(t *testing.T) {
 	setupTestProject(t, false)
+	mock := newSyncBackendMock()
+	installSyncStubs(t, mock)
 
-	requestCount := 0
+	requests := []string{}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		requestCount++
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{})
+		requests = append(requests, r.Method+" "+r.URL.Path)
+		if r.Method == http.MethodGet && r.URL.Path == "/api/gpus" {
+			serveGpusAndEnvironment(w, r)
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+		_ = json.NewEncoder(w).Encode(map[string]any{"detail": "not found"})
 	}))
 	defer server.Close()
 
 	t.Setenv("TAHUNA_API_URL", server.URL)
 
 	output := captureStdout(t, func() {
-		environmentUpdate([]string{"--serve-gpu-type", "nvidia-a100", "--serve-gpu-count", "2", "--serve-volume-gb", "160"})
+		environmentUpdate([]string{"--id", "env-test", "--serve-gpu-type", "nvidia-a100", "--serve-gpu-count", "2", "--serve-volume-gb", "160"})
 	})
 
-	if requestCount != 0 {
-		t.Fatalf("expected serve-only local update to avoid API calls, got %d requests", requestCount)
+	for _, request := range requests {
+		if request != "GET /api/gpus" {
+			t.Fatalf("expected serve-only update to avoid remote environment refreshes, got %v", requests)
+		}
 	}
 
 	cfg, err := loadProjectConfig()
@@ -264,56 +289,39 @@ func TestEnvironmentUpdate_ServeComputeOnly_UpdatesLocalServeConfigWithoutPatch(
 	if !strings.Contains(output, "serve compute updated") {
 		t.Fatalf("expected local serve compute update message, got: %s", output)
 	}
+	if len(mock.commitBodies) != 1 {
+		t.Fatalf("expected one config sync commit, got %d", len(mock.commitBodies))
+	}
+	serveSnapshot, ok := mock.commitBodies[0]["serve_snapshot"].(*serveSnapshotResponse)
+	if !ok {
+		t.Fatalf("expected serve_snapshot payload, got %#v", mock.commitBodies[0]["serve_snapshot"])
+	}
+	if serveSnapshot.GPUType != "nvidia-a100" || serveSnapshot.GPUCount != 2 || serveSnapshot.VolumeGB != 160 {
+		t.Fatalf("expected synced serve snapshot to reflect local updates, got %#v", serveSnapshot)
+	}
 }
 
-func TestEnvironmentUpdate_LinkedEnvironmentRefreshesLocalProjectConfig(t *testing.T) {
+func TestEnvironmentUpdate_LinkedEnvironmentUsesLocalSourceOfTruth(t *testing.T) {
 	setupTestProject(t, false)
 	if err := saveLinkedEnvironmentID("env-test"); err != nil {
 		t.Fatalf("failed to save linked environment id: %v", err)
 	}
+	mock := newSyncBackendMock()
+	installSyncStubs(t, mock)
 
+	var mu sync.Mutex
+	requests := []string{}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		requests = append(requests, r.Method+" "+r.URL.Path)
+		mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
-		switch {
-		case r.Method == http.MethodGet && r.URL.Path == "/api/gpus":
-			_ = json.NewEncoder(w).Encode(map[string]any{
-				"gpus": []map[string]any{
-					{"id": "NVIDIA A100 80GB", "display_name": "NVIDIA A100 80GB", "max_gpu_count": 8, "memory_gb": 80},
-				},
-				"images": map[string]any{
-					"pt": map[string]any{
-						"2.8.0-cu128": map[string]any{
-							"3.11": "docker.io/test/tahuna:pt-2.8.0-cu128-py3.11",
-						},
-					},
-				},
-			})
-			return
-		case r.Method == http.MethodPatch && r.URL.Path == "/api/environments/env-test":
-			_ = json.NewEncoder(w).Encode(map[string]any{
-				"environment_id": "env-test",
-				"gpu_type":       "NVIDIA A100 80GB",
-				"gpu_count":      2,
-				"volume_gb":      160,
-			})
-			return
-		case r.Method == http.MethodGet && r.URL.Path == "/api/environments/env-test":
-			_ = json.NewEncoder(w).Encode(map[string]any{
-				"environment_id": "env-test",
-				"name":           "linked-env",
-				"gpu_type":       "NVIDIA A100 80GB",
-				"gpu_count":      2,
-				"volume_gb":      160,
-				"framework":      "pt",
-				"version":        "2.8.0-cu128",
-				"python_version": "3.11",
-			})
-			return
-		default:
-			w.WriteHeader(http.StatusNotFound)
-			_ = json.NewEncoder(w).Encode(map[string]any{"detail": "not found"})
+		if r.Method == http.MethodGet && r.URL.Path == "/api/gpus" {
+			serveGpusAndEnvironment(w, r)
 			return
 		}
+		w.WriteHeader(http.StatusNotFound)
+		_ = json.NewEncoder(w).Encode(map[string]any{"detail": "not found"})
 	}))
 	defer server.Close()
 
@@ -354,5 +362,15 @@ func TestEnvironmentUpdate_LinkedEnvironmentRefreshesLocalProjectConfig(t *testi
 	}
 	if strings.Contains(text, "framework_version") || strings.Contains(text, "requirements") {
 		t.Fatalf("local project config leaked legacy fields: %s", text)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	for _, request := range requests {
+		if request != "GET /api/gpus" {
+			t.Fatalf("expected local config to remain authoritative without environment refreshes, got %v", requests)
+		}
+	}
+	if len(mock.commitBodies) != 1 {
+		t.Fatalf("expected one config sync commit, got %d", len(mock.commitBodies))
 	}
 }

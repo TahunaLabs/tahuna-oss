@@ -413,15 +413,6 @@ export const commitSync = httpAction(async (ctx, request) => {
     });
   }
 
-  if (!codeManifestHash && !dataManifestHash) {
-    return new Response(
-      JSON.stringify({ detail: "at least one of code_manifest_hash or data_manifest_hash is required" }),
-      {
-        status: 400,
-        headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
-      },
-    );
-  }
   const typedEnvironmentId = environmentId as Id<"environments">;
   const ownedEnvironment = await requireAccessibleEnvironment(ctx, userId, environmentId);
   if (!ownedEnvironment) {
@@ -480,6 +471,18 @@ export const commitSync = httpAction(async (ctx, request) => {
     }
   }
 
+  const framework =
+    typeof body?.framework === "string" && body.framework.trim() !== "" ? body.framework.trim() : undefined;
+  const version =
+    typeof body?.version === "string" && body.version.trim() !== "" ? body.version.trim() : undefined;
+  const pythonVersion =
+    typeof body?.python_version === "string" && body.python_version.trim() !== ""
+      ? body.python_version.trim()
+      : undefined;
+  const gpuType =
+    typeof body?.gpu_type === "string" && body.gpu_type.trim() !== "" ? body.gpu_type.trim() : undefined;
+  const gpuCount = typeof body?.gpu_count === "number" && body.gpu_count > 0 ? body.gpu_count : undefined;
+  const volumeGb = typeof body?.volume_gb === "number" && body.volume_gb > 0 ? body.volume_gb : undefined;
   const commandRaw = body?.command;
   const command = Array.isArray(commandRaw)
     ? commandRaw.filter((p: unknown) => typeof p === "string" && (p as string).trim() !== "")
@@ -498,12 +501,39 @@ export const commitSync = httpAction(async (ctx, request) => {
     });
   }
 
+  const hasConfigUpdate =
+    typeof framework !== "undefined" ||
+    typeof version !== "undefined" ||
+    typeof pythonVersion !== "undefined" ||
+    typeof gpuType !== "undefined" ||
+    typeof gpuCount !== "undefined" ||
+    typeof volumeGb !== "undefined" ||
+    typeof command !== "undefined" ||
+    typeof outputDir !== "undefined" ||
+    typeof serveSnapshot !== "undefined";
+
+  if (!codeManifestHash && !dataManifestHash && !hasConfigUpdate) {
+    return new Response(
+      JSON.stringify({ detail: "at least one manifest hash or synced config field is required" }),
+      {
+        status: 400,
+        headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+      },
+    );
+  }
+
   try {
-    const data = await ctx.runMutation(internal.environments.internalCommitSyncPointers, {
+    const data = await ctx.runMutation(internal.environments.internalCommitSync, {
       userId,
       environmentId: typedEnvironmentId,
       code_manifest_hash: codeManifestHash,
       data_manifest_hash: dataManifestHash,
+      framework,
+      version,
+      python_version: pythonVersion,
+      gpu_type: gpuType,
+      gpu_count: gpuCount,
+      volume_gb: volumeGb,
       command,
       output_dir: outputDir,
       serve_snapshot: serveSnapshot,
@@ -513,7 +543,7 @@ export const commitSync = httpAction(async (ctx, request) => {
       headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
     });
   } catch (err) {
-    const detail = toClientErrorDetail(err, "failed to commit sync pointers");
+    const detail = toClientErrorDetail(err, "failed to commit sync");
     return new Response(JSON.stringify({ detail }), {
       status: 400,
       headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
