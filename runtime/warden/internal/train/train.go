@@ -651,6 +651,7 @@ func emitTrainOutputLine(
 }
 
 func NormalizeCommand(command []string) ([]string, error) {
+	//
 	if len(command) == 0 {
 		return nil, fmt.Errorf("command is required: environment has no command configured")
 	}
