@@ -22,12 +22,12 @@ export function LandingHero() {
               </p>
             </div>
 
-            <div className="flex flex-wrap items-center gap-3 self-start">
+            <div className="flex flex-col items-start gap-3 self-start">
               <Button
                 asChild
                 variant="default"
-                size="none"
-                className="h-12 rounded-none px-6 font-mono text-sm uppercase tracking-ui-eyebrow"
+                size="compact"
+                className="font-serif text-base uppercase tracking-tight"
               >
                 <Link href="/login">
                   Get started
@@ -38,8 +38,8 @@ export function LandingHero() {
               <Button
                 asChild
                 variant="outline"
-                size="none"
-                className="h-12 rounded-none border-border bg-background px-6 font-mono text-sm uppercase tracking-ui-eyebrow"
+                size="compact"
+                className="font-serif text-base uppercase tracking-tight"
               >
                 <Link href="https://cal.com/monaimel/15min" target="_blank" rel="noreferrer">
                   Talk to an engineer
