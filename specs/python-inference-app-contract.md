@@ -10,7 +10,7 @@ For Python app serving, it supersedes the engine-matrix model described in `spec
 
 ## Implementation Status
 
-This section is non-normative. It records rollout status in the current codebase as of 2026-04-01.
+This section is non-normative. It records rollout status in the current codebase as of 2026-04-02.
 
 - PR1 is done.
   This document is the canonical Python app serving contract and supersedes `specs/serve.md` for Python app serving.
@@ -30,9 +30,9 @@ This section is non-normative. It records rollout status in the current codebase
 - PR8 is done.
   The CLI now has canonical `tahuna serve create`, `list`, `show`, `logs`, and `stop` commands, reuses the existing run/train output and help patterns, and supports interactive GPU fallback when RunPod capacity is unavailable.
 - PR9 is in progress.
-  The dashboard already exposes synced serving config, the `qwen-yoda-lora` example is now serveable end-to-end from a completed run, and the auth direction is documented, but the authenticated Tahuna inference proxy and final invoke UX are still incomplete.
+  The dashboard now shows actual serves instead of synced config snapshots, exposes logs and stop actions without surfacing operator-only fields on the main surface, the `qwen-yoda-lora` example is now trainable and serveable end-to-end from a completed run, and runtime Hugging Face caches are routed to the workspace volume for both train and serve.
 - The next implementation step is the authenticated Tahuna serve inference proxy.
-  The core serve path now works end-to-end, but user inference still reaches the backing serve through provider URLs instead of a canonical Tahuna-authenticated API surface.
+  The core serve path now works end-to-end, but user inference still reaches the backing serve through provider URLs in practice instead of a canonical Tahuna-authenticated API surface and invoke UX.
 
 ## Scope
 
@@ -663,4 +663,4 @@ This section is non-normative. It exists to guide implementation sequencing.
    Add `tahuna serve create`, `list`, `show`, `logs`, and `stop`.
 
 9. PR9: Docs, examples, and dashboard. Status: in progress.
-   The dashboard already shows synced serving config, the example serve flow now works end-to-end, and the auth direction is documented, but the authenticated Tahuna inference proxy and canonical invoke UX are still pending.
+   The dashboard now shows actual serves with user-facing status/source/compute details, the example serve flow now works end-to-end, and the auth direction is documented, but the authenticated Tahuna inference proxy and canonical invoke UX are still pending.

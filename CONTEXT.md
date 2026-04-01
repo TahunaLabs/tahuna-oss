@@ -1,22 +1,24 @@
 # Tahuna Project Context
 
-Last updated: 2026-03-13
+Last updated: 2026-04-02
 
 ## 1) What This Project Is
 
-Tahuna is a GPU provisioning + training orchestration product for data scientists.
+Tahuna is a GPU provisioning, training, and serving orchestration product for data scientists.
 
 Current codebase architecture:
 
 - `cli/`: Go CLI for user workflows (`tahuna init`, env/run commands, interactive shell).
 - `web/`: Next.js app for auth, dashboard, API key management, and Convex-backed backend logic.
 - `web/convex/*`: backend state, APIs, and run lifecycle logic.
+- `runtime/warden/`: runtime bootstrap, dependency install, training execution, and serve supervision inside provisioned compute.
 
 The intended user story is:
 
 1. Set up project and environment quickly.
 2. Sync code/data/config.
 3. Launch and monitor training runs from CLI/dashboard.
+4. Turn a completed run artifact into a managed serve and invoke it through Tahuna.
 
 ## 2) High-Level User Workflows (Target)
 
@@ -100,6 +102,21 @@ Run:
 - `[x]` create run from existing environment implemented
 - `[~]` dashboard monitoring exists with run status lists; deep run observability is limited
 
+### Serve rollout status
+
+Current serve state as of 2026-04-02:
+
+- `[x]` control-plane serve resource exists with canonical `create/list/show/logs/stop` support and serve lifecycle events/runtime logs
+- `[x]` serve creation pins an immutable model snapshot from exactly one explicit source: run output or storage prefix
+- `[x]` `runtime/warden` has serve mode, materializes `/workspace/model`, installs the `serve` dependency group, supervises readiness/liveness, and reconciles stop/failure callbacks
+- `[x]` CLI supports `tahuna serve create`, `list`, `show`, `logs`, and `stop`, including interactive GPU fallback on no-capacity responses
+- `[x]` the `qwen-yoda-lora` example now trains and serves end-to-end from a completed run artifact
+- `[x]` the dashboard `Serving` page now shows actual serves with user-facing status/source/compute information plus logs and stop actions
+- `[x]` Hugging Face caches are routed under the workspace volume for both train and serve to avoid root-disk exhaustion during model downloads
+- `[ ]` authenticated Tahuna inference proxy is not implemented yet
+- `[ ]` canonical invoke UX is not implemented yet; current live inference still uses provider URLs in practice
+- `[ ]` serve product polish remains after the proxy lands (final dashboard/API invoke surface and end-user-facing docs)
+
 ## 4) API Contract Status (CLI <-> Convex)
 
 Contract fixes applied on 2026-03-06:
@@ -151,6 +168,10 @@ Current operational note:
   - create/cancel runs
   - upload/remove data blobs
 
+- [`web/components/features/dashboard/serving-container.tsx`](/Users/mounselam/Developer/tahuna/web/components/features/dashboard/serving-container.tsx)
+  - serve-focused dashboard container
+  - authenticated list/logs/stop wiring for actual serves
+
 - [`web/app/api-key/page.tsx`](/Users/pazuzzu/Desktop/gigi/boob-ai/web/app/api-key/page.tsx)
   - legacy API key page; target UX is machine/session management aligned with dashboard theme
 
@@ -180,6 +201,14 @@ Current operational note:
   - real provisioning flow with Runpod pod creation + in-pod bootstrap materialization contract
   - runtime token validation + ingestion for pod logs/metrics/status
 
+- [`web/convex/serves.ts`](/Users/mounselam/Developer/tahuna/web/convex/serves.ts)
+  - serve CRUD + lifecycle transitions
+  - backend provisioning / stop orchestration
+  - runtime callback endpoints and dashboard-facing serve queries/mutations
+
+- [`web/convex/servesRead.ts`](/Users/mounselam/Developer/tahuna/web/convex/servesRead.ts)
+  - serve list/show/log shaping for CLI and dashboard surfaces
+
 - [`web/convex/data.ts`](/Users/pazuzzu/Desktop/gigi/boob-ai/web/convex/data.ts)
   - R2 data upload URLs, metadata sync, listing, deletion
 
@@ -197,7 +226,9 @@ Most realistic current path:
 4. CLI stores auth token (and auto-detected browser URL base when missing) in `~/.config/tahuna/config.env`.
 5. Use `tahuna init .` (or `tahuna init <project-name>`) then `tahuna train` / `tahuna train -d`.
 6. If no GPU capacity is available, CLI returns a strict create error; in interactive mode it prompts for alternate GPU selection and retries.
-7. Use CLI + dashboard to inspect runs/data.
+7. Use `tahuna serve create --from-run <run_id>` to turn a completed run artifact into a managed serve.
+8. Use CLI + dashboard to inspect runs, serves, and synced data.
+9. Inference currently reaches the live serve through the provider URL in practice; the Tahuna-authenticated inference proxy is the next serve slice.
 
 ## 7) Product Decisions (locked 2026-03-09)
 
