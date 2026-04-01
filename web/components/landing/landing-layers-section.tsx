@@ -2,8 +2,8 @@ import { Card, CardContent } from "@/components/ui/card"
 
 const layers = [
   {
-    title: "Init",
-    owner: "tahuna init .",
+    title: "Tahuna init",
+    owner: "tahuna init",
     detail: "Tahuna scans your project, detects your framework, identifies your entrypoint and data, and scaffolds anything missing.",
     statA: "Project-aware",
     statB: "No boilerplate",
@@ -23,11 +23,11 @@ const layers = [
     statB: "Your loop stays yours",
   },
   {
-    title: "Persist",
-    owner: "runs + artifacts",
-    detail: "Your checkpoints, models, and outputs are persisted. Run history stays queryable, and every experiment can be traced back to exact inputs.",
-    statA: "Artifacts persisted",
-    statB: "Fully reproducible",
+    title: "Serve",
+    owner: "tahuna serve",
+    detail: "Tahuna provisions inference compute, materializes a pinned model snapshot, installs the serve dependencies, and launches your inference.py entrypoint.",
+    statA: "Inference-ready",
+    statB: "Health-checked",
   },
 ]
 
