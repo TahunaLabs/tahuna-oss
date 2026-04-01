@@ -2,7 +2,7 @@ import { ConvexError, v } from "convex/values"
 import { CopyObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3"
 import { components, internal } from "@convex/_generated/api"
 import type { Id } from "@convex/_generated/dataModel"
-import { internalAction, internalMutation, internalQuery } from "@convex/_generated/server"
+import { internalAction, internalMutation, internalQuery, type ActionCtx } from "@convex/_generated/server"
 import { R2 } from "@convex-dev/r2"
 import { RUN_CONFIG } from "@convex/appConfig"
 import { RUN_STATUS } from "@convex/runsConstants"
@@ -115,6 +115,13 @@ type CreateServePreparation = {
   serve_config: ResolvedServeConfig
   source: SnapshotSourceSelection
   source_entries: SnapshotSourceEntry[]
+}
+
+type ServeRemovalPayload = {
+  serve_id: string
+  object_prefix: string
+  manifest_key: string
+  manifest_hash: string
 }
 
 type ServeProvisioningPayload = {
@@ -264,6 +271,13 @@ const serveResponseValidator = v.object({
   health_failure_threshold: v.number(),
   graceful_shutdown_seconds: v.number(),
   model_snapshot: serveModelSnapshotResponseValidator,
+})
+
+const serveRemovalPayloadValidator = v.object({
+  serve_id: v.string(),
+  object_prefix: v.string(),
+  manifest_key: v.string(),
+  manifest_hash: v.string(),
 })
 
 const listServesResponseValidator = v.object({
@@ -512,6 +526,54 @@ function createSnapshotBasePrefix(environmentId: string) {
   return `serves/${environmentId}/${Date.now()}-${suffix}`
 }
 
+async function deleteObjectsByPrefix(ctx: ActionCtx, prefix: string) {
+  let cursor: string | null = null
+  let pages = 0
+  while (pages < 100) {
+    const result = await r2.listMetadata(ctx, 100, cursor)
+    for (const item of result.page) {
+      if (!item.key.startsWith(prefix)) {
+        continue
+      }
+      try {
+        await r2.deleteObject(ctx, item.key)
+      } catch {
+        // Best-effort cleanup only.
+      }
+    }
+    if (result.isDone) {
+      return
+    }
+    cursor = result.continueCursor
+    pages += 1
+  }
+}
+
+async function deleteServeSnapshotObjects(ctx: ActionCtx, payload: ServeRemovalPayload) {
+  try {
+    const manifest = await fetchServeSnapshotManifest(ctx, payload.manifest_key, payload.manifest_hash)
+    const keys = new Set<string>(manifest.entries.map((entry) => entry.key))
+    keys.add(payload.manifest_key)
+    for (const key of keys) {
+      try {
+        await r2.deleteObject(ctx, key)
+      } catch {
+        // Best-effort cleanup only.
+      }
+    }
+    return
+  } catch {
+    // Fall back to prefix cleanup when the manifest is missing or unreadable.
+  }
+
+  await deleteObjectsByPrefix(ctx, `${payload.object_prefix}/`)
+  try {
+    await r2.deleteObject(ctx, payload.manifest_key)
+  } catch {
+    // Best-effort cleanup only.
+  }
+}
+
 function serializeSnapshotManifest(entries: SnapshotManifestEntry[], objectPrefix: string) {
   return JSON.stringify({
     version: "serve-model-snapshot.v1",
@@ -605,6 +667,20 @@ export const internalGetLogs = internalQuery({
   },
 })
 
+export const internalGetRemovalPayload = internalQuery({
+  args: { userId: v.string(), serveId: v.id("serves") },
+  returns: serveRemovalPayloadValidator,
+  handler: async (ctx, args): Promise<ServeRemovalPayload> => {
+    const row = await getAccessibleServe(ctx, args.userId, args.serveId)
+    return {
+      serve_id: String(row._id),
+      object_prefix: row.modelSnapshot.objectPrefix,
+      manifest_key: row.modelSnapshot.manifestKey,
+      manifest_hash: row.modelSnapshot.manifestHash,
+    }
+  },
+})
+
 export const internalPrepareCreate = internalQuery({
   args: {
     userId: v.string(),
@@ -612,6 +688,9 @@ export const internalPrepareCreate = internalQuery({
     fromRunId: v.optional(v.id("runs")),
     fromStoragePrefix: v.optional(v.string()),
     modelPath: v.optional(v.string()),
+    gpuType: v.optional(v.string()),
+    gpuCount: v.optional(v.number()),
+    volumeGb: v.optional(v.number()),
   },
   returns: createServePreparationValidator,
   handler: async (ctx, args) => {
@@ -636,9 +715,15 @@ export const internalPrepareCreate = internalQuery({
       codeManifestHash: env.latestCodeManifestHash,
       dataManifestHash: env.latestDataManifestHash || null,
       pythonVersion: serveSnapshot.pythonVersion,
-      gpuType: serveSnapshot.gpuType,
-      gpuCount: serveSnapshot.gpuCount,
-      volumeGb: serveSnapshot.volumeGb,
+      gpuType: args.gpuType?.trim() || serveSnapshot.gpuType,
+      gpuCount:
+        typeof args.gpuCount === "number" && Number.isFinite(args.gpuCount) && args.gpuCount > 0
+          ? Math.floor(args.gpuCount)
+          : serveSnapshot.gpuCount,
+      volumeGb:
+        typeof args.volumeGb === "number" && Number.isFinite(args.volumeGb) && args.volumeGb > 0
+          ? Math.floor(args.volumeGb)
+          : serveSnapshot.volumeGb,
       port: serveSnapshot.port,
       healthPath: serveSnapshot.healthPath,
       defaultModelPath: serveSnapshot.defaultModelPath,
@@ -727,6 +812,10 @@ export const internalCreate = internalAction({
     fromRunId: v.optional(v.id("runs")),
     fromStoragePrefix: v.optional(v.string()),
     modelPath: v.optional(v.string()),
+    gpuType: v.optional(v.string()),
+    gpuCount: v.optional(v.number()),
+    volumeGb: v.optional(v.number()),
+    enqueueProvisioning: v.optional(v.boolean()),
   },
   returns: serveResponseValidator,
   handler: async (ctx, args): Promise<ServeResponse> => {
@@ -780,6 +869,7 @@ export const internalCreate = internalAction({
       return await ctx.runMutation(internal.serves.internalInsertCreatedServe, {
         userId: args.userId,
         environmentId: args.environmentId,
+        enqueueProvisioning: args.enqueueProvisioning,
         serveConfig: preparation.serve_config,
         modelSnapshot: {
           sourceType: preparation.source.source_type,
@@ -813,12 +903,55 @@ export const internalInsertCreatedServe = internalMutation({
   args: {
     userId: v.string(),
     environmentId: v.id("environments"),
+    enqueueProvisioning: v.optional(v.boolean()),
     serveConfig: resolvedServeConfigValidator,
     modelSnapshot: persistedModelSnapshotValidator,
   },
   returns: serveResponseValidator,
   handler: async (ctx, args) => {
     return createServeForUserId(ctx, args)
+  },
+})
+
+export const internalDeleteRemovedServeRecords = internalMutation({
+  args: { serveId: v.id("serves") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const row = await ctx.db.get("serves", args.serveId)
+    if (!row) {
+      return null
+    }
+
+    const [events, runtimeLogs] = await Promise.all([
+      ctx.db
+        .query("serveEvents")
+        .withIndex("by_serve", (q) => q.eq("serveId", args.serveId))
+        .collect(),
+      ctx.db
+        .query("serveRuntimeLogs")
+        .withIndex("by_serve", (q) => q.eq("serveId", args.serveId))
+        .collect(),
+    ])
+    await Promise.all(events.map((event) => ctx.db.delete("serveEvents", event._id)))
+    await Promise.all(runtimeLogs.map((runtimeLog) => ctx.db.delete("serveRuntimeLogs", runtimeLog._id)))
+    await ctx.db.delete("serves", args.serveId)
+    return null
+  },
+})
+
+export const internalRemove = internalAction({
+  args: { userId: v.string(), serveId: v.id("serves") },
+  returns: v.object({ deleted: v.boolean(), serve_id: v.string() }),
+  handler: async (ctx, args): Promise<{ deleted: boolean; serve_id: string }> => {
+    const payload: ServeRemovalPayload = await ctx.runQuery(internal.serves.internalGetRemovalPayload, args)
+    await deleteServeSnapshotObjects(ctx, payload)
+    await ctx.runMutation(internal.serves.internalDeleteRemovedServeRecords, {
+      serveId: args.serveId,
+    })
+    return {
+      deleted: true,
+      serve_id: payload.serve_id,
+    }
   },
 })
 

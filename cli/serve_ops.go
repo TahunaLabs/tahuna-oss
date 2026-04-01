@@ -102,6 +102,167 @@ func resolveServeID(id string, args []string, usage string) string {
 	return serveID
 }
 
+func inferEnvironmentServeCompute(environmentID string) (string, int, int, error) {
+	if strings.TrimSpace(environmentID) == "" {
+		return "", 0, 0, errors.New("environment_id is required")
+	}
+	env, err := doJSONAs[environmentResponse](http.MethodGet, "/environments/"+environmentID, nil)
+	if err != nil {
+		return "", 0, 0, err
+	}
+	if env.ServeSnapshot != nil {
+		gpuType := strings.TrimSpace(env.ServeSnapshot.GPUType)
+		if gpuType == "" {
+			gpuType = strings.TrimSpace(env.GPUType)
+		}
+		gpuCount := int(env.ServeSnapshot.GPUCount)
+		if gpuCount <= 0 {
+			gpuCount = int(env.GPUCount)
+		}
+		volumeGB := int(env.ServeSnapshot.VolumeGB)
+		if volumeGB <= 0 {
+			volumeGB = int(env.VolumeGB)
+		}
+		if gpuType == "" {
+			return "", gpuCount, volumeGB, errors.New("environment serve gpu_type is empty")
+		}
+		return gpuType, gpuCount, volumeGB, nil
+	}
+	gpuType := strings.TrimSpace(env.GPUType)
+	if gpuType == "" {
+		return "", int(env.GPUCount), int(env.VolumeGB), errors.New("environment gpu_type is empty")
+	}
+	return gpuType, int(env.GPUCount), int(env.VolumeGB), nil
+}
+
+func persistFallbackServeCompute(environmentID, gpuType string, gpuCount, volumeGB int) {
+	selectedGPU := strings.TrimSpace(gpuType)
+	if strings.TrimSpace(environmentID) == "" || selectedGPU == "" {
+		return
+	}
+	cfg, err := loadPersistedProjectConfig()
+	if err != nil {
+		logWarn("serve created with fallback GPU %q but failed to load local project config for %s: %v", selectedGPU, environmentID, err)
+		return
+	}
+	cfg.ServeGPUType = selectedGPU
+	if gpuCount > 0 {
+		cfg.ServeGPUCount = gpuCount
+	}
+	if volumeGB > 0 {
+		cfg.ServeVolumeGB = volumeGB
+	}
+	if err := saveProjectConfig(cfg); err != nil {
+		logWarn("serve created with fallback GPU %q but failed to save local project config for %s: %v", selectedGPU, environmentID, err)
+		return
+	}
+	if err := syncIncremental(environmentID, syncScope{}, syncOptions{}); err != nil {
+		logWarn("serve created with fallback GPU %q but failed to sync environment %s: %v", selectedGPU, environmentID, err)
+	}
+}
+
+func createServeWithCapacityPrompt(environmentID string, payload map[string]any) (serveResponse, error) {
+	resp, err := doJSONAs[serveResponse](http.MethodPost, "/serves", payload)
+	if err == nil || !isNoGPUCapacityCreateError(err) || !supportsInteractivePrompts() {
+		return resp, err
+	}
+
+	gpus, _, _, gpusErr := fetchGpusAndImages()
+	if gpusErr != nil || len(gpus) == 0 {
+		return serveResponse{}, err
+	}
+
+	defaultGPU := strings.TrimSpace(asString(payload["gpu_type"]))
+	gpuCount := int(asInt64(payload["gpu_count"]))
+	volumeGB := int(asInt64(payload["volume_gb"]))
+	if inferredGPU, inferredCount, inferredVolume, inferErr := inferEnvironmentServeCompute(environmentID); inferErr == nil {
+		if defaultGPU == "" {
+			defaultGPU = inferredGPU
+		}
+		if gpuCount <= 0 && inferredCount > 0 {
+			gpuCount = inferredCount
+			payload["gpu_count"] = inferredCount
+		}
+		if volumeGB <= 0 && inferredVolume > 0 {
+			volumeGB = inferredVolume
+			payload["volume_gb"] = inferredVolume
+		}
+	}
+
+	defaultIndex := 0
+	if defaultGPU != "" {
+		for i, gpu := range gpus {
+			if strings.EqualFold(strings.TrimSpace(gpu), defaultGPU) {
+				defaultIndex = i
+				break
+			}
+		}
+	}
+
+	unavailable := map[string]struct{}{}
+	if defaultGPU != "" {
+		unavailable[normalizeGPUChoice(defaultGPU)] = struct{}{}
+	}
+
+	lastErr := err
+	for {
+		fmt.Printf("%sNo GPU capacity for current selection.%s\n", cAmpGold, cReset)
+		candidates := availableGPUChoices(gpus, unavailable)
+		if len(candidates) == 0 {
+			return serveResponse{}, fmt.Errorf("no GPU capacity currently available in listed GPUs; run `tahuna gpus list` and try again later")
+		}
+		if defaultIndex >= len(candidates) {
+			defaultIndex = 0
+		}
+		nextGPU := promptChoice("Choose available GPU", candidates, defaultIndex)
+		payload["gpu_type"] = nextGPU
+		if gpuCount > 0 {
+			payload["gpu_count"] = gpuCount
+		}
+		if volumeGB > 0 {
+			payload["volume_gb"] = volumeGB
+		}
+		if gpuCount > 0 {
+			if err := validateGPUSelection(nextGPU, gpuCount); err != nil {
+				fmt.Printf("%s%s%s\n", cAmpGold, err.Error(), cReset)
+				unavailable[normalizeGPUChoice(nextGPU)] = struct{}{}
+				choice := promptChoice("Still unavailable", []string{"Try another GPU", "Cancel"}, 0)
+				if choice == "Cancel" {
+					return serveResponse{}, lastErr
+				}
+				continue
+			}
+		}
+
+		resp, err = doJSONAs[serveResponse](http.MethodPost, "/serves", payload)
+		if err == nil {
+			persistFallbackServeCompute(environmentID, nextGPU, gpuCount, volumeGB)
+			return resp, nil
+		}
+		lastErr = err
+		if !isNoGPUCapacityCreateError(err) {
+			return serveResponse{}, err
+		}
+
+		unavailable[normalizeGPUChoice(nextGPU)] = struct{}{}
+		choice := promptChoice("Still unavailable", []string{"Try another GPU", "Cancel"}, 0)
+		if choice == "Cancel" {
+			return serveResponse{}, lastErr
+		}
+		candidates = availableGPUChoices(gpus, unavailable)
+		if len(candidates) == 0 {
+			return serveResponse{}, fmt.Errorf("no GPU capacity currently available in listed GPUs; run `tahuna gpus list` and try again later")
+		}
+		defaultIndex = 0
+		for i, gpu := range candidates {
+			if strings.EqualFold(strings.TrimSpace(gpu), nextGPU) {
+				defaultIndex = (i + 1) % len(candidates)
+				break
+			}
+		}
+	}
+}
+
 func serveCreate(args []string) {
 	fs := flag.NewFlagSet("serve create", flag.ExitOnError)
 	fromRunID := fs.String("from-run", "", "Completed run ID to serve from")
@@ -119,7 +280,7 @@ func serveCreate(args []string) {
 	payload, err := buildServeCreatePayload(environmentID, *fromRunID, *fromStoragePrefix, *modelPath)
 	must(err)
 
-	resp, err := doJSONAs[serveResponse](http.MethodPost, "/serves", payload)
+	resp, err := createServeWithCapacityPrompt(environmentID, payload)
 	must(err)
 
 	printSuccessLine(fmt.Sprintf("serve created: %s (%s)", resp.ServeID, defaultString(resp.Status, "queued")))

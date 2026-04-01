@@ -22,6 +22,17 @@ type CreateRunStrictArgs = {
   volume_gb?: number;
 };
 
+type CreateServeStrictArgs = {
+  userId: string;
+  environmentId: Id<"environments">;
+  fromRunId?: Id<"runs">;
+  fromStoragePrefix?: string;
+  modelPath?: string;
+  gpuType?: string;
+  gpuCount?: number;
+  volumeGb?: number;
+};
+
 export type GpuRow = {
   id: string;
   display_name: string;
@@ -322,6 +333,41 @@ export async function createAndProvisionRunStrict(ctx: ActionCtx, args: CreateRu
       runId,
     });
     throw new Error("no GPU capacity currently available; run was not created");
+  }
+  throw new Error(detail);
+}
+
+export async function createAndProvisionServeStrict(ctx: ActionCtx, args: CreateServeStrictArgs) {
+  const created = await ctx.runAction(internal.serves.internalCreate, {
+    userId: args.userId,
+    environmentId: args.environmentId,
+    fromRunId: args.fromRunId,
+    fromStoragePrefix: args.fromStoragePrefix,
+    modelPath: args.modelPath,
+    gpuType: args.gpuType,
+    gpuCount: args.gpuCount,
+    volumeGb: args.volumeGb,
+    enqueueProvisioning: false,
+  });
+  const serveId = created.serve_id as Id<"serves">;
+
+  await ctx.runAction(internal.serves.provisionServe, { serveId });
+
+  const resolved = await ctx.runQuery(internal.serves.internalGet, {
+    userId: args.userId,
+    serveId,
+  });
+  if (resolved.status !== "failed") {
+    return resolved;
+  }
+
+  const detail = resolved.error || "serve provisioning failed";
+  if (isNoGpuCapacityError(detail)) {
+    await ctx.runAction(internal.serves.internalRemove, {
+      userId: args.userId,
+      serveId,
+    });
+    throw new Error("no GPU capacity currently available; serve was not created");
   }
   throw new Error(detail);
 }

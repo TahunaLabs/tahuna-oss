@@ -1,7 +1,14 @@
 import { internal } from "@convex/_generated/api"
 import type { Id } from "@convex/_generated/dataModel"
 import { httpAction } from "@convex/_generated/server"
-import { authenticateApiRequest, corsHeaders, readJsonBody, toClientErrorDetail } from "@convex/cli/shared"
+import {
+  authenticateApiRequest,
+  corsHeaders,
+  createAndProvisionServeStrict,
+  readJsonBody,
+  toClientErrorDetail,
+  validateGpuCountLimit,
+} from "@convex/cli/shared"
 import { handleServeRuntimeGet, handleServeRuntimePost, handleStopServe, parseServeRuntimeRoute } from "@convex/servesHttp"
 
 export const postServeAction = httpAction(async (ctx, request) => {
@@ -54,13 +61,31 @@ export const createServe = httpAction(async (ctx, request) => {
     })
   }
   try {
-    const data = await ctx.runAction(internal.serves.internalCreate, {
+    const requestedGpuType = typeof body?.gpu_type === "string" ? body.gpu_type.trim() : ""
+    const requestedGpuCount = typeof body?.gpu_count === "number" ? body.gpu_count : 0
+    const requestedVolumeGb = typeof body?.volume_gb === "number" ? body.volume_gb : 0
+    if (requestedGpuType || requestedGpuCount > 0) {
+      const current = await ctx.runQuery(internal.environments.internalGet, {
+        userId,
+        environmentId: environmentId as Id<"environments">,
+      })
+      const effectiveGpuType = requestedGpuType || current.serve_snapshot?.gpu_type || ""
+      const effectiveGpuCount =
+        requestedGpuCount > 0 ? requestedGpuCount : (current.serve_snapshot?.gpu_count ?? 0)
+      if (effectiveGpuCount > 0) {
+        await validateGpuCountLimit(ctx, userId, effectiveGpuType, effectiveGpuCount)
+      }
+    }
+    const data = await createAndProvisionServeStrict(ctx, {
       userId,
       environmentId: environmentId as Id<"environments">,
       fromRunId: typeof body?.from_run_id === "string" ? (body.from_run_id as Id<"runs">) : undefined,
       fromStoragePrefix:
         typeof body?.from_storage_prefix === "string" ? body.from_storage_prefix.trim() : undefined,
       modelPath: typeof body?.model_path === "string" ? body.model_path.trim() : undefined,
+      gpuType: requestedGpuType || undefined,
+      gpuCount: requestedGpuCount > 0 ? requestedGpuCount : undefined,
+      volumeGb: requestedVolumeGb > 0 ? requestedVolumeGb : undefined,
     })
     return new Response(JSON.stringify(data), {
       status: 200,
@@ -68,8 +93,9 @@ export const createServe = httpAction(async (ctx, request) => {
     })
   } catch (err) {
     const detail = toClientErrorDetail(err, "failed to create serve")
+    const status = detail.toLowerCase().includes("no gpu capacity currently available") ? 409 : 400
     return new Response(JSON.stringify({ detail }), {
-      status: 400,
+      status,
       headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
     })
   }

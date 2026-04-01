@@ -192,3 +192,84 @@ func TestServeCreate_FromStoragePrefixPayload(t *testing.T) {
 		t.Fatalf("did not expect model_path in storage payload: %#v", createPayload)
 	}
 }
+
+func TestCreateServeWithCapacityPrompt_NonInteractiveNoCapacityError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method == http.MethodPost && r.URL.Path == "/api/serves" {
+			w.WriteHeader(http.StatusConflict)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"detail": "no gpu capacity currently available",
+			})
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+		_ = json.NewEncoder(w).Encode(map[string]any{"detail": "not found"})
+	}))
+	defer server.Close()
+
+	t.Setenv("TAHUNA_API_URL", server.URL)
+	t.Setenv("TERM", "dumb")
+
+	_, err := createServeWithCapacityPrompt("env-test", map[string]any{"gpu_type": "nvidia-h100"})
+	if err == nil {
+		t.Fatalf("expected no-capacity error")
+	}
+	if !strings.Contains(strings.ToLower(err.Error()), "no gpu capacity currently available") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestPersistFallbackServeCompute_UpdatesLocalServeConfigAndCommitsSync(t *testing.T) {
+	setupTestProject(t, false)
+	mock := newSyncBackendMock()
+	installSyncStubs(t, mock)
+
+	requests := []string{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests = append(requests, r.Method+" "+r.URL.Path)
+		if r.Method == http.MethodGet && r.URL.Path == "/api/gpus" {
+			serveGpusAndEnvironment(w, r)
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+		_ = json.NewEncoder(w).Encode(map[string]any{"detail": "not found"})
+	}))
+	defer server.Close()
+
+	t.Setenv("TAHUNA_API_URL", server.URL)
+
+	persistFallbackServeCompute("env-test", "NVIDIA RTX A5000", 2, 160)
+
+	cfg, err := loadProjectConfig()
+	if err != nil {
+		t.Fatalf("failed to load project config: %v", err)
+	}
+	if cfg.ServeGPUType != "NVIDIA RTX A5000" {
+		t.Fatalf("expected local serve gpu_type to match selected fallback GPU, got %q", cfg.ServeGPUType)
+	}
+	if cfg.ServeGPUCount != 2 {
+		t.Fatalf("expected local serve gpu_count=2, got %d", cfg.ServeGPUCount)
+	}
+	if cfg.ServeVolumeGB != 160 {
+		t.Fatalf("expected local serve volume_gb=160, got %d", cfg.ServeVolumeGB)
+	}
+	if cfg.GPUType != "NVIDIA A100 80GB" {
+		t.Fatalf("expected environment gpu_type to remain unchanged, got %q", cfg.GPUType)
+	}
+	if len(mock.commitBodies) != 1 {
+		t.Fatalf("expected one config sync commit, got %d", len(mock.commitBodies))
+	}
+	serveSnapshot, ok := mock.commitBodies[0]["serve_snapshot"].(*serveSnapshotResponse)
+	if !ok {
+		t.Fatalf("expected serve_snapshot payload, got %#v", mock.commitBodies[0]["serve_snapshot"])
+	}
+	if serveSnapshot.GPUType != "NVIDIA RTX A5000" || serveSnapshot.GPUCount != 2 || serveSnapshot.VolumeGB != 160 {
+		t.Fatalf("expected synced serve snapshot to match selected fallback compute, got %#v", serveSnapshot)
+	}
+	for _, request := range requests {
+		if request != "GET /api/gpus" {
+			t.Fatalf("expected fallback serve sync to avoid remote environment refreshes, got %v", requests)
+		}
+	}
+}
