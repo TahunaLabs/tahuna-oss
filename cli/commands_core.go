@@ -1124,188 +1124,25 @@ func train(args []string) {
 }
 
 func createRunWithCapacityPrompt(path string, payload map[string]any) (createRunResponse, error) {
-	resp, err := doJSONAs[createRunResponse](http.MethodPost, path, payload)
-	if err == nil || !isNoGPUCapacityCreateError(err) || !supportsInteractivePrompts() {
-		return resp, err
-	}
-
-	gpus, _, _, gpusErr := fetchGpusAndImages()
-	if gpusErr != nil || len(gpus) == 0 {
-		return createRunResponse{}, err
-	}
-
-	defaultGPU := strings.TrimSpace(asString(payload["gpu_type"]))
-	if defaultGPU == "" {
-		if inferred, inferErr := inferEnvironmentGPU(path); inferErr == nil {
-			defaultGPU = inferred
-		}
-	}
-	defaultIndex := 0
-	if defaultGPU != "" {
-		for i, gpu := range gpus {
-			if strings.EqualFold(strings.TrimSpace(gpu), defaultGPU) {
-				defaultIndex = i
-				break
+	return createWithCapacityPrompt(payload, capacityPromptOptions[createRunResponse]{
+		create: func(nextPayload map[string]any) (createRunResponse, error) {
+			return doJSONAs[createRunResponse](http.MethodPost, path, nextPayload)
+		},
+		resolveSelection: func(_ map[string]any) (computeSelection, error) {
+			environmentID, err := environmentIDFromRunsPath(path)
+			if err != nil {
+				return computeSelection{}, err
 			}
-		}
-	}
-
-	unavailable := map[string]struct{}{}
-	if defaultGPU != "" {
-		unavailable[normalizeGPUChoice(defaultGPU)] = struct{}{}
-	}
-
-	lastErr := err
-	for {
-		fmt.Printf("%sNo GPU capacity for current selection.%s\n", cAmpGold, cReset)
-		candidates := availableGPUChoices(gpus, unavailable)
-		if len(candidates) == 0 {
-			return createRunResponse{}, fmt.Errorf("no GPU capacity currently available in listed GPUs; run `tahuna gpus list` and try again later")
-		}
-		if defaultIndex >= len(candidates) {
-			defaultIndex = 0
-		}
-		nextGPU := promptChoice("Choose available GPU", candidates, defaultIndex)
-		payload["gpu_type"] = nextGPU
-		if gpuCount := int(asInt64(payload["gpu_count"])); gpuCount > 0 {
-			if err := validateGPUSelection(nextGPU, gpuCount); err != nil {
-				fmt.Printf("%s%s%s\n", cAmpGold, err.Error(), cReset)
-				unavailable[normalizeGPUChoice(nextGPU)] = struct{}{}
-				choice := promptChoice("Still unavailable", []string{"Try another GPU", "Cancel"}, 0)
-				if choice == "Cancel" {
-					return createRunResponse{}, lastErr
-				}
-				continue
+			selections, err := loadEnvironmentComputeSelections(environmentID)
+			if err != nil {
+				return computeSelection{}, err
 			}
-		}
-
-		resp, err = doJSONAs[createRunResponse](http.MethodPost, path, payload)
-		if err == nil {
-			persistFallbackEnvironmentGPU(path, nextGPU)
-			return resp, nil
-		}
-		lastErr = err
-		if !isNoGPUCapacityCreateError(err) {
-			return createRunResponse{}, err
-		}
-
-		unavailable[normalizeGPUChoice(nextGPU)] = struct{}{}
-		choice := promptChoice("Still unavailable", []string{"Try another GPU", "Cancel"}, 0)
-		if choice == "Cancel" {
-			return createRunResponse{}, lastErr
-		}
-		candidates = availableGPUChoices(gpus, unavailable)
-		if len(candidates) == 0 {
-			return createRunResponse{}, fmt.Errorf("no GPU capacity currently available in listed GPUs; run `tahuna gpus list` and try again later")
-		}
-		defaultIndex = 0
-		for i, gpu := range candidates {
-			if strings.EqualFold(strings.TrimSpace(gpu), nextGPU) {
-				defaultIndex = (i + 1) % len(candidates)
-				break
-			}
-		}
-	}
-}
-
-func normalizeGPUChoice(value string) string {
-	return strings.ToLower(strings.TrimSpace(value))
-}
-
-func availableGPUChoices(gpus []string, unavailable map[string]struct{}) []string {
-	if len(gpus) == 0 {
-		return nil
-	}
-	choices := make([]string, 0, len(gpus))
-	seen := map[string]struct{}{}
-	for _, gpu := range gpus {
-		trimmed := strings.TrimSpace(gpu)
-		if trimmed == "" {
-			continue
-		}
-		key := normalizeGPUChoice(trimmed)
-		if _, blocked := unavailable[key]; blocked {
-			continue
-		}
-		if _, exists := seen[key]; exists {
-			continue
-		}
-		seen[key] = struct{}{}
-		choices = append(choices, trimmed)
-	}
-	return choices
-}
-
-func persistFallbackEnvironmentGPU(path, gpuType string) {
-	selectedGPU := strings.TrimSpace(gpuType)
-	if selectedGPU == "" {
-		return
-	}
-	environmentID, err := environmentIDFromRunsPath(path)
-	if err != nil {
-		return
-	}
-	cfg, err := loadPersistedProjectConfig()
-	if err != nil {
-		logWarn("run created with fallback GPU %q but failed to load local project config for %s: %v", selectedGPU, environmentID, err)
-		return
-	}
-	cfg.GPUType = selectedGPU
-	if err := saveProjectConfig(cfg); err != nil {
-		logWarn("run created with fallback GPU %q but failed to save local project config for %s: %v", selectedGPU, environmentID, err)
-		return
-	}
-	if err := syncIncremental(environmentID, syncScope{}, syncOptions{}); err != nil {
-		logWarn("run created with fallback GPU %q but failed to sync environment %s: %v", selectedGPU, environmentID, err)
-	}
-}
-
-func isNoGPUCapacityCreateError(err error) bool {
-	if err == nil {
-		return false
-	}
-	text := strings.ToLower(err.Error())
-	return strings.Contains(text, "no gpu capacity currently available") ||
-		strings.Contains(text, "no instances currently available") ||
-		strings.Contains(text, "insufficient capacity")
-}
-
-func supportsInteractivePrompts() bool {
-	in, inErr := os.Stdin.Stat()
-	out, outErr := os.Stdout.Stat()
-	if inErr != nil || outErr != nil {
-		return false
-	}
-	return (in.Mode()&os.ModeCharDevice) != 0 && (out.Mode()&os.ModeCharDevice) != 0
-}
-
-func environmentIDFromRunsPath(path string) (string, error) {
-	parts := strings.Split(strings.Trim(path, "/"), "/")
-	// Expected: environments/{env_id}/runs
-	if len(parts) < 3 || parts[0] != "environments" || parts[2] != "runs" {
-		return "", errors.New("environment id not found in path")
-	}
-	environmentID := strings.TrimSpace(parts[1])
-	if environmentID == "" {
-		return "", errors.New("environment id is empty")
-	}
-	return environmentID, nil
-}
-
-func inferEnvironmentGPU(path string) (string, error) {
-	environmentID, err := environmentIDFromRunsPath(path)
-	if err != nil {
-		return "", err
-	}
-	env, err := doJSONAs[environmentResponse](http.MethodGet, "/environments/"+environmentID, nil)
-	if err != nil {
-		return "", err
-	}
-	gpu := strings.TrimSpace(env.GPUType)
-	if gpu == "" {
-		return "", errors.New("environment gpu_type is empty")
-	}
-	return gpu, nil
+			return selections.Environment, nil
+		},
+		persistSelection: func(selectedGPU string, _ computeSelection) {
+			persistFallbackEnvironmentGPU(path, selectedGPU)
+		},
+	})
 }
 
 func preRunSync(environmentID string) error {
