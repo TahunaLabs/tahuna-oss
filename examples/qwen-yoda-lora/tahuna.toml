@@ -9,22 +9,22 @@ version = "2.2.0-cu121"
 python_version = "3.11"
 gpu_type = "NVIDIA RTX A4500"
 gpu_count = 1
-volume_gb = 2
+volume_gb = 5
 
 [train]
 command = ["uv", "run", "--active", "--no-sync", "python", "-u", "train.py"]
-output_model_path = "outputs/model"
+output_model_path = "outputs/adapter"
 
 [serve]
 command = ["uv", "run", "--active", "--no-sync", "python", "-u", "inference.py"]
 python_version = "3.11"
 gpu_type = "NVIDIA RTX A4500"
 gpu_count = 1
-volume_gb = 2
+volume_gb = 5
 port = 8000
 health_path = "/health"
-default_model_path = "outputs/model"
-startup_timeout_seconds = 90
+default_model_path = "outputs/adapter"
+startup_timeout_seconds = 900
 health_interval_seconds = 5
 health_timeout_seconds = 2
 health_failure_threshold = 3

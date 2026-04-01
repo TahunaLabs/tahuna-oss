@@ -3,12 +3,17 @@ name = "qwen-yoda-lora"
 version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = [
-  "accelerate>=1.10.0",
-  "datasets>=4.0.0",
   "peft>=0.17.0",
   "torch==2.8.0",
-  "torchvision==0.23.0",
   "transformers>=4.51.0",
+]
+
+[dependency-groups]
+train = [
+  "accelerate>=1.10.0",
+  "datasets>=4.0.0",
+  "torchvision==0.23.0",
   "trl>=0.22.0",
   "wandb>=0.25.1",
 ]
+serve = []

@@ -107,7 +107,7 @@ type SnapshotManifestEntry = {
   path: string
   key: string
   size: number
-  sha256: string | null
+  sha256: string
 }
 
 type CreateServePreparation = {
@@ -757,7 +757,9 @@ export const internalCreate = internalAction({
           path: entry.path,
           key: targetKey,
           size,
-          sha256: metadata?.sha256 || null,
+          // Copied run artifacts do not reliably expose checksum metadata in R2.
+          // Keep the field canonical in the snapshot manifest, but allow it to be empty.
+          sha256: metadata?.sha256 || "",
         })
         totalBytes += size
       }

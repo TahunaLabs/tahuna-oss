@@ -49,7 +49,7 @@ func TestServeCreate_FromRunPayloadAndOutput(t *testing.T) {
 			}
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"serve_id":                  "serve-123",
-				"created_at":                1773159748712,
+				"created_at":                1773159748712.4966,
 				"environment_id":            "env-test",
 				"command":                   []string{"uv", "run", "python", "-u", "inference.py"},
 				"output_dir":                "outputs",
@@ -135,7 +135,7 @@ func TestServeCreate_FromStoragePrefixPayload(t *testing.T) {
 			}
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"serve_id":                  "serve-storage",
-				"created_at":                1773159748712,
+				"created_at":                1773159748712.4966,
 				"environment_id":            "env-test",
 				"command":                   []string{"uv", "run", "python", "-u", "inference.py"},
 				"output_dir":                "outputs",

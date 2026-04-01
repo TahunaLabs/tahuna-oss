@@ -78,6 +78,41 @@ func TestWriteManifestEntriesRejectsHashMismatch(t *testing.T) {
 	}
 }
 
+func TestWriteManifestEntriesAllowsMissingHashForModelSnapshots(t *testing.T) {
+	content := []byte("adapter-config")
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write(content)
+	}))
+	defer server.Close()
+
+	entries := []runtimeapi.BootstrapEntry{
+		{
+			Path:        "adapter_config.json",
+			SHA256:      "",
+			Size:        int64(len(content)),
+			Mode:        0o644,
+			DownloadURL: server.URL,
+		},
+	}
+
+	root := t.TempDir()
+	stats, err := WriteManifestEntries(context.Background(), NewDownloader(5*time.Second), entries, root, "model", nil)
+	if err != nil {
+		t.Fatalf("WriteManifestEntries returned error: %v", err)
+	}
+	if stats.FileCount != 1 {
+		t.Fatalf("expected 1 file, got %d", stats.FileCount)
+	}
+	materialized, err := os.ReadFile(filepath.Join(root, "adapter_config.json"))
+	if err != nil {
+		t.Fatalf("read materialized file: %v", err)
+	}
+	if string(materialized) != string(content) {
+		t.Fatalf("unexpected materialized content: %q", string(materialized))
+	}
+}
+
 func TestWriteManifestEntriesReportsProgress(t *testing.T) {
 	contentA := []byte("file-a")
 	hashA := sha256.Sum256(contentA)

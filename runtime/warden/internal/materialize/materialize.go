@@ -150,7 +150,7 @@ func WriteManifestEntries(
 			_ = os.Remove(target)
 			return Stats{}, fmt.Errorf("%s blob size mismatch for %s: expected=%d actual=%d", kind, rel, entry.Size, size)
 		}
-		if hash != entry.SHA256 {
+		if entry.SHA256 != "" && hash != entry.SHA256 {
 			_ = os.Remove(target)
 			return Stats{}, fmt.Errorf("%s blob hash mismatch for %s", kind, rel)
 		}

@@ -30,7 +30,7 @@ type serveModelSnapshotResponse struct {
 
 type serveResponse struct {
 	ServeID                 string                     `json:"serve_id"`
-	CreatedAt               int64                      `json:"created_at"`
+	CreatedAt               float64                    `json:"created_at"`
 	EnvironmentID           string                     `json:"environment_id"`
 	Command                 []string                   `json:"command"`
 	OutputDir               string                     `json:"output_dir"`

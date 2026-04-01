@@ -218,7 +218,10 @@ function parseServeSnapshotManifest(raw: unknown): ServeSnapshotManifest | null 
     if (typeof entry.size !== "number" || !Number.isFinite(entry.size) || entry.size < 0) {
       return null
     }
-    if (typeof entry.sha256 !== "string" || !/^[a-f0-9]{64}$/.test(entry.sha256)) {
+    if (
+      typeof entry.sha256 !== "string" ||
+      (entry.sha256 !== "" && !/^[a-f0-9]{64}$/.test(entry.sha256))
+    ) {
       return null
     }
 

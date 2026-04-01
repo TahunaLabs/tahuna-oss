@@ -233,7 +233,7 @@ func printServeListSummary(serves []serveResponse, envNameByID map[string]string
 			truncateRunListColumn(envLabel, 22),
 			truncateRunListColumn(defaultString(serve.Status, "unknown"), 12),
 			truncateRunListColumn(serveSourceTypeLabel(serve.ModelSnapshot), 10),
-			formatUnixMillis(serve.CreatedAt),
+			formatUnixMillis(int64(serve.CreatedAt)),
 		)
 	}
 }
@@ -274,7 +274,7 @@ func printServeSummary(serve serveResponse) {
 	}
 	fmt.Printf("Status: %s\n", defaultString(serve.Status, "unknown"))
 	if serve.CreatedAt > 0 {
-		fmt.Printf("Created: %s\n", formatUnixMillis(serve.CreatedAt))
+		fmt.Printf("Created: %s\n", formatUnixMillis(int64(serve.CreatedAt)))
 	}
 	if strings.TrimSpace(serve.PodID) != "" {
 		fmt.Printf("Pod ID: %s\n", serve.PodID)

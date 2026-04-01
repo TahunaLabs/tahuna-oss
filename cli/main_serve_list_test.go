@@ -17,7 +17,7 @@ func TestServeList_DefaultHumanReadable(t *testing.T) {
 				"serves": []map[string]any{
 					{
 						"serve_id":                  "serve-1",
-						"created_at":                1773159359016,
+						"created_at":                1773159359016.25,
 						"environment_id":            "env-1",
 						"command":                   []string{"uv", "run", "python", "-u", "inference.py"},
 						"output_dir":                "outputs",
@@ -118,7 +118,7 @@ func TestServeShow_DefaultHumanReadable(t *testing.T) {
 		if r.Method == http.MethodGet && r.URL.Path == "/api/serves/serve-1" {
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"serve_id":                  "serve-1",
-				"created_at":                1773159359016,
+				"created_at":                1773159359016.25,
 				"environment_id":            "env-1",
 				"command":                   []string{"uv", "run", "python", "-u", "inference.py"},
 				"output_dir":                "outputs",

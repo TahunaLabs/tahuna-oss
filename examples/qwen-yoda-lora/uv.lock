@@ -1636,24 +1636,33 @@ name = "qwen-yoda-lora"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
-    { name = "accelerate" },
-    { name = "datasets" },
     { name = "peft" },
     { name = "torch" },
-    { name = "torchvision" },
     { name = "transformers" },
+]
+
+[package.dev-dependencies]
+train = [
+    { name = "accelerate" },
+    { name = "datasets" },
+    { name = "torchvision" },
     { name = "trl" },
     { name = "wandb" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "accelerate", specifier = ">=1.10.0" },
-    { name = "datasets", specifier = ">=4.0.0" },
     { name = "peft", specifier = ">=0.17.0" },
     { name = "torch", specifier = "==2.8.0" },
-    { name = "torchvision", specifier = "==0.23.0" },
     { name = "transformers", specifier = ">=4.51.0" },
+]
+
+[package.metadata.requires-dev]
+serve = []
+train = [
+    { name = "accelerate", specifier = ">=1.10.0" },
+    { name = "datasets", specifier = ">=4.0.0" },
+    { name = "torchvision", specifier = "==0.23.0" },
     { name = "trl", specifier = ">=0.22.0" },
     { name = "wandb", specifier = ">=0.25.1" },
 ]

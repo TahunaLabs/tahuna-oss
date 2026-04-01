@@ -6,10 +6,17 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
+import torch
+from peft import AutoPeftModelForCausalLM
+from transformers import AutoTokenizer
+
 PORT = int(os.environ.get("TAHUNA_SERVE_PORT", "8000"))
 HEALTH_PATH = os.environ.get("TAHUNA_SERVE_HEALTH_PATH", "/health")
-MODEL_ROOT = Path(os.environ.get("TAHUNA_MODEL_ROOT", "outputs/model")).resolve()
+MODEL_ROOT = Path(os.environ.get("TAHUNA_MODEL_ROOT", "outputs/adapter")).resolve()
 PREDICT_PATH = "/predict"
+DEFAULT_MAX_NEW_TOKENS = 64
+DEFAULT_TEMPERATURE = 0.0
+DEFAULT_TOP_P = 1.0
 
 logging.basicConfig(
     level=os.environ.get("TAHUNA_LOG_LEVEL", "INFO").upper(),
@@ -18,12 +25,24 @@ logging.basicConfig(
 LOGGER = logging.getLogger("tahuna.inference")
 
 
+def select_torch_dtype() -> torch.dtype:
+    if not torch.cuda.is_available():
+        return torch.float32
+    if torch.cuda.is_bf16_supported():
+        return torch.bfloat16
+    return torch.float16
+
+
 class ModelServer:
     def __init__(self):
         self.ready = False
         self.startup_error = ""
         self.model_root = MODEL_ROOT
         self.model_example_file = ""
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.dtype = select_torch_dtype()
+        self.model = None
+        self.tokenizer = None
 
     def load(self):
         if not self.model_root.exists():
@@ -38,13 +57,108 @@ class ModelServer:
                 "Check train.output_model_path and serve.default_model_path."
             )
         self.model_example_file = str(first_file.relative_to(self.model_root))
+        self.tokenizer = AutoTokenizer.from_pretrained(str(self.model_root), use_fast=True)
+        if self.tokenizer.pad_token is None:
+            self.tokenizer.pad_token = self.tokenizer.eos_token
+
+        self.model = AutoPeftModelForCausalLM.from_pretrained(
+            str(self.model_root),
+            torch_dtype=self.dtype,
+        )
+        self.model.to(self.device)
+        self.model.eval()
         self.ready = True
-        LOGGER.info("model_root=%s example_file=%s", self.model_root, self.model_example_file)
+        LOGGER.info(
+            "model_root=%s example_file=%s device=%s dtype=%s",
+            self.model_root,
+            self.model_example_file,
+            self.device,
+            self.dtype,
+        )
+
+    def _prompt_from_messages(self, messages):
+        if not isinstance(messages, list) or len(messages) == 0:
+            raise ValueError("messages must be a non-empty array")
+        normalized = []
+        for item in messages:
+            if not isinstance(item, dict):
+                raise ValueError("each message must be an object with role and content")
+            role = str(item.get("role", "")).strip()
+            content = item.get("content")
+            if not isinstance(content, str):
+                raise ValueError("each message content must be a string")
+            content = content.strip()
+            if not role or not content:
+                raise ValueError("each message must include non-empty role and content")
+            normalized.append({"role": role, "content": content})
+        if hasattr(self.tokenizer, "apply_chat_template"):
+            return self.tokenizer.apply_chat_template(
+                normalized,
+                tokenize=False,
+                add_generation_prompt=True,
+            )
+        return "\n".join(f"{item['role']}: {item['content']}" for item in normalized)
+
+    def _resolve_prompt(self, payload):
+        if not isinstance(payload, dict):
+            raise ValueError("request body must be a JSON object")
+        prompt = payload.get("prompt")
+        if isinstance(prompt, str) and prompt.strip():
+            return prompt.strip()
+        if "messages" in payload:
+            return self._prompt_from_messages(payload["messages"])
+        raise ValueError("request must include a non-empty 'prompt' string or 'messages' array")
+
+    def _resolve_int(self, payload, key, default, minimum=1, maximum=1024):
+        value = payload.get(key, default)
+        if not isinstance(value, int):
+            raise ValueError(f"{key} must be an integer")
+        if value < minimum or value > maximum:
+            raise ValueError(f"{key} must be between {minimum} and {maximum}")
+        return value
+
+    def _resolve_float(self, payload, key, default, minimum=0.0, maximum=2.0):
+        value = payload.get(key, default)
+        if isinstance(value, int):
+            value = float(value)
+        if not isinstance(value, float):
+            raise ValueError(f"{key} must be a number")
+        if value < minimum or value > maximum:
+            raise ValueError(f"{key} must be between {minimum} and {maximum}")
+        return value
 
     def predict(self, payload):
-        raise NotImplementedError(
-            "replace ModelServer.predict with model inference logic that reads from TAHUNA_MODEL_ROOT"
-        )
+        if not self.ready or self.model is None or self.tokenizer is None:
+            raise RuntimeError("model is not ready")
+
+        prompt = self._resolve_prompt(payload)
+        max_new_tokens = self._resolve_int(payload, "max_new_tokens", DEFAULT_MAX_NEW_TOKENS)
+        temperature = self._resolve_float(payload, "temperature", DEFAULT_TEMPERATURE)
+        top_p = self._resolve_float(payload, "top_p", DEFAULT_TOP_P, minimum=0.0, maximum=1.0)
+
+        encoded = self.tokenizer(prompt, return_tensors="pt")
+        encoded = {key: value.to(self.device) for key, value in encoded.items()}
+
+        generate_kwargs = {
+            "max_new_tokens": max_new_tokens,
+            "pad_token_id": self.tokenizer.pad_token_id,
+            "eos_token_id": self.tokenizer.eos_token_id,
+        }
+        if temperature > 0:
+            generate_kwargs["do_sample"] = True
+            generate_kwargs["temperature"] = temperature
+            generate_kwargs["top_p"] = top_p
+        else:
+            generate_kwargs["do_sample"] = False
+
+        with torch.inference_mode():
+            generated = self.model.generate(**encoded, **generate_kwargs)
+        new_tokens = generated[0, encoded["input_ids"].shape[1] :]
+        text = self.tokenizer.decode(new_tokens, skip_special_tokens=True).strip()
+        return {
+            "generated_text": text,
+            "model_root": str(self.model_root),
+        }
 
 
 APP = ModelServer()
@@ -118,9 +232,6 @@ class Handler(BaseHTTPRequestHandler):
             return
         try:
             result = APP.predict(payload)
-        except NotImplementedError as err:
-            self._write_json(HTTPStatus.NOT_IMPLEMENTED, {"detail": str(err)})
-            return
         except ValueError as err:
             self._write_json(HTTPStatus.BAD_REQUEST, {"detail": str(err)})
             return
