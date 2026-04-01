@@ -110,6 +110,7 @@ func RunEntrypoint(
 	cmd := exec.Command(normalized[0], normalized[1:]...) // #nosec G204
 	cmd.Dir = workspaceRoot
 	trainEnv := os.Environ()
+	trainEnv = pythonenv.BuildWorkspaceCacheEnvironment(trainEnv, workspaceRoot)
 	if venvPath, ok := pythonenv.ResolvePrebakedVirtualEnvPath(trainEnv); ok {
 		trainEnv = pythonenv.BuildVirtualEnvEnvironment(trainEnv, venvPath)
 	}

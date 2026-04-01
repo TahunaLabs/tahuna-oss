@@ -52,6 +52,24 @@ func BuildVirtualEnvEnvironment(baseEnv []string, venvPath string) []string {
 	return setEnvValue(withProjectEnv, "PATH", pathValue)
 }
 
+func BuildWorkspaceCacheEnvironment(baseEnv []string, workspaceRoot string) []string {
+	trimmedRoot := strings.TrimSpace(workspaceRoot)
+	if trimmedRoot == "" {
+		return append([]string{}, baseEnv...)
+	}
+
+	cacheRoot := filepath.Join(trimmedRoot, ".cache")
+	hfHome := filepath.Join(cacheRoot, "huggingface")
+	hubCache := filepath.Join(hfHome, "hub")
+
+	withCacheRoot := setEnvValue(baseEnv, "XDG_CACHE_HOME", cacheRoot)
+	withHFHome := setEnvValue(withCacheRoot, "HF_HOME", hfHome)
+	withHubCache := setEnvValue(withHFHome, "HF_HUB_CACHE", hubCache)
+	withLegacyHubCache := setEnvValue(withHubCache, "HUGGINGFACE_HUB_CACHE", hubCache)
+	withXetCache := setEnvValue(withLegacyHubCache, "HF_XET_CACHE", filepath.Join(hfHome, "xet"))
+	return setEnvValue(withXetCache, "HF_DATASETS_CACHE", filepath.Join(hfHome, "datasets"))
+}
+
 func MergeEnvironment(baseEnv, overrides []string) []string {
 	merged := append([]string{}, baseEnv...)
 	for _, entry := range overrides {
