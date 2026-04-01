@@ -22,12 +22,31 @@ export function LandingHero() {
               </p>
             </div>
 
-            <Button asChild variant="outline" size="lg" className="self-start rounded-full px-8">
-              <Link href="https://cal.com/monaimel/15min">
-                Talk to an engineer
-                <ArrowRight />
-              </Link>
-            </Button>
+            <div className="flex flex-wrap items-center gap-3 self-start">
+              <Button
+                asChild
+                variant="default"
+                size="none"
+                className="h-12 rounded-none px-6 font-mono text-sm uppercase tracking-ui-eyebrow"
+              >
+                <Link href="/login">
+                  Get started
+                  <ArrowRight />
+                </Link>
+              </Button>
+
+              <Button
+                asChild
+                variant="outline"
+                size="none"
+                className="h-12 rounded-none border-border bg-background px-6 font-mono text-sm uppercase tracking-ui-eyebrow"
+              >
+                <Link href="https://cal.com/monaimel/15min" target="_blank" rel="noreferrer">
+                  Talk to an engineer
+                  <ArrowRight />
+                </Link>
+              </Button>
+            </div>
           </div>
         </div>
       </div>
