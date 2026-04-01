@@ -27,12 +27,12 @@ This section is non-normative. It records rollout status in the current codebase
   Serve bootstrap now resolves concrete model download entries from the pinned snapshot manifest, `runtime/warden` materializes `/workspace/model`, installs base dependencies plus the `serve` group only, launches the serve command, sets serve runtime env vars, and supervises readiness/liveness with serve status callbacks.
 - PR7 is done.
   Serve creation now enqueues real backend provisioning, resolves a canonical serve runtime launch spec, launches compute in Warden serve mode, reconciles runtime callbacks into canonical serve status transitions, and tears down serve compute on stop and failure paths.
-- PR8 is still pending.
-  The backend no longer requires manual provisioning work, but the product still lacks canonical CLI `tahuna serve ...` commands.
+- PR8 is done.
+  The CLI now has canonical `tahuna serve create`, `list`, `show`, `logs`, and `stop` commands, reuses the existing run/train output and help patterns, and supports interactive GPU fallback when RunPod capacity is unavailable.
 - PR9 is in progress.
-  The dashboard already exposes synced serving config, but end-to-end serve workflows, examples, and final documentation are still incomplete.
-- The next implementation step is PR8.
-  The backend provisioning path is real, but the product still lacks canonical CLI `tahuna serve ...` flows.
+  The dashboard already exposes synced serving config, the `qwen-yoda-lora` example is now serveable end-to-end from a completed run, and the auth direction is documented, but the authenticated Tahuna inference proxy and final invoke UX are still incomplete.
+- The next implementation step is the authenticated Tahuna serve inference proxy.
+  The core serve path now works end-to-end, but user inference still reaches the backing serve through provider URLs instead of a canonical Tahuna-authenticated API surface.
 
 ## Scope
 
@@ -659,8 +659,8 @@ This section is non-normative. It exists to guide implementation sequencing.
 7. PR7: Serve provisioning backend. Status: done.
    Add backend provisioning orchestration for create, start, stop, failure handling, and runtime callbacks.
 
-8. PR8: CLI serve commands. Status: pending.
+8. PR8: CLI serve commands. Status: done.
    Add `tahuna serve create`, `list`, `show`, `logs`, and `stop`.
 
 9. PR9: Docs, examples, and dashboard. Status: in progress.
-   The dashboard already shows synced serving config, but examples and end-to-end serve UX should only be finalized after the backend and runtime path are working.
+   The dashboard already shows synced serving config, the example serve flow now works end-to-end, and the auth direction is documented, but the authenticated Tahuna inference proxy and canonical invoke UX are still pending.
