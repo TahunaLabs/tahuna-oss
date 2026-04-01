@@ -5,7 +5,8 @@ on:
     # MVP phase: trigger from develop.
     # TODO: switch this back to `main` once MVP is complete.
     branches:
-      - develop
+    #  - develop
+      - serve
     paths:
       - runtime/images/**
       - runtime/images/prebake/**
