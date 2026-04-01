@@ -819,7 +819,16 @@ export const internalCreate = internalAction({
   },
   returns: serveResponseValidator,
   handler: async (ctx, args): Promise<ServeResponse> => {
-    const preparation: CreateServePreparation = await ctx.runQuery(internal.serves.internalPrepareCreate, args)
+    const preparation: CreateServePreparation = await ctx.runQuery(internal.serves.internalPrepareCreate, {
+      userId: args.userId,
+      environmentId: args.environmentId,
+      fromRunId: args.fromRunId,
+      fromStoragePrefix: args.fromStoragePrefix,
+      modelPath: args.modelPath,
+      gpuType: args.gpuType,
+      gpuCount: args.gpuCount,
+      volumeGb: args.volumeGb,
+    })
     const snapshotBasePrefix = createSnapshotBasePrefix(preparation.environment_id)
     const objectPrefix = `${snapshotBasePrefix}/model`
     const manifestKey = `${snapshotBasePrefix}/model-manifest.json`
