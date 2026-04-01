@@ -867,6 +867,7 @@ async function removeEnvironmentForUserId(ctx: MutationCtx, userId: string, envi
   const runIdsToDelete = runs.map((run) => run._id);
   const serveIdsToDelete = serves.map((serve) => serve._id);
   const podsToTerminate: Array<{ runId: Id<"runs">; podId: string; runpodCredentialId?: Id<"runpodCredentials"> }> = [];
+  const servePodsToTerminate: Array<{ serveId: Id<"serves">; podId: string; runpodCredentialId?: Id<"runpodCredentials"> }> = [];
 
   addManifestRef(deleteRefs, "code", env.latestCodeManifestHash, envIdString, envDataId);
   addManifestRef(deleteRefs, "data", env.latestDataManifestHash, envIdString, envDataId);
@@ -894,12 +895,34 @@ async function removeEnvironmentForUserId(ctx: MutationCtx, userId: string, envi
       artifactKeys.add(key);
     }
   }
+  for (const serve of serves) {
+    if (serve.podId) {
+      servePodsToTerminate.push({
+        serveId: serve._id,
+        podId: serve.podId,
+        runpodCredentialId: serve.runpodCredentialId,
+      });
+    }
+  }
   for (let start = 0; start < podsToTerminate.length; start += RUN_CLEANUP_QUERY_BATCH_SIZE) {
     const chunk = podsToTerminate.slice(start, start + RUN_CLEANUP_QUERY_BATCH_SIZE);
     await Promise.all(
       chunk.map((pod) =>
         ctx.scheduler.runAfter(0, internal.runs.internalTerminatePod, {
           runId: pod.runId,
+          podId: pod.podId,
+          runpodCredentialId: pod.runpodCredentialId,
+          force: true,
+        }),
+      ),
+    );
+  }
+  for (let start = 0; start < servePodsToTerminate.length; start += RUN_CLEANUP_QUERY_BATCH_SIZE) {
+    const chunk = servePodsToTerminate.slice(start, start + RUN_CLEANUP_QUERY_BATCH_SIZE);
+    await Promise.all(
+      chunk.map((pod) =>
+        ctx.scheduler.runAfter(0, internal.serves.internalTerminatePod, {
+          serveId: pod.serveId,
           podId: pod.podId,
           runpodCredentialId: pod.runpodCredentialId,
           force: true,

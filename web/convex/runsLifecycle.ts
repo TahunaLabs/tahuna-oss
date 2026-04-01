@@ -6,13 +6,13 @@ import type { MutationCtx } from "@convex/_generated/server";
 import { resolveRunComputePricing } from "@/lib/run-compute-pricing";
 import { buildRuntimeCompatibilityKey, resolveRunpodCloudType } from "@/lib/runtime-incompatibility";
 import { PYTHON_CONFIG, RUN_CONFIG } from "@convex/appConfig";
-import { images } from "@convex/catalog";
 import { getLatestActiveRunpodCredentialForUserId } from "@convex/runpodCredentialsStore";
 import { resolveTerminalRunTiming, settleRunComputeCharge } from "@convex/runBilling";
 import { ACTIVE_STATUSES, RUN_DELETE_BATCH_SIZE, RUN_STATUS, TERMINAL_STATUSES } from "@convex/runsConstants";
 import { getAccessibleEnvironment, getAccessibleRun, listRunsForUser } from "@convex/runsAccess";
 import { hasRunNameConflict, pickUniqueGeneratedRunName, validateRunName, getRunName, normalizeRunName } from "@convex/runsNaming";
 import { toRunResponse } from "@convex/runsRead";
+import { resolveImageName } from "@convex/runtimeProvisioning";
 
 const provisionPool = new Workpool(components.workpool, {
   maxParallelism: RUN_CONFIG.workpoolMaxParallelism,
@@ -35,22 +35,6 @@ async function deleteIndexedStorageKeys(ctx: MutationCtx, userId: string, keys: 
       await ctx.db.delete("storageObjects", row._id);
     }
   }
-}
-
-function resolveImageName(framework: string, version: string, pythonVersion: string) {
-  const frameworkImages = images[framework];
-  if (!frameworkImages) {
-    throw new ConvexError(`unsupported framework for provisioning: ${framework}`);
-  }
-  const versionImages = frameworkImages[version];
-  if (!versionImages) {
-    throw new ConvexError(`unsupported framework version for provisioning: ${framework}:${version}`);
-  }
-  const imageName = versionImages[pythonVersion];
-  if (!imageName) {
-    throw new ConvexError(`unsupported python version for provisioning: ${framework}:${version}:${pythonVersion}`);
-  }
-  return imageName;
 }
 
 export async function createRunForUserId(

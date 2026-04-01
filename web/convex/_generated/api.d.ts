@@ -40,6 +40,7 @@ import type * as runsNaming from "../runsNaming.js";
 import type * as runsQuery from "../runsQuery.js";
 import type * as runsRead from "../runsRead.js";
 import type * as runtimeBootstrap from "../runtimeBootstrap.js";
+import type * as runtimeProvisioning from "../runtimeProvisioning.js";
 import type * as serves from "../serves.js";
 import type * as servesAccess from "../servesAccess.js";
 import type * as servesConstants from "../servesConstants.js";
@@ -91,6 +92,7 @@ declare const fullApi: ApiFromModules<{
   runsQuery: typeof runsQuery;
   runsRead: typeof runsRead;
   runtimeBootstrap: typeof runtimeBootstrap;
+  runtimeProvisioning: typeof runtimeProvisioning;
   serves: typeof serves;
   servesAccess: typeof servesAccess;
   servesConstants: typeof servesConstants;

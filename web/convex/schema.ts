@@ -98,6 +98,7 @@ export default defineSchema({
     status: v.string(),
     error: v.optional(v.string()),
     podId: v.optional(v.string()),
+    runpodCredentialId: v.optional(v.id("runpodCredentials")),
     runtimeTokenHash: v.optional(v.string()),
     codeManifestHash: v.optional(v.string()),
     dataManifestHash: v.optional(v.string()),

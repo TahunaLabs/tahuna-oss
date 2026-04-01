@@ -7,7 +7,6 @@ import {
   internalQuery,
   mutation,
   query,
-  type ActionCtx,
   type MutationCtx,
 } from "@convex/_generated/server";
 import { requireUser } from "@convex/auth";
@@ -19,7 +18,6 @@ import {
   resolveRunpodCloudType,
   type RuntimeCompatibilityFingerprint,
 } from "@/lib/runtime-incompatibility";
-import { images } from "@convex/catalog";
 import { PYTHON_CONFIG, RUN_CONFIG } from "@convex/appConfig";
 import { applyStorageDeltaCredits, USAGE_EVENT_TYPE, upsertLedgerDebitTotal } from "@convex/credits";
 import type { ComputeSettlementResult } from "@convex/runBilling";
@@ -46,9 +44,13 @@ import {
   renameRunForUserId,
   scheduleForcedPodTermination,
 } from "@convex/runsLifecycle";
-import { sha256Hex } from "@convex/syncManifest";
+import {
+  provisionRuntimePod,
+  resolveImageName,
+  resolveWandbBaseURL,
+  terminateRuntimePodWithRetry,
+} from "@convex/runtimeProvisioning";
 import { ACTIVE_STATUSES, RUN_STATUS, TERMINAL_STATUSES } from "@convex/runsConstants";
-import { fetchRunpodGpuTypes, resolveRunpodApiKeyByCredentialId } from "@convex/runpodCredentials";
 const runResponseValidator = v.object({
   run_id: v.string(),
   name: v.string(),
@@ -470,204 +472,6 @@ async function getSignedDownloadUrlByHead(key: string): Promise<string | null> {
     }
     throw error;
   }
-}
-
-function resolveImageName(framework: string, version: string, pythonVersion: string) {
-  const frameworkImages = images[framework];
-  if (!frameworkImages) {
-    throw new Error(`unsupported framework for provisioning: ${framework}`);
-  }
-  const versionImages = frameworkImages[version];
-  if (!versionImages) {
-    throw new Error(`unsupported framework version for provisioning: ${framework}:${version}`);
-  }
-  const imageName = versionImages[pythonVersion];
-  if (!imageName) {
-    throw new Error(`unsupported python version for provisioning: ${framework}:${version}:${pythonVersion}`);
-  }
-  return imageName;
-}
-
-function resolveRuntimeApiBase() {
-  // Prefer public Tahuna URLs for pod runtime callbacks.
-  // Localhost app URLs are often unreachable from remote pods.
-  const candidates = [
-    process.env.NEXT_PUBLIC_CONVEX_SITE_URL, // dev: direct Convex .site URL (pods can't reach localhost)
-    process.env.SITE_URL, // prod: public app URL (e.g. https://tahuna.app)
-  ];
-  for (const candidate of candidates) {
-    const trimmed = (candidate || "").trim();
-    if (trimmed && !trimmed.includes("localhost") && !trimmed.includes("127.0.0.1")) {
-      return trimmed.replace(/\/+$/, "");
-    }
-  }
-  // Fallback: allow localhost if nothing else is available (local dev testing)
-  for (const candidate of candidates) {
-    const trimmed = (candidate || "").trim();
-    if (trimmed) {
-      return trimmed.replace(/\/+$/, "");
-    }
-  }
-  throw new Error("SITE_URL is required for pod runtime callbacks");
-}
-
-function resolveWandbBaseURL(runtimeApiBase: string) {
-  return `${runtimeApiBase}/api/monitoring/wandb`;
-}
-
-function generateRuntimeToken() {
-  const bytes = new Uint8Array(32);
-  crypto.getRandomValues(bytes);
-  return Array.from(bytes)
-    .map((byte) => byte.toString(16).padStart(2, "0"))
-    .join("");
-}
-
-function runtimeEntrypoint() {
-  return "/usr/local/bin/warden";
-}
-
-async function createRunpodPod(args: {
-  ctx: ActionCtx;
-  runId: string;
-  runpodCredentialId: Id<"runpodCredentials">;
-  imageName: string;
-  gpuType: string;
-  gpuCount: number;
-  volumeGb: number;
-  runtimeToken: string;
-  payload: ProvisioningPayload;
-}) {
-  const { apiKey } = await resolveRunpodApiKeyByCredentialId(args.ctx, args.runpodCredentialId);
-  const allowedCloudType = resolveRunpodCloudType();
-  const gpuTypeId = await resolveRunpodGpuTypeId(apiKey, args.gpuType);
-  const runtimeApiBase = resolveRuntimeApiBase();
-  const wandbBaseURL = resolveWandbBaseURL(runtimeApiBase);
-  const runtimeRequestTimeoutSeconds = process.env.TAHUNA_RUNTIME_REQUEST_TIMEOUT_SECONDS?.trim() || "120";
-
-  const response = await fetch("https://rest.runpod.io/v1/pods", {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      name: `tahuna-${args.runId}`,
-      computeType: "GPU",
-      cloudType: allowedCloudType,
-      gpuCount: Math.max(1, args.gpuCount),
-      gpuTypeIds: [gpuTypeId],
-      gpuTypePriority: "custom",
-      imageName: args.imageName,
-      volumeInGb: Math.max(1, args.volumeGb),
-      volumeMountPath: "/workspace",
-      env: {
-        TAHUNA_RUN_ID: args.payload.run_id,
-        TAHUNA_ENVIRONMENT_ID: args.payload.environment_id,
-        TAHUNA_CONTRACT_VERSION: args.payload.contract_version,
-        TAHUNA_INPUT_PATH: args.payload.input_path,
-        TAHUNA_OUTPUT_DIR: args.payload.output_dir,
-        TAHUNA_OUTPUT_PATH: args.payload.output_path,
-        TAHUNA_LOGS_PATH: args.payload.logs_path,
-        TAHUNA_CODE_MANIFEST_HASH: args.payload.code_manifest_hash || "",
-        TAHUNA_DATA_MANIFEST_HASH: args.payload.data_manifest_hash || "",
-        TAHUNA_CODE_MANIFEST_KEY: args.payload.code_manifest_key || "",
-        TAHUNA_DATA_MANIFEST_KEY: args.payload.data_manifest_key || "",
-        TAHUNA_API_BASE: runtimeApiBase,
-        TAHUNA_RUNTIME_TOKEN: args.runtimeToken,
-        TAHUNA_WORKSPACE_ROOT: "/workspace",
-        TAHUNA_RUNTIME_REQUEST_TIMEOUT_SECONDS: runtimeRequestTimeoutSeconds,
-        TAHUNA_CANCELLATION_GRACE_SECONDS: String(RUN_CONFIG.cancellationGraceSeconds),
-        WANDB_BASE_URL: wandbBaseURL,
-      },
-      dockerEntrypoint: [runtimeEntrypoint()],
-      ports: ["22/tcp", "8888/http"],
-    }),
-  });
-  const rawText = await response.text();
-  let body: unknown = null;
-  try {
-    body = rawText ? JSON.parse(rawText) : null;
-  } catch {
-    body = null;
-  }
-  if (!response.ok) {
-    const detail =
-      body && typeof body === "object" && "message" in body && typeof (body as Record<string, unknown>).message === "string"
-        ? String((body as Record<string, unknown>).message)
-        : (rawText.trim() || `http ${response.status}`);
-    throw new Error(`Runpod pod creation failed: ${detail}`);
-  }
-  const row = (body || {}) as Record<string, unknown>;
-  const podId = typeof row.id === "string" ? row.id : (typeof row.podId === "string" ? row.podId : "");
-  if (!podId) {
-    throw new Error("Runpod pod creation failed: missing pod id in response");
-  }
-  return {
-    podId,
-    rawResponse: row,
-  };
-}
-
-async function terminateRunpodPod(
-  ctx: ActionCtx,
-  args: {
-    podId: string;
-    runpodCredentialId: Id<"runpodCredentials">;
-  },
-) {
-  if (!args.podId) {
-    return;
-  }
-  const { apiKey } = await resolveRunpodApiKeyByCredentialId(ctx, args.runpodCredentialId);
-  const response = await fetch(`https://rest.runpod.io/v1/pods/${args.podId}`, {
-    method: "DELETE",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-    },
-  });
-  if (response.status === 404) {
-    // Already gone.
-    return;
-  }
-  if (!response.ok) {
-    const detail = (await response.text()).trim();
-    throw new Error(detail || `Runpod pod termination failed: http ${response.status}`);
-  }
-}
-
-function normalizeGpuLabel(value: string) {
-  return value.trim().toLowerCase().replace(/\s+/g, " ");
-}
-
-async function resolveRunpodGpuTypeId(apiKey: string, requestedGpu: string) {
-  const trimmed = requestedGpu.trim();
-  if (!trimmed) {
-    throw new Error("GPU type is empty");
-  }
-  const gpuTypes = await fetchRunpodGpuTypes(apiKey);
-  if (gpuTypes.length === 0) {
-    throw new Error("Runpod GPU catalog is empty");
-  }
-
-  const requestedNorm = normalizeGpuLabel(trimmed);
-  const directMatch = gpuTypes.find((gpu) => typeof gpu.id === "string" && gpu.id === trimmed);
-  if (directMatch?.id) {
-    return directMatch.id;
-  }
-  const displayMatch = gpuTypes.find(
-    (gpu) => typeof gpu.displayName === "string" && normalizeGpuLabel(gpu.displayName) === requestedNorm,
-  );
-  if (displayMatch?.id) {
-    return displayMatch.id;
-  }
-
-  const sample = gpuTypes
-    .slice(0, 10)
-    .map((gpu) => gpu.displayName || gpu.id || "")
-    .filter(Boolean)
-    .join(", ");
-  throw new Error(`Runpod GPU type not found: "${trimmed}". Available examples: ${sample}`);
 }
 
 function normalizeCompatibilityFingerprint(
@@ -1143,48 +947,42 @@ export const internalTerminatePod = internalAction({
     attempt: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    const shouldTerminate = await ctx.runQuery(internal.runs.internalShouldTerminatePod, {
-      runId: args.runId,
-      force: args.force === true,
-    });
-    if (!shouldTerminate) {
-      return;
-    }
-    const attempt = args.attempt ?? 0;
-    let runpodCredentialId: Id<"runpodCredentials"> | null = args.runpodCredentialId ?? null;
-    try {
-      runpodCredentialId = runpodCredentialId
-        ?? await ctx.runQuery(internal.runs.internalGetRunpodCredentialId, { runId: args.runId });
-      if (!runpodCredentialId) {
-        throw new Error("Runpod credential is missing for pod termination");
-      }
-      await terminateRunpodPod(ctx, {
-        podId: args.podId,
-        runpodCredentialId,
-      });
-      await ctx.runMutation(internal.runs.markCancelledAfterTermination, {
-        runId: args.runId,
-        force: args.force === true,
-      });
-    } catch (error) {
-      const detail = error instanceof Error ? error.message : "failed to terminate pod";
-      const nextAttempt = attempt + 1;
-      if (nextAttempt < RUN_CONFIG.terminationRetryMaxAttempts) {
-        await ctx.runMutation(internal.runs.scheduleTerminationRetry, {
+    await terminateRuntimePodWithRetry({
+      ctx,
+      podId: args.podId,
+      runpodCredentialId: args.runpodCredentialId ?? null,
+      attempt: args.attempt ?? 0,
+      shouldTerminate: async () =>
+        await ctx.runQuery(internal.runs.internalShouldTerminatePod, {
           runId: args.runId,
-          podId: args.podId,
-          runpodCredentialId: runpodCredentialId ?? undefined,
           force: args.force === true,
-          attempt: nextAttempt,
-          error: detail,
+        }),
+      resolveCredentialId: async () =>
+        await ctx.runQuery(internal.runs.internalGetRunpodCredentialId, { runId: args.runId }),
+      onTerminated: async () => {
+        await ctx.runMutation(internal.runs.markCancelledAfterTermination, {
+          runId: args.runId,
+          force: args.force === true,
         });
-        return;
-      }
-      await ctx.runMutation(internal.runs.markCancellationTerminationFailed, {
-        runId: args.runId,
-        error: `${detail} (retries exhausted)`,
-      });
-    }
+      },
+      onRetry: async ({ nextAttempt, runpodCredentialId, error }) => {
+        if (nextAttempt < RUN_CONFIG.terminationRetryMaxAttempts) {
+          await ctx.runMutation(internal.runs.scheduleTerminationRetry, {
+            runId: args.runId,
+            podId: args.podId,
+            runpodCredentialId,
+            force: args.force === true,
+            attempt: nextAttempt,
+            error,
+          });
+          return;
+        }
+        await ctx.runMutation(internal.runs.markCancellationTerminationFailed, {
+          runId: args.runId,
+          error: `${error} (retries exhausted)`,
+        });
+      },
+    });
   },
 });
 
@@ -1497,26 +1295,47 @@ export const provisionRun = internalAction({
       if (dataManifestHash && dataManifestKey) {
         await fetchSyncManifest(ctx, "data", dataManifestKey, dataManifestHash);
       }
-      const runtimeToken = generateRuntimeToken();
-      const runtimeTokenHash = await sha256Hex(runtimeToken);
-      await ctx.runMutation(internal.runs.setRuntimeTokenHash, {
-        runId: args.runId,
-        runtimeTokenHash,
+      const provisionResult = await provisionRuntimePod({
+        ctx,
+        shouldAbort: async () =>
+          await ctx.runQuery(internal.runs.internalShouldAbortProvisioning, { runId: args.runId }),
+        setRuntimeTokenHash: async (runtimeTokenHash) => {
+          await ctx.runMutation(internal.runs.setRuntimeTokenHash, {
+            runId: args.runId,
+            runtimeTokenHash,
+          });
+        },
+        createPod: {
+          name: `tahuna-${String(args.runId)}`,
+          runpodCredentialId: runSpec.runpod_credential_id,
+          imageName: compatibilityFingerprint.imageName,
+          gpuType: runSpec.effective_gpu_type,
+          gpuCount: runSpec.effective_gpu_count,
+          volumeGb: runSpec.effective_volume_gb,
+        },
+        buildEnv: ({ runtimeToken, runtimeApiBase, runtimeRequestTimeoutSeconds }) => ({
+          TAHUNA_RUN_ID: provisioningPayload.run_id,
+          TAHUNA_ENVIRONMENT_ID: provisioningPayload.environment_id,
+          TAHUNA_CONTRACT_VERSION: provisioningPayload.contract_version,
+          TAHUNA_INPUT_PATH: provisioningPayload.input_path,
+          TAHUNA_OUTPUT_DIR: provisioningPayload.output_dir,
+          TAHUNA_OUTPUT_PATH: provisioningPayload.output_path,
+          TAHUNA_LOGS_PATH: provisioningPayload.logs_path,
+          TAHUNA_CODE_MANIFEST_HASH: provisioningPayload.code_manifest_hash || "",
+          TAHUNA_DATA_MANIFEST_HASH: provisioningPayload.data_manifest_hash || "",
+          TAHUNA_CODE_MANIFEST_KEY: provisioningPayload.code_manifest_key || "",
+          TAHUNA_DATA_MANIFEST_KEY: provisioningPayload.data_manifest_key || "",
+          TAHUNA_API_BASE: runtimeApiBase,
+          TAHUNA_RUNTIME_TOKEN: runtimeToken,
+          TAHUNA_WORKSPACE_ROOT: "/workspace",
+          TAHUNA_RUNTIME_REQUEST_TIMEOUT_SECONDS: runtimeRequestTimeoutSeconds,
+          TAHUNA_CANCELLATION_GRACE_SECONDS: String(RUN_CONFIG.cancellationGraceSeconds),
+          WANDB_BASE_URL: resolveWandbBaseURL(runtimeApiBase),
+        }),
       });
-      if (await ctx.runQuery(internal.runs.internalShouldAbortProvisioning, { runId: args.runId })) {
+      if (!provisionResult) {
         return null;
       }
-      const provisionResult = await createRunpodPod({
-        ctx,
-        runId: String(args.runId),
-        runpodCredentialId: runSpec.runpod_credential_id,
-        imageName: compatibilityFingerprint.imageName,
-        gpuType: runSpec.effective_gpu_type,
-        gpuCount: runSpec.effective_gpu_count,
-        volumeGb: runSpec.effective_volume_gb,
-        runtimeToken,
-        payload: provisioningPayload,
-      });
       provisionedPodId = provisionResult.podId;
       await ctx.runMutation(internal.runs.markPodProvisioned, {
         runId: args.runId,

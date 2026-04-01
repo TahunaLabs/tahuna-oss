@@ -1,9 +1,18 @@
+import { Workpool } from "@convex-dev/workpool"
 import { ConvexError } from "convex/values"
+import { components, internal } from "@convex/_generated/api"
 import type { Id } from "@convex/_generated/dataModel"
 import type { MutationCtx } from "@convex/_generated/server"
+import { RUN_CONFIG } from "@convex/appConfig"
+import { getLatestActiveRunpodCredentialForUserId } from "@convex/runpodCredentialsStore"
 import { getAccessibleServe } from "@convex/servesAccess"
 import { SERVE_STATUS } from "@convex/servesConstants"
 import { toServeResponse } from "@convex/servesRead"
+
+const provisionPool = new Workpool(components.workpool, {
+  maxParallelism: RUN_CONFIG.workpoolMaxParallelism,
+  retryActionsByDefault: true,
+})
 
 export async function createServeForUserId(
   ctx: MutationCtx,
@@ -39,8 +48,14 @@ export async function createServeForUserId(
       objectCount: number;
       totalBytes: number;
     };
+    enqueueProvisioning?: boolean;
   },
 ) {
+  const runpodCredential = await getLatestActiveRunpodCredentialForUserId(ctx, args.userId)
+  if (!runpodCredential) {
+    throw new ConvexError("No compute provider configured. Add one in Settings → Providers.")
+  }
+
   const now = Date.now()
   const serveId = await ctx.db.insert("serves", {
     userId: args.userId,
@@ -49,6 +64,7 @@ export async function createServeForUserId(
     dataManifestHash: args.serveConfig.dataManifestHash || undefined,
     logs: `serves/${args.environmentId}/${now}/logs`,
     status: SERVE_STATUS.QUEUED,
+    runpodCredentialId: runpodCredential.credentialId,
     modelSnapshot: args.modelSnapshot,
   })
 
@@ -78,6 +94,10 @@ export async function createServeForUserId(
       health_path: args.serveConfig.healthPath,
     },
   })
+
+  if (args.enqueueProvisioning ?? true) {
+    await provisionPool.enqueueAction(ctx, internal.serves.provisionServe, { serveId })
+  }
 
   const row = await ctx.db.get("serves", serveId)
   if (!row) {
@@ -120,6 +140,32 @@ export async function stopServeForUserId(
       forced: force,
     },
   })
+  if (nextStatus === SERVE_STATUS.STOPPING) {
+    await ctx.scheduler.runAfter(0, internal.serves.internalTerminatePod, {
+      serveId,
+      podId: row.podId!,
+      runpodCredentialId: row.runpodCredentialId,
+      force: true,
+    })
+  }
 
   return { serve_id: String(serveId), stop_requested: true, forced: force, status: nextStatus }
+}
+
+export async function scheduleForcedServePodTermination(
+  ctx: MutationCtx,
+  serveId: Id<"serves">,
+  podId: string | undefined,
+  runpodCredentialId: Id<"runpodCredentials"> | undefined,
+) {
+  const podIdValue = podId?.trim() || ""
+  if (!podIdValue) {
+    return
+  }
+  await ctx.scheduler.runAfter(0, internal.serves.internalTerminatePod, {
+    serveId,
+    podId: podIdValue,
+    runpodCredentialId,
+    force: true,
+  })
 }
