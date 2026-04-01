@@ -2,9 +2,10 @@ import { ConvexError, v } from "convex/values"
 import { CopyObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3"
 import { components, internal } from "@convex/_generated/api"
 import type { Id } from "@convex/_generated/dataModel"
-import { internalAction, internalMutation, internalQuery, type ActionCtx } from "@convex/_generated/server"
+import { internalAction, internalMutation, internalQuery, mutation, query, type ActionCtx } from "@convex/_generated/server"
 import { R2 } from "@convex-dev/r2"
 import { RUN_CONFIG } from "@convex/appConfig"
+import { requireUser } from "@convex/auth"
 import { RUN_STATUS } from "@convex/runsConstants"
 import { buildManifestObjectKey } from "@convex/cli/shared"
 import {
@@ -27,7 +28,13 @@ import {
   scheduleForcedServePodTermination,
   stopServeForUserId,
 } from "@convex/servesLifecycle"
-import { listByUserId, toServeLogsResponse, toServeResponse } from "@convex/servesRead"
+import {
+  listByUserId,
+  listSummariesByUserId,
+  toServeLogsOnlyResponse,
+  toServeLogsResponse,
+  toServeResponse,
+} from "@convex/servesRead"
 import { sha256Hex } from "@convex/syncManifest"
 
 const r2 = new R2(components.r2)
@@ -284,6 +291,32 @@ const listServesResponseValidator = v.object({
   serves: v.array(serveResponseValidator),
 })
 
+const serveSummaryModelSnapshotResponseValidator = v.object({
+  source_type: v.union(v.literal("run"), v.literal("storage")),
+  source_run_id: v.union(v.string(), v.null()),
+  source_object_prefix: v.union(v.string(), v.null()),
+  source_model_path: v.union(v.string(), v.null()),
+  object_count: v.number(),
+  total_bytes: v.number(),
+})
+
+const serveSummaryResponseValidator = v.object({
+  serve_id: v.string(),
+  created_at: v.number(),
+  environment_id: v.string(),
+  status: v.string(),
+  error: v.string(),
+  python_version: v.string(),
+  gpu_type: v.string(),
+  gpu_count: v.number(),
+  volume_gb: v.number(),
+  model_snapshot: serveSummaryModelSnapshotResponseValidator,
+})
+
+const listServeSummariesResponseValidator = v.object({
+  serves: v.array(serveSummaryResponseValidator),
+})
+
 const serveLogsResponseValidator = v.object({
   serve_id: v.string(),
   status: v.string(),
@@ -300,6 +333,19 @@ const serveLogsResponseValidator = v.object({
     returned_logs: v.number(),
     includes_pinned_bootstrap: v.boolean(),
   }),
+  recent_logs: v.array(
+    v.object({
+      timestamp: v.number(),
+      level: v.string(),
+      source: v.string(),
+      message: v.string(),
+    }),
+  ),
+})
+
+const serveLogsOnlyResponseValidator = v.object({
+  serve_id: v.string(),
+  status: v.string(),
   recent_logs: v.array(
     v.object({
       timestamp: v.number(),
@@ -640,6 +686,37 @@ function canTransitionServeStatus(current: string, next: string) {
   }
   return false
 }
+
+export const list = query({
+  args: {},
+  returns: listServeSummariesResponseValidator,
+  handler: async (ctx) => {
+    const user = await requireUser(ctx)
+    return listSummariesByUserId(ctx, String(user._id))
+  },
+})
+
+export const getLogs = query({
+  args: { serveId: v.id("serves") },
+  returns: serveLogsOnlyResponseValidator,
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx)
+    const row = await getAccessibleServe(ctx, String(user._id), args.serveId)
+    return toServeLogsOnlyResponse(ctx, row)
+  },
+})
+
+export const stop = mutation({
+  args: {
+    serveId: v.id("serves"),
+    force: v.optional(v.boolean()),
+  },
+  returns: serveStopResponseValidator,
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx)
+    return stopServeForUserId(ctx, String(user._id), args.serveId, args.force === true)
+  },
+})
 
 export const internalList = internalQuery({
   args: { userId: v.string() },

@@ -21,6 +21,17 @@ function toServeModelSnapshotResponse(row: Doc<"serves">) {
   }
 }
 
+function toServeModelSnapshotSummaryResponse(row: Doc<"serves">) {
+  return {
+    source_type: row.modelSnapshot.sourceType,
+    source_run_id: row.modelSnapshot.sourceRunId ? String(row.modelSnapshot.sourceRunId) : null,
+    source_object_prefix: row.modelSnapshot.sourceObjectPrefix || null,
+    source_model_path: row.modelSnapshot.sourceModelPath || null,
+    object_count: row.modelSnapshot.objectCount,
+    total_bytes: row.modelSnapshot.totalBytes,
+  }
+}
+
 export function toServeResponse(row: Doc<"serves">) {
   return {
     serve_id: String(row._id),
@@ -50,6 +61,21 @@ export function toServeResponse(row: Doc<"serves">) {
   }
 }
 
+export function toServeSummaryResponse(row: Doc<"serves">) {
+  return {
+    serve_id: String(row._id),
+    created_at: row._creationTime,
+    environment_id: String(row.environmentId),
+    status: row.status,
+    error: row.error || "",
+    python_version: row.pythonVersion,
+    gpu_type: row.gpuType,
+    gpu_count: row.gpuCount,
+    volume_gb: row.volumeGb,
+    model_snapshot: toServeModelSnapshotSummaryResponse(row),
+  }
+}
+
 export async function listByUserId(ctx: QueryCtx, userId: string) {
   const rows = await ctx.db
     .query("serves")
@@ -58,6 +84,17 @@ export async function listByUserId(ctx: QueryCtx, userId: string) {
     .collect()
   return {
     serves: rows.map((row) => toServeResponse(row)),
+  }
+}
+
+export async function listSummariesByUserId(ctx: QueryCtx, userId: string) {
+  const rows = await ctx.db
+    .query("serves")
+    .withIndex("by_user", (q) => q.eq("userId", userId))
+    .order("desc")
+    .collect()
+  return {
+    serves: rows.map((row) => toServeSummaryResponse(row)),
   }
 }
 
@@ -127,6 +164,15 @@ export async function toServeLogsResponse(ctx: QueryCtx, row: Doc<"serves">) {
     log_file: `${row.logs}/serve.log`,
     note: "Runtime logs are streamed by the serve runtime and persisted in Convex.",
     logs_window: recentLogs.window,
+    recent_logs: recentLogs.logs,
+  }
+}
+
+export async function toServeLogsOnlyResponse(ctx: QueryCtx, row: Doc<"serves">) {
+  const recentLogs = await listRecentRuntimeLogs(ctx, row._id)
+  return {
+    serve_id: String(row._id),
+    status: row.status,
     recent_logs: recentLogs.logs,
   }
 }

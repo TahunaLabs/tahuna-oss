@@ -78,6 +78,39 @@ export type ServeSnapshot = {
   graceful_shutdown_seconds: number
 }
 
+export type ServeModelSnapshot = {
+  source_type: "run" | "storage"
+  source_run_id: string | null
+  source_object_prefix: string | null
+  source_model_path: string | null
+  object_count: number
+  total_bytes: number
+}
+
+export type ServeRow = {
+  serve_id: Id<"serves">
+  created_at: number
+  environment_id: string
+  status: string
+  error: string
+  python_version: string
+  gpu_type: string
+  gpu_count: number
+  volume_gb: number
+  model_snapshot: ServeModelSnapshot
+}
+
+export type ServeLogsOnlyDetail = {
+  serve_id: string
+  status: string
+  recent_logs: Array<{
+    timestamp: number
+    level: string
+    source: string
+    message: string
+  }>
+}
+
 export type EnvironmentRow = {
   environment_id: Id<"environments">
   data_id: string
