@@ -25,7 +25,7 @@ const layers = [
   {
     title: "Serve",
     owner: "tahuna serve",
-    detail: "Tahuna provisions inference compute, materializes a pinned model snapshot, installs the serve dependencies, and launches your inference.py entrypoint.",
+    detail: "Tahuna provisions inference compute, loads a pinned model snapshot, installs what your service needs, and brings it online.",
     statA: "Inference-ready",
     statB: "Health-checked",
   },
