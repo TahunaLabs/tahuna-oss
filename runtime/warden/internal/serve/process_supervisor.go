@@ -28,6 +28,12 @@ type processSupervisor struct {
 }
 
 func startProcessSupervisor(cmd *exec.Cmd) (*processSupervisor, error) {
+	if cmd.SysProcAttr == nil {
+		cmd.SysProcAttr = &syscall.SysProcAttr{}
+	}
+	// Own the process group so shutdown applies to shell wrappers and their children.
+	cmd.SysProcAttr.Setpgid = true
+
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return nil, fmt.Errorf("create stdout pipe: %w", err)
@@ -182,23 +188,42 @@ func (s *processSupervisor) wait() {
 }
 
 func (s *processSupervisor) signal(sig syscall.Signal) error {
-	if s == nil || s.cmd == nil || s.cmd.Process == nil {
-		return nil
+	pgid, err := s.processGroupID()
+	if err != nil || pgid == 0 {
+		return err
 	}
-	if err := s.cmd.Process.Signal(sig); err != nil && !errors.Is(err, os.ErrProcessDone) {
+	if err := syscall.Kill(-pgid, sig); err != nil && !errors.Is(err, syscall.ESRCH) {
 		return err
 	}
 	return nil
 }
 
 func (s *processSupervisor) kill() error {
-	if s == nil || s.cmd == nil || s.cmd.Process == nil {
-		return nil
+	pgid, err := s.processGroupID()
+	if err != nil || pgid == 0 {
+		return err
 	}
-	if err := s.cmd.Process.Kill(); err != nil && !errors.Is(err, os.ErrProcessDone) {
+	if err := syscall.Kill(-pgid, syscall.SIGKILL); err != nil && !errors.Is(err, syscall.ESRCH) {
 		return err
 	}
 	return nil
+}
+
+func (s *processSupervisor) processGroupID() (int, error) {
+	if s == nil || s.cmd == nil || s.cmd.Process == nil {
+		return 0, nil
+	}
+	pgid, err := syscall.Getpgid(s.cmd.Process.Pid)
+	if err != nil {
+		if errors.Is(err, syscall.ESRCH) {
+			return 0, nil
+		}
+		return 0, err
+	}
+	if pgid <= 0 {
+		return 0, nil
+	}
+	return pgid, nil
 }
 
 func isBenignStreamReadError(err error) bool {
