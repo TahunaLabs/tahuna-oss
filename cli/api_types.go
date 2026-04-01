@@ -16,6 +16,77 @@ type serveSnapshotResponse struct {
 	GracefulShutdownSeconds int64    `json:"graceful_shutdown_seconds"`
 }
 
+type serveModelSnapshotResponse struct {
+	SourceType         string `json:"source_type"`
+	SourceRunID        string `json:"source_run_id"`
+	SourceObjectPrefix string `json:"source_object_prefix"`
+	SourceModelPath    string `json:"source_model_path"`
+	ObjectPrefix       string `json:"object_prefix"`
+	ManifestKey        string `json:"manifest_key"`
+	ManifestHash       string `json:"manifest_hash"`
+	ObjectCount        int64  `json:"object_count"`
+	TotalBytes         int64  `json:"total_bytes"`
+}
+
+type serveResponse struct {
+	ServeID                 string                     `json:"serve_id"`
+	CreatedAt               int64                      `json:"created_at"`
+	EnvironmentID           string                     `json:"environment_id"`
+	Command                 []string                   `json:"command"`
+	OutputDir               string                     `json:"output_dir"`
+	Logs                    string                     `json:"logs"`
+	Status                  string                     `json:"status"`
+	Error                   string                     `json:"error"`
+	PodID                   string                     `json:"pod_id"`
+	CodeManifestHash        string                     `json:"code_manifest_hash"`
+	DataManifestHash        string                     `json:"data_manifest_hash"`
+	PythonVersion           string                     `json:"python_version"`
+	GPUType                 string                     `json:"gpu_type"`
+	GPUCount                int64                      `json:"gpu_count"`
+	VolumeGB                int64                      `json:"volume_gb"`
+	Port                    int64                      `json:"port"`
+	HealthPath              string                     `json:"health_path"`
+	DefaultModelPath        string                     `json:"default_model_path"`
+	StartupTimeoutSeconds   int64                      `json:"startup_timeout_seconds"`
+	HealthIntervalSeconds   int64                      `json:"health_interval_seconds"`
+	HealthTimeoutSeconds    int64                      `json:"health_timeout_seconds"`
+	HealthFailureThreshold  int64                      `json:"health_failure_threshold"`
+	GracefulShutdownSeconds int64                      `json:"graceful_shutdown_seconds"`
+	ModelSnapshot           serveModelSnapshotResponse `json:"model_snapshot"`
+}
+
+type servesResponse struct {
+	Serves []serveResponse `json:"serves"`
+}
+
+type serveLogsWindowResponse struct {
+	TailLimit               int64 `json:"tail_limit"`
+	StartupScanLimit        int64 `json:"startup_scan_limit"`
+	PinnedBootstrapLimit    int64 `json:"pinned_bootstrap_limit"`
+	ScannedTail             int64 `json:"scanned_tail"`
+	ScannedStartup          int64 `json:"scanned_startup"`
+	PinnedBootstrapCount    int64 `json:"pinned_bootstrap_count"`
+	ReturnedLogs            int64 `json:"returned_logs"`
+	IncludesPinnedBootstrap bool  `json:"includes_pinned_bootstrap"`
+}
+
+type serveLogsResponse struct {
+	ServeID    string                  `json:"serve_id"`
+	Status     string                  `json:"status"`
+	LogsPath   string                  `json:"logs_path"`
+	LogFile    string                  `json:"log_file"`
+	Note       string                  `json:"note"`
+	LogsWindow serveLogsWindowResponse `json:"logs_window"`
+	RecentLogs []logLineResponse       `json:"recent_logs"`
+}
+
+type stopServeResponse struct {
+	ServeID       string `json:"serve_id"`
+	StopRequested bool   `json:"stop_requested"`
+	Forced        bool   `json:"forced"`
+	Status        string `json:"status"`
+}
+
 // environmentResponse represents a single environment from the API.
 type environmentResponse struct {
 	EnvironmentID string                 `json:"environment_id"`

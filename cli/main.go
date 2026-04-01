@@ -67,6 +67,8 @@ func main() {
 		handleData(os.Args[2:])
 	case "run":
 		handleRun(os.Args[2:])
+	case "serve":
+		handleServe(os.Args[2:])
 	case "sync":
 		handleSync(os.Args[2:])
 	case "train":
@@ -103,6 +105,7 @@ Usage:
   tahuna gpus list
   tahuna data list|show ...
   tahuna run create|rename|list|show|watch|logs|cancel|rm ...
+  tahuna serve create|list|show|logs|stop ...
   tahuna up
   tahuna version
 
@@ -118,6 +121,15 @@ Run commands:
   tahuna run logs <run_id|run_name> [--verbose] [--follow]
   tahuna run cancel <run_id|run_name> [-f]
   tahuna run rm <run_id|run_name|pattern>... [--all|-a] [--cancel|-c] [--force|-f]
+
+Serve commands:
+  tahuna serve help
+  tahuna serve create --from-run <run_id> [--model-path <path>]
+  tahuna serve create --from-storage-prefix <prefix>
+  tahuna serve list
+  tahuna serve show <serve_id>
+  tahuna serve logs <serve_id>
+  tahuna serve stop <serve_id> [--force|-f]
 
 Environment:
   tahuna env list [--verbose]
