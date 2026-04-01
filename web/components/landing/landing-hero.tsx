@@ -23,8 +23,8 @@ export function LandingHero() {
             </div>
 
             <Button asChild variant="outline" size="lg" className="self-start rounded-full px-8">
-              <Link href="/login">
-                Try it
+              <Link href="https://cal.com/monaimel/15min">
+                Talk to an engineer
                 <ArrowRight />
               </Link>
             </Button>
