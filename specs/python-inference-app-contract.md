@@ -352,6 +352,18 @@ If `[serve].command` is configured, Tahuna launches serving with that command in
 
 Tahuna does not define the inference payload schema in this contract. Tahuna only defines readiness and lifecycle.
 
+### User Traffic Boundary
+
+Tahuna owns the public inference edge.
+
+Rules:
+
+- end users and clients must call Tahuna API routes to talk to a serve
+- direct provider URLs such as public RunPod proxy URLs are not part of the canonical user-facing contract
+- Tahuna authenticates user inference requests with normal user session or API-key auth before proxying them to the running serve
+- `inference.py` is responsible for inference behavior only; it is not responsible for validating Tahuna user sessions or API keys
+- `inference.py` should assume proxied HTTP traffic from Tahuna on the configured serve port
+
 ### Process Ownership
 
 Tahuna supervises the process tree rooted at the resolved serve command.
@@ -450,6 +462,26 @@ The exact payloads may be specified separately, but the serving contract require
 - bootstrap delivery of the code, optional data, and pinned model materialization plan plus runtime settings
 - status updates for serve lifecycle transitions
 - log streaming or batched log upload from the supervised process
+
+The runtime token is an internal control-plane credential only.
+
+Rules:
+
+- `TAHUNA_RUNTIME_TOKEN` authenticates Warden-to-Tahuna runtime callbacks only
+- `TAHUNA_RUNTIME_TOKEN` is not a user credential and is not the public serve authentication model
+- user inference requests must not be sent directly to the runtime callback surface
+
+## User Inference Access Contract
+
+Tahuna proxies user inference traffic to the running serve after authenticating and authorizing the caller.
+
+This contract intentionally does not freeze the external inference payload schema, but it does freeze the ownership boundary:
+
+- Tahuna API is the only canonical public entrypoint for a serve
+- the backing serve process listens on the internal configured HTTP port only
+- public access must not require users to discover or call provider-specific pod URLs
+- the provider network endpoint is replaceable infrastructure detail, not product contract
+- Tahuna may preserve the app-defined HTTP method, path, headers, and body when proxying, subject to future API-surface rules
 
 ## Readiness And Health
 
@@ -566,6 +598,7 @@ The binary `tritonserver` is a different runtime contract and is out of scope fo
 - non-Python serving binaries such as `tritonserver`
 - user-provided Docker images
 - model serving by pointing directly at mutable run artifacts
+- direct public provider endpoints as the canonical user-facing inference access model
 - automatic inference payload schema
 - artifact upload from serve pods in MVP
 - autoscaling in MVP
@@ -582,6 +615,8 @@ The binary `tritonserver` is a different runtime contract and is out of scope fo
 - serving uses a pinned model snapshot at `TAHUNA_MODEL_ROOT`
 - serving health is determined by a local HTTP probe
 - Tahuna manages infrastructure and lifecycle; the user manages Python app behavior
+- user-facing inference access terminates at Tahuna API, not at raw provider pod URLs
+- `TAHUNA_RUNTIME_TOKEN` is internal-only and is not user auth
 
 ## Acceptance Criteria
 
@@ -597,6 +632,7 @@ The implementation satisfies this contract only if all of the following are true
 - a stopped serve transitions to `stopped`, not `failed`
 - `TAHUNA_WORKSPACE_ROOT`, `TAHUNA_MODEL_ROOT`, `TAHUNA_DATA_DIR`, and `TAHUNA_OUTPUT_DIR` are absolute paths inside `/workspace`
 - the implementation does not require engine selection in `tahuna.toml`
+- a user can invoke a running serve through Tahuna-authenticated API access without calling a provider-specific pod URL directly
 
 ## Suggested Implementation PR Order
 

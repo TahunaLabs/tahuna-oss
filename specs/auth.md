@@ -2,15 +2,23 @@
 
 ## Scope
 
-Single-user email OTP authentication with CLI-initiated machine/session provisioning (implemented with API keys under the hood). No OAuth providers, no team/org accounts.
+Single-user email OTP authentication with:
+
+- CLI-initiated machine/session provisioning implemented with API keys under the hood
+- authenticated Tahuna API access for user-facing serve inference requests
+
+No OAuth providers, no team/org accounts.
 
 ## Elements
 
 | Element | Type | Description |
 |---------|------|-------------|
 | User account | Backend record | Email-identified user created via Better Auth |
+| Browser session | Credential | Better Auth web session for authenticated dashboard/API usage |
 | API key | Credential | SHA256-hashed bearer token stored in `apiKeys` table |
 | Machine/session | Backend projection | User-visible machine identity mapped to latest active key |
+| Runtime token | Internal credential | Opaque bearer token used only by Tahuna-managed pods for runtime callbacks |
+| Serve inference proxy | API surface | Tahuna-authenticated API route family that proxies user inference traffic to a running serve |
 | CLI config file | Local file | `~/.config/tahuna/config.env` stores `TAHUNA_API_KEY` |
 | Browser auth page | Web page | `/auth/cli` — email OTP entry + callback redirect |
 
@@ -73,6 +81,32 @@ CLI                          Browser                      Backend
 5. Update `lastUsedAt` timestamp.
 6. Return associated `userId`.
 
+## Serve Inference Access
+
+User-facing inference requests for a running serve must terminate at Tahuna API routes, not at raw provider URLs.
+
+Rules:
+
+- Tahuna-authenticated browser sessions may call serve inference routes.
+- Tahuna API keys may call serve inference routes.
+- direct provider endpoints such as public RunPod proxy URLs are implementation detail only and are not the canonical user-facing contract
+- Tahuna must authorize the caller against the target serve before proxying the request
+- Tahuna must forward the authenticated request to the backing serve process on the internal serve port
+- the Python app behind the serve is not responsible for validating Tahuna user sessions or API keys
+- runtime tokens are internal-only and must never be accepted as user inference credentials
+
+### Credential Boundary
+
+There are two distinct auth surfaces:
+
+1. User auth.
+   Browser session or API key used by humans, CLI clients, and future SDKs to call Tahuna API.
+
+2. Runtime auth.
+   Opaque runtime bearer token used only by Tahuna-managed pods to call runtime callback endpoints such as bootstrap, status, logs, and metrics.
+
+Runtime auth is not JWT-based user auth and must not be exposed as the public inference authentication model.
+
 ## Invariants
 
 - API keys are never stored in plaintext on the backend.
@@ -80,6 +114,8 @@ CLI                          Browser                      Backend
 - The CLI never prompts for a password. Authentication is always browser-delegated.
 - The local callback server binds to `127.0.0.1` only (no network exposure).
 - The `state` parameter must match between the auth request and the callback to prevent CSRF.
+- User-facing serve inference never depends on direct provider endpoint access.
+- Runtime tokens are internal-only credentials and are never a substitute for user auth.
 
 ## Error States
 
