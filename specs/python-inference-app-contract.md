@@ -25,11 +25,14 @@ This section is non-normative. It records rollout status in the current codebase
   Serve creation now requires exactly one model source (`from_run_id` or `from_storage_prefix`), copies model objects into a serve-owned immutable prefix under `serves/<environmentId>/.../model`, writes a pinned snapshot manifest JSON, and persists `objectPrefix`, `manifestKey`, `manifestHash`, `objectCount`, and `totalBytes` on the serve row.
 - PR6 is done.
   Serve bootstrap now resolves concrete model download entries from the pinned snapshot manifest, `runtime/warden` materializes `/workspace/model`, installs base dependencies plus the `serve` group only, launches the serve command, sets serve runtime env vars, and supervises readiness/liveness with serve status callbacks.
-- PR7 and PR8 are still pending.
+- PR7 is done.
+  Serve creation now enqueues real backend provisioning, resolves a canonical serve runtime launch spec, launches compute in Warden serve mode, reconciles runtime callbacks into canonical serve status transitions, and tears down serve compute on stop and failure paths.
+- PR8 is still pending.
+  The backend no longer requires manual provisioning work, but the product still lacks canonical CLI `tahuna serve ...` commands.
 - PR9 is in progress.
   The dashboard already exposes synced serving config, but end-to-end serve workflows, examples, and final documentation are still incomplete.
-- The next implementation step is PR7.
-  The product still lacks full serve provisioning orchestration and CLI `tahuna serve ...` flows.
+- The next implementation step is PR8.
+  The backend provisioning path is real, but the product still lacks canonical CLI `tahuna serve ...` flows.
 
 ## Scope
 
@@ -617,7 +620,7 @@ This section is non-normative. It exists to guide implementation sequencing.
 6. PR6: Warden serve mode. Status: done.
    Generalize the runtime bootstrap path to support serving, model materialization, process supervision, readiness polling, liveness polling, and stop semantics.
 
-7. PR7: Serve provisioning backend. Status: pending.
+7. PR7: Serve provisioning backend. Status: done.
    Add backend provisioning orchestration for create, start, stop, failure handling, and runtime callbacks.
 
 8. PR8: CLI serve commands. Status: pending.
