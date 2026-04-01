@@ -84,7 +84,6 @@ func resolveTrainEnvironment(baseEnv []string) []string {
 	environment = append(environment, "WANDB_API_KEY="+runtimeToken)
 	return environment
 }
-
 func RunEntrypoint(
 	ctx context.Context,
 	workspaceRoot string,
