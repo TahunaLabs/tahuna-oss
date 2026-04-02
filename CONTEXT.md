@@ -113,9 +113,10 @@ Current serve state as of 2026-04-02:
 - `[x]` the `qwen-yoda-lora` example now trains and serves end-to-end from a completed run artifact
 - `[x]` the dashboard `Serving` page now shows actual serves with user-facing status/source/compute information plus logs and stop actions
 - `[x]` Hugging Face caches are routed under the workspace volume for both train and serve to avoid root-disk exhaustion during model downloads
-- `[ ]` authenticated Tahuna inference proxy is not implemented yet
-- `[ ]` canonical invoke UX is not implemented yet; current live inference still uses provider URLs in practice
-- `[ ]` serve product polish remains after the proxy lands (final dashboard/API invoke surface and end-user-facing docs)
+- `[x]` Tahuna now exposes an authenticated serve inference proxy rooted at `/api/serves/{serve_id}/inference[/...]`
+- `[x]` the minimal canonical invoke surface exists in both the API payloads and user-facing surfaces without freezing the user app's payload schema
+- `[x]` the proxy is app-agnostic transport/auth plumbing: Tahuna owns auth/proxying and the user app owns inference request/response semantics
+- `[ ]` inference hardening remains after the proxy landing: provider metadata leakage, browser-session protections, request limits, timeout guardrails, and provider isolation still need tightening
 
 ## 4) API Contract Status (CLI <-> Convex)
 
@@ -178,6 +179,11 @@ Current operational note:
 - [`web/app/auth/cli/page.tsx`](/Users/pazuzzu/Desktop/gigi/boob-ai/web/app/auth/cli/page.tsx)
   - browser authorization step for CLI login callback flow
 
+- [`web/app/api/serves/[serveId]/inference/[[...path]]/route.ts`](/Users/mounselam/Developer/tahuna/web/app/api/serves/[serveId]/inference/[[...path]]/route.ts)
+  - Tahuna-owned serve inference proxy route
+  - authenticates browser-session or API-key callers at the Tahuna edge
+  - preserves app-defined HTTP paths under `/api/serves/{serve_id}/inference/...`
+
 ### Convex Backend (`/web/convex`)
 
 - [`web/convex/schema.ts`](/Users/pazuzzu/Desktop/gigi/boob-ai/web/convex/schema.ts)
@@ -228,7 +234,8 @@ Most realistic current path:
 6. If no GPU capacity is available, CLI returns a strict create error; in interactive mode it prompts for alternate GPU selection and retries.
 7. Use `tahuna serve create --from-run <run_id>` to turn a completed run artifact into a managed serve.
 8. Use CLI + dashboard to inspect runs, serves, and synced data.
-9. Inference currently reaches the live serve through the provider URL in practice; the Tahuna-authenticated inference proxy is the next serve slice.
+9. Invoke a running serve through Tahuna at `/api/serves/{serve_id}/inference[/...]`.
+10. Remaining serve work is now hardening and provider isolation, not inventing a new example-specific inference schema.
 
 ## 7) Product Decisions (locked 2026-03-09)
 

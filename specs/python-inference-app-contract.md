@@ -29,10 +29,12 @@ This section is non-normative. It records rollout status in the current codebase
   Serve creation now enqueues real backend provisioning, resolves a canonical serve runtime launch spec, launches compute in Warden serve mode, reconciles runtime callbacks into canonical serve status transitions, and tears down serve compute on stop and failure paths.
 - PR8 is done.
   The CLI now has canonical `tahuna serve create`, `list`, `show`, `logs`, and `stop` commands, reuses the existing run/train output and help patterns, and supports interactive GPU fallback when RunPod capacity is unavailable.
-- PR9 is in progress.
+- PR9 is done.
   The dashboard now shows actual serves instead of synced config snapshots, exposes logs and stop actions without surfacing operator-only fields on the main surface, the `qwen-yoda-lora` example is now trainable and serveable end-to-end from a completed run, and runtime Hugging Face caches are routed to the workspace volume for both train and serve.
-- The next implementation step is the authenticated Tahuna serve inference proxy.
-  The core serve path now works end-to-end, but user inference still reaches the backing serve through provider URLs in practice instead of a canonical Tahuna-authenticated API surface and invoke UX.
+- PR10 is done.
+  Tahuna now exposes an authenticated serve inference proxy rooted at `/api/serves/{serve_id}/inference[/...]`, accepts browser-session or API-key auth at the Tahuna edge, and adds a minimal canonical invoke surface without freezing the user app's inference payload schema.
+- The next implementation step is inference hardening and provider isolation.
+  The proxy surface now exists, but the next slice must remove provider metadata leakage, tighten browser-session protections, add request and timeout guardrails, and make direct provider access non-viable without turning the proxy into an example-specific API adapter.
 
 ## Scope
 
@@ -85,6 +87,9 @@ The user owns:
 
 8. Python apps only.
    This contract covers Python entrypoints executed by `python -u ...`. It does not cover non-Python serving binaries.
+
+9. Tahuna-owned public inference edge.
+   Tahuna owns authentication, authorization, proxying, provider isolation, and related guardrails at the public serve edge. The user app owns request and response semantics.
 
 ## Canonical Project Files
 
@@ -359,8 +364,12 @@ Tahuna owns the public inference edge.
 Rules:
 
 - end users and clients must call Tahuna API routes to talk to a serve
+- the canonical route family is rooted at `/api/serves/{serve_id}/inference`
+- optional nested path suffixes under `/api/serves/{serve_id}/inference/...` are part of the transport contract so user apps can expose app-defined HTTP routes
 - direct provider URLs such as public RunPod proxy URLs are not part of the canonical user-facing contract
 - Tahuna authenticates user inference requests with normal user session or API-key auth before proxying them to the running serve
+- Tahuna's public inference edge is transport and auth plumbing, not an inference-schema adapter
+- Tahuna must not require the current example app's route layout or an OpenAI-compatible payload shape in order to invoke a serve
 - `inference.py` is responsible for inference behavior only; it is not responsible for validating Tahuna user sessions or API keys
 - `inference.py` should assume proxied HTTP traffic from Tahuna on the configured serve port
 
@@ -478,10 +487,14 @@ Tahuna proxies user inference traffic to the running serve after authenticating 
 This contract intentionally does not freeze the external inference payload schema, but it does freeze the ownership boundary:
 
 - Tahuna API is the only canonical public entrypoint for a serve
+- the canonical invoke root is `/api/serves/{serve_id}/inference`
+- Tahuna may preserve an app-defined nested path suffix under `/api/serves/{serve_id}/inference/...`
 - the backing serve process listens on the internal configured HTTP port only
 - public access must not require users to discover or call provider-specific pod URLs
 - the provider network endpoint is replaceable infrastructure detail, not product contract
 - Tahuna may preserve the app-defined HTTP method, path, headers, and body when proxying, subject to future API-surface rules
+- Tahuna must not hardcode the current example app's routes or payload schema into the public auth or proxy layer
+- hardening work must preserve arbitrary user-defined HTTP inference logic even if the public surface becomes stricter about auth, limits, or provider isolation
 
 ## Readiness And Health
 
@@ -600,6 +613,7 @@ The binary `tritonserver` is a different runtime contract and is out of scope fo
 - model serving by pointing directly at mutable run artifacts
 - direct public provider endpoints as the canonical user-facing inference access model
 - automatic inference payload schema
+- tying the public inference auth or proxy contract to the current example app's request or response shape
 - artifact upload from serve pods in MVP
 - autoscaling in MVP
 - rolling updates or blue-green deployment in MVP
@@ -633,6 +647,7 @@ The implementation satisfies this contract only if all of the following are true
 - `TAHUNA_WORKSPACE_ROOT`, `TAHUNA_MODEL_ROOT`, `TAHUNA_DATA_DIR`, and `TAHUNA_OUTPUT_DIR` are absolute paths inside `/workspace`
 - the implementation does not require engine selection in `tahuna.toml`
 - a user can invoke a running serve through Tahuna-authenticated API access without calling a provider-specific pod URL directly
+- a user-defined serve route under the app's own HTTP surface can be reached through `/api/serves/{serve_id}/inference/...` without requiring Tahuna to rewrite the request into an example-specific schema
 
 ## Suggested Implementation PR Order
 
@@ -662,5 +677,11 @@ This section is non-normative. It exists to guide implementation sequencing.
 8. PR8: CLI serve commands. Status: done.
    Add `tahuna serve create`, `list`, `show`, `logs`, and `stop`.
 
-9. PR9: Docs, examples, and dashboard. Status: in progress.
-   The dashboard now shows actual serves with user-facing status/source/compute details, the example serve flow now works end-to-end, and the auth direction is documented, but the authenticated Tahuna inference proxy and canonical invoke UX are still pending.
+9. PR9: Docs, examples, and dashboard. Status: done.
+   The dashboard now shows actual serves with user-facing status/source/compute details, the example serve flow now works end-to-end, and the serving docs align with the shipped app-centric contract.
+
+10. PR10: Authenticated Tahuna inference proxy. Status: done.
+    Add the Tahuna-owned inference proxy and minimal canonical invoke surface at `/api/serves/{serve_id}/inference[/...]` without freezing the user app's payload schema.
+
+11. PR11: Inference hardening and provider isolation. Status: next.
+    Remove provider metadata leakage from public surfaces, tighten browser-session protections, add proxy guardrails, and make direct provider access non-canonical in practice while preserving app-agnostic HTTP passthrough semantics.

@@ -5,7 +5,7 @@
 Single-user email OTP authentication with:
 
 - CLI-initiated machine/session provisioning implemented with API keys under the hood
-- authenticated Tahuna API access for user-facing serve inference requests
+- authenticated Tahuna API access for user-facing serve inference requests through a Tahuna-owned proxy surface
 
 No OAuth providers, no team/org accounts.
 
@@ -18,7 +18,7 @@ No OAuth providers, no team/org accounts.
 | API key | Credential | SHA256-hashed bearer token stored in `apiKeys` table |
 | Machine/session | Backend projection | User-visible machine identity mapped to latest active key |
 | Runtime token | Internal credential | Opaque bearer token used only by Tahuna-managed pods for runtime callbacks |
-| Serve inference proxy | API surface | Tahuna-authenticated API route family that proxies user inference traffic to a running serve |
+| Serve inference proxy | API surface | Tahuna-authenticated API route family rooted at `/api/serves/{serve_id}/inference[/...]` that proxies user inference traffic to a running serve |
 | CLI config file | Local file | `~/.config/tahuna/config.env` stores `TAHUNA_API_KEY` |
 | Browser auth page | Web page | `/auth/cli` — email OTP entry + callback redirect |
 
@@ -85,12 +85,21 @@ CLI                          Browser                      Backend
 
 User-facing inference requests for a running serve must terminate at Tahuna API routes, not at raw provider URLs.
 
+Canonical route family:
+
+- `/api/serves/{serve_id}/inference`
+- `/api/serves/{serve_id}/inference/...`
+
 Rules:
 
 - Tahuna-authenticated browser sessions may call serve inference routes.
 - Tahuna API keys may call serve inference routes.
 - direct provider endpoints such as public RunPod proxy URLs are implementation detail only and are not the canonical user-facing contract
+- Tahuna owns the public inference edge as an app-agnostic transport and auth layer
 - Tahuna must authorize the caller against the target serve before proxying the request
+- Tahuna must not require an example-specific or OpenAI-specific inference payload schema at the auth boundary
+- Tahuna may preserve the app-defined HTTP method, path, query string, headers, and body when proxying, subject to future public-surface rules
+- the Python app behind the serve owns inference request and response semantics
 - Tahuna must forward the authenticated request to the backing serve process on the internal serve port
 - the Python app behind the serve is not responsible for validating Tahuna user sessions or API keys
 - runtime tokens are internal-only and must never be accepted as user inference credentials
@@ -115,6 +124,7 @@ Runtime auth is not JWT-based user auth and must not be exposed as the public in
 - The local callback server binds to `127.0.0.1` only (no network exposure).
 - The `state` parameter must match between the auth request and the callback to prevent CSRF.
 - User-facing serve inference never depends on direct provider endpoint access.
+- User-facing serve inference uses a Tahuna-owned proxy surface and is not tied to the current example app's payload shape or route layout.
 - Runtime tokens are internal-only credentials and are never a substitute for user auth.
 
 ## Error States
