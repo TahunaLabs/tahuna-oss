@@ -78,10 +78,34 @@ def build_command() -> list[str]:
     return command
 
 
+def log_example_inference(model_name: str) -> None:
+    base_url = f"http://127.0.0.1:{PORT}"
+    LOGGER.info("example_models_curl=%s", shlex.join(["curl", "-sS", f"{base_url}/v1/models"]))
+    payload = (
+        '{"model":"%s","messages":[{"role":"system","content":"You are Yoda."},'
+        '{"role":"user","content":"Speak about patience in one sentence."}],"temperature":0,"max_tokens":80}'
+    ) % model_name
+    LOGGER.info(
+        "example_chat_curl=%s",
+        shlex.join(
+            [
+                "curl",
+                "-sS",
+                f"{base_url}/v1/chat/completions",
+                "-H",
+                "Content-Type: application/json",
+                "-d",
+                payload,
+            ]
+        ),
+    )
+
+
 def main() -> None:
     example_file = ensure_model_root()
     base_model_name = load_adapter_base_model()
     mode = "lora-adapter" if base_model_name else "full-model"
+    model_name = LORA_NAME if base_model_name else str(MODEL_ROOT)
     command = build_command()
     LOGGER.info(
         "mode=%s model_root=%s example_file=%s health_path=%s port=%s",
@@ -93,9 +117,12 @@ def main() -> None:
     )
     if base_model_name:
         LOGGER.info("base_model=%s lora_name=%s", base_model_name, LORA_NAME)
+    log_example_inference(model_name)
     LOGGER.info("launching %s", shlex.join(command))
     os.execvp(command[0], command)
 
 
 if __name__ == "__main__":
+    # Example inference commands are logged during startup so the serve output
+    # always includes a local smoke-test for the current vLLM route and model.
     main()
