@@ -44,7 +44,6 @@ export function toServeResponse(row: Doc<"serves">) {
     logs: row.logs,
     status: row.status,
     error: row.error || "",
-    pod_id: row.podId || "",
     code_manifest_hash: row.codeManifestHash || "",
     data_manifest_hash: row.dataManifestHash || "",
     python_version: row.pythonVersion,
@@ -60,6 +59,16 @@ export function toServeResponse(row: Doc<"serves">) {
     health_failure_threshold: row.healthFailureThreshold,
     graceful_shutdown_seconds: row.gracefulShutdownSeconds,
     model_snapshot: toServeModelSnapshotResponse(row),
+  }
+}
+
+export function toServeInferenceTarget(row: Doc<"serves">) {
+  return {
+    serve_id: String(row._id),
+    status: row.status,
+    pod_id: row.podId || "",
+    port: row.port,
+    inference_path: serveInferencePath(String(row._id)),
   }
 }
 

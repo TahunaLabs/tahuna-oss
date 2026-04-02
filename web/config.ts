@@ -48,6 +48,11 @@ export const RUN_CONFIG = {
   workpoolMaxParallelism: 3,
 } as const;
 
+export const INFERENCE_PROXY_CONFIG = {
+  maxRequestBytes: 10 * MIB,
+  upstreamTimeoutMs: 120 * 1000,
+} as const;
+
 export const SYNC_CONFIG = {
   commitRetryAttempts: 8,
   commitRetryReuploadAttempt: 4,

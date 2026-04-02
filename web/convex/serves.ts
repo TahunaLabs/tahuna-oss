@@ -1,8 +1,8 @@
 import { ConvexError, v } from "convex/values"
 import { CopyObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3"
-import { components, internal } from "@convex/_generated/api"
+import { api, components, internal } from "@convex/_generated/api"
 import type { Id } from "@convex/_generated/dataModel"
-import { internalAction, internalMutation, internalQuery, mutation, query, type ActionCtx } from "@convex/_generated/server"
+import { action, internalAction, internalMutation, internalQuery, mutation, query, type ActionCtx } from "@convex/_generated/server"
 import { R2 } from "@convex-dev/r2"
 import { RUN_CONFIG } from "@convex/appConfig"
 import { requireUser } from "@convex/auth"
@@ -31,6 +31,7 @@ import {
 import {
   listByUserId,
   listSummariesByUserId,
+  toServeInferenceTarget,
   toServeLogsOnlyResponse,
   toServeLogsResponse,
   toServeResponse,
@@ -80,7 +81,6 @@ type ServeResponse = {
   logs: string
   status: string
   error: string
-  pod_id: string
   code_manifest_hash: string
   data_manifest_hash: string
   python_version: string
@@ -264,7 +264,6 @@ const serveResponseValidator = v.object({
   logs: v.string(),
   status: v.string(),
   error: v.string(),
-  pod_id: v.string(),
   code_manifest_hash: v.string(),
   data_manifest_hash: v.string(),
   python_version: v.string(),
@@ -717,20 +716,59 @@ export const getLogs = query({
   },
 })
 
-export const getInferenceTarget = query({
+export const resolveInferenceTarget = action({
   args: { serveId: v.id("serves") },
   returns: serveInferenceTargetValidator,
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<{
+    serve_id: string
+    status: string
+    pod_id: string
+    port: number
+    inference_path: string
+  }> => {
     const user = await requireUser(ctx)
-    const row = await getAccessibleServe(ctx, String(user._id), args.serveId)
-    const response = toServeResponse(row)
-    return {
-      serve_id: response.serve_id,
-      status: response.status,
-      pod_id: response.pod_id,
-      port: response.port,
-      inference_path: response.inference_path,
+    return await ctx.runQuery(internal.serves.internalGetInferenceTarget, {
+      userId: String(user._id),
+      serveId: args.serveId,
+    })
+  },
+})
+
+export const resolveInferenceTargetByApiKey = action({
+  args: {
+    serveId: v.id("serves"),
+    apiKey: v.string(),
+  },
+  returns: serveInferenceTargetValidator,
+  handler: async (ctx, args): Promise<{
+    serve_id: string
+    status: string
+    pod_id: string
+    port: number
+    inference_path: string
+  }> => {
+    const auth = await ctx.runQuery(api.auth.authByApiKey, { apiKey: args.apiKey })
+    if (!auth) {
+      throw new ConvexError("authentication required")
     }
+
+    const now = Date.now()
+    const shouldTouch = typeof auth.lastUsedAt !== "number" || now - auth.lastUsedAt >= 60_000
+    if (shouldTouch) {
+      try {
+        await ctx.scheduler.runAfter(0, internal.auth.internalTouchApiKeyLastUsed, {
+          keyId: auth.keyId,
+          at: now,
+        })
+      } catch {
+        // Best effort only. Inference auth must not fail due to usage timestamp contention.
+      }
+    }
+
+    return await ctx.runQuery(internal.serves.internalGetInferenceTarget, {
+      userId: auth.userId,
+      serveId: args.serveId,
+    })
   },
 })
 
@@ -760,6 +798,15 @@ export const internalGet = internalQuery({
   handler: async (ctx, args) => {
     const row = await getAccessibleServe(ctx, args.userId, args.serveId)
     return toServeResponse(row)
+  },
+})
+
+export const internalGetInferenceTarget = internalQuery({
+  args: { userId: v.string(), serveId: v.id("serves") },
+  returns: serveInferenceTargetValidator,
+  handler: async (ctx, args) => {
+    const row = await getAccessibleServe(ctx, args.userId, args.serveId)
+    return toServeInferenceTarget(row)
   },
 })
 

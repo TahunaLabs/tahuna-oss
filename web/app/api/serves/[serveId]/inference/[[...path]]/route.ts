@@ -1,7 +1,9 @@
 import { api } from "@convex/_generated/api"
 import type { Id } from "@convex/_generated/dataModel"
-import { fetchAuthQuery, isAuthenticated } from "@/lib/auth-server"
-import { serveInferencePath, serveInferenceUpstreamBaseUrl } from "@/lib/serve-inference"
+import { INFERENCE_PROXY_CONFIG } from "@/config"
+import { fetchAuthAction, isAuthenticated } from "@/lib/auth-server"
+import { convexServerClient } from "@/lib/convex-server"
+import { serveInferencePath } from "@/lib/serve-inference"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
@@ -61,6 +63,8 @@ const RESPONSE_HEADER_BLOCKLIST = new Set([
   "upgrade",
 ])
 
+const SAFE_SESSION_FETCH_SITES = new Set(["same-origin", "none"])
+
 function noStoreHeaders(init?: HeadersInit) {
   const headers = new Headers(init)
   headers.set("Cache-Control", "no-store")
@@ -78,20 +82,27 @@ function trimErrorLine(value: string) {
   return value.split("\n")[0]?.trim() || ""
 }
 
-function detailFromResponseBody(body: string, fallback: string) {
-  const trimmed = body.trim()
+function buildRuntimeUpstreamBaseUrl(podId: string, port: number) {
+  const normalizedPodId = podId.trim()
+  const normalizedPort = Number.isFinite(port) ? Math.trunc(port) : 0
+  if (!normalizedPodId) {
+    throw new Error("serve is missing a live inference runtime")
+  }
+  if (normalizedPort <= 0) {
+    throw new Error("serve is missing its inference port")
+  }
+  return `https://${normalizedPodId}-${normalizedPort}.proxy.runpod.net`
+}
+
+function extractBearerToken(authorization: string) {
+  const trimmed = authorization.trim()
   if (!trimmed) {
-    return fallback
+    return ""
   }
-  try {
-    const parsed = JSON.parse(trimmed) as { detail?: unknown }
-    if (typeof parsed.detail === "string" && parsed.detail.trim()) {
-      return parsed.detail.trim()
-    }
-  } catch {
-    // Fall back to the plain-text body below.
+  if (!trimmed.toLowerCase().startsWith("bearer ")) {
+    throw new InferenceProxyError(401, "authentication required")
   }
-  return trimmed
+  return trimmed.slice("bearer ".length).trim()
 }
 
 function statusFromDetail(detail: string) {
@@ -105,47 +116,45 @@ function statusFromDetail(detail: string) {
   if (normalized.includes("not serving") || normalized.includes("live inference runtime")) {
     return 409
   }
+  if (normalized.includes("too large") || normalized.includes("too big")) {
+    return 413
+  }
+  if (normalized.includes("timed out")) {
+    return 504
+  }
+  if (normalized.includes("forbidden")) {
+    return 403
+  }
   return 400
 }
 
-function ensureConvexSiteUrl() {
-  const siteUrl = process.env.NEXT_PUBLIC_CONVEX_SITE_URL?.trim()
-  if (!siteUrl) {
-    throw new InferenceProxyError(500, "NEXT_PUBLIC_CONVEX_SITE_URL is required")
+function enforceSessionRequestProtections(request: Request) {
+  const requestOrigin = new URL(request.url).origin
+  const origin = request.headers.get("origin")?.trim() || ""
+  if (origin && origin !== requestOrigin) {
+    throw new InferenceProxyError(403, "forbidden cross-origin session inference request")
   }
-  return siteUrl.replace(/\/+$/, "")
+
+  const fetchSite = request.headers.get("sec-fetch-site")?.trim().toLowerCase() || ""
+  if (fetchSite && !SAFE_SESSION_FETCH_SITES.has(fetchSite)) {
+    throw new InferenceProxyError(403, "forbidden cross-site session inference request")
+  }
+
+  const method = request.method.toUpperCase()
+  if (method !== "GET" && method !== "HEAD" && method !== "OPTIONS" && !origin) {
+    throw new InferenceProxyError(403, "forbidden session inference request without same-origin origin header")
+  }
 }
 
 async function resolveServeTargetByApiKey(serveId: string, authorization: string): Promise<ServeInferenceTarget> {
-  const response = await fetch(`${ensureConvexSiteUrl()}/api/serves/${encodeURIComponent(serveId)}`, {
-    method: "GET",
-    headers: {
-      Accept: "application/json",
-      Authorization: authorization,
-    },
-    cache: "no-store",
-  })
-  const body = await response.text()
-  if (!response.ok) {
-    throw new InferenceProxyError(response.status, detailFromResponseBody(body, "failed to load serve"))
-  }
-
-  let payload: Partial<ServeInferenceTarget> | null = null
   try {
-    payload = body ? (JSON.parse(body) as Partial<ServeInferenceTarget>) : null
-  } catch {
-    throw new InferenceProxyError(502, "failed to load serve")
-  }
-
-  return {
-    serve_id: typeof payload?.serve_id === "string" && payload.serve_id ? payload.serve_id : serveId,
-    status: typeof payload?.status === "string" ? payload.status : "",
-    pod_id: typeof payload?.pod_id === "string" ? payload.pod_id : "",
-    port: typeof payload?.port === "number" ? payload.port : 0,
-    inference_path:
-      typeof payload?.inference_path === "string" && payload.inference_path
-        ? payload.inference_path
-        : serveInferencePath(serveId),
+    return await convexServerClient().action(api.serves.resolveInferenceTargetByApiKey, {
+      serveId: serveId as Id<"serves">,
+      apiKey: extractBearerToken(authorization),
+    })
+  } catch (error) {
+    const detail = trimErrorLine(error instanceof Error ? error.message : "") || "failed to load serve"
+    throw new InferenceProxyError(statusFromDetail(detail), detail)
   }
 }
 
@@ -154,7 +163,7 @@ async function resolveServeTargetBySession(serveId: string): Promise<ServeInfere
     throw new InferenceProxyError(401, "authentication required")
   }
   try {
-    return await fetchAuthQuery(api.serves.getInferenceTarget, {
+    return await fetchAuthAction(api.serves.resolveInferenceTarget, {
       serveId: serveId as Id<"serves">,
     })
   } catch (error) {
@@ -168,6 +177,7 @@ async function resolveServeTarget(request: Request, serveId: string) {
   if (authorization) {
     return resolveServeTargetByApiKey(serveId, authorization)
   }
+  enforceSessionRequestProtections(request)
   return resolveServeTargetBySession(serveId)
 }
 
@@ -178,7 +188,7 @@ function resolveUpstreamUrl(request: Request, target: ServeInferenceTarget) {
 
   let upstreamBase: string
   try {
-    upstreamBase = serveInferenceUpstreamBaseUrl(target.pod_id, target.port)
+    upstreamBase = buildRuntimeUpstreamBaseUrl(target.pod_id, target.port)
   } catch (error) {
     const detail = trimErrorLine(error instanceof Error ? error.message : "") || "failed to resolve serve runtime"
     throw new InferenceProxyError(statusFromDetail(detail), detail)
@@ -221,7 +231,88 @@ function buildClientResponseHeaders(upstreamHeaders: Headers) {
     headers.set(name, value)
   }
   headers.set("Cache-Control", "no-store")
+  headers.set("X-Content-Type-Options", "nosniff")
   return headers
+}
+
+function bodyAllowedForMethod(method: string) {
+  return method !== "GET" && method !== "HEAD"
+}
+
+async function readRequestBodyWithLimit(request: Request) {
+  if (!request.body) {
+    return undefined
+  }
+
+  const contentLength = request.headers.get("content-length")?.trim() || ""
+  if (contentLength) {
+    const parsed = Number.parseInt(contentLength, 10)
+    if (Number.isFinite(parsed) && parsed > INFERENCE_PROXY_CONFIG.maxRequestBytes) {
+      throw new InferenceProxyError(413, "inference request body too large")
+    }
+  }
+
+  const reader = request.body.getReader()
+  const chunks: Uint8Array[] = []
+  let total = 0
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) {
+      break
+    }
+    if (!value) {
+      continue
+    }
+    total += value.byteLength
+    if (total > INFERENCE_PROXY_CONFIG.maxRequestBytes) {
+      throw new InferenceProxyError(413, "inference request body too large")
+    }
+    chunks.push(value)
+  }
+
+  if (total === 0) {
+    return undefined
+  }
+
+  const body = new Uint8Array(total)
+  let offset = 0
+  for (const chunk of chunks) {
+    body.set(chunk, offset)
+    offset += chunk.byteLength
+  }
+  return body.buffer.slice(body.byteOffset, body.byteOffset + body.byteLength)
+}
+
+async function fetchUpstream(
+  upstreamUrl: URL,
+  init: {
+    method: string
+    headers: Headers
+    body: ArrayBuffer | undefined
+  },
+) {
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), INFERENCE_PROXY_CONFIG.upstreamTimeoutMs)
+  try {
+    return await fetch(upstreamUrl, {
+      method: init.method,
+      headers: init.headers,
+      body: init.body,
+      cache: "no-store",
+      redirect: "manual",
+      signal: controller.signal,
+    })
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw new InferenceProxyError(
+        504,
+        `upstream inference request timed out after ${Math.floor(INFERENCE_PROXY_CONFIG.upstreamTimeoutMs / 1000)}s`,
+      )
+    }
+    throw error
+  } finally {
+    clearTimeout(timeoutId)
+  }
 }
 
 async function handleInferenceRequest(request: Request, context: RouteContext) {
@@ -234,12 +325,11 @@ async function handleInferenceRequest(request: Request, context: RouteContext) {
     const target = await resolveServeTarget(request, serveId)
     const upstreamUrl = resolveUpstreamUrl(request, target)
     const method = request.method.toUpperCase()
-    const upstreamResponse = await fetch(upstreamUrl, {
+    const body = bodyAllowedForMethod(method) ? await readRequestBodyWithLimit(request) : undefined
+    const upstreamResponse = await fetchUpstream(upstreamUrl, {
       method,
       headers: buildUpstreamRequestHeaders(request, target),
-      body: method === "GET" || method === "HEAD" ? undefined : await request.arrayBuffer(),
-      cache: "no-store",
-      redirect: "manual",
+      body,
     })
 
     return new Response(upstreamResponse.body, {
