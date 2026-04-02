@@ -74,6 +74,7 @@ type ServeResponse = {
   serve_id: string
   created_at: number
   environment_id: string
+  inference_path: string
   command: string[]
   output_dir: string
   logs: string
@@ -257,6 +258,7 @@ const serveResponseValidator = v.object({
   serve_id: v.string(),
   created_at: v.number(),
   environment_id: v.string(),
+  inference_path: v.string(),
   command: v.array(v.string()),
   output_dir: v.string(),
   logs: v.string(),
@@ -304,6 +306,7 @@ const serveSummaryResponseValidator = v.object({
   serve_id: v.string(),
   created_at: v.number(),
   environment_id: v.string(),
+  inference_path: v.string(),
   status: v.string(),
   error: v.string(),
   python_version: v.string(),
@@ -354,6 +357,14 @@ const serveLogsOnlyResponseValidator = v.object({
       message: v.string(),
     }),
   ),
+})
+
+const serveInferenceTargetValidator = v.object({
+  serve_id: v.string(),
+  status: v.string(),
+  pod_id: v.string(),
+  port: v.number(),
+  inference_path: v.string(),
 })
 
 const runtimeLogLineValidator = v.object({
@@ -703,6 +714,23 @@ export const getLogs = query({
     const user = await requireUser(ctx)
     const row = await getAccessibleServe(ctx, String(user._id), args.serveId)
     return toServeLogsOnlyResponse(ctx, row)
+  },
+})
+
+export const getInferenceTarget = query({
+  args: { serveId: v.id("serves") },
+  returns: serveInferenceTargetValidator,
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx)
+    const row = await getAccessibleServe(ctx, String(user._id), args.serveId)
+    const response = toServeResponse(row)
+    return {
+      serve_id: response.serve_id,
+      status: response.status,
+      pod_id: response.pod_id,
+      port: response.port,
+      inference_path: response.inference_path,
+    }
   },
 })
 

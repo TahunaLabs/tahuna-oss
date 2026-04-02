@@ -32,6 +32,7 @@ type serveResponse struct {
 	ServeID                 string                     `json:"serve_id"`
 	CreatedAt               float64                    `json:"created_at"`
 	EnvironmentID           string                     `json:"environment_id"`
+	InferencePath           string                     `json:"inference_path"`
 	Command                 []string                   `json:"command"`
 	OutputDir               string                     `json:"output_dir"`
 	Logs                    string                     `json:"logs"`

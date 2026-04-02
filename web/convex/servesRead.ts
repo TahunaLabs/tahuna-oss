@@ -1,6 +1,7 @@
 import type { Doc, Id } from "@convex/_generated/dataModel"
 import type { QueryCtx } from "@convex/_generated/server"
 import { RUN_CONFIG } from "@convex/appConfig"
+import { serveInferencePath } from "@/lib/serve-inference"
 
 const BOOTSTRAP_LOG_SOURCE = "bootstrap"
 const RUNTIME_LOG_TAIL_LIMIT = RUN_CONFIG.runtimeLogTailLimit
@@ -37,6 +38,7 @@ export function toServeResponse(row: Doc<"serves">) {
     serve_id: String(row._id),
     created_at: row._creationTime,
     environment_id: String(row.environmentId),
+    inference_path: serveInferencePath(String(row._id)),
     command: row.command,
     output_dir: row.outputDir,
     logs: row.logs,
@@ -66,6 +68,7 @@ export function toServeSummaryResponse(row: Doc<"serves">) {
     serve_id: String(row._id),
     created_at: row._creationTime,
     environment_id: String(row.environmentId),
+    inference_path: serveInferencePath(String(row._id)),
     status: row.status,
     error: row.error || "",
     python_version: row.pythonVersion,

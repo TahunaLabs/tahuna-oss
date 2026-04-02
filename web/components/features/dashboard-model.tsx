@@ -91,6 +91,7 @@ export type ServeRow = {
   serve_id: Id<"serves">
   created_at: number
   environment_id: string
+  inference_path: string
   status: string
   error: string
   python_version: string

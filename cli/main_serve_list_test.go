@@ -19,6 +19,7 @@ func TestServeList_DefaultHumanReadable(t *testing.T) {
 						"serve_id":                  "serve-1",
 						"created_at":                1773159359016.25,
 						"environment_id":            "env-1",
+						"inference_path":            "/api/serves/serve-1/inference",
 						"command":                   []string{"uv", "run", "python", "-u", "inference.py"},
 						"output_dir":                "outputs",
 						"logs":                      "serves/env-1/1/logs",
@@ -120,6 +121,7 @@ func TestServeShow_DefaultHumanReadable(t *testing.T) {
 				"serve_id":                  "serve-1",
 				"created_at":                1773159359016.25,
 				"environment_id":            "env-1",
+				"inference_path":            "/api/serves/serve-1/inference",
 				"command":                   []string{"uv", "run", "python", "-u", "inference.py"},
 				"output_dir":                "outputs",
 				"logs":                      "serves/env-1/1/logs",
@@ -173,6 +175,9 @@ func TestServeShow_DefaultHumanReadable(t *testing.T) {
 	}
 	if !strings.Contains(output, "Command: uv run python -u inference.py") {
 		t.Fatalf("expected command summary, got: %s", output)
+	}
+	if !strings.Contains(output, "Inference URL:") || !strings.Contains(output, "/api/serves/serve-1/inference") {
+		t.Fatalf("expected inference URL, got: %s", output)
 	}
 	if !strings.Contains(output, "Use --verbose (-v) for full JSON payload.") {
 		t.Fatalf("expected verbose hint, got: %s", output)

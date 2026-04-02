@@ -318,6 +318,9 @@ func printServeSummary(serve serveResponse) {
 	if strings.TrimSpace(serve.HealthPath) != "" {
 		fmt.Printf("Health path: %s\n", serve.HealthPath)
 	}
+	if inferenceURL := serveInferenceURL(serve.InferencePath); inferenceURL != "" {
+		fmt.Printf("Inference URL: %s\n", inferenceURL)
+	}
 	if len(serve.Command) > 0 {
 		fmt.Printf("Command: %s\n", strings.Join(serve.Command, " "))
 	}

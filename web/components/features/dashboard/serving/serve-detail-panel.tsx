@@ -80,7 +80,7 @@ function ServeDetailPanel({
         </div>
       ) : null}
 
-      <div className="grid grid-cols-1 gap-3 px-6 py-4 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 px-6 py-4 md:grid-cols-2 xl:grid-cols-4">
         <ServeSummaryCard
           title="Source"
           value={formatServeSource(serve.model_snapshot)}
@@ -94,6 +94,11 @@ function ServeDetailPanel({
         <ServeSummaryCard
           title="Snapshot"
           value={formatServeSnapshotSize(serve.model_snapshot)}
+        />
+        <ServeSummaryCard
+          title="Inference"
+          value={serve.inference_path}
+          detail="Tahuna-authenticated proxy root"
         />
       </div>
 
@@ -140,7 +145,7 @@ function ServeSummaryCard({
       <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
         {title}
       </p>
-      <p className="mt-2 text-sm text-foreground">{value}</p>
+      <p className="mt-2 break-all text-sm text-foreground">{value}</p>
       {detail ? (
         <p className="mt-1 break-all text-xs text-muted-foreground">{detail}</p>
       ) : null}

@@ -929,6 +929,20 @@ func runDashboardURL(runID string) string {
 	return fmt.Sprintf("%s/dashboard/runs/%s", base, neturl.QueryEscape(runID))
 }
 
+func serveInferenceURL(path string) string {
+	trimmedPath := strings.TrimSpace(path)
+	if trimmedPath == "" {
+		return ""
+	}
+	if strings.HasPrefix(trimmedPath, "http://") || strings.HasPrefix(trimmedPath, "https://") {
+		return trimmedPath
+	}
+	if !strings.HasPrefix(trimmedPath, "/") {
+		trimmedPath = "/" + trimmedPath
+	}
+	return strings.TrimRight(browserBaseURL(), "/") + trimmedPath
+}
+
 func resolveLoginBrowserBaseURL() string {
 	browserURL := cfg.browserURL
 	if browserURL == "" {
