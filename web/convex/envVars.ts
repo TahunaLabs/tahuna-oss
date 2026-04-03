@@ -137,8 +137,10 @@ async function listStoredEnvVarsForEnvironment(
     .sort((left, right) => left.name.localeCompare(right.name));
 }
 
-function filterInjectableEnvVarNames(rows: Array<{ name: string }>) {
-  return rows.filter(({ name }) => shouldInjectEnvironmentEnvVar(name));
+function listInjectableEnvVarNames(rows: Array<{ name: string }>): EnvVarName[] {
+  return rows
+    .filter(({ name }) => shouldInjectEnvironmentEnvVar(name))
+    .map(({ name }) => ({ name }));
 }
 
 async function assertEnvironmentAccess(
@@ -219,7 +221,7 @@ export const internalListEnvironmentEnvVarNames = internalQuery({
   returns: envVarNamesValidator,
   handler: async (ctx, args) => {
     await assertEnvironmentAccess(ctx, args.userId, args.environmentId, "read");
-    return filterInjectableEnvVarNames(await listStoredEnvVarsForEnvironment(ctx, args.environmentId));
+    return listInjectableEnvVarNames(await listStoredEnvVarsForEnvironment(ctx, args.environmentId));
   },
 });
 
