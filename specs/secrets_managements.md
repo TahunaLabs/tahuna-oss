@@ -36,14 +36,15 @@ Tahuna exposes a dedicated env-var command family:
 
 - `tahuna env_vars list`
 - `tahuna env_vars get NAME`
-- `tahuna env_vars set --from-file .env.tahuna`
-- `tahuna env_vars remove NAME`
+- `tahuna env_vars set [--from-file <path>]`
+- `tahuna env_vars rm NAME`
 
 Expected behavior:
 
 - commands default to the linked environment when one exists
 - commands may also accept `--id <env_id>` to target a specific environment explicitly
-- `.env.tahuna` is an import source only, not the canonical store
+- if `--from-file` is omitted, `set` should try common local env files in this order: `.env.local`, then `.env`
+- local env files are import sources only, not the canonical store
 - values are stored server-side in Convex, not in local project config
 
 Future extensions may add:
@@ -176,8 +177,6 @@ Implications:
 - user-managed vars may override neutral application vars such as `WANDB_PROJECT`, `WANDB_ENTITY`, `WANDB_API_KEY`, or `WANDB_BASE_URL`
 - user-managed vars may not override reserved runtime/bootstrap vars or cache-path vars
 
-If a user points `WANDB_BASE_URL` away from Tahuna, Tahuna should not assume it can still inject a runtime token as `WANDB_API_KEY`.
-
 ## Run And Serve Snapshot Semantics
 
 Env-var changes are not retroactive.
@@ -198,11 +197,12 @@ Practical rule:
 
 ## Local File Behavior
 
-`.env.tahuna` is a convenience import format only.
+Common local env files such as `.env.local` and `.env` are convenience import sources only.
 
 It should:
 
-- be safe to use with `tahuna env_vars set --from-file .env.tahuna`
+- be safe to use with `tahuna env_vars set`
+- be safe to use with `tahuna env_vars set --from-file <path>`
 - not be treated as canonical state
 - not be written back automatically by Tahuna
 - be gitignored in normal project setups
@@ -214,7 +214,7 @@ Tahuna should not mirror remote secret values into `tahuna.toml`.
 If a requested env-var key does not exist:
 
 - `get NAME` returns a clear not-found error
-- `remove NAME` may either return not-found or succeed as a no-op, but the behavior must be documented and consistent
+- `rm NAME` may either return not-found or succeed as a no-op, but the behavior must be documented and consistent
 
 If an import file contains reserved keys:
 
@@ -253,7 +253,7 @@ The CLI remains a remote control plane client:
 Recommended verification path:
 
 1. Create or link an environment.
-2. Import a file with `HF_TOKEN` and `WANDB_PROJECT`.
+2. Run `tahuna env_vars set` with `HF_TOKEN` and `WANDB_PROJECT` present in `.env.local` or `.env`, or import an explicit file with `--from-file`.
 3. Confirm `tahuna env_vars list` shows the names but not decrypted values.
 4. Confirm `tahuna env_vars get HF_TOKEN` returns the stored value.
 5. Launch a run that downloads from Hugging Face.
