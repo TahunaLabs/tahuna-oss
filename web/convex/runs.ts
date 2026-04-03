@@ -21,6 +21,7 @@ import {
 import { PYTHON_CONFIG, RUN_CONFIG } from "@convex/appConfig";
 import { applyStorageDeltaCredits, USAGE_EVENT_TYPE, upsertLedgerDebitTotal } from "@convex/credits";
 import type { ComputeSettlementResult } from "@convex/runBilling";
+import { resolveConfiguredDependencyGroup } from "@/lib/dependency-selection";
 import {
   estimateRunUsageFromHourlyRateCents,
   runLiveDebitIdempotencyKey,
@@ -436,7 +437,11 @@ function manifestKey(
 }
 
 function toProvisioningPayload(row: Doc<"runs">): ProvisioningPayload {
-  if (typeof row.dependencyGroup !== "string") {
+  const dependencyGroup = resolveConfiguredDependencyGroup({
+    dependencyGroup: row.dependencyGroup,
+    dependencyMode: row.dependencyMode,
+  });
+  if (dependencyGroup === null) {
     throw new ConvexError("run dependency selection is missing");
   }
   return {
@@ -444,7 +449,7 @@ function toProvisioningPayload(row: Doc<"runs">): ProvisioningPayload {
     environment_id: String(row.environmentId),
     user_id: row.userId,
     command: row.command ?? [],
-    dependency_group: row.dependencyGroup,
+    dependency_group: dependencyGroup,
     output_dir: row.outputDir ?? "outputs",
     input_path: row.input,
     output_path: row.output,

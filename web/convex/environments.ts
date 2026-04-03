@@ -17,6 +17,7 @@ import { shortId } from "@convex/ids";
 import { R2 } from "@convex-dev/r2";
 import { PYTHON_CONFIG } from "@convex/appConfig";
 import { ENVIRONMENT_CONFIG_FILE_NAME, parseEnvironmentConfig, renderEnvironmentConfig } from "@/lib/environment-config";
+import { resolveConfiguredDependencyGroup } from "@/lib/dependency-selection";
 
 const serveSnapshotResponseValidator = v.object({
   command: v.array(v.string()),
@@ -485,10 +486,20 @@ function toEnvironmentResponse(
   access: "private" | "shared" = "private",
 ) {
   const dataId = row.dataId || String(row._id);
+  const trainDependencyGroup = resolveConfiguredDependencyGroup({
+    dependencyGroup: row.trainDependencyGroup,
+    dependencyMode: row.trainDependencyMode,
+  });
+  const serveDependencyGroup = row.serveSnapshot
+    ? resolveConfiguredDependencyGroup({
+        dependencyGroup: row.serveSnapshot.dependencyGroup,
+        dependencyMode: row.serveSnapshot.dependencyMode,
+      })
+    : null;
   const serveSnapshot = row.serveSnapshot
     ? {
         command: row.serveSnapshot.command,
-        dependency_group: row.serveSnapshot.dependencyGroup,
+        dependency_group: serveDependencyGroup ?? undefined,
         python_version: row.serveSnapshot.pythonVersion,
         gpu_type: row.serveSnapshot.gpuType,
         gpu_count: row.serveSnapshot.gpuCount,
@@ -518,7 +529,7 @@ function toEnvironmentResponse(
     gpu_count: row.gpuCount,
     volume_gb: row.volumeGb,
     python_version: row.pythonVersion || PYTHON_CONFIG.defaultVersion,
-    train_dependency_group: row.trainDependencyGroup || "",
+    train_dependency_group: trainDependencyGroup ?? "",
     framework: row.framework,
     version: row.version,
     command: row.command,

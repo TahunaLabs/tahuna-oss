@@ -3,6 +3,7 @@ import { ConvexError } from "convex/values";
 import { components, internal } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import type { MutationCtx } from "@convex/_generated/server";
+import { resolveConfiguredDependencyGroup } from "@/lib/dependency-selection";
 import { resolveRunComputePricing } from "@/lib/run-compute-pricing";
 import { buildRuntimeCompatibilityKey, resolveRunpodCloudType } from "@/lib/runtime-incompatibility";
 import { PYTHON_CONFIG, RUN_CONFIG } from "@convex/appConfig";
@@ -54,10 +55,13 @@ export async function createRunForUserId(
   if (!Array.isArray(command) || command.length === 0) {
     throw new ConvexError("environment has no command configured; run `tahuna sync` before creating a run");
   }
-  if (typeof env.trainDependencyGroup !== "string") {
+  const dependencyGroup = resolveConfiguredDependencyGroup({
+    dependencyGroup: env.trainDependencyGroup,
+    dependencyMode: env.trainDependencyMode,
+  });
+  if (dependencyGroup === null) {
     throw new ConvexError("environment has no training dependency selection configured; run `tahuna sync` before creating a run");
   }
-  const dependencyGroup = env.trainDependencyGroup.trim();
   const effectiveGpuType = args.gpu_type ?? env.gpuType;
   const effectiveGpuCount = args.gpu_count ?? env.gpuCount;
   const effectiveVolumeGb = args.volume_gb ?? env.volumeGb;

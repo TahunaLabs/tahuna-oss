@@ -8,6 +8,7 @@ import { RUN_CONFIG } from "@convex/appConfig"
 import { requireUser } from "@convex/auth"
 import { RUN_STATUS } from "@convex/runsConstants"
 import { buildManifestObjectKey } from "@convex/cli/shared"
+import { resolveConfiguredDependencyGroup } from "@/lib/dependency-selection"
 import {
   fetchServeSnapshotManifest,
   fetchSyncManifest,
@@ -859,7 +860,11 @@ export const internalPrepareCreate = internalQuery({
     if (!serveSnapshot || !Array.isArray(serveSnapshot.command) || serveSnapshot.command.length === 0) {
       throw new ConvexError("environment has no serve config configured; run `tahuna sync` before creating a serve")
     }
-    if (typeof serveSnapshot.dependencyGroup !== "string") {
+    const dependencyGroup = resolveConfiguredDependencyGroup({
+      dependencyGroup: serveSnapshot.dependencyGroup,
+      dependencyMode: serveSnapshot.dependencyMode,
+    })
+    if (dependencyGroup === null) {
       throw new ConvexError("environment has no serve dependency selection configured; run `tahuna sync` before creating a serve")
     }
     if (!env.latestCodeManifestHash) {
@@ -877,7 +882,7 @@ export const internalPrepareCreate = internalQuery({
       outputDir: env.outputDir,
       codeManifestHash: env.latestCodeManifestHash,
       dataManifestHash: env.latestDataManifestHash || null,
-      dependencyGroup: serveSnapshot.dependencyGroup.trim(),
+      dependencyGroup,
       pythonVersion: serveSnapshot.pythonVersion,
       gpuType: args.gpuType?.trim() || serveSnapshot.gpuType,
       gpuCount:
@@ -1152,7 +1157,11 @@ export const internalGetProvisioningPayload = internalQuery({
     if (!environment) {
       throw new ConvexError("environment not found")
     }
-    if (typeof row.dependencyGroup !== "string") {
+    const dependencyGroup = resolveConfiguredDependencyGroup({
+      dependencyGroup: row.dependencyGroup,
+      dependencyMode: row.dependencyMode,
+    })
+    if (dependencyGroup === null) {
       throw new ConvexError("serve dependency selection is missing")
     }
     return {
@@ -1161,7 +1170,7 @@ export const internalGetProvisioningPayload = internalQuery({
       environment_data_id: environment.dataId || String(environment._id),
       user_id: row.userId,
       command: row.command,
-      dependency_group: row.dependencyGroup,
+      dependency_group: dependencyGroup,
       output_dir: row.outputDir,
       logs_path: row.logs,
       code_manifest_hash: row.codeManifestHash || null,
@@ -1280,7 +1289,11 @@ export const internalGetRuntimeBootstrapContext = internalQuery({
     if (!environment) {
       throw new ConvexError("environment not found")
     }
-    if (typeof row.dependencyGroup !== "string") {
+    const dependencyGroup = resolveConfiguredDependencyGroup({
+      dependencyGroup: row.dependencyGroup,
+      dependencyMode: row.dependencyMode,
+    })
+    if (dependencyGroup === null) {
       throw new ConvexError("serve dependency selection is missing")
     }
     return {
@@ -1292,7 +1305,7 @@ export const internalGetRuntimeBootstrapContext = internalQuery({
       output_dir: row.outputDir,
       logs_path: row.logs,
       command: row.command,
-      dependency_group: row.dependencyGroup,
+      dependency_group: dependencyGroup,
       code_manifest_hash: row.codeManifestHash || null,
       data_manifest_hash: row.dataManifestHash || null,
       python_version: row.pythonVersion,
