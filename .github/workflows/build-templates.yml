@@ -90,12 +90,12 @@ jobs:
           file: runtime/images/Dockerfile
           pull: true
           push: true
-          tags: ghcr.io/${{ github.repository }}/tahuna:${{ matrix.tag }}
+          tags: ghcr.io/${{ github.repository.toLowerCase() }}/tahuna:${{ matrix.tag }}
           build-args: |
             BASE_IMAGE=${{ matrix.base }}
             PREBAKE_FRAMEWORK=${{ matrix.framework }}
             PREBAKE_VERSION=${{ matrix.version }}
             PREBAKE_PYTHON_VERSION=${{ matrix.python_version }}
             PREBAKE_PROTECTED_PACKAGES=${{ matrix.protected_packages }}
-          cache-from: type=registry,ref=ghcr.io/${{ github.repository }}/tahuna:cache-${{ matrix.tag }}
-          cache-to: type=registry,ref=ghcr.io/${{ github.repository }}/tahuna:cache-${{ matrix.tag }},mode=max
+          cache-from: type=registry,ref=ghcr.io/${{ github.repository.toLowerCase() }}/tahuna:cache-${{ matrix.tag }}
+          cache-to: type=registry,ref=ghcr.io/${{ github.repository.toLowerCase() }}/tahuna:cache-${{ matrix.tag }},mode=max
