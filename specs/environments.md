@@ -27,12 +27,14 @@ An environment is a named, user-scoped container that holds runtime configuratio
 | `gpuType` | string | Default GPU type (e.g., `"NVIDIA A100 80GB"`) |
 | `gpuCount` | number | Default GPU count |
 | `volumeGb` | number | Default volume size in GB |
+| `trainDependencyGroup` | string? | Resolved training dependency selection; `""` means base `[project.dependencies]` |
 | `latestCodeManifestHash` | string? | SHA256 of latest code manifest |
 | `latestDataManifestHash` | string? | SHA256 of latest data manifest |
 | `boundDataManifestHashes` | string[] | Additional data manifests bound to this environment |
 | `latestSyncAt` | number? | Timestamp of last sync commit |
 | `command` | string[] | Pinned entrypoint command (set at init, updated by sync commit) |
 | `outputDir` | string | Output directory name relative to workspace root (default: `"outputs"`) |
+| `serveSnapshot` | object? | Optional serving launch spec, present only when serving is enabled |
 | `artifacts` | string? | Legacy field (R2 artifact prefix) |
 | `dataId` | string? | Legacy field (data blob ID) |
 
@@ -43,6 +45,7 @@ An environment is a named, user-scoped container that holds runtime configuratio
 - Triggered by: `tahuna init` only
 - Creates one environment record on the backend
 - Links to local project via `.tahuna/environment_id`
+- Followed immediately by a config-only sync that writes the resolved train dependency selection and optional serve snapshot
 - No other creation path exists (dashboard cannot create environments)
 
 ### Read Operations
@@ -66,7 +69,7 @@ An environment is a named, user-scoped container that holds runtime configuratio
   - `gpu_count` must not exceed max for that GPU type
   - `volume_gb` must be positive
 - Manifest pointers (`latestCodeManifestHash`, `latestDataManifestHash`) are updated only by the sync commit endpoint, never by direct user commands.
-- `command` and `outputDir` are set at environment creation (from local project config) and updated on every sync commit. They are the single source of truth for run execution config — run creation reads them from the environment, not from CLI payload.
+- `command`, `trainDependencyGroup`, `outputDir`, and optional `serveSnapshot` are set from local project config and updated on sync commit. They are the single source of truth for run/serve execution config — creation reads them from the environment, not from CLI payload.
 - Additional data bindings are metadata links only (no blob copy).
 
 ### Deletion
@@ -116,6 +119,8 @@ Environment specs (gpu_type, gpu_count, volume_gb)
 - One environment belongs to exactly one user.
 - Environment deletion cascades to all child resources (runs, blobs, manifests).
 - Manifest pointers are only written by sync commit, never by user commands.
+- The environment stores the resolved training dependency selection. `""` means base `[project.dependencies]`.
+- `serveSnapshot` exists only when serving is enabled for the project.
 - Framework and Python version are detected from uv files (`pyproject.toml`, `uv.lock`) and determine pod image selection.
 
 ## Error States

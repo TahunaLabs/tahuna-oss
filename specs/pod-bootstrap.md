@@ -82,10 +82,13 @@ POD STARTS
     v
 5. INSTALL DEPENDENCIES
    - Use uv as the default runtime package manager.
-   - Training runtime installs the base dependency set plus the fixed `train` group.
-   - If `uv.lock` exists: `uv sync --frozen --no-dev --inexact --group train`
-   - If `uv.lock` missing but `pyproject.toml` exists: `uv sync --no-dev --inexact --group train`
+   - Training runtime installs the base dependency set plus the resolved training dependency selection.
+   - If the synced selection is empty, install base `[project.dependencies]` only.
+   - If the synced selection is non-empty, append `--group <name>`.
+   - If `uv.lock` exists: `uv sync --frozen --no-dev --inexact [--group <name>]`
+   - If `uv.lock` missing but `pyproject.toml` exists: `uv sync --no-dev --inexact [--group <name>]`
    - If Warden is running inside a prebaked virtualenv, include `--active`.
+   - If the prebaked image already contains protected packages with matching lockfile versions, Warden may first attempt a selective sync that skips reinstalling those packages, then fall back to a full sync if needed.
    - If `pyproject.toml` missing: report FAILED (bootstrap contract violation)
    - Stream install output to:
      POST /api/runs/{RUN_ID}/runtime/logs

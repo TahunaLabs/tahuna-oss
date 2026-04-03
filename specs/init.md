@@ -10,8 +10,9 @@ Guided project setup that detects/scaffolds local project files, selects runtime
 |---------|------|-------------|
 | `.tahuna/` | Local directory | Project-local Tahuna state |
 | `.tahuna/environment_id` | Local file | Links this project to a remote environment |
-| `.tahuna/tahuna.toml` | Local file | Local project config and linked environment defaults |
+| `tahuna.toml` | Local file | Canonical local project config and synced runtime intent |
 | `train.py` | Project file | Entrypoint script (default name, user can override) |
+| `inference.py` | Project file | Optional serving entrypoint, scaffolded only when serving is enabled |
 | `data/` | Project directory | Training data directory (default name, user can override) |
 | `outputs/` | Project directory | Training output directory (default name, user can override) |
 | `pyproject.toml` | Project file | Python project metadata + dependencies (uv source of truth) |
@@ -32,103 +33,162 @@ Guided project setup that detects/scaffolds local project files, selects runtime
 ### Init Flow
 
 ```
-1. DIRECTORY RESOLUTION
+1. AUTHENTICATION + CATALOG FETCH
+   - Fetch GPU catalog and managed runtime image catalog up front
+   - This doubles as the auth check before interactive prompts
+
+2. DIRECTORY RESOLUTION
    - If arg is ".": use current directory
    - If arg is a name: create directory, cd into it
    - If no arg: default to "."
 
-2. GUARD: RE-INIT CHECK
-   - If .tahuna/ already exists: ERROR "Project already initialized.
-     To reconfigure, delete .tahuna/ and run init again."
+3. RE-INIT CHECK
+   - If .tahuna/environment_id already exists:
+     - interactive terminals: warn and offer overwrite
+     - non-interactive terminals: fail and instruct the user to remove the link before re-running init
 
-3. PROJECT FILE DETECTION & SCAFFOLDING
-   For each mandatory project item:
+4. PROJECT FILE DETECTION
+   For each canonical project item:
 
    a. Entrypoint (default: train.py)
       - Detect: look for train.py in project root
-      - If found: "Detected train.py. Use this? [Y/n/custom path]"
-      - If not found: "Creating train.py."
-      - Template: minimal Python script with argparse + config loading
+      - If found: keep it
+      - If not found: scaffold train.py later
 
-   b. Data directory (default: data/)
+   b. Serving entrypoint (default: inference.py)
+      - Detect: look for inference.py in project root
+      - If found: serving is enabled
+      - If not found: ask "Do you want to serve this project?"
+      - If user answers yes: scaffold inference.py later
+      - If user answers no: serving stays disabled and init must not scaffold inference.py or a `[serve]` config block
+
+   c. Data directory (default: data/)
       - Detect: look for data/ directory
-      - If found: "Detected data/. Use this? [Y/n/custom path]"
-      - If not found: "Creating data/."
-      - Also offer: "Bind existing Storage data now? [y/N]"
+      - If found: offer keep / custom path / create new
+      - If not found: offer create / custom path
 
-   c. Output directory (default: outputs/)
+   d. Output directory (default: outputs/)
       - Detect: look for outputs/ directory
-      - If found: "Detected outputs/. Use this? [Y/n/custom path]"
-      - If not found: "Creating outputs/."
+      - If found: offer keep / custom path / create new
+      - If not found: offer create / custom path
 
-   d. UV project files (`pyproject.toml` + `uv.lock`)
+   e. UV project files (`pyproject.toml` + `uv.lock`)
       - Detect: look for pyproject.toml (required) and uv.lock (preferred)
-      - If found: "Detected pyproject.toml/uv.lock. Use these? [Y/n/custom path]"
       - If pyproject.toml missing: "Creating pyproject.toml."
       - If uv.lock missing: run `uv lock` and print "Creating uv.lock."
-      - Template/default deps: torch or tensorflow (based on framework detection)
+      - The default scaffolded `pyproject.toml` seeds `[dependency-groups].train` with `torch` or `tensorflow` and an empty `serve` group
 
-4. FRAMEWORK + PYTHON DETECTION (single source of truth: uv files)
+5. FRAMEWORK + PYTHON DETECTION (single source of truth: uv files)
    - Parse pyproject.toml dependency groups for framework packages
    - Parse uv.lock (or pyproject `requires-python`) for Python version
-   - Map "torch"/"pytorch" -> PyTorch, "tensorflow"/"keras" -> TensorFlow
+   - Map "torch"/"pytorch" -> `pt`, "tensorflow"/"keras" -> `tf`
    - If ambiguous or not found: prompt user to select
    - Framework + version + Python version determine catalog filtering AND pod image
 
-5. RUNTIME CONFIGURATION
+6. DEPENDENCY SELECTION
+   - Parse `[dependency-groups]` from pyproject.toml
+   - Resolve a training dependency selection and persist it into `tahuna.toml`
+   - If a `train` group exists, preselect it
+   - If no `train` group exists, prompt for:
+     - one of the discovered dependency groups, or
+     - base `[project.dependencies]`
+   - If serving is enabled:
+     - if dependency groups exist, resolve a serving dependency selection the same way, preselecting `serve` when present
+     - if no dependency groups exist, serving silently defaults to base `[project.dependencies]`
+   - `dependency_group = ""` in `tahuna.toml` means "use base `[project.dependencies]` only"
+
+7. RUNTIME CONFIGURATION
    - Fetch GPU catalog from backend (GET /api/catalog)
    - Prompt: GPU type (from available list, filtered by framework)
    - Prompt: GPU count (default from shared config, max from catalog per GPU type)
    - Prompt: Volume size GB (default from shared config)
 
-6. ENVIRONMENT CREATION
+8. LOCAL FILE SCAFFOLDING
+   - Create train.py if missing
+   - Create inference.py only if serving is enabled and the file is missing
+   - Create data/ and outputs/ if missing
+   - Write root `tahuna.toml`
+
+9. ENVIRONMENT CREATION
    - POST /api/environments with: name, framework, version,
      gpu_type, gpu_count, volume_gb
    - Save environment ID to .tahuna/environment_id
-   - Save project config to .tahuna/tahuna.toml
+   - `command` and `output_dir` are created from resolved local config
 
-7. SUCCESS OUTPUT
+10. INITIAL CONFIG SYNC
+   - Run a config-only sync commit
+   - Push resolved environment config, train command, train dependency selection, output dir, and optional serve snapshot
+   - Do not upload code or data during init
+
+11. SUCCESS OUTPUT
    - Print summary: project path, environment ID, GPU config
    - Print next steps: "Run `tahuna train` to start training."
 ```
 
-### `.tahuna/tahuna.toml` Schema
+### `tahuna.toml` Schema
 
 ```toml
 [project]
-entrypoint = "train.py"
 data_dir = "data"
 output_dir = "outputs"
-python_project_file = "pyproject.toml"
-uv_lock_file = "uv.lock"
 
 [environment]
-name = "my-project"
 framework = "pt"
 version = "2.8.0-cu128"
 python_version = "3.11"
 gpu_type = "NVIDIA A100 80GB"
 gpu_count = 1
 volume_gb = 80
+
+[train]
+command = ["uv", "run", "--active", "--no-sync", "python", "-u", "train.py"]
+dependency_group = ""
+output_model_path = "outputs/model"
+
+[serve]
+command = ["uv", "run", "--active", "--no-sync", "python", "-u", "inference.py"]
+dependency_group = "serve"
+python_version = "3.11"
+gpu_type = "NVIDIA A100 80GB"
+gpu_count = 1
+volume_gb = 80
+port = 8000
+health_path = "/health"
+default_model_path = "outputs/model"
+startup_timeout_seconds = 900
+health_interval_seconds = 5
+health_timeout_seconds = 2
+health_failure_threshold = 3
+graceful_shutdown_seconds = 30
 ```
+
+Notes:
+
+- `[serve]` is optional and is omitted when serving is disabled during init.
+- `dependency_group = ""` means "install only base `[project.dependencies]`".
+- If a dependency group key is absent entirely, the selection has not been configured yet.
 
 ## Invariants
 
-- `.tahuna/` must not exist before init. Re-init is an error.
-- All mandatory project items (entrypoint, data dir, output dir, uv project files) are created if missing.
+- `tahuna.toml` at the project root is the canonical local config file.
+- `.tahuna/` stores local link/cache state only; it is not the source of runtime intent.
+- `train.py`, `data/`, `outputs/`, `pyproject.toml`, and `uv.lock` are always created if missing.
+- `inference.py` is created only when serving is enabled.
 - One project directory maps to exactly one remote environment.
 - Framework/Python detection reads from uv files only (`pyproject.toml`, `uv.lock`) unless detection fails.
 - The environment ID file (`.tahuna/environment_id`) is the single link between local project and remote state.
+- `tahuna init` always resolves a train dependency selection before finishing.
 
 ## Error States
 
 | Condition | Behavior |
 |-----------|----------|
-| `.tahuna/` already exists | Error: "Project already initialized." |
+| Existing linked environment in non-interactive init | Error: project already initialized; remove `.tahuna/environment_id` or rerun interactively |
 | Not authenticated | Error: "Not authenticated. Run `tahuna login` first." |
 | Backend unreachable | Error: "Cannot reach Tahuna backend. Check your connection." |
 | GPU catalog empty | Error: "No GPUs available. Try again later." |
 | `pyproject.toml` invalid | Error: "Cannot parse pyproject.toml." |
+| Invalid configured dependency group | Error: dependency group not found in `pyproject.toml`; rerun `tahuna init .` or update `tahuna.toml` |
 | uv resolution fails | Error: "`uv lock` failed. Fix dependency metadata and retry." |
 | Directory creation fails | Error: "Cannot create directory: <reason>" |
 
@@ -137,3 +197,4 @@ volume_gb = 80
 - Auth (valid API key required)
 - Backend `/api/catalog` endpoint
 - Backend `POST /api/environments` endpoint
+- Backend `/api/sync/commit` endpoint for the init-time config sync

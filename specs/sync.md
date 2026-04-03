@@ -54,6 +54,7 @@ Root `tahuna.toml` is the source of truth for synced environment, train, and ser
 
 | Trigger | Scope | Description |
 |---------|-------|-------------|
+| `tahuna init` | config only | Initial commit of resolved local config after environment creation |
 | `tahuna sync` | code + data | Manual full sync |
 | `tahuna sync code` | code only | Manual code-only sync |
 | `tahuna sync data` | data only | Manual data-only sync |
@@ -70,6 +71,7 @@ syncIncremental(environmentID, scope):
      - Load root tahuna.toml
      - Resolve canonical environment/train/serve config from local file
      - Do not refresh local config from remote environment state
+     - Validate configured dependency selections against current `pyproject.toml`
 
   FOR EACH kind IN scope (code, data):
 
@@ -122,14 +124,15 @@ syncIncremental(environmentID, scope):
            gpu_count: 1,
            volume_gb: 80,
            command: ["uv", "run", ...] (always — resolved from local tahuna.toml),
+           train_dependency_group: "" | "<group-name>" (always once configured; empty string means base `[project.dependencies]`),
            output_dir: "outputs" (always — resolved from local tahuna.toml),
-           serve_snapshot: { ... } (always — resolved from local tahuna.toml)
+           serve_snapshot: { ... } (only when serving is enabled)
          }
        - Backend validates:
          a. Manifest exists in R2 if a manifest hash was provided (with metadata sync + bounded polling for propagation)
          b. Manifest JSON schema is valid if a manifest hash was provided
          c. Updates environment latestCodeManifestHash / latestDataManifestHash when provided
-         d. Updates environment runtime config, command, outputDir, and serveSnapshot from local tahuna.toml
+         d. Updates environment runtime config, command, trainDependencyGroup, outputDir, and optional serveSnapshot from local tahuna.toml
          e. Allows config-only commits when no code/data manifest changed (for example after `tahuna env update`)
        - Retry logic: bounded attempts and exponential backoff from shared config
          for transient "manifest not found" errors (R2 propagation delay)
@@ -198,9 +201,13 @@ Output sync rules:
 - Manifests are immutable once committed. Rollback changes the pointer, not the manifest.
 - Sync commit is atomic: either both pointers update or neither does (when syncing both scopes).
 - Root `tahuna.toml` is authoritative for synced environment/train/serve config.
+- Dependency selections are explicit synced config:
+  - `""` means base `[project.dependencies]`
+  - non-empty string means `uv --group <name>`
 - The sync cache (`.tahuna/sync_*_manifest.json`) is advisory. Deleting it forces a full re-check but not a full re-upload (missing-blob check handles dedup).
 - Manual sync (`tahuna sync`) is a convenience command. `train` and `run create` always auto-sync.
 - `tahuna env update` may issue a config-only sync commit even when code and data are unchanged.
+- `tahuna init` always performs a config-only sync after environment creation.
 - Local output directories are excluded from local sync and cannot override pod-synced output artifacts.
 
 ## Shared Defaults & Constants

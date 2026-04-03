@@ -10,21 +10,21 @@ For Python app serving, it supersedes the engine-matrix model described in `spec
 
 ## Implementation Status
 
-This section is non-normative. It records rollout status in the current codebase as of 2026-04-02.
+This section is non-normative. It records rollout status in the current codebase as of 2026-04-03.
 
 - PR1 is done.
   This document is the canonical Python app serving contract and supersedes `specs/serve.md` for Python app serving.
-- PR2 is in progress, with canonical root config and local-authoritative sync already landed.
-  Root `tahuna.toml` support and `[train]` / `[serve]` parsing and validation exist in `cli/project.go`, `tahuna init` scaffolds `train.py`, `inference.py`, `pyproject.toml`, and `uv.lock` in `cli/commands_core.go`, and `tahuna sync` / `tahuna env update` now push resolved environment, train, and serve config from local `tahuna.toml` instead of refreshing that file from the remote environment first.
+- PR2 is done.
+  Root `tahuna.toml` is canonical, `tahuna init` scaffolds `train.py`, `pyproject.toml`, and `uv.lock`, asks whether serving should be enabled before scaffolding `inference.py`, and persists explicit train/serve dependency selections into local config.
 - PR3 is done.
-  `runtime/warden/internal/deps` now owns Python dependency installation with explicit `train` and `serve` modes, `runtime/warden/internal/bootstrap` dispatches separate run and serve orchestration paths, and shared virtualenv environment handling lives in `runtime/warden/internal/pythonenv`.
+  `runtime/warden/internal/deps` now owns Python dependency installation with an explicit synced dependency selection per mode. The runtime installs either base `[project.dependencies]` only or base plus the selected group; it no longer hard-codes `train` and `serve`.
   The protected-package lockfile check reads `uv.lock` with `github.com/BurntSushi/toml` instead of manual line parsing.
 - PR4 is done.
   The control plane now has canonical `serves`, `serveEvents`, and `serveRuntimeLogs` records, serve lifecycle status transitions, serve runtime log/status ingestion, and `/api/serves` HTTP routes including runtime callback endpoints.
 - PR5 is done.
   Serve creation now requires exactly one model source (`from_run_id` or `from_storage_prefix`), copies model objects into a serve-owned immutable prefix under `serves/<environmentId>/.../model`, writes a pinned snapshot manifest JSON, and persists `objectPrefix`, `manifestKey`, `manifestHash`, `objectCount`, and `totalBytes` on the serve row.
 - PR6 is done.
-  Serve bootstrap now resolves concrete model download entries from the pinned snapshot manifest, `runtime/warden` materializes `/workspace/model`, installs base dependencies plus the `serve` group only, launches the serve command, sets serve runtime env vars, and supervises readiness/liveness with serve status callbacks.
+  Serve bootstrap now resolves concrete model download entries from the pinned snapshot manifest, `runtime/warden` materializes `/workspace/model`, installs base dependencies plus the resolved serving dependency selection, launches the serve command, sets serve runtime env vars, and supervises readiness/liveness with serve status callbacks.
 - PR7 is done.
   Serve creation now enqueues real backend provisioning, resolves a canonical serve runtime launch spec, launches compute in Warden serve mode, reconciles runtime callbacks into canonical serve status transitions, and tears down serve compute on stop and failure paths.
 - PR8 is done.
@@ -33,6 +33,8 @@ This section is non-normative. It records rollout status in the current codebase
   The dashboard now shows actual serves instead of synced config snapshots, exposes logs and stop actions without surfacing operator-only fields on the main surface, the `qwen-yoda-lora` example is now trainable and serveable end-to-end from a completed run, and runtime Hugging Face caches are routed to the workspace volume for both train and serve.
 - PR10 is done.
   Tahuna now exposes an authenticated serve inference proxy rooted at `/api/serves/{serve_id}/inference[/...]`, accepts browser-session or API-key auth at the Tahuna edge, and adds a minimal canonical invoke surface without freezing the user app's inference payload schema.
+- Runtime image registry alignment is done.
+  The managed runtime image catalog now defaults to `ghcr.io/pazuzzu/tahuna`, matching the image build workflow. `TAHUNA_RUNTIME_IMAGE_REPO` remains the override.
 - The next implementation step is inference hardening and provider isolation.
   The proxy surface now exists, but the next slice must remove provider metadata leakage, tighten browser-session protections, add request and timeout guardrails, and make direct provider access non-viable without turning the proxy into an example-specific API adapter.
 
@@ -43,7 +45,7 @@ This contract defines the project, runtime, and lifecycle requirements for Tahun
 - the user owns the Python application code
 - `train.py` is the canonical training entrypoint
 - `inference.py` is the canonical serving entrypoint
-- training and serving install separate dependency groups from one Python project
+- training and serving resolve separate dependency selections from one Python project
 
 This contract is intentionally app-centric rather than engine-centric.
 
@@ -64,31 +66,34 @@ The user owns:
 
 ## Principles
 
-1. One canonical entrypoint per mode.
-   Training runs `python -u train.py`. Serving runs `python -u inference.py`.
+1. One canonical script per mode.
+   Training uses `train.py`. Serving uses `inference.py` when serving is enabled.
 
-2. One canonical project layout.
+2. One canonical default launch command per mode.
+   Training defaults to `uv run --active --no-sync python -u train.py`. Serving defaults to `uv run --active --no-sync python -u inference.py`.
+
+3. One canonical project layout.
    Tahuna expects root-level project files and does not rely on `.tahuna/tahuna.toml` for new projects.
 
-3. Local project config is authoritative.
+4. Local project config is authoritative.
    Root `tahuna.toml` is the source of truth for synced environment, train, and serve config. `tahuna sync` and `tahuna env update` push resolved values from this file to the backend.
 
-4. Separate dependency surfaces.
-   Training installs the `train` dependency group. Serving installs the `serve` dependency group. Shared dependencies live in base project dependencies.
+5. Separate dependency surfaces.
+   Training and serving each use an explicit dependency selection. Shared dependencies live in base project dependencies. A mode may either use a named dependency group or base `[project.dependencies]` only.
 
-5. User-defined Python inference stack.
+6. User-defined Python inference stack.
    Tahuna does not care whether `inference.py` uses `vllm`, `sglang`, `transformers`, `fastapi`, `uvicorn`, `litserve`, or plain HTTP code, as long as it satisfies this runtime contract.
 
-6. Tahuna-managed lifecycle.
+7. Tahuna-managed lifecycle.
    The Python app is user-defined, but readiness gating, health enforcement, stop semantics, and snapshot pinning are Tahuna-managed.
 
-7. Snapshot, not mutable prefix.
+8. Snapshot, not mutable prefix.
    Serving always runs from a pinned model snapshot resolved at serve creation time.
 
-8. Python apps only.
-   This contract covers Python entrypoints executed by `python -u ...`. It does not cover non-Python serving binaries.
+9. Python apps only.
+   This contract covers user Python entrypoints launched by the resolved train or serve command. It does not cover non-Python serving binaries.
 
-9. Tahuna-owned public inference edge.
+10. Tahuna-owned public inference edge.
    Tahuna owns authentication, authorization, proxying, provider isolation, and related guardrails at the public serve edge. The user app owns request and response semantics.
 
 ## Canonical Project Files
@@ -99,9 +104,9 @@ Canonical root-level files:
 - `pyproject.toml`
 - `uv.lock`
 - `train.py`
-- `inference.py`
+- `inference.py` when serving is enabled
 
-Optional project files may exist, but these files define the Tahuna contract.
+Optional project files may exist, but these files define the Tahuna contract. `inference.py` and `[serve]` are omitted when the user chooses not to serve the project.
 
 Legacy `.tahuna/tahuna.toml` is migration-only and is not part of the canonical contract for new projects.
 
@@ -135,9 +140,13 @@ gpu_count = 1
 volume_gb = 120
 
 [train]
+command = ["uv", "run", "--active", "--no-sync", "python", "-u", "train.py"]
+dependency_group = ""
 output_model_path = "outputs/model"
 
 [serve]
+command = ["uv", "run", "--active", "--no-sync", "python", "-u", "inference.py"]
+dependency_group = "serve"
 python_version = "3.11"
 gpu_type = "NVIDIA L40S"
 gpu_count = 1
@@ -188,22 +197,30 @@ Rules:
 
 Training-specific config:
 
+- `command`
+- `dependency_group`
 - `output_model_path`
 
 Defaults:
 
+- `command = ["uv", "run", "--active", "--no-sync", "python", "-u", "train.py"]`
 - `output_model_path = "outputs/model"`
 
 Rules:
 
-- `train.py` is fixed and is not configurable in MVP
-- the training dependency group is fixed to `train`
+- `train.py` is the canonical default training script
+- `[train].command` is synced to the environment and is the canonical launch command for runs
+- `[train].dependency_group` is explicit synced state:
+  - `""` means base `[project.dependencies]`
+  - non-empty string means use that dependency group
 - `output_model_path` is a workspace-relative path under `[project].output_dir`
 
 ### `[serve]`
 
 Serving-specific config:
 
+- `command`
+- `dependency_group`
 - `python_version`
 - `gpu_type`
 - `gpu_count`
@@ -219,6 +236,7 @@ Serving-specific config:
 
 Defaults:
 
+- `command = ["uv", "run", "--active", "--no-sync", "python", "-u", "inference.py"]`
 - `python_version = [environment].python_version`
 - `port = 8000`
 - `health_path = "/health"`
@@ -231,15 +249,17 @@ Defaults:
 
 Rules:
 
-- the default serve command is `python -u inference.py`
+- the default serve command is `uv run --active --no-sync python -u inference.py`
 - `[serve].command` may override the exact serving launch command
-- the serving dependency group is fixed to `serve`
+- `[serve].dependency_group` follows the same selection rules as `[train].dependency_group`
 - `default_model_path` is only a default lookup path inside a run output tree
 - serving compute must be explicit and must not be inferred from `[environment]` except for the `python_version` default
+- `tahuna init` asks whether serving should be enabled before scaffolding `inference.py`
+- `tahuna serve create` must re-resolve the serving dependency selection if it is missing or stale in `tahuna.toml`
 
 ## Dependency Contract
 
-Tahuna uses one Python project with separate dependency groups.
+Tahuna uses one Python project with explicit mode-specific dependency selections.
 
 Canonical dependency sources:
 
@@ -272,23 +292,25 @@ serve = [
 Rules:
 
 - base project dependencies are shared across training and serving
-- `train` dependencies are installed only for `tahuna train`
-- `serve` dependencies are installed only for `tahuna serve`
-- dependency group names are fixed to `train` and `serve`
+- the scaffolded `pyproject.toml` seeds `train` and `serve` groups, but group names are not fixed by the runtime contract
+- `tahuna init` scans available dependency groups and resolves a training dependency selection
+- if serving is enabled and dependency groups exist, `tahuna init` also resolves a serving dependency selection
+- if serving is enabled and no dependency groups exist, serving defaults to base `[project.dependencies]`
+- `tahuna serve create` re-prompts when the serving dependency selection is missing or references a group no longer present in `pyproject.toml`
 - the lockfile must pin both dependency surfaces
 - Tahuna must not infer dependencies by scanning imports
 
 ### Install Semantics
 
-Training runtime installs the base dependency set plus the `train` group.
+Training runtime installs the base dependency set plus the selected training group, if any.
 
-Serving runtime installs the base dependency set plus the `serve` group.
+Serving runtime installs the base dependency set plus the selected serving group, if any.
 
 Reference commands:
 
 ```text
-uv sync --active --frozen --group train
-uv sync --active --frozen --group serve
+uv sync --active --frozen --no-dev --inexact
+uv sync --active --frozen --no-dev --inexact --group <selected-group>
 ```
 
 The exact flag spelling may evolve, but the normative contract is:
@@ -296,18 +318,21 @@ The exact flag spelling may evolve, but the normative contract is:
 - install from `pyproject.toml` and `uv.lock`
 - honor the lockfile
 - install only the dependency set for the active mode
+- omit `--group` entirely when the selected dependency group is empty
 
 ## Training Contract
 
 ### Entrypoint
 
-Tahuna launches training with:
+Tahuna launches training with the resolved `[train].command`.
+
+The default value is:
 
 ```text
-python -u train.py
+uv run --active --no-sync python -u train.py
 ```
 
-No alternate training entrypoint is part of the MVP contract.
+`train.py` remains the canonical default script.
 
 ### Runtime Expectations
 
@@ -333,7 +358,7 @@ Tahuna does not require a specific training framework inside `train.py` beyond w
 Tahuna launches serving with:
 
 ```text
-python -u inference.py
+uv run --active --no-sync python -u inference.py
 ```
 
 This is the default serve command.
@@ -595,6 +620,8 @@ Rules:
 - user libraries such as `vllm`, `sglang`, `transformers`, `fastapi`, or `uvicorn` come from `pyproject.toml` and `uv.lock`
 - Tahuna must not require the user to select a serving engine in `tahuna.toml`
 - Tahuna must not infer serving behavior from dependency names
+- the managed runtime image catalog defaults to `ghcr.io/pazuzzu/tahuna` unless `TAHUNA_RUNTIME_IMAGE_REPO` overrides it
+- the default image repo and the runtime image publishing workflow must stay aligned
 
 ## Clarification On `triton`
 
@@ -624,7 +651,7 @@ The binary `tritonserver` is a different runtime contract and is out of scope fo
 - `train.py` is the canonical training entrypoint
 - `inference.py` is the canonical serving entrypoint
 - canonical project files live at repo root
-- training and serving dependency sets are separate and fixed to `train` and `serve`
+- training and serving dependency selections are explicit synced config, and may be either base deps or a named group
 - Tahuna installs dependencies from `pyproject.toml` and `uv.lock`
 - serving uses a pinned model snapshot at `TAHUNA_MODEL_ROOT`
 - serving health is determined by a local HTTP probe
@@ -636,9 +663,9 @@ The binary `tritonserver` is a different runtime contract and is out of scope fo
 
 The implementation satisfies this contract only if all of the following are true:
 
-- a project with root `tahuna.toml`, `pyproject.toml`, `uv.lock`, `train.py`, and `inference.py` can train and serve without any path overrides
-- training installs base dependencies plus `train`, but not `serve`
-- serving installs base dependencies plus `serve`, but not `train`
+- a project with root `tahuna.toml`, `pyproject.toml`, `uv.lock`, `train.py`, and optional `inference.py` can train, and can serve when serving is enabled
+- training installs base dependencies plus the selected training group, if any
+- serving installs base dependencies plus the selected serving group, if any
 - `tahuna serve create --from-run <run_id>` snapshots the model directory and starts `inference.py`
 - a running serve remains healthy if the source run artifacts are renamed or deleted after snapshot creation
 - a serve that never returns HTTP `200` on the health endpoint fails after `[serve].startup_timeout_seconds`
@@ -656,7 +683,7 @@ This section is non-normative. It exists to guide implementation sequencing.
 1. PR1: Spec alignment. Status: done.
    Rewrite the Python serving contract, mark `specs/serve.md` as superseded for Python app serving, and align product language.
 
-2. PR2: Config contract and migration. Status: in progress.
+2. PR2: Config contract and migration. Status: done.
    Add root `tahuna.toml` support, introduce `[train]` and `[serve]`, migrate from legacy `.tahuna/tahuna.toml`, update project scaffolding, and make local `tahuna.toml` the source of truth for synced config.
 
 3. PR3: Mode-aware dependency installation. Status: done.
