@@ -50,6 +50,8 @@ jobs:
     needs: matrix
     runs-on: ubuntu-latest
     environment: dev
+    env:
+      REGISTRY: ghcr.io/pazuzzu
     strategy:
       fail-fast: false
       max-parallel: 2
@@ -90,12 +92,12 @@ jobs:
           file: runtime/images/Dockerfile
           pull: true
           push: true
-          tags: ghcr.io/${{ toLower(github.repository) }}/tahuna:${{ matrix.tag }}
+          tags: ${{ env.REGISTRY }}/tahuna:${{ matrix.tag }}
           build-args: |
             BASE_IMAGE=${{ matrix.base }}
             PREBAKE_FRAMEWORK=${{ matrix.framework }}
             PREBAKE_VERSION=${{ matrix.version }}
             PREBAKE_PYTHON_VERSION=${{ matrix.python_version }}
             PREBAKE_PROTECTED_PACKAGES=${{ matrix.protected_packages }}
-          cache-from: type=registry,ref=ghcr.io/${{ toLower(github.repository) }}/tahuna:cache-${{ matrix.tag }}
-          cache-to: type=registry,ref=ghcr.io/${{ toLower(github.repository) }}/tahuna:cache-${{ matrix.tag }},mode=max
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/tahuna:cache-${{ matrix.tag }}
+          cache-to: type=registry,ref=${{ env.REGISTRY }}/tahuna:cache-${{ matrix.tag }},mode=max
