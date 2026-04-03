@@ -74,6 +74,10 @@ func initProject(target string) error {
 	if err := ensureUVLockFile(); err != nil {
 		return fmt.Errorf("failed to create uv.lock: %w", err)
 	}
+	dependencyGroups, err := loadProjectDependencyGroups()
+	if err != nil {
+		return fmt.Errorf("failed to inspect pyproject.toml dependency groups: %w", err)
+	}
 	if _, err := ensureConfiguredDependencyGroup(
 		&projectCfg,
 		"train",
@@ -84,7 +88,9 @@ func initProject(target string) error {
 	); err != nil {
 		return fmt.Errorf("failed to resolve training dependency selection: %w", err)
 	}
-	if _, err := ensureConfiguredDependencyGroup(
+	if len(dependencyGroups) == 0 {
+		setServeDependencyGroup(&projectCfg, "")
+	} else if _, err := ensureConfiguredDependencyGroup(
 		&projectCfg,
 		"serve",
 		serveDependencyPromptLabel,
