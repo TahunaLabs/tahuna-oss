@@ -251,18 +251,20 @@ func TestResolveServeCommand_DefaultAndOverride(t *testing.T) {
 
 func TestRenderProjectConfig_WritesExplicitTrainAndServeDefaults(t *testing.T) {
 	rendered, err := renderProjectConfig(projectConfig{
-		DataDir:              "data",
-		OutputDir:            "outputs",
-		Framework:            "pt",
-		FrameworkVersion:     "2.2.0-cu121",
-		PythonVersion:        "3.11",
-		GPUType:              "NVIDIA L4",
-		GPUCount:             1,
-		VolumeGB:             5,
-		TrainOutputModelPath: "outputs/model",
-		ServeGPUType:         "NVIDIA L4",
-		ServeGPUCount:        1,
-		ServeVolumeGB:        5,
+		DataDir:                   "data",
+		OutputDir:                 "outputs",
+		Framework:                 "pt",
+		FrameworkVersion:          "2.2.0-cu121",
+		PythonVersion:             "3.11",
+		GPUType:                   "NVIDIA L4",
+		GPUCount:                  1,
+		VolumeGB:                  5,
+		TrainOutputModelPath:      "outputs/model",
+		TrainDependencyConfigured: true,
+		ServeGPUType:              "NVIDIA L4",
+		ServeGPUCount:             1,
+		ServeVolumeGB:             5,
+		ServeDependencyConfigured: true,
 	})
 	if err != nil {
 		t.Fatalf("renderProjectConfig failed: %v", err)
@@ -272,6 +274,7 @@ func TestRenderProjectConfig_WritesExplicitTrainAndServeDefaults(t *testing.T) {
 		"[train]",
 		`command = ["uv", "run", "--active", "--no-sync", "python", "-u", "train.py"]`,
 		`output_model_path = "outputs/model"`,
+		`dependency_group = ""`,
 		"[serve]",
 		`command = ["uv", "run", "--active", "--no-sync", "python", "-u", "inference.py"]`,
 		`python_version = "3.11"`,

@@ -118,18 +118,20 @@ func setupTestProject(t *testing.T, withData bool) string {
 		t.Fatalf("failed to chdir: %v", err)
 	}
 	if err := saveProjectConfig(projectConfig{
-		DataDir:              "data",
-		OutputDir:            "outputs",
-		Framework:            "pt",
-		FrameworkVersion:     "2.8.0-cu128",
-		PythonVersion:        "3.11",
-		GPUType:              "NVIDIA A100 80GB",
-		GPUCount:             1,
-		VolumeGB:             80,
-		TrainOutputModelPath: "outputs/model",
-		ServeGPUType:         "NVIDIA A100 80GB",
-		ServeGPUCount:        1,
-		ServeVolumeGB:        80,
+		DataDir:                   "data",
+		OutputDir:                 "outputs",
+		Framework:                 "pt",
+		FrameworkVersion:          "2.8.0-cu128",
+		PythonVersion:             "3.11",
+		GPUType:                   "NVIDIA A100 80GB",
+		GPUCount:                  1,
+		VolumeGB:                  80,
+		TrainOutputModelPath:      "outputs/model",
+		TrainDependencyConfigured: true,
+		ServeGPUType:              "NVIDIA A100 80GB",
+		ServeGPUCount:             1,
+		ServeVolumeGB:             80,
+		ServeDependencyConfigured: true,
 	}); err != nil {
 		t.Fatalf("failed to save project config: %v", err)
 	}

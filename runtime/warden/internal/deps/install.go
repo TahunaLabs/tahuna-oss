@@ -19,12 +19,7 @@ type Hooks struct {
 	EmitLog func(level, source, message string)
 }
 
-type Mode string
-
 const (
-	ModeTrain Mode = "train"
-	ModeServe Mode = "serve"
-
 	protectedPackagesEnv             = "TAHUNA_PREBAKED_PROTECTED_PACKAGES"
 	prebakedProtectedVersionsFileEnv = "TAHUNA_PREBAKED_PROTECTED_VERSIONS_FILE"
 	defaultProtectedVersionsFilePath = "/opt/tahuna/protected-package-versions.json"
@@ -48,12 +43,7 @@ type commandRunner func(
 var runCommand commandRunner = runStreamingCommandWithEnv
 var ensureUVCommand = ensureUV
 
-func InstallDependencies(ctx context.Context, workspaceRoot string, mode Mode, hooks Hooks) error {
-	group, err := dependencyGroup(mode)
-	if err != nil {
-		return err
-	}
-
+func InstallDependencies(ctx context.Context, workspaceRoot string, dependencyGroup string, hooks Hooks) error {
 	pyproject := filepath.Join(workspaceRoot, "pyproject.toml")
 	if _, err := os.Stat(pyproject); err != nil {
 		return fmt.Errorf("pyproject.toml not found in workspace")
@@ -88,7 +78,7 @@ func InstallDependencies(ctx context.Context, workspaceRoot string, mode Mode, h
 		}
 	}
 
-	fullSyncCommand := buildSyncCommand(group, hasLock, useActiveVirtualEnv)
+	fullSyncCommand := buildSyncCommand(strings.TrimSpace(dependencyGroup), hasLock, useActiveVirtualEnv)
 	selectiveSyncCommand := buildSelectiveSyncCommand(fullSyncCommand, protectedPackages)
 	selectiveInstallEnabled := len(protectedPackages) > 0
 	if selectiveInstallEnabled {
@@ -153,18 +143,7 @@ func InstallDependencies(ctx context.Context, workspaceRoot string, mode Mode, h
 	return nil
 }
 
-func dependencyGroup(mode Mode) (string, error) {
-	switch mode {
-	case ModeTrain:
-		return "train", nil
-	case ModeServe:
-		return "serve", nil
-	default:
-		return "", fmt.Errorf("unsupported dependency install mode %q", strings.TrimSpace(string(mode)))
-	}
-}
-
-func buildSyncCommand(group string, hasLock, useActiveVirtualEnv bool) []string {
+func buildSyncCommand(dependencyGroup string, hasLock, useActiveVirtualEnv bool) []string {
 	command := []string{"uv", "sync"}
 	if useActiveVirtualEnv {
 		command = append(command, "--active")
@@ -172,7 +151,10 @@ func buildSyncCommand(group string, hasLock, useActiveVirtualEnv bool) []string 
 	if hasLock {
 		command = append(command, "--frozen")
 	}
-	command = append(command, "--no-dev", "--inexact", "--group", group)
+	command = append(command, "--no-dev", "--inexact")
+	if dependencyGroup != "" {
+		command = append(command, "--group", dependencyGroup)
+	}
 	return command
 }
 

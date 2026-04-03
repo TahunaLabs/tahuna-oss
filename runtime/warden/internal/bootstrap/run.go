@@ -76,7 +76,7 @@ func (r *Runner) runTraining(ctx context.Context) error {
 	}()
 
 	r.transition(StateInstall)
-	installErr := deps.InstallDependencies(ctx, r.cfg.WorkspaceRoot, deps.ModeTrain, installHooks)
+	installErr := deps.InstallDependencies(ctx, r.cfg.WorkspaceRoot, plan.DependencyGroup, installHooks)
 	dataRes := <-dataResultCh
 	if installErr != nil {
 		return r.failWithError(ctx, installErr)

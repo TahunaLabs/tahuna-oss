@@ -13,11 +13,16 @@ import (
 func TestInstallDependenciesSelectiveSyncSuccess(t *testing.T) {
 	for _, tc := range []struct {
 		name  string
-		mode  Mode
 		group string
 	}{
-		{name: "train", mode: ModeTrain, group: "train"},
-		{name: "serve", mode: ModeServe, group: "serve"},
+		{
+			name:  "train",
+			group: "train",
+		},
+		{
+			name:  "serve",
+			group: "serve",
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			root := t.TempDir()
@@ -58,7 +63,7 @@ func TestInstallDependenciesSelectiveSyncSuccess(t *testing.T) {
 				return 0, nil
 			}
 
-			if err := InstallDependencies(context.Background(), root, tc.mode, Hooks{}); err != nil {
+			if err := InstallDependencies(context.Background(), root, tc.group, Hooks{}); err != nil {
 				t.Fatalf("InstallDependencies returned error: %v", err)
 			}
 
@@ -152,7 +157,12 @@ version = "3.0.0"
 		return 0, nil
 	}
 
-	if err := InstallDependencies(context.Background(), root, ModeTrain, Hooks{}); err != nil {
+	if err := InstallDependencies(
+		context.Background(),
+		root,
+		"train",
+		Hooks{},
+	); err != nil {
 		t.Fatalf("InstallDependencies returned error: %v", err)
 	}
 
@@ -211,7 +221,12 @@ version = "2.5.0"
 		return 0, nil
 	}
 
-	if err := InstallDependencies(context.Background(), root, ModeTrain, Hooks{}); err != nil {
+	if err := InstallDependencies(
+		context.Background(),
+		root,
+		"train",
+		Hooks{},
+	); err != nil {
 		t.Fatalf("InstallDependencies returned error: %v", err)
 	}
 
@@ -263,7 +278,12 @@ func TestInstallDependenciesFallsBackToFullSync(t *testing.T) {
 		return 0, nil
 	}
 
-	if err := InstallDependencies(context.Background(), root, ModeTrain, Hooks{}); err != nil {
+	if err := InstallDependencies(
+		context.Background(),
+		root,
+		"train",
+		Hooks{},
+	); err != nil {
 		t.Fatalf("InstallDependencies returned error: %v", err)
 	}
 
@@ -316,13 +336,21 @@ func TestInstallDependenciesWithoutLockSkipsFrozenFlag(t *testing.T) {
 		return 0, nil
 	}
 
-	if err := InstallDependencies(context.Background(), root, ModeTrain, Hooks{}); err != nil {
+	if err := InstallDependencies(
+		context.Background(),
+		root,
+		"",
+		Hooks{},
+	); err != nil {
 		t.Fatalf("InstallDependencies returned error: %v", err)
 	}
 
 	joined := strings.Join(command, " ")
 	if strings.Contains(joined, "--frozen") {
 		t.Fatalf("did not expect --frozen without uv.lock, got %q", joined)
+	}
+	if strings.Contains(joined, "--group") {
+		t.Fatalf("did not expect dependency group for project-mode install, got %q", joined)
 	}
 }
 
@@ -360,7 +388,12 @@ func TestInstallDependenciesReturnsErrorWhenFallbackFails(t *testing.T) {
 		return 9, nil
 	}
 
-	err := InstallDependencies(context.Background(), root, ModeTrain, Hooks{})
+	err := InstallDependencies(
+		context.Background(),
+		root,
+		"train",
+		Hooks{},
+	)
 	if err == nil {
 		t.Fatal("expected InstallDependencies to fail when fallback sync fails")
 	}
@@ -369,17 +402,39 @@ func TestInstallDependenciesReturnsErrorWhenFallbackFails(t *testing.T) {
 	}
 }
 
-func TestInstallDependenciesRejectsUnknownMode(t *testing.T) {
+func TestInstallDependenciesTrimsDependencyGroup(t *testing.T) {
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, "pyproject.toml"), []byte("[project]\nname='x'\nversion='0.1.0'\n"), 0o644); err != nil {
 		t.Fatalf("write pyproject: %v", err)
 	}
 
-	err := InstallDependencies(context.Background(), root, Mode("bad-mode"), Hooks{})
-	if err == nil {
-		t.Fatal("expected InstallDependencies to reject unsupported mode")
+	previousEnsure := ensureUVCommand
+	previousRunner := runCommand
+	defer func() {
+		ensureUVCommand = previousEnsure
+		runCommand = previousRunner
+	}()
+
+	ensureUVCommand = func(context.Context, string, Hooks) error { return nil }
+
+	var command []string
+	runCommand = func(
+		_ context.Context,
+		_ string,
+		cmd []string,
+		_ Hooks,
+		_ []string,
+	) (int, error) {
+		command = append([]string{}, cmd...)
+		return 0, nil
 	}
-	if !strings.Contains(err.Error(), "unsupported dependency install mode") {
-		t.Fatalf("unexpected error: %v", err)
+
+	if err := InstallDependencies(context.Background(), root, "  train  ", Hooks{}); err != nil {
+		t.Fatalf("InstallDependencies returned error: %v", err)
+	}
+
+	joined := strings.Join(command, " ")
+	if !strings.Contains(joined, "--group train") {
+		t.Fatalf("expected trimmed dependency group, got %q", joined)
 	}
 }

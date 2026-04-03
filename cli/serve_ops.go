@@ -120,6 +120,31 @@ func createServeWithCapacityPrompt(environmentID string, payload map[string]any)
 	})
 }
 
+func ensureServeDependencySelection(environmentID string) error {
+	cfg, err := loadProjectConfig()
+	if err != nil {
+		return err
+	}
+	changed, err := ensureConfiguredDependencyGroup(
+		&cfg,
+		"serve",
+		serveDependencyPromptLabel,
+		cfg.ServeDependencyGroup,
+		serveDependencyGroupConfigured(cfg),
+		"serve",
+	)
+	if err != nil {
+		return err
+	}
+	if !changed {
+		return nil
+	}
+	if err := saveProjectConfig(cfg); err != nil {
+		return fmt.Errorf("failed to save project config: %w", err)
+	}
+	return runSyncWithStatus(environmentID, syncScope{})
+}
+
 func serveCreate(args []string) {
 	fs := flag.NewFlagSet("serve create", flag.ExitOnError)
 	fromRunID := fs.String("from-run", "", "Completed run ID to serve from")
@@ -133,6 +158,7 @@ func serveCreate(args []string) {
 
 	environmentID, err := resolveEnvironmentID()
 	must(err)
+	must(ensureServeDependencySelection(environmentID))
 
 	payload, err := buildServeCreatePayload(environmentID, *fromRunID, *fromStoragePrefix, *modelPath)
 	must(err)

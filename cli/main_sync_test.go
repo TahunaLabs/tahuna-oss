@@ -299,6 +299,9 @@ func TestPreRunSync_ConfigValidationFailsBeforeSyncCommit(t *testing.T) {
 	brokenConfig := `[project]
 data_dir = "data"
 
+[train]
+dependency_group = ""
+
 [serve]
 gpu_type = "NVIDIA A100 80GB"
 gpu_count = 1

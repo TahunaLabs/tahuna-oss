@@ -2,6 +2,7 @@ package main
 
 type serveSnapshotResponse struct {
 	Command                 []string `json:"command"`
+	DependencyGroup         *string  `json:"dependency_group,omitempty"`
 	PythonVersion           string   `json:"python_version"`
 	GPUType                 string   `json:"gpu_type"`
 	GPUCount                int64    `json:"gpu_count"`
@@ -90,19 +91,20 @@ type stopServeResponse struct {
 
 // environmentResponse represents a single environment from the API.
 type environmentResponse struct {
-	EnvironmentID string                 `json:"environment_id"`
-	Name          string                 `json:"name"`
-	GPUType       string                 `json:"gpu_type"`
-	GPUCount      int64                  `json:"gpu_count"`
-	VolumeGB      int64                  `json:"volume_gb"`
-	Framework     string                 `json:"framework"`
-	Version       string                 `json:"version"`
-	PythonVersion string                 `json:"python_version"`
-	Artifacts     string                 `json:"artifacts"`
-	BoundDataIDs  []string               `json:"bound_data_ids"`
-	Command       []string               `json:"command"`
-	OutputDir     string                 `json:"output_dir"`
-	ServeSnapshot *serveSnapshotResponse `json:"serve_snapshot"`
+	EnvironmentID        string                 `json:"environment_id"`
+	Name                 string                 `json:"name"`
+	GPUType              string                 `json:"gpu_type"`
+	GPUCount             int64                  `json:"gpu_count"`
+	VolumeGB             int64                  `json:"volume_gb"`
+	Framework            string                 `json:"framework"`
+	Version              string                 `json:"version"`
+	PythonVersion        string                 `json:"python_version"`
+	TrainDependencyGroup string                 `json:"train_dependency_group"`
+	Artifacts            string                 `json:"artifacts"`
+	BoundDataIDs         []string               `json:"bound_data_ids"`
+	Command              []string               `json:"command"`
+	OutputDir            string                 `json:"output_dir"`
+	ServeSnapshot        *serveSnapshotResponse `json:"serve_snapshot"`
 }
 
 // environmentsResponse is the response from GET /environments.

@@ -140,6 +140,9 @@ func buildSyncCommitPayload(environmentID string, prepared []preparedManifest, c
 	if len(cmd) > 0 {
 		commitPayload["command"] = cmd
 	}
+	if cfg.TrainDependencyConfigured {
+		commitPayload["train_dependency_group"] = normalizeDependencyGroup(cfg.TrainDependencyGroup)
+	}
 	if outputDir := strings.TrimSpace(cfg.OutputDir); outputDir != "" {
 		commitPayload["output_dir"] = outputDir
 	} else {

@@ -57,6 +57,7 @@ type ResolvedServeConfig = {
   outputDir: string
   codeManifestHash: string
   dataManifestHash: string | null
+  dependencyGroup: string
   pythonVersion: string
   gpuType: string
   gpuCount: number
@@ -138,6 +139,7 @@ type ServeProvisioningPayload = {
   environment_data_id: string
   user_id: string
   command: string[]
+  dependency_group: string
   output_dir: string
   logs_path: string
   code_manifest_hash: string | null
@@ -173,6 +175,7 @@ type RuntimeBootstrapPlan = {
   output_dir: string
   logs_path: string
   command: string[]
+  dependency_group: string
   code: {
     manifest_hash: string
     entries: RuntimeBootstrapEntry[]
@@ -205,6 +208,7 @@ type RuntimeBootstrapContext = {
   output_dir: string
   logs_path: string
   command: string[]
+  dependency_group: string
   code_manifest_hash: string | null
   data_manifest_hash: string | null
   python_version: string
@@ -228,6 +232,7 @@ const resolvedServeConfigValidator = v.object({
   outputDir: v.string(),
   codeManifestHash: v.string(),
   dataManifestHash: v.union(v.string(), v.null()),
+  dependencyGroup: v.string(),
   pythonVersion: v.string(),
   gpuType: v.string(),
   gpuCount: v.number(),
@@ -427,6 +432,7 @@ const serveProvisioningPayloadValidator = v.object({
   environment_data_id: v.string(),
   user_id: v.string(),
   command: v.array(v.string()),
+  dependency_group: v.string(),
   output_dir: v.string(),
   logs_path: v.string(),
   code_manifest_hash: v.union(v.string(), v.null()),
@@ -470,6 +476,7 @@ const runtimeBootstrapContextValidator = v.object({
   output_dir: v.string(),
   logs_path: v.string(),
   command: v.array(v.string()),
+  dependency_group: v.string(),
   code_manifest_hash: v.union(v.string(), v.null()),
   data_manifest_hash: v.union(v.string(), v.null()),
   python_version: v.string(),
@@ -500,6 +507,7 @@ const runtimeBootstrapPlanValidator = v.object({
   output_dir: v.string(),
   logs_path: v.string(),
   command: v.array(v.string()),
+  dependency_group: v.string(),
   code: v.object({
     manifest_hash: v.string(),
     entries: v.array(runtimeBootstrapEntryValidator),
@@ -851,6 +859,9 @@ export const internalPrepareCreate = internalQuery({
     if (!serveSnapshot || !Array.isArray(serveSnapshot.command) || serveSnapshot.command.length === 0) {
       throw new ConvexError("environment has no serve config configured; run `tahuna sync` before creating a serve")
     }
+    if (typeof serveSnapshot.dependencyGroup !== "string") {
+      throw new ConvexError("environment has no serve dependency selection configured; run `tahuna sync` before creating a serve")
+    }
     if (!env.latestCodeManifestHash) {
       throw new ConvexError("environment code is not synced; run `tahuna sync` before creating a serve")
     }
@@ -866,6 +877,7 @@ export const internalPrepareCreate = internalQuery({
       outputDir: env.outputDir,
       codeManifestHash: env.latestCodeManifestHash,
       dataManifestHash: env.latestDataManifestHash || null,
+      dependencyGroup: serveSnapshot.dependencyGroup.trim(),
       pythonVersion: serveSnapshot.pythonVersion,
       gpuType: args.gpuType?.trim() || serveSnapshot.gpuType,
       gpuCount:
@@ -1140,12 +1152,16 @@ export const internalGetProvisioningPayload = internalQuery({
     if (!environment) {
       throw new ConvexError("environment not found")
     }
+    if (typeof row.dependencyGroup !== "string") {
+      throw new ConvexError("serve dependency selection is missing")
+    }
     return {
       serve_id: String(row._id),
       environment_id: String(row.environmentId),
       environment_data_id: environment.dataId || String(environment._id),
       user_id: row.userId,
       command: row.command,
+      dependency_group: row.dependencyGroup,
       output_dir: row.outputDir,
       logs_path: row.logs,
       code_manifest_hash: row.codeManifestHash || null,
@@ -1264,6 +1280,9 @@ export const internalGetRuntimeBootstrapContext = internalQuery({
     if (!environment) {
       throw new ConvexError("environment not found")
     }
+    if (typeof row.dependencyGroup !== "string") {
+      throw new ConvexError("serve dependency selection is missing")
+    }
     return {
       serve_id: String(row._id),
       environment_id: String(row.environmentId),
@@ -1273,6 +1292,7 @@ export const internalGetRuntimeBootstrapContext = internalQuery({
       output_dir: row.outputDir,
       logs_path: row.logs,
       command: row.command,
+      dependency_group: row.dependencyGroup,
       code_manifest_hash: row.codeManifestHash || null,
       data_manifest_hash: row.dataManifestHash || null,
       python_version: row.pythonVersion,
@@ -1344,6 +1364,7 @@ export const internalGetRuntimeBootstrapPlan = internalAction({
       output_dir: bootstrap.output_dir,
       logs_path: bootstrap.logs_path,
       command: bootstrap.command,
+      dependency_group: bootstrap.dependency_group,
       code: {
         manifest_hash: bootstrap.code_manifest_hash,
         entries: codeEntries,

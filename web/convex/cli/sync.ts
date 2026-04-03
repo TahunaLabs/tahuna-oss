@@ -92,6 +92,8 @@ function normalizeServeSnapshot(raw: unknown) {
     typeof snapshot.health_failure_threshold === "number" ? snapshot.health_failure_threshold : null;
   const gracefulShutdownSeconds =
     typeof snapshot.graceful_shutdown_seconds === "number" ? snapshot.graceful_shutdown_seconds : null;
+  const dependencyGroup =
+    typeof snapshot.dependency_group === "string" ? snapshot.dependency_group.trim() : undefined;
 
   if (
     !command || command.length === 0 ||
@@ -110,9 +112,9 @@ function normalizeServeSnapshot(raw: unknown) {
   ) {
     throw new Error("serve_snapshot must include command, runtime, device, port, health, and model fields");
   }
-
   return {
     command,
+    dependency_group: dependencyGroup,
     python_version: pythonVersion,
     gpu_type: gpuType,
     gpu_count: gpuCount,
@@ -487,6 +489,10 @@ export const commitSync = httpAction(async (ctx, request) => {
   const command = Array.isArray(commandRaw)
     ? commandRaw.filter((p: unknown) => typeof p === "string" && (p as string).trim() !== "")
     : undefined;
+  const trainDependencyGroup =
+    typeof body?.train_dependency_group === "string"
+      ? body.train_dependency_group.trim()
+      : undefined;
   const outputDir = typeof body?.output_dir === "string" && body.output_dir.trim() !== ""
     ? body.output_dir.trim()
     : undefined;
@@ -509,6 +515,7 @@ export const commitSync = httpAction(async (ctx, request) => {
     typeof gpuCount !== "undefined" ||
     typeof volumeGb !== "undefined" ||
     typeof command !== "undefined" ||
+    typeof trainDependencyGroup !== "undefined" ||
     typeof outputDir !== "undefined" ||
     typeof serveSnapshot !== "undefined";
 
@@ -535,6 +542,7 @@ export const commitSync = httpAction(async (ctx, request) => {
       gpu_count: gpuCount,
       volume_gb: volumeGb,
       command,
+      train_dependency_group: trainDependencyGroup,
       output_dir: outputDir,
       serve_snapshot: serveSnapshot,
     });

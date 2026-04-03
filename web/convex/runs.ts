@@ -175,6 +175,7 @@ const provisioningPayloadValidator = v.object({
   environment_id: v.string(),
   user_id: v.string(),
   command: v.array(v.string()),
+  dependency_group: v.string(),
   output_dir: v.string(),
   input_path: v.string(),
   output_path: v.string(),
@@ -251,6 +252,7 @@ const runtimeBootstrapPlanValidator = v.object({
   contract_version: v.string(),
   workspace_root: v.string(),
   command: v.array(v.string()),
+  dependency_group: v.string(),
   code: v.object({
     manifest_hash: v.string(),
     entries: v.array(runtimeBootstrapEntryValidator),
@@ -284,6 +286,7 @@ type ProvisioningPayload = {
   environment_id: string;
   user_id: string;
   command: string[];
+  dependency_group: string;
   output_dir: string;
   input_path: string;
   output_path: string;
@@ -306,6 +309,7 @@ type RuntimeBootstrapPlan = {
   contract_version: string;
   workspace_root: string;
   command: string[];
+  dependency_group: string;
   code: {
     manifest_hash: string;
     entries: RuntimeBootstrapEntry[];
@@ -432,11 +436,15 @@ function manifestKey(
 }
 
 function toProvisioningPayload(row: Doc<"runs">): ProvisioningPayload {
+  if (typeof row.dependencyGroup !== "string") {
+    throw new ConvexError("run dependency selection is missing");
+  }
   return {
     run_id: String(row._id),
     environment_id: String(row.environmentId),
     user_id: row.userId,
     command: row.command ?? [],
+    dependency_group: row.dependencyGroup,
     output_dir: row.outputDir ?? "outputs",
     input_path: row.input,
     output_path: row.output,
@@ -1080,6 +1088,7 @@ export const internalGetRuntimeBootstrapPlan = internalAction({
       contract_version: provisioningPayload.contract_version,
       workspace_root: "/workspace",
       command: provisioningPayload.command,
+      dependency_group: provisioningPayload.dependency_group,
       code: {
         manifest_hash: codeManifestHash,
         entries: codeEntries,

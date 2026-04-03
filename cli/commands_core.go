@@ -74,6 +74,26 @@ func initProject(target string) error {
 	if err := ensureUVLockFile(); err != nil {
 		return fmt.Errorf("failed to create uv.lock: %w", err)
 	}
+	if _, err := ensureConfiguredDependencyGroup(
+		&projectCfg,
+		"train",
+		trainDependencyPromptLabel,
+		projectCfg.TrainDependencyGroup,
+		trainDependencyGroupConfigured(projectCfg),
+		"train",
+	); err != nil {
+		return fmt.Errorf("failed to resolve training dependency selection: %w", err)
+	}
+	if _, err := ensureConfiguredDependencyGroup(
+		&projectCfg,
+		"serve",
+		serveDependencyPromptLabel,
+		projectCfg.ServeDependencyGroup,
+		serveDependencyGroupConfigured(projectCfg),
+		"serve",
+	); err != nil {
+		return fmt.Errorf("failed to resolve serving dependency selection: %w", err)
+	}
 	if err := ensureProjectFile("train.py", defaultTrainEntrypointTemplate(projectCfg)); err != nil {
 		return fmt.Errorf("failed to create train entrypoint: %w", err)
 	}
@@ -1146,5 +1166,23 @@ func createRunWithCapacityPrompt(path string, payload map[string]any) (createRun
 }
 
 func preRunSync(environmentID string) error {
+	cfg, err := loadProjectConfig()
+	if err != nil {
+		return err
+	}
+	if changed, err := ensureConfiguredDependencyGroup(
+		&cfg,
+		"train",
+		trainDependencyPromptLabel,
+		cfg.TrainDependencyGroup,
+		trainDependencyGroupConfigured(cfg),
+		"train",
+	); err != nil {
+		return err
+	} else if changed {
+		if err := saveProjectConfig(cfg); err != nil {
+			return fmt.Errorf("failed to save project config: %w", err)
+		}
+	}
 	return runSyncWithStatus(environmentID, syncScope{code: true, data: true})
 }

@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/BurntSushi/toml"
@@ -46,8 +47,12 @@ type projectConfig struct {
 	GPUCount                     int
 	VolumeGB                     int
 	TrainCommand                 []string
+	TrainDependencyGroup         string
+	TrainDependencyConfigured    bool
 	TrainOutputModelPath         string
 	ServeCommand                 []string
+	ServeDependencyGroup         string
+	ServeDependencyConfigured    bool
 	ServePythonVersion           string
 	ServeGPUType                 string
 	ServeGPUCount                int
@@ -91,11 +96,13 @@ type projectConfigEnvironmentSection struct {
 
 type projectConfigTrainSection struct {
 	Command         []string `toml:"command,omitempty"`
+	DependencyGroup string   `toml:"dependency_group,omitempty"`
 	OutputModelPath string   `toml:"output_model_path,omitempty"`
 }
 
 type projectConfigServeSection struct {
 	Command                 []string `toml:"command,omitempty"`
+	DependencyGroup         string   `toml:"dependency_group,omitempty"`
 	PythonVersion           string   `toml:"python_version,omitempty"`
 	GPUType                 string   `toml:"gpu_type,omitempty"`
 	GPUCount                int      `toml:"gpu_count,omitempty"`
@@ -108,6 +115,34 @@ type projectConfigServeSection struct {
 	HealthTimeoutSeconds    int      `toml:"health_timeout_seconds,omitempty"`
 	HealthFailureThreshold  int      `toml:"health_failure_threshold,omitempty"`
 	GracefulShutdownSeconds int      `toml:"graceful_shutdown_seconds,omitempty"`
+}
+
+const (
+	baseDependenciesChoiceLabel = "Use base [project.dependencies]"
+	trainDependencyPromptLabel  = "Training dependencies"
+	serveDependencyPromptLabel  = "Serving dependencies"
+)
+
+func normalizeDependencyGroup(value string) string {
+	return strings.TrimSpace(value)
+}
+
+func trainDependencyGroupConfigured(cfg projectConfig) bool {
+	return cfg.TrainDependencyConfigured
+}
+
+func serveDependencyGroupConfigured(cfg projectConfig) bool {
+	return cfg.ServeDependencyConfigured
+}
+
+func setTrainDependencyGroup(cfg *projectConfig, group string) {
+	cfg.TrainDependencyGroup = normalizeDependencyGroup(group)
+	cfg.TrainDependencyConfigured = true
+}
+
+func setServeDependencyGroup(cfg *projectConfig, group string) {
+	cfg.ServeDependencyGroup = normalizeDependencyGroup(group)
+	cfg.ServeDependencyConfigured = true
 }
 
 func normalizeProjectPath(value string) string {
@@ -316,6 +351,140 @@ func detectPythonVersion() string {
 	return readAndExtract("pyproject.toml")
 }
 
+func loadProjectDependencyGroups() ([]string, error) {
+	type pyprojectDependencyGroups struct {
+		DependencyGroups map[string]any `toml:"dependency-groups"`
+	}
+
+	var parsed pyprojectDependencyGroups
+	if _, err := toml.DecodeFile("pyproject.toml", &parsed); err != nil {
+		return nil, fmt.Errorf("failed to parse pyproject.toml dependency groups: %w", err)
+	}
+
+	groups := make([]string, 0, len(parsed.DependencyGroups))
+	for name := range parsed.DependencyGroups {
+		trimmed := strings.TrimSpace(name)
+		if trimmed == "" {
+			continue
+		}
+		groups = append(groups, trimmed)
+	}
+	sort.Strings(groups)
+	return groups, nil
+}
+
+func dependencyGroupExists(groups []string, group string) bool {
+	trimmed := strings.TrimSpace(group)
+	if trimmed == "" {
+		return false
+	}
+	for _, candidate := range groups {
+		if candidate == trimmed {
+			return true
+		}
+	}
+	return false
+}
+
+func validateDependencyGroup(section, group string, groups []string, configured bool, allowUnset bool) error {
+	normalizedGroup := normalizeDependencyGroup(group)
+	if !configured {
+		if allowUnset {
+			return nil
+		}
+		return fmt.Errorf("missing %s.dependency_group in %s", section, projectConfigFilePath())
+	}
+	if normalizedGroup == "" {
+		return nil
+	}
+	if !dependencyGroupExists(groups, normalizedGroup) {
+		return fmt.Errorf("invalid %s.dependency_group %q in %s: group not found in pyproject.toml", section, normalizedGroup, projectConfigFilePath())
+	}
+	return nil
+}
+
+func promptDependencyGroup(label string, groups []string, currentGroup, preferredGroup string) string {
+	type option struct {
+		label string
+		group string
+	}
+
+	options := []option{{
+		label: baseDependenciesChoiceLabel,
+		group: "",
+	}}
+	for _, group := range groups {
+		options = append(options, option{
+			label: fmt.Sprintf("Use dependency group [%s]", group),
+			group: group,
+		})
+	}
+
+	defaultIndex := 0
+	if dependencyGroupExists(groups, currentGroup) {
+		for index, option := range options {
+			if option.group == currentGroup {
+				defaultIndex = index
+				break
+			}
+		}
+	} else if dependencyGroupExists(groups, preferredGroup) {
+		for index, option := range options {
+			if option.group == preferredGroup {
+				defaultIndex = index
+				break
+			}
+		}
+	}
+
+	labels := make([]string, 0, len(options))
+	for _, option := range options {
+		labels = append(labels, option.label)
+	}
+	choice := promptChoice(label, labels, defaultIndex)
+	for _, option := range options {
+		if option.label == choice {
+			return option.group
+		}
+	}
+	return options[defaultIndex].group
+}
+
+func ensureConfiguredDependencyGroup(
+	cfg *projectConfig,
+	section string,
+	promptLabel string,
+	currentGroup string,
+	configured bool,
+	preferredGroup string,
+) (bool, error) {
+	groups, err := loadProjectDependencyGroups()
+	if err != nil {
+		return false, err
+	}
+	if err := validateDependencyGroup(section, currentGroup, groups, configured, true); err == nil && configured {
+		return false, nil
+	}
+
+	if !supportsInteractivePrompts() {
+		if configured {
+			return false, fmt.Errorf("invalid %s dependency selection in %s; update pyproject.toml or rerun `tahuna init .`", section, projectConfigFilePath())
+		}
+		return false, fmt.Errorf("missing %s dependency selection in %s; rerun `tahuna init .` or update %s", section, projectConfigFilePath(), projectConfigFilePath())
+	}
+
+	group := promptDependencyGroup(promptLabel, groups, currentGroup, preferredGroup)
+	switch section {
+	case "train":
+		setTrainDependencyGroup(cfg, group)
+	case "serve":
+		setServeDependencyGroup(cfg, group)
+	default:
+		return false, fmt.Errorf("unsupported dependency selection section %q", section)
+	}
+	return true, nil
+}
+
 func extractPythonVersionFromText(text string) string {
 	lower := strings.ToLower(text)
 	lines := strings.Split(lower, "\n")
@@ -455,6 +624,13 @@ func validateProjectConfigBindings(environmentID string) (projectConfig, error) 
 	if err := validateCanonicalProjectFile("uv.lock"); err != nil {
 		return cfg, err
 	}
+	dependencyGroups, err := loadProjectDependencyGroups()
+	if err != nil {
+		return cfg, err
+	}
+	if err := validateDependencyGroup("train", cfg.TrainDependencyGroup, dependencyGroups, cfg.TrainDependencyConfigured, true); err != nil {
+		return cfg, err
+	}
 	if err := validateProjectSubpathBinding("train.output_model_path", cfg.TrainOutputModelPath, cfg.OutputDir); err != nil {
 		return cfg, err
 	}
@@ -561,11 +737,19 @@ func mergeProjectConfig(base, next projectConfig) projectConfig {
 	if len(next.TrainCommand) > 0 {
 		base.TrainCommand = append([]string{}, normalizeCommandTokens(next.TrainCommand)...)
 	}
+	if next.TrainDependencyConfigured {
+		base.TrainDependencyConfigured = true
+		base.TrainDependencyGroup = normalizeDependencyGroup(next.TrainDependencyGroup)
+	}
 	if value := strings.TrimSpace(next.TrainOutputModelPath); value != "" {
 		base.TrainOutputModelPath = normalizeProjectPath(value)
 	}
 	if len(next.ServeCommand) > 0 {
 		base.ServeCommand = append([]string{}, normalizeCommandTokens(next.ServeCommand)...)
+	}
+	if next.ServeDependencyConfigured {
+		base.ServeDependencyConfigured = true
+		base.ServeDependencyGroup = normalizeDependencyGroup(next.ServeDependencyGroup)
 	}
 	if value := strings.TrimSpace(next.ServePythonVersion); value != "" {
 		base.ServePythonVersion = value
@@ -621,11 +805,16 @@ func hasProjectSection(cfg projectConfig) bool {
 }
 
 func hasTrainSection(cfg projectConfig) bool {
-	return len(cfg.TrainCommand) > 0 || strings.TrimSpace(cfg.TrainOutputModelPath) != ""
+	return len(cfg.TrainCommand) > 0 ||
+		cfg.TrainDependencyConfigured ||
+		strings.TrimSpace(cfg.TrainDependencyGroup) != "" ||
+		strings.TrimSpace(cfg.TrainOutputModelPath) != ""
 }
 
 func hasServeSection(cfg projectConfig) bool {
 	return len(cfg.ServeCommand) > 0 ||
+		cfg.ServeDependencyConfigured ||
+		strings.TrimSpace(cfg.ServeDependencyGroup) != "" ||
 		strings.TrimSpace(cfg.ServePythonVersion) != "" ||
 		strings.TrimSpace(cfg.ServeGPUType) != "" ||
 		cfg.ServeGPUCount > 0 ||
@@ -704,6 +893,9 @@ func renderProjectConfig(cfg projectConfig) (string, error) {
 			return "", err
 		}
 		lines = append(lines, fmt.Sprintf("command = %s", renderTomlStringArray(trainCommand)))
+		if cfg.TrainDependencyConfigured {
+			lines = append(lines, fmt.Sprintf("dependency_group = \"%s\"", escapeProjectConfigValue(normalizeDependencyGroup(cfg.TrainDependencyGroup))))
+		}
 		trainOutputModelPath := strings.TrimSpace(cfg.TrainOutputModelPath)
 		if trainOutputModelPath == "" {
 			outputDir := strings.TrimSpace(cfg.OutputDir)
@@ -725,6 +917,9 @@ func renderProjectConfig(cfg projectConfig) (string, error) {
 			return "", err
 		}
 		lines = append(lines, fmt.Sprintf("command = %s", renderTomlStringArray(serveCommand)))
+		if cfg.ServeDependencyConfigured {
+			lines = append(lines, fmt.Sprintf("dependency_group = \"%s\"", escapeProjectConfigValue(normalizeDependencyGroup(cfg.ServeDependencyGroup))))
+		}
 		servePythonVersion := strings.TrimSpace(cfg.ServePythonVersion)
 		if servePythonVersion == "" {
 			servePythonVersion = strings.TrimSpace(cfg.PythonVersion)
@@ -804,7 +999,7 @@ func parseProjectConfigTOML(text string) (parsedProjectConfig, error) {
 		return parsedProjectConfig{}, err
 	}
 	return parsedProjectConfig{
-		cfg:     projectConfigFromFile(file),
+		cfg:     projectConfigFromFile(file, defined),
 		file:    file,
 		defined: defined,
 	}, nil
@@ -830,7 +1025,7 @@ func validateRequiredProjectConfigValues(path string, file projectConfigFile, de
 	return nil
 }
 
-func projectConfigFromFile(file projectConfigFile) projectConfig {
+func projectConfigFromFile(file projectConfigFile, defined map[string]struct{}) projectConfig {
 	cfg := projectConfig{}
 	if file.Project != nil {
 		cfg.DataDir = normalizeProjectPath(file.Project.DataDir)
@@ -846,10 +1041,14 @@ func projectConfigFromFile(file projectConfigFile) projectConfig {
 	}
 	if file.Train != nil {
 		cfg.TrainCommand = normalizeCommandTokens(file.Train.Command)
+		cfg.TrainDependencyGroup = normalizeDependencyGroup(file.Train.DependencyGroup)
+		cfg.TrainDependencyConfigured = tomlKeyDefined(defined, "train.dependency_group")
 		cfg.TrainOutputModelPath = normalizeProjectPath(file.Train.OutputModelPath)
 	}
 	if file.Serve != nil {
 		cfg.ServeCommand = normalizeCommandTokens(file.Serve.Command)
+		cfg.ServeDependencyGroup = normalizeDependencyGroup(file.Serve.DependencyGroup)
+		cfg.ServeDependencyConfigured = tomlKeyDefined(defined, "serve.dependency_group")
 		cfg.ServePythonVersion = file.Serve.PythonVersion
 		cfg.ServeGPUType = file.Serve.GPUType
 		cfg.ServeGPUCount = file.Serve.GPUCount
@@ -877,6 +1076,11 @@ func validateProjectConfigFile(file projectConfigFile, defined map[string]struct
 			}
 		}
 	}
+	if file.Train != nil {
+		if err := validateDependencyGroupField("train", file.Train.DependencyGroup, defined); err != nil {
+			return err
+		}
+	}
 	if file.Environment != nil {
 		if err := validateConfiguredPositiveInt(defined, "environment.gpu_count", file.Environment.GPUCount); err != nil {
 			return err
@@ -895,6 +1099,9 @@ func validateProjectConfigFile(file projectConfigFile, defined map[string]struct
 					return fmt.Errorf("invalid serve.command in %s: command tokens must be non-empty strings", projectConfigFilePath())
 				}
 			}
+		}
+		if err := validateDependencyGroupField("serve", file.Serve.DependencyGroup, defined); err != nil {
+			return err
 		}
 		if err := validateConfiguredPositiveInt(defined, "serve.gpu_count", file.Serve.GPUCount); err != nil {
 			return err
@@ -928,6 +1135,16 @@ func validateConfiguredPositiveInt(defined map[string]struct{}, field string, va
 	if tomlKeyDefined(defined, field) && value < 1 {
 		return fmt.Errorf("invalid %s in %s: expected a positive integer", field, projectConfigFilePath())
 	}
+	return nil
+}
+
+func validateDependencyGroupField(section, group string, defined map[string]struct{}) error {
+	groupKey := section + ".dependency_group"
+	groupDefined := tomlKeyDefined(defined, groupKey)
+	if !groupDefined {
+		return nil
+	}
+	_ = normalizeDependencyGroup(group)
 	return nil
 }
 
@@ -1497,8 +1714,14 @@ func resolveServeSnapshot(cfg projectConfig) (*serveSnapshotResponse, error) {
 	if pythonVersion == "" {
 		pythonVersion = strings.TrimSpace(cfg.PythonVersion)
 	}
+	var serveDependencyGroup *string
+	if cfg.ServeDependencyConfigured {
+		group := normalizeDependencyGroup(cfg.ServeDependencyGroup)
+		serveDependencyGroup = &group
+	}
 	return &serveSnapshotResponse{
 		Command:                 command,
+		DependencyGroup:         serveDependencyGroup,
 		PythonVersion:           pythonVersion,
 		GPUType:                 strings.TrimSpace(cfg.ServeGPUType),
 		GPUCount:                int64(cfg.ServeGPUCount),

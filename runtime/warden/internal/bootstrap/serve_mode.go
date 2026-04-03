@@ -100,7 +100,7 @@ func (r *Runner) runServe(ctx context.Context) error {
 	}()
 
 	r.transition(StateInstall)
-	installErr := deps.InstallDependencies(ctx, r.cfg.WorkspaceRoot, deps.ModeServe, installHooks)
+	installErr := deps.InstallDependencies(ctx, r.cfg.WorkspaceRoot, plan.DependencyGroup, installHooks)
 	dataRes := <-dataResultCh
 	modelRes := <-modelResultCh
 	if installErr != nil {

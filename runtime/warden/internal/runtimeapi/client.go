@@ -53,6 +53,7 @@ type RunBootstrapPlan struct {
 	ContractVersion string                    `json:"contract_version"`
 	WorkspaceRoot   string                    `json:"workspace_root"`
 	Command         []string                  `json:"command"`
+	DependencyGroup string                    `json:"dependency_group"`
 	Code            BootstrapManifest         `json:"code"`
 	Data            OptionalBootstrapManifest `json:"data"`
 }
@@ -66,6 +67,7 @@ type ServeBootstrapPlan struct {
 	OutputDir               string                    `json:"output_dir"`
 	LogsPath                string                    `json:"logs_path"`
 	Command                 []string                  `json:"command"`
+	DependencyGroup         string                    `json:"dependency_group"`
 	Code                    BootstrapManifest         `json:"code"`
 	Data                    OptionalBootstrapManifest `json:"data"`
 	Model                   BootstrapManifest         `json:"model"`

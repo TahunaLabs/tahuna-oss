@@ -20,6 +20,7 @@ import { ENVIRONMENT_CONFIG_FILE_NAME, parseEnvironmentConfig, renderEnvironment
 
 const serveSnapshotResponseValidator = v.object({
   command: v.array(v.string()),
+  dependency_group: v.optional(v.string()),
   python_version: v.string(),
   gpu_type: v.string(),
   gpu_count: v.number(),
@@ -49,6 +50,7 @@ const environmentResponseValidator = v.object({
   gpu_count: v.number(),
   volume_gb: v.number(),
   python_version: v.string(),
+  train_dependency_group: v.string(),
   framework: v.string(),
   version: v.string(),
   command: v.array(v.string()),
@@ -486,6 +488,7 @@ function toEnvironmentResponse(
   const serveSnapshot = row.serveSnapshot
     ? {
         command: row.serveSnapshot.command,
+        dependency_group: row.serveSnapshot.dependencyGroup,
         python_version: row.serveSnapshot.pythonVersion,
         gpu_type: row.serveSnapshot.gpuType,
         gpu_count: row.serveSnapshot.gpuCount,
@@ -515,6 +518,7 @@ function toEnvironmentResponse(
     gpu_count: row.gpuCount,
     volume_gb: row.volumeGb,
     python_version: row.pythonVersion || PYTHON_CONFIG.defaultVersion,
+    train_dependency_group: row.trainDependencyGroup || "",
     framework: row.framework,
     version: row.version,
     command: row.command,
@@ -1188,6 +1192,7 @@ export const internalCommitSync = internalMutation({
     gpu_count: v.optional(v.number()),
     volume_gb: v.optional(v.number()),
     command: v.optional(v.array(v.string())),
+    train_dependency_group: v.optional(v.string()),
     output_dir: v.optional(v.string()),
     serve_snapshot: v.optional(serveSnapshotResponseValidator),
   },
@@ -1205,6 +1210,7 @@ export const internalCommitSync = internalMutation({
       gpuCount?: number;
       volumeGb?: number;
       command?: string[];
+      trainDependencyGroup?: string;
       outputDir?: string;
       serveSnapshot?: Doc<"environments">["serveSnapshot"];
     } = { latestSyncAt: Date.now() };
@@ -1236,12 +1242,19 @@ export const internalCommitSync = internalMutation({
     if (Array.isArray(args.command) && args.command.length > 0) {
       patch.command = args.command;
     }
+    if (typeof args.train_dependency_group === "string") {
+      patch.trainDependencyGroup = args.train_dependency_group.trim();
+    }
     if (typeof args.output_dir === "string" && args.output_dir.trim() !== "") {
       patch.outputDir = args.output_dir.trim();
     }
     if (args.serve_snapshot) {
       patch.serveSnapshot = {
         command: args.serve_snapshot.command,
+        dependencyGroup:
+          typeof args.serve_snapshot.dependency_group === "string"
+            ? args.serve_snapshot.dependency_group.trim()
+            : undefined,
         pythonVersion: args.serve_snapshot.python_version,
         gpuType: args.serve_snapshot.gpu_type,
         gpuCount: args.serve_snapshot.gpu_count,

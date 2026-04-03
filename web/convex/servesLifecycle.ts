@@ -24,6 +24,7 @@ export async function createServeForUserId(
       outputDir: string;
       codeManifestHash: string;
       dataManifestHash: string | null;
+      dependencyGroup: string;
       pythonVersion: string;
       gpuType: string;
       gpuCount: number;
@@ -87,6 +88,7 @@ export async function createServeForUserId(
       },
       code_manifest_hash: args.serveConfig.codeManifestHash,
       data_manifest_hash: args.serveConfig.dataManifestHash || null,
+      dependency_group: args.serveConfig.dependencyGroup,
       gpu_type: args.serveConfig.gpuType,
       gpu_count: args.serveConfig.gpuCount,
       volume_gb: args.serveConfig.volumeGb,

@@ -54,6 +54,10 @@ export async function createRunForUserId(
   if (!Array.isArray(command) || command.length === 0) {
     throw new ConvexError("environment has no command configured; run `tahuna sync` before creating a run");
   }
+  if (typeof env.trainDependencyGroup !== "string") {
+    throw new ConvexError("environment has no training dependency selection configured; run `tahuna sync` before creating a run");
+  }
+  const dependencyGroup = env.trainDependencyGroup.trim();
   const effectiveGpuType = args.gpu_type ?? env.gpuType;
   const effectiveGpuCount = args.gpu_count ?? env.gpuCount;
   const effectiveVolumeGb = args.volume_gb ?? env.volumeGb;
@@ -127,6 +131,7 @@ export async function createRunForUserId(
     effectiveVolumeGb,
     codeManifestHash: codeManifestHash,
     dataManifestHash: dataManifestHash || undefined,
+    dependencyGroup,
     computeHourlyRateCents: computePricing.hourlyRateCents,
     creditsReservedCents: 0,
     computeChargeCents: 0,
@@ -147,6 +152,7 @@ export async function createRunForUserId(
       volume_gb: effectiveVolumeGb,
       code_manifest_hash: codeManifestHash || null,
       data_manifest_hash: dataManifestHash || null,
+      dependency_group: dependencyGroup,
       hourly_rate_cents: computePricing.hourlyRateCents,
     },
   });
