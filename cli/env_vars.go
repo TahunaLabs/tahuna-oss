@@ -129,9 +129,8 @@ func envVarSet(args []string) {
 
 	environmentID, err := resolveEnvironmentID()
 	must(err)
-	resp, err := doJSONAs[envVarNamesResponse](http.MethodPost, "/env_vars", map[string]any{
-		"environment_id": environmentID,
-		"env_vars":       inputs,
+	resp, err := doJSONAs[envVarNamesResponse](http.MethodPost, envVarsListPath(environmentID), map[string]any{
+		"env_vars": inputs,
 	})
 	must(err)
 

@@ -11,8 +11,7 @@ import (
 )
 
 type envVarSetPayload struct {
-	EnvironmentID string           `json:"environment_id"`
-	EnvVars       []envVarSetInput `json:"env_vars"`
+	EnvVars []envVarSetInput `json:"env_vars"`
 }
 
 func setupLinkedEnvironmentForEnvVarTest(t *testing.T, environmentID string) {
@@ -104,7 +103,9 @@ func TestEnvVarGet_DefaultHumanReadable(t *testing.T) {
 func TestEnvVarSet_NameEqualsValue(t *testing.T) {
 	var payload envVarSetPayload
 	setupEnvVarServer(t, "env-test", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodPost && r.URL.Path == "/api/env_vars" {
+		if r.Method == http.MethodPost &&
+			r.URL.Path == "/api/env_vars" &&
+			r.URL.Query().Get("environment_id") == "env-test" {
 			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 				t.Fatalf("failed to decode payload: %v", err)
 			}
@@ -120,9 +121,6 @@ func TestEnvVarSet_NameEqualsValue(t *testing.T) {
 		envVarSet([]string{"HF_TOKEN=hf-secret"})
 	})
 
-	if payload.EnvironmentID != "env-test" {
-		t.Fatalf("expected environment_id=env-test, got %q", payload.EnvironmentID)
-	}
 	if len(payload.EnvVars) != 1 || payload.EnvVars[0].Name != "HF_TOKEN" || payload.EnvVars[0].Value != "hf-secret" {
 		t.Fatalf("unexpected payload: %#v", payload.EnvVars)
 	}
@@ -137,7 +135,9 @@ func TestEnvVarSet_NameEqualsValue(t *testing.T) {
 func TestEnvVarSet_ValueFlag(t *testing.T) {
 	var payload envVarSetPayload
 	setupEnvVarServer(t, "env-test", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodPost && r.URL.Path == "/api/env_vars" {
+		if r.Method == http.MethodPost &&
+			r.URL.Path == "/api/env_vars" &&
+			r.URL.Query().Get("environment_id") == "env-test" {
 			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 				t.Fatalf("failed to decode payload: %v", err)
 			}
@@ -153,9 +153,6 @@ func TestEnvVarSet_ValueFlag(t *testing.T) {
 		envVarSet([]string{"WANDB_BASE_URL", "--value", "https://api.wandb.ai"})
 	})
 
-	if payload.EnvironmentID != "env-test" {
-		t.Fatalf("expected environment_id=env-test, got %q", payload.EnvironmentID)
-	}
 	if len(payload.EnvVars) != 1 || payload.EnvVars[0].Name != "WANDB_BASE_URL" || payload.EnvVars[0].Value != "https://api.wandb.ai" {
 		t.Fatalf("unexpected payload: %#v", payload.EnvVars)
 	}
@@ -167,7 +164,9 @@ func TestEnvVarSet_ValueFlag(t *testing.T) {
 func TestEnvVarSet_DefaultFileLookupPrefersEnvLocal(t *testing.T) {
 	var payload envVarSetPayload
 	setupEnvVarServer(t, "env-test", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodPost && r.URL.Path == "/api/env_vars" {
+		if r.Method == http.MethodPost &&
+			r.URL.Path == "/api/env_vars" &&
+			r.URL.Query().Get("environment_id") == "env-test" {
 			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 				t.Fatalf("failed to decode payload: %v", err)
 			}
@@ -207,9 +206,6 @@ func TestEnvVarSet_DefaultFileLookupPrefersEnvLocal(t *testing.T) {
 		envVarSet(nil)
 	})
 
-	if payload.EnvironmentID != "env-test" {
-		t.Fatalf("expected environment_id=env-test, got %q", payload.EnvironmentID)
-	}
 	if len(payload.EnvVars) != 2 {
 		t.Fatalf("expected two env vars, got %#v", payload.EnvVars)
 	}
