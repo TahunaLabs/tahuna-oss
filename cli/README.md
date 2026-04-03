@@ -58,6 +58,7 @@ After that you can use both side by side:
 ```bash
 tahuna env list       # prod → https://tahuna.app   (config: ~/.config/tahuna/)
 tahuna-dev env list   # dev  → http://localhost:3000 (config: ~/.config/tahuna-dev/)
+tahuna env_vars list  # runtime env vars for the authenticated user
 ```
 
 ## Run locally
@@ -76,6 +77,7 @@ go run . init .
 go run . train
 go run . run list
 go run . sync
+go run . env_vars set HF_TOKEN=...
 ```
 
 `login` opens the browser auth flow and stores CLI credentials locally.

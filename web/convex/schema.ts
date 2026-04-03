@@ -151,6 +151,17 @@ export default defineSchema({
     updatedAt: v.number(),
   }).index("by_user", ["userId"]),
 
+  envVars: defineTable({
+    userId: v.string(),
+    name: v.string(),
+    valueCiphertext: v.string(),
+    valueIv: v.string(),
+    valueVersion: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_user_and_name", ["userId", "name"]),
+
   runtimeIncompatibilities: defineTable({
     compatibilityKey: v.string(),
     cloudType: v.string(),

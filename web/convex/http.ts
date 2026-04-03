@@ -16,6 +16,7 @@ import {
   removeEnvironment,
   updateEnvironmentSpecs,
 } from "@convex/cli/environments";
+import { getEnvVar, listEnvVars, removeEnvVar, setEnvVars } from "@convex/cli/envVars";
 import { createRun, getRunOrLogs, listRuns, postRunRuntime, removeRun, renameRun } from "@convex/cli/runs";
 import { createServe, getServeOrLogs, listServes, postServeAction } from "@convex/cli/serves";
 import { fileStream as wandbFileStream, graphql as wandbGraphql, upload as wandbUpload } from "@convex/monitoring/wandb";
@@ -31,6 +32,10 @@ http.route({ path: "/api/gpus", method: "GET", handler: getGpus });
 http.route({ path: "/api/config", method: "GET", handler: getConfig });
 http.route({ path: "/api/data", method: "GET", handler: listDataItems });
 http.route({ pathPrefix: "/api/data/", method: "GET", handler: getDataItem });
+http.route({ path: "/api/env_vars", method: "GET", handler: listEnvVars });
+http.route({ path: "/api/env_vars", method: "POST", handler: setEnvVars });
+http.route({ pathPrefix: "/api/env_vars/", method: "GET", handler: getEnvVar });
+http.route({ pathPrefix: "/api/env_vars/", method: "DELETE", handler: removeEnvVar });
 
 // Sync helpers for CLI
 http.route({ path: "/api/sync/blobs/missing", method: "POST", handler: listMissingBlobHashes });

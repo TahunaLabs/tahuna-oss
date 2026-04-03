@@ -23,6 +23,10 @@ import { applyStorageDeltaCredits, USAGE_EVENT_TYPE, upsertLedgerDebitTotal } fr
 import type { ComputeSettlementResult } from "@convex/runBilling";
 import { resolveConfiguredDependencyGroup } from "@/lib/dependency-selection";
 import {
+  buildProvisionedRuntimeEnv,
+  resolveUserEnvVarsForUserId,
+} from "@convex/envVars";
+import {
   estimateRunUsageFromHourlyRateCents,
   runLiveDebitIdempotencyKey,
   resolveRunHourlyRateCents,
@@ -1287,6 +1291,7 @@ export const provisionRun = internalAction({
     if (await ctx.runQuery(internal.runs.internalShouldAbortProvisioning, { runId: args.runId })) {
       return null;
     }
+    const userEnv = await resolveUserEnvVarsForUserId(ctx, provisioningPayload.user_id);
     const compatibilityFingerprint = normalizeCompatibilityFingerprint({
       cloudType: resolveRunpodCloudType(),
       framework: runSpec.framework,
@@ -1327,25 +1332,31 @@ export const provisionRun = internalAction({
           gpuCount: runSpec.effective_gpu_count,
           volumeGb: runSpec.effective_volume_gb,
         },
-        buildEnv: ({ runtimeToken, runtimeApiBase, runtimeRequestTimeoutSeconds }) => ({
-          TAHUNA_RUN_ID: provisioningPayload.run_id,
-          TAHUNA_ENVIRONMENT_ID: provisioningPayload.environment_id,
-          TAHUNA_CONTRACT_VERSION: provisioningPayload.contract_version,
-          TAHUNA_INPUT_PATH: provisioningPayload.input_path,
-          TAHUNA_OUTPUT_DIR: provisioningPayload.output_dir,
-          TAHUNA_OUTPUT_PATH: provisioningPayload.output_path,
-          TAHUNA_LOGS_PATH: provisioningPayload.logs_path,
-          TAHUNA_CODE_MANIFEST_HASH: provisioningPayload.code_manifest_hash || "",
-          TAHUNA_DATA_MANIFEST_HASH: provisioningPayload.data_manifest_hash || "",
-          TAHUNA_CODE_MANIFEST_KEY: provisioningPayload.code_manifest_key || "",
-          TAHUNA_DATA_MANIFEST_KEY: provisioningPayload.data_manifest_key || "",
-          TAHUNA_API_BASE: runtimeApiBase,
-          TAHUNA_RUNTIME_TOKEN: runtimeToken,
-          TAHUNA_WORKSPACE_ROOT: "/workspace",
-          TAHUNA_RUNTIME_REQUEST_TIMEOUT_SECONDS: runtimeRequestTimeoutSeconds,
-          TAHUNA_CANCELLATION_GRACE_SECONDS: String(RUN_CONFIG.cancellationGraceSeconds),
-          WANDB_BASE_URL: resolveWandbBaseURL(runtimeApiBase),
-        }),
+        buildEnv: ({ runtimeToken, runtimeApiBase, runtimeRequestTimeoutSeconds }) =>
+          buildProvisionedRuntimeEnv({
+            userEnv,
+            defaultEnv: {
+              WANDB_BASE_URL: resolveWandbBaseURL(runtimeApiBase),
+            },
+            systemEnv: {
+              TAHUNA_RUN_ID: provisioningPayload.run_id,
+              TAHUNA_ENVIRONMENT_ID: provisioningPayload.environment_id,
+              TAHUNA_CONTRACT_VERSION: provisioningPayload.contract_version,
+              TAHUNA_INPUT_PATH: provisioningPayload.input_path,
+              TAHUNA_OUTPUT_DIR: provisioningPayload.output_dir,
+              TAHUNA_OUTPUT_PATH: provisioningPayload.output_path,
+              TAHUNA_LOGS_PATH: provisioningPayload.logs_path,
+              TAHUNA_CODE_MANIFEST_HASH: provisioningPayload.code_manifest_hash || "",
+              TAHUNA_DATA_MANIFEST_HASH: provisioningPayload.data_manifest_hash || "",
+              TAHUNA_CODE_MANIFEST_KEY: provisioningPayload.code_manifest_key || "",
+              TAHUNA_DATA_MANIFEST_KEY: provisioningPayload.data_manifest_key || "",
+              TAHUNA_API_BASE: runtimeApiBase,
+              TAHUNA_RUNTIME_TOKEN: runtimeToken,
+              TAHUNA_WORKSPACE_ROOT: "/workspace",
+              TAHUNA_RUNTIME_REQUEST_TIMEOUT_SECONDS: runtimeRequestTimeoutSeconds,
+              TAHUNA_CANCELLATION_GRACE_SECONDS: String(RUN_CONFIG.cancellationGraceSeconds),
+            },
+          }),
       });
       if (!provisionResult) {
         return null;

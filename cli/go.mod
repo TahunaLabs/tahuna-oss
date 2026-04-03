@@ -5,6 +5,7 @@ go 1.22
 require (
 	github.com/BurntSushi/toml v1.6.0
 	github.com/manifoldco/promptui v0.9.0
+	github.com/subosito/gotenv v1.4.1
 )
 
 require (

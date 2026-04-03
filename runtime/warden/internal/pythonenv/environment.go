@@ -62,12 +62,12 @@ func BuildWorkspaceCacheEnvironment(baseEnv []string, workspaceRoot string) []st
 	hfHome := filepath.Join(cacheRoot, "huggingface")
 	hubCache := filepath.Join(hfHome, "hub")
 
-	withCacheRoot := setEnvValue(baseEnv, "XDG_CACHE_HOME", cacheRoot)
-	withHFHome := setEnvValue(withCacheRoot, "HF_HOME", hfHome)
-	withHubCache := setEnvValue(withHFHome, "HF_HUB_CACHE", hubCache)
-	withLegacyHubCache := setEnvValue(withHubCache, "HUGGINGFACE_HUB_CACHE", hubCache)
-	withXetCache := setEnvValue(withLegacyHubCache, "HF_XET_CACHE", filepath.Join(hfHome, "xet"))
-	return setEnvValue(withXetCache, "HF_DATASETS_CACHE", filepath.Join(hfHome, "datasets"))
+	withCacheRoot := setEnvValueIfMissing(baseEnv, "XDG_CACHE_HOME", cacheRoot)
+	withHFHome := setEnvValueIfMissing(withCacheRoot, "HF_HOME", hfHome)
+	withHubCache := setEnvValueIfMissing(withHFHome, "HF_HUB_CACHE", hubCache)
+	withLegacyHubCache := setEnvValueIfMissing(withHubCache, "HUGGINGFACE_HUB_CACHE", hubCache)
+	withXetCache := setEnvValueIfMissing(withLegacyHubCache, "HF_XET_CACHE", filepath.Join(hfHome, "xet"))
+	return setEnvValueIfMissing(withXetCache, "HF_DATASETS_CACHE", filepath.Join(hfHome, "datasets"))
 }
 
 func MergeEnvironment(baseEnv, overrides []string) []string {
@@ -101,4 +101,11 @@ func setEnvValue(baseEnv []string, key, value string) []string {
 	}
 	filtered = append(filtered, key+"="+value)
 	return filtered
+}
+
+func setEnvValueIfMissing(baseEnv []string, key, value string) []string {
+	if _, exists := LookupEnvValue(baseEnv, key); exists {
+		return append([]string{}, baseEnv...)
+	}
+	return append(append([]string{}, baseEnv...), key+"="+value)
 }

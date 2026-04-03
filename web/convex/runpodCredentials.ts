@@ -8,16 +8,13 @@ import {
   type ActionCtx,
 } from "@convex/_generated/server";
 import { requireUser } from "@convex/auth";
+import { decryptSecretValue, encryptSecretValue } from "@convex/credentialsCrypto";
 import {
   getLatestActiveRunpodCredentialForUserId,
   runpodCredentialStatusValidator,
   toRunpodCredentialStatus,
 } from "@convex/runpodCredentialsStore";
 import { sha256Hex } from "@convex/syncManifest";
-
-const RUNPOD_CREDENTIAL_KEY_ENV_NAME = "TAHUNA_CREDENTIALS_SECRET";
-const RUNPOD_CREDENTIAL_KEY_VERSION = 1;
-const RUNPOD_CREDENTIAL_IV_BYTES = 12;
 
 type RunpodGpuType = {
   id?: string;
@@ -43,58 +40,12 @@ type RunpodCredentialStatus = {
   updated_at?: number;
 };
 
-function encodeBase64(bytes: Uint8Array) {
-  let value = "";
-  for (const byte of bytes) {
-    value += String.fromCharCode(byte);
-  }
-  return btoa(value);
-}
-
-function decodeBase64(value: string) {
-  try {
-    const decoded = atob(value);
-    const out = new Uint8Array(decoded.length);
-    for (let index = 0; index < decoded.length; index += 1) {
-      out[index] = decoded.charCodeAt(index);
-    }
-    return out;
-  } catch {
-    throw new ConvexError(`invalid base64 value for ${RUNPOD_CREDENTIAL_KEY_ENV_NAME}`);
-  }
-}
-
-let importedEncryptionKeyPromise: Promise<CryptoKey> | null = null;
-
-async function getEncryptionKey() {
-  if (!importedEncryptionKeyPromise) {
-    importedEncryptionKeyPromise = (async () => {
-      const rawKey = process.env[RUNPOD_CREDENTIAL_KEY_ENV_NAME]?.trim() || "";
-      if (!rawKey) {
-        throw new ConvexError(`${RUNPOD_CREDENTIAL_KEY_ENV_NAME} is not set`);
-      }
-      const keyBytes = decodeBase64(rawKey);
-      if (keyBytes.byteLength !== 32) {
-        throw new ConvexError(`${RUNPOD_CREDENTIAL_KEY_ENV_NAME} must decode to 32 bytes`);
-      }
-      return crypto.subtle.importKey("raw", keyBytes, "AES-GCM", false, ["encrypt", "decrypt"]);
-    })();
-  }
-  return importedEncryptionKeyPromise;
-}
-
 async function encryptRunpodApiKey(apiKey: string) {
-  const key = await getEncryptionKey();
-  const iv = crypto.getRandomValues(new Uint8Array(RUNPOD_CREDENTIAL_IV_BYTES));
-  const ciphertext = await crypto.subtle.encrypt(
-    { name: "AES-GCM", iv },
-    key,
-    new TextEncoder().encode(apiKey),
-  );
+  const encrypted = await encryptSecretValue(apiKey);
   return {
-    keyCiphertext: encodeBase64(new Uint8Array(ciphertext)),
-    keyIv: encodeBase64(iv),
-    keyVersion: RUNPOD_CREDENTIAL_KEY_VERSION,
+    keyCiphertext: encrypted.ciphertext,
+    keyIv: encrypted.iv,
+    keyVersion: encrypted.version,
   };
 }
 
@@ -103,16 +54,11 @@ async function decryptRunpodApiKey(row: {
   keyIv: string;
   keyVersion: number;
 }) {
-  if (row.keyVersion !== RUNPOD_CREDENTIAL_KEY_VERSION) {
-    throw new ConvexError(`unsupported Runpod credential key version: ${row.keyVersion}`);
-  }
-  const key = await getEncryptionKey();
-  const plaintext = await crypto.subtle.decrypt(
-    { name: "AES-GCM", iv: decodeBase64(row.keyIv) },
-    key,
-    decodeBase64(row.keyCiphertext),
-  );
-  return new TextDecoder().decode(plaintext);
+  return decryptSecretValue({
+    ciphertext: row.keyCiphertext,
+    iv: row.keyIv,
+    version: row.keyVersion,
+  });
 }
 
 function trimApiKeyOrThrow(value: string) {

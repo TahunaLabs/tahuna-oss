@@ -61,6 +61,8 @@ func main() {
 	switch os.Args[1] {
 	case "env", "environment":
 		handleEnvironment(os.Args[2:])
+	case "env_vars":
+		handleEnvVars(os.Args[2:])
 	case "gpus":
 		handleGPUs(os.Args[2:])
 	case "data":
@@ -101,6 +103,7 @@ Usage:
   tahuna sync [code|data]
   tahuna train [-d] [--gpu-type <gpu>] [--gpu-count <n>] [--volume-gb <n>]
   tahuna env list|show|update|rm ...
+  tahuna env_vars list|get|set|rm ...
   tahuna env data bind|unbind ...
   tahuna gpus list
   tahuna data list|show ...
@@ -136,6 +139,14 @@ Environment:
   tahuna env show <env_id> | --id <env_id> [--verbose]
   tahuna env update [<env_id>] [--gpu-type <gpu>] [--gpu-count <n>] [--volume-gb <n>]
   tahuna env rm <env_id> | --id <env_id> | --all|-a
+
+Env Vars:
+  tahuna env_vars list [--verbose]
+  tahuna env_vars get <name> [--verbose]
+  tahuna env_vars set NAME=value [--verbose]
+  tahuna env_vars set NAME --value <value> [--verbose]
+  tahuna env_vars set [--from-file <path>] [--verbose]
+  tahuna env_vars rm <name> [--verbose]
 
 Auth:
   TAHUNA_API_URL      API base URL override

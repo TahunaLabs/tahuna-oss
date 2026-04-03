@@ -33,6 +33,38 @@ func TestBuildWorkspaceCacheEnvironmentSetsHuggingFaceCachesUnderWorkspace(t *te
 	}
 }
 
+func TestBuildWorkspaceCacheEnvironmentPreservesUserManagedOverrides(t *testing.T) {
+	workspaceRoot := "/workspace"
+	baseEnv := []string{
+		"PATH=/usr/bin",
+		"XDG_CACHE_HOME=/tmp/cache",
+		"HF_HOME=/tmp/hf",
+		"HF_HUB_CACHE=/tmp/hf/hub",
+		"HUGGINGFACE_HUB_CACHE=/tmp/hf/legacy-hub",
+		"HF_XET_CACHE=/tmp/hf/xet",
+		"HF_DATASETS_CACHE=/tmp/hf/datasets",
+	}
+	resolved := BuildWorkspaceCacheEnvironment(baseEnv, workspaceRoot)
+
+	for _, key := range []string{
+		"XDG_CACHE_HOME",
+		"HF_HOME",
+		"HF_HUB_CACHE",
+		"HUGGINGFACE_HUB_CACHE",
+		"HF_XET_CACHE",
+		"HF_DATASETS_CACHE",
+	} {
+		got, ok := LookupEnvValue(resolved, key)
+		if !ok {
+			t.Fatalf("expected %s to be preserved", key)
+		}
+		want, _ := LookupEnvValue(baseEnv, key)
+		if got != want {
+			t.Fatalf("expected %s=%q, got %q", key, want, got)
+		}
+	}
+}
+
 func TestBuildWorkspaceCacheEnvironmentSkipsBlankWorkspaceRoot(t *testing.T) {
 	baseEnv := []string{"PATH=/usr/bin", "HF_HOME=/tmp/hf"}
 	resolved := BuildWorkspaceCacheEnvironment(baseEnv, "   ")

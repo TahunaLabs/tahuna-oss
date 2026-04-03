@@ -6,6 +6,7 @@ import { action, internalAction, internalMutation, internalQuery, mutation, quer
 import { R2 } from "@convex-dev/r2"
 import { RUN_CONFIG } from "@convex/appConfig"
 import { requireUser } from "@convex/auth"
+import { buildProvisionedRuntimeEnv, resolveUserEnvVarsForUserId } from "@convex/envVars"
 import { RUN_STATUS } from "@convex/runsConstants"
 import { buildManifestObjectKey } from "@convex/cli/shared"
 import { resolveConfiguredDependencyGroup } from "@/lib/dependency-selection"
@@ -22,6 +23,7 @@ import { SERVE_STATUS, TERMINAL_SERVE_STATUSES } from "@convex/servesConstants"
 import {
   provisionRuntimePod,
   resolveImageName,
+  resolveWandbBaseURL,
   terminateRuntimePodWithRetry,
 } from "@convex/runtimeProvisioning"
 import {
@@ -1453,6 +1455,7 @@ export const provisionServe = internalAction({
     if (await ctx.runQuery(internal.serves.internalShouldAbortProvisioning, { serveId: args.serveId })) {
       return null
     }
+    const userEnv = await resolveUserEnvVarsForUserId(ctx, provisioningPayload.user_id)
 
     let provisionedPodId = ""
     try {
@@ -1509,17 +1512,24 @@ export const provisionServe = internalAction({
           volumeGb: serveSpec.effective_volume_gb,
           ports: ["22/tcp", `${serveSpec.port}/http`],
         },
-        buildEnv: ({ runtimeToken, runtimeApiBase, runtimeRequestTimeoutSeconds }) => ({
-          TAHUNA_SERVE_ID: provisioningPayload.serve_id,
-          TAHUNA_ENVIRONMENT_ID: provisioningPayload.environment_id,
-          TAHUNA_CONTRACT_VERSION: provisioningPayload.contract_version,
-          TAHUNA_OUTPUT_DIR: provisioningPayload.output_dir,
-          TAHUNA_API_BASE: runtimeApiBase,
-          TAHUNA_RUNTIME_TOKEN: runtimeToken,
-          TAHUNA_WORKSPACE_ROOT: "/workspace",
-          TAHUNA_RUNTIME_REQUEST_TIMEOUT_SECONDS: runtimeRequestTimeoutSeconds,
-          TAHUNA_CANCELLATION_GRACE_SECONDS: String(provisioningPayload.graceful_shutdown_seconds),
-        }),
+        buildEnv: ({ runtimeToken, runtimeApiBase, runtimeRequestTimeoutSeconds }) =>
+          buildProvisionedRuntimeEnv({
+            userEnv,
+            defaultEnv: {
+              WANDB_BASE_URL: resolveWandbBaseURL(runtimeApiBase),
+            },
+            systemEnv: {
+              TAHUNA_SERVE_ID: provisioningPayload.serve_id,
+              TAHUNA_ENVIRONMENT_ID: provisioningPayload.environment_id,
+              TAHUNA_CONTRACT_VERSION: provisioningPayload.contract_version,
+              TAHUNA_OUTPUT_DIR: provisioningPayload.output_dir,
+              TAHUNA_API_BASE: runtimeApiBase,
+              TAHUNA_RUNTIME_TOKEN: runtimeToken,
+              TAHUNA_WORKSPACE_ROOT: "/workspace",
+              TAHUNA_RUNTIME_REQUEST_TIMEOUT_SECONDS: runtimeRequestTimeoutSeconds,
+              TAHUNA_CANCELLATION_GRACE_SECONDS: String(provisioningPayload.graceful_shutdown_seconds),
+            },
+          }),
       })
       if (!provisionResult) {
         return null

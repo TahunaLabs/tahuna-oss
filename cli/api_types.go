@@ -112,6 +112,24 @@ type environmentsResponse struct {
 	Environments []environmentResponse `json:"environments"`
 }
 
+type envVarNameResponse struct {
+	Name string `json:"name"`
+}
+
+type envVarNamesResponse struct {
+	EnvVars []envVarNameResponse `json:"env_vars"`
+}
+
+type envVarValueResponse struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
+}
+
+type envVarDeleteResponse struct {
+	Name    string `json:"name"`
+	Deleted bool   `json:"deleted"`
+}
+
 // runResponse represents a single run from the API.
 type runResponse struct {
 	RunID             string `json:"run_id"`

@@ -702,6 +702,8 @@ func friendlyError(err error) string {
 			return "Access denied."
 		case apiErr.status == 404 && strings.Contains(detail, "environment"):
 			return "Environment not found."
+		case apiErr.status == 404 && strings.Contains(detail, "env var"):
+			return "Env var not found."
 		case apiErr.status == 404 && strings.Contains(detail, "run"):
 			return "Run not found."
 		case apiErr.status == 404:
