@@ -13,12 +13,14 @@ volume_gb = 2
 
 [train]
 command = ["uv", "run", "--active", "--no-sync", "python", "-u", "train.py"]
+dependency_group = "serve"
 output_model_path = "outputs/model"
 
 [serve]
 command = ["uv", "run", "--active", "--no-sync", "python", "-u", "inference.py"]
+dependency_group = "serve"
 python_version = "3.11"
-gpu_type = "NVIDIA RTX A4000"
+gpu_type = "NVIDIA RTX A4500"
 gpu_count = 1
 volume_gb = 2
 port = 8000

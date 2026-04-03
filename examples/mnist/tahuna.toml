@@ -5,11 +5,11 @@ output_dir = "outputs"
 
 [environment]
 framework = "pt"
-version = "2.8.0-cu128"
+version = "2.2.0-cu121"
 python_version = "3.11"
 gpu_type = "NVIDIA GeForce RTX 3090"
 gpu_count = 1
-volume_gb = 80
+volume_gb = 10
 
 [train]
 command = ["uv", "run", "--active", "--no-sync", "python", "-u", "train.py"]

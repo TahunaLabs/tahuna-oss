@@ -4,10 +4,6 @@ import runtimeImageBases from "@/convex/runtime-images.json";
 import { getRunpodGpuPricePerHour } from "@/lib/runpod-gpu-pricing";
 import { fetchRunpodGpuTypes, resolveActiveRunpodApiKeyForUserId } from "@convex/runpodCredentials";
 
-const MANAGED_RUNTIME_IMAGE_REPO = (
-  process.env.TAHUNA_RUNTIME_IMAGE_REPO?.trim() ||
-  "docker.io/pazuzzu/tahuna"
-).replace(/\/+$/, "");
 
 type RuntimeVersionEntry = { base: string; python: string[] };
 type RuntimeImageSpec = Record<string, Record<string, RuntimeVersionEntry>>;
@@ -22,7 +18,7 @@ export const images: Record<string, Record<string, Record<string, string>>> = ((
       out[framework][version] = {};
       for (const python of entry.python) {
         const tag = `${framework}-${version}-py${python}`;
-        out[framework][version][python] = `${MANAGED_RUNTIME_IMAGE_REPO}:${tag}`;
+        out[framework][version][python] = `${process.env.TAHUNA_RUNTIME_IMAGE_REPO}:${tag}`;
       }
     }
   }
