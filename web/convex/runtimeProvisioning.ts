@@ -41,10 +41,6 @@ export function resolveRuntimeApiBase() {
   throw new Error("SITE_URL is required for pod runtime callbacks");
 }
 
-export function resolveWandbBaseURL(runtimeApiBase: string) {
-  return `${runtimeApiBase}/api/monitoring/wandb`;
-}
-
 export function generateRuntimeToken() {
   const bytes = new Uint8Array(32);
   crypto.getRandomValues(bytes);

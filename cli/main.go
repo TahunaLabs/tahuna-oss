@@ -147,6 +147,7 @@ Env Vars:
   tahuna env_vars set NAME --value <value> [--verbose]
   tahuna env_vars set [--from-file <path>] [--verbose]
   tahuna env_vars rm <name> [--verbose]
+  Operates on the linked environment in the current project.
 
 Auth:
   TAHUNA_API_URL      API base URL override

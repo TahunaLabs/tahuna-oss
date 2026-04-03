@@ -58,7 +58,7 @@ After that you can use both side by side:
 ```bash
 tahuna env list       # prod → https://tahuna.app   (config: ~/.config/tahuna/)
 tahuna-dev env list   # dev  → http://localhost:3000 (config: ~/.config/tahuna-dev/)
-tahuna env_vars list  # runtime env vars for the authenticated user
+tahuna env_vars list  # runtime env vars for the linked environment
 ```
 
 ## Run locally

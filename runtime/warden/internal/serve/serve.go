@@ -72,7 +72,6 @@ func RunEntrypoint(ctx context.Context, cfg Config, hooks Hooks) error {
 	cmd.Dir = cfg.WorkspaceRoot
 
 	commandEnv := os.Environ()
-	commandEnv = pythonenv.BuildWorkspaceCacheEnvironment(commandEnv, cfg.WorkspaceRoot)
 	if venvPath, ok := pythonenv.ResolvePrebakedVirtualEnvPath(commandEnv); ok {
 		commandEnv = pythonenv.BuildVirtualEnvEnvironment(commandEnv, venvPath)
 	}

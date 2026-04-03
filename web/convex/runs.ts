@@ -24,7 +24,7 @@ import type { ComputeSettlementResult } from "@convex/runBilling";
 import { resolveConfiguredDependencyGroup } from "@/lib/dependency-selection";
 import {
   buildProvisionedRuntimeEnv,
-  resolveUserEnvVarsForUserId,
+  resolveEnvironmentEnvVarsForEnvironmentId,
 } from "@convex/envVars";
 import {
   estimateRunUsageFromHourlyRateCents,
@@ -52,7 +52,6 @@ import {
 import {
   provisionRuntimePod,
   resolveImageName,
-  resolveWandbBaseURL,
   terminateRuntimePodWithRetry,
 } from "@convex/runtimeProvisioning";
 import { ACTIVE_STATUSES, RUN_STATUS, TERMINAL_STATUSES } from "@convex/runsConstants";
@@ -1291,7 +1290,10 @@ export const provisionRun = internalAction({
     if (await ctx.runQuery(internal.runs.internalShouldAbortProvisioning, { runId: args.runId })) {
       return null;
     }
-    const userEnv = await resolveUserEnvVarsForUserId(ctx, provisioningPayload.user_id);
+    const environmentEnv = await resolveEnvironmentEnvVarsForEnvironmentId(
+      ctx,
+      provisioningPayload.environment_id as Id<"environments">,
+    );
     const compatibilityFingerprint = normalizeCompatibilityFingerprint({
       cloudType: resolveRunpodCloudType(),
       framework: runSpec.framework,
@@ -1334,10 +1336,7 @@ export const provisionRun = internalAction({
         },
         buildEnv: ({ runtimeToken, runtimeApiBase, runtimeRequestTimeoutSeconds }) =>
           buildProvisionedRuntimeEnv({
-            userEnv,
-            defaultEnv: {
-              WANDB_BASE_URL: resolveWandbBaseURL(runtimeApiBase),
-            },
+            environmentEnv,
             systemEnv: {
               TAHUNA_RUN_ID: provisioningPayload.run_id,
               TAHUNA_ENVIRONMENT_ID: provisioningPayload.environment_id,

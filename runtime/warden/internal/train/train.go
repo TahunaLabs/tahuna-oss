@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -25,65 +24,6 @@ type Hooks struct {
 	EmitMetrics func(samples []runtimeapi.MetricSample)
 }
 
-const (
-	tahunaWandbPath = "/api/monitoring/wandb"
-)
-
-func normalizeWandbPath(path string) string {
-	trimmed := strings.TrimSpace(path)
-	if trimmed == "" {
-		return ""
-	}
-	normalized := strings.TrimRight(trimmed, "/")
-	if normalized == "" {
-		return "/"
-	}
-	if !strings.HasPrefix(normalized, "/") {
-		return "/" + normalized
-	}
-	return normalized
-}
-
-func isTahunaWandbBaseURL(raw string) bool {
-	baseURL := strings.TrimSpace(raw)
-	if baseURL == "" {
-		return false
-	}
-
-	parsed, err := url.Parse(baseURL)
-	if err == nil && (parsed.Scheme != "" || parsed.Host != "") {
-		return normalizeWandbPath(parsed.Path) == tahunaWandbPath
-	}
-
-	if slash := strings.Index(baseURL, "/"); slash >= 0 {
-		return normalizeWandbPath(baseURL[slash:]) == tahunaWandbPath
-	}
-	return normalizeWandbPath(baseURL) == tahunaWandbPath
-}
-
-func resolveTrainEnvironment(baseEnv []string) []string {
-	if _, exists := pythonenv.LookupEnvValue(baseEnv, "WANDB_API_KEY"); exists {
-		return baseEnv
-	}
-
-	runtimeToken, tokenSet := pythonenv.LookupEnvValue(baseEnv, "TAHUNA_RUNTIME_TOKEN")
-	if !tokenSet {
-		return baseEnv
-	}
-	runtimeToken = strings.TrimSpace(runtimeToken)
-	if runtimeToken == "" {
-		return baseEnv
-	}
-
-	wandbBaseURL, _ := pythonenv.LookupEnvValue(baseEnv, "WANDB_BASE_URL")
-	if !isTahunaWandbBaseURL(wandbBaseURL) {
-		return baseEnv
-	}
-
-	environment := append([]string{}, baseEnv...)
-	environment = append(environment, "WANDB_API_KEY="+runtimeToken)
-	return environment
-}
 func RunEntrypoint(
 	ctx context.Context,
 	workspaceRoot string,
@@ -110,11 +50,10 @@ func RunEntrypoint(
 	cmd := exec.Command(normalized[0], normalized[1:]...) // #nosec G204
 	cmd.Dir = workspaceRoot
 	trainEnv := os.Environ()
-	trainEnv = pythonenv.BuildWorkspaceCacheEnvironment(trainEnv, workspaceRoot)
 	if venvPath, ok := pythonenv.ResolvePrebakedVirtualEnvPath(trainEnv); ok {
 		trainEnv = pythonenv.BuildVirtualEnvEnvironment(trainEnv, venvPath)
 	}
-	cmd.Env = resolveTrainEnvironment(trainEnv)
+	cmd.Env = trainEnv
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return 0, false, fmt.Errorf("create stdout pipe: %w", err)

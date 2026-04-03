@@ -2,7 +2,6 @@ package main
 
 import (
 	"errors"
-	"flag"
 	"fmt"
 	"net/http"
 	neturl "net/url"
@@ -15,23 +14,16 @@ import (
 )
 
 type envVarSetInput struct {
-	Name  string
-	Value string
+	Name  string `json:"name"`
+	Value string `json:"value"`
 }
 
-type optionalStringFlag struct {
-	value string
-	set   bool
-}
-
-func (f *optionalStringFlag) String() string {
-	return f.value
-}
-
-func (f *optionalStringFlag) Set(value string) error {
-	f.value = value
-	f.set = true
-	return nil
+type envVarArgs struct {
+	positionals []string
+	verbose     bool
+	fromFile    string
+	value       string
+	hasValue    bool
 }
 
 func handleEnvVars(args []string) {
@@ -44,9 +36,6 @@ func handleEnvVars(args []string) {
 	case "-h", "--help", "help":
 		envVarsUsage()
 		return
-	}
-
-	switch args[0] {
 	case "list":
 		envVarList(args[1:])
 	case "get":
@@ -71,25 +60,29 @@ func envVarsUsage() {
   tahuna env_vars set [--from-file <path>] [--verbose|-v]
   tahuna env_vars rm <name> [--verbose|-v]
 
+These commands target the linked environment in the current project.
 If no NAME/value or --from-file path is provided, "set" loads .env.local first,
 then .env from the current working directory.
 `)
 }
 
 func envVarList(args []string) {
-	fs := flag.NewFlagSet("env_vars list", flag.ExitOnError)
-	verbose := fs.Bool("verbose", false, "Show full env_vars payload")
-	fs.BoolVar(verbose, "v", false, "Show full env_vars payload")
-	mustParseFlags(fs, args)
+	parsed, err := parseEnvVarArgs(args, false, false)
+	must(err)
+	require(len(parsed.positionals) == 0, "usage: tahuna env_vars list [--verbose]")
 
-	if *verbose {
-		resp, err := doJSON(http.MethodGet, "/env_vars", nil)
+	environmentID, err := resolveEnvironmentID()
+	must(err)
+	path := envVarsListPath(environmentID)
+
+	if parsed.verbose {
+		resp, err := doJSON(http.MethodGet, path, nil)
 		must(err)
 		printJSON(resp)
 		return
 	}
 
-	resp, err := doJSONAs[envVarNamesResponse](http.MethodGet, "/env_vars", nil)
+	resp, err := doJSONAs[envVarNamesResponse](http.MethodGet, path, nil)
 	must(err)
 	printEnvVarList(resp.EnvVars)
 }
@@ -107,20 +100,15 @@ func printEnvVarList(envVars []envVarNameResponse) {
 }
 
 func envVarGet(args []string) {
-	normalizedArgs, err := reorderEnvVarArgs(args, map[string]bool{})
+	parsed, err := parseEnvVarArgs(args, false, false)
 	must(err)
+	require(len(parsed.positionals) == 1, "name is required (usage: tahuna env_vars get <name>)")
 
-	fs := flag.NewFlagSet("env_vars get", flag.ExitOnError)
-	verbose := fs.Bool("verbose", false, "Show full env_var payload")
-	fs.BoolVar(verbose, "v", false, "Show full env_var payload")
-	mustParseFlags(fs, normalizedArgs)
+	environmentID, err := resolveEnvironmentID()
+	must(err)
+	path := envVarPath(environmentID, parsed.positionals[0])
 
-	require(len(fs.Args()) == 1, "name is required (usage: tahuna env_vars get <name>)")
-	name := strings.TrimSpace(fs.Args()[0])
-	require(name != "", "name is required (usage: tahuna env_vars get <name>)")
-
-	path := "/env_vars/" + neturl.PathEscape(name)
-	if *verbose {
+	if parsed.verbose {
 		resp, err := doJSON(http.MethodGet, path, nil)
 		must(err)
 		printJSON(resp)
@@ -133,37 +121,21 @@ func envVarGet(args []string) {
 }
 
 func envVarSet(args []string) {
-	normalizedArgs, err := reorderEnvVarArgs(args, map[string]bool{
-		"--from-file": true,
-		"--value":     true,
-	})
+	parsed, err := parseEnvVarArgs(args, true, true)
 	must(err)
 
-	fs := flag.NewFlagSet("env_vars set", flag.ExitOnError)
-	var valueFlag optionalStringFlag
-	fromFile := fs.String("from-file", "", "Load env vars from a dotenv file")
-	verbose := fs.Bool("verbose", false, "Show full env_vars payload")
-	fs.BoolVar(verbose, "v", false, "Show full env_vars payload")
-	fs.Var(&valueFlag, "value", "Env var value")
-	mustParseFlags(fs, normalizedArgs)
-
-	inputs, sourcePath, err := resolveEnvVarSetInputs(fs.Args(), valueFlag, strings.TrimSpace(*fromFile))
+	inputs, sourcePath, err := resolveEnvVarSetInputs(parsed.positionals, parsed.value, parsed.hasValue, parsed.fromFile)
 	must(err)
 
-	payload := make([]map[string]any, 0, len(inputs))
-	for _, input := range inputs {
-		payload = append(payload, map[string]any{
-			"name":  input.Name,
-			"value": input.Value,
-		})
-	}
-
+	environmentID, err := resolveEnvironmentID()
+	must(err)
 	resp, err := doJSONAs[envVarNamesResponse](http.MethodPost, "/env_vars", map[string]any{
-		"env_vars": payload,
+		"environment_id": environmentID,
+		"env_vars":       inputs,
 	})
 	must(err)
 
-	if *verbose {
+	if parsed.verbose {
 		printJSON(resp)
 		return
 	}
@@ -177,9 +149,9 @@ func envVarSet(args []string) {
 	printEnvVarList(resp.EnvVars)
 }
 
-func resolveEnvVarSetInputs(args []string, valueFlag optionalStringFlag, fromFile string) ([]envVarSetInput, string, error) {
+func resolveEnvVarSetInputs(args []string, value string, hasValue bool, fromFile string) ([]envVarSetInput, string, error) {
 	if fromFile != "" {
-		if valueFlag.set || len(args) > 0 {
+		if hasValue || len(args) > 0 {
 			return nil, "", errors.New("cannot combine --from-file with NAME=value or --value")
 		}
 		inputs, err := parseEnvVarFile(fromFile)
@@ -189,18 +161,15 @@ func resolveEnvVarSetInputs(args []string, valueFlag optionalStringFlag, fromFil
 		return inputs, filepath.Clean(fromFile), nil
 	}
 
-	if valueFlag.set {
+	if hasValue {
 		if len(args) != 1 {
 			return nil, "", errors.New("usage: tahuna env_vars set NAME --value <value>")
 		}
 		name := strings.TrimSpace(args[0])
-		if strings.Contains(name, "=") {
-			return nil, "", errors.New("cannot combine NAME=value with --value")
+		if name == "" || strings.Contains(name, "=") {
+			return nil, "", errors.New("usage: tahuna env_vars set NAME --value <value>")
 		}
-		if name == "" {
-			return nil, "", errors.New("name is required")
-		}
-		return []envVarSetInput{{Name: name, Value: valueFlag.value}}, "", nil
+		return []envVarSetInput{{Name: name, Value: value}}, "", nil
 	}
 
 	switch len(args) {
@@ -215,16 +184,11 @@ func resolveEnvVarSetInputs(args []string, valueFlag optionalStringFlag, fromFil
 		}
 		return inputs, defaultPath, nil
 	case 1:
-		raw := strings.TrimSpace(args[0])
-		if !strings.Contains(raw, "=") {
+		name, rawValue, ok := strings.Cut(strings.TrimSpace(args[0]), "=")
+		if !ok || strings.TrimSpace(name) == "" {
 			return nil, "", errors.New("usage: tahuna env_vars set NAME=value | NAME --value <value> | [--from-file <path>]")
 		}
-		name, value, _ := strings.Cut(raw, "=")
-		name = strings.TrimSpace(name)
-		if name == "" {
-			return nil, "", errors.New("name is required")
-		}
-		return []envVarSetInput{{Name: name, Value: value}}, "", nil
+		return []envVarSetInput{{Name: strings.TrimSpace(name), Value: rawValue}}, "", nil
 	default:
 		return nil, "", errors.New("usage: tahuna env_vars set NAME=value | NAME --value <value> | [--from-file <path>]")
 	}
@@ -257,70 +221,74 @@ func parseEnvVarFile(path string) ([]envVarSetInput, error) {
 
 	inputs := make([]envVarSetInput, 0, len(names))
 	for _, name := range names {
-		inputs = append(inputs, envVarSetInput{
-			Name:  name,
-			Value: env[name],
-		})
+		inputs = append(inputs, envVarSetInput{Name: name, Value: env[name]})
 	}
 	return inputs, nil
 }
 
 func envVarRemove(args []string) {
-	normalizedArgs, err := reorderEnvVarArgs(args, map[string]bool{})
+	parsed, err := parseEnvVarArgs(args, false, false)
+	must(err)
+	require(len(parsed.positionals) == 1, "name is required (usage: tahuna env_vars rm <name>)")
+
+	environmentID, err := resolveEnvironmentID()
+	must(err)
+	resp, err := doJSONAs[envVarDeleteResponse](http.MethodDelete, envVarPath(environmentID, parsed.positionals[0]), nil)
 	must(err)
 
-	fs := flag.NewFlagSet("env_vars rm", flag.ExitOnError)
-	verbose := fs.Bool("verbose", false, "Show full env_var delete payload")
-	fs.BoolVar(verbose, "v", false, "Show full env_var delete payload")
-	mustParseFlags(fs, normalizedArgs)
-
-	require(len(fs.Args()) == 1, "name is required (usage: tahuna env_vars rm <name>)")
-	name := strings.TrimSpace(fs.Args()[0])
-	require(name != "", "name is required (usage: tahuna env_vars rm <name>)")
-
-	path := "/env_vars/" + neturl.PathEscape(name)
-	resp, err := doJSONAs[envVarDeleteResponse](http.MethodDelete, path, nil)
-	must(err)
-
-	if *verbose {
+	if parsed.verbose {
 		printJSON(resp)
 		return
 	}
 	fmt.Printf("Removed env var: %s\n", resp.Name)
 }
 
-func reorderEnvVarArgs(args []string, valueFlags map[string]bool) ([]string, error) {
-	flags := make([]string, 0, len(args))
-	positionals := make([]string, 0, len(args))
-
-	for index := 0; index < len(args); index += 1 {
-		arg := args[index]
-		switch {
-		case arg == "-h" || arg == "--help" || arg == "-v" || arg == "--verbose":
-			flags = append(flags, arg)
-		case valueFlags[arg]:
-			if index+1 >= len(args) {
-				return nil, fmt.Errorf("flag needs an argument: %s", arg)
-			}
-			flags = append(flags, arg, args[index+1])
-			index += 1
-		case hasInlineValueFlag(arg, valueFlags):
-			flags = append(flags, arg)
-		case strings.HasPrefix(arg, "-"):
-			return nil, fmt.Errorf("unknown flag: %s", arg)
-		default:
-			positionals = append(positionals, arg)
-		}
-	}
-
-	return append(flags, positionals...), nil
+func envVarsListPath(environmentID string) string {
+	return "/env_vars?environment_id=" + neturl.QueryEscape(strings.TrimSpace(environmentID))
 }
 
-func hasInlineValueFlag(arg string, valueFlags map[string]bool) bool {
-	for name := range valueFlags {
-		if strings.HasPrefix(arg, name+"=") {
-			return true
+func envVarPath(environmentID, name string) string {
+	return "/env_vars/" + neturl.PathEscape(strings.TrimSpace(name)) +
+		"?environment_id=" + neturl.QueryEscape(strings.TrimSpace(environmentID))
+}
+
+func parseEnvVarArgs(args []string, allowFromFile, allowValue bool) (envVarArgs, error) {
+	parsed := envVarArgs{}
+	for index := 0; index < len(args); index += 1 {
+		arg := strings.TrimSpace(args[index])
+		switch {
+		case arg == "", arg == "help", arg == "-h", arg == "--help":
+			return parsed, errors.New("usage: tahuna env_vars list|get|set|rm ...")
+		case arg == "-v" || arg == "--verbose":
+			parsed.verbose = true
+		case allowFromFile && arg == "--from-file":
+			index += 1
+			if index >= len(args) {
+				return parsed, errors.New("flag needs an argument: --from-file")
+			}
+			parsed.fromFile = strings.TrimSpace(args[index])
+		case allowValue && arg == "--value":
+			index += 1
+			if index >= len(args) {
+				return parsed, errors.New("flag needs an argument: --value")
+			}
+			parsed.value = args[index]
+			parsed.hasValue = true
+		case allowFromFile && strings.HasPrefix(arg, "--from-file="):
+			parsed.fromFile = inlineFlagValue(arg)
+		case allowValue && strings.HasPrefix(arg, "--value="):
+			parsed.value = inlineFlagValue(arg)
+			parsed.hasValue = true
+		case strings.HasPrefix(arg, "-"):
+			return parsed, fmt.Errorf("unknown flag: %s", arg)
+		default:
+			parsed.positionals = append(parsed.positionals, arg)
 		}
 	}
-	return false
+	return parsed, nil
+}
+
+func inlineFlagValue(value string) string {
+	_, rawValue, _ := strings.Cut(value, "=")
+	return strings.TrimSpace(rawValue)
 }

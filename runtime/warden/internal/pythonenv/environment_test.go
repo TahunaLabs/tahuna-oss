@@ -1,74 +1,44 @@
 package pythonenv
 
 import (
+	"os"
 	"path/filepath"
-	"reflect"
 	"testing"
 )
 
-func TestBuildWorkspaceCacheEnvironmentSetsHuggingFaceCachesUnderWorkspace(t *testing.T) {
-	workspaceRoot := "/workspace"
-	resolved := BuildWorkspaceCacheEnvironment([]string{"PATH=/usr/bin"}, workspaceRoot)
+func TestBuildVirtualEnvEnvironmentSetsCanonicalRuntimePaths(t *testing.T) {
+	baseEnv := []string{"PATH=/usr/bin:/bin"}
+	venvPath := "/workspace/.venv"
 
-	cacheRoot := filepath.Join(workspaceRoot, ".cache")
-	hfHome := filepath.Join(cacheRoot, "huggingface")
-	hubCache := filepath.Join(hfHome, "hub")
-	cases := map[string]string{
-		"XDG_CACHE_HOME":        cacheRoot,
-		"HF_HOME":               hfHome,
-		"HF_HUB_CACHE":          hubCache,
-		"HUGGINGFACE_HUB_CACHE": hubCache,
-		"HF_XET_CACHE":          filepath.Join(hfHome, "xet"),
-		"HF_DATASETS_CACHE":     filepath.Join(hfHome, "datasets"),
+	resolved := BuildVirtualEnvEnvironment(baseEnv, venvPath)
+
+	virtualEnv, ok := LookupEnvValue(resolved, "VIRTUAL_ENV")
+	if !ok || virtualEnv != venvPath {
+		t.Fatalf("expected VIRTUAL_ENV=%q, got %q (ok=%v)", venvPath, virtualEnv, ok)
 	}
 
-	for key, want := range cases {
-		got, ok := LookupEnvValue(resolved, key)
-		if !ok {
-			t.Fatalf("expected %s to be set", key)
-		}
-		if got != want {
-			t.Fatalf("expected %s=%q, got %q", key, want, got)
-		}
+	projectEnv, ok := LookupEnvValue(resolved, "UV_PROJECT_ENVIRONMENT")
+	if !ok || projectEnv != venvPath {
+		t.Fatalf("expected UV_PROJECT_ENVIRONMENT=%q, got %q (ok=%v)", venvPath, projectEnv, ok)
+	}
+
+	pathValue, ok := LookupEnvValue(resolved, "PATH")
+	wantPath := filepath.Join(venvPath, "bin") + string(os.PathListSeparator) + "/usr/bin:/bin"
+	if !ok || pathValue != wantPath {
+		t.Fatalf("expected PATH=%q, got %q (ok=%v)", wantPath, pathValue, ok)
 	}
 }
 
-func TestBuildWorkspaceCacheEnvironmentPreservesUserManagedOverrides(t *testing.T) {
-	workspaceRoot := "/workspace"
-	baseEnv := []string{
-		"PATH=/usr/bin",
-		"XDG_CACHE_HOME=/tmp/cache",
-		"HF_HOME=/tmp/hf",
-		"HF_HUB_CACHE=/tmp/hf/hub",
-		"HUGGINGFACE_HUB_CACHE=/tmp/hf/legacy-hub",
-		"HF_XET_CACHE=/tmp/hf/xet",
-		"HF_DATASETS_CACHE=/tmp/hf/datasets",
-	}
-	resolved := BuildWorkspaceCacheEnvironment(baseEnv, workspaceRoot)
+func TestMergeEnvironmentOverridesByKey(t *testing.T) {
+	merged := MergeEnvironment(
+		[]string{"PATH=/usr/bin", "WANDB_PROJECT=old"},
+		[]string{"WANDB_PROJECT=new", "HF_TOKEN=secret"},
+	)
 
-	for _, key := range []string{
-		"XDG_CACHE_HOME",
-		"HF_HOME",
-		"HF_HUB_CACHE",
-		"HUGGINGFACE_HUB_CACHE",
-		"HF_XET_CACHE",
-		"HF_DATASETS_CACHE",
-	} {
-		got, ok := LookupEnvValue(resolved, key)
-		if !ok {
-			t.Fatalf("expected %s to be preserved", key)
-		}
-		want, _ := LookupEnvValue(baseEnv, key)
-		if got != want {
-			t.Fatalf("expected %s=%q, got %q", key, want, got)
-		}
+	if got, ok := LookupEnvValue(merged, "WANDB_PROJECT"); !ok || got != "new" {
+		t.Fatalf("expected WANDB_PROJECT=new, got %q (ok=%v)", got, ok)
 	}
-}
-
-func TestBuildWorkspaceCacheEnvironmentSkipsBlankWorkspaceRoot(t *testing.T) {
-	baseEnv := []string{"PATH=/usr/bin", "HF_HOME=/tmp/hf"}
-	resolved := BuildWorkspaceCacheEnvironment(baseEnv, "   ")
-	if !reflect.DeepEqual(resolved, baseEnv) {
-		t.Fatalf("expected environment to remain unchanged, got %#v", resolved)
+	if got, ok := LookupEnvValue(merged, "HF_TOKEN"); !ok || got != "secret" {
+		t.Fatalf("expected HF_TOKEN=secret, got %q (ok=%v)", got, ok)
 	}
 }

@@ -10,10 +10,54 @@ import (
 	"testing"
 )
 
-func TestEnvVarList_DefaultHumanReadable(t *testing.T) {
+type envVarSetPayload struct {
+	EnvironmentID string           `json:"environment_id"`
+	EnvVars       []envVarSetInput `json:"env_vars"`
+}
+
+func setupLinkedEnvironmentForEnvVarTest(t *testing.T, environmentID string) {
+	t.Helper()
+
+	dir := t.TempDir()
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get cwd: %v", err)
+	}
+	if err := os.Chdir(dir); err != nil {
+		t.Fatalf("failed to chdir: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = os.Chdir(cwd)
+	})
+	if err := saveLinkedEnvironmentID(environmentID); err != nil {
+		t.Fatalf("failed to save linked environment id: %v", err)
+	}
+}
+
+func setupEnvVarServer(
+	t *testing.T,
+	environmentID string,
+	handler func(w http.ResponseWriter, r *http.Request),
+) {
+	t.Helper()
+
+	setupLinkedEnvironmentForEnvVarTest(t, environmentID)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		if r.Method == http.MethodGet && r.URL.Path == "/api/env_vars" {
+		handler(w, r)
+	}))
+	t.Cleanup(server.Close)
+	t.Setenv("TAHUNA_API_URL", server.URL)
+}
+
+func writeNotFound(w http.ResponseWriter) {
+	w.WriteHeader(http.StatusNotFound)
+	_ = json.NewEncoder(w).Encode(map[string]any{"detail": "not found"})
+}
+
+func TestEnvVarList_DefaultHumanReadable(t *testing.T) {
+	setupEnvVarServer(t, "env-test", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && r.URL.Path == "/api/env_vars" && r.URL.Query().Get("environment_id") == "env-test" {
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"env_vars": []map[string]any{
 					{"name": "HF_TOKEN"},
@@ -22,12 +66,8 @@ func TestEnvVarList_DefaultHumanReadable(t *testing.T) {
 			})
 			return
 		}
-		w.WriteHeader(http.StatusNotFound)
-		_ = json.NewEncoder(w).Encode(map[string]any{"detail": "not found"})
-	}))
-	defer server.Close()
-
-	t.Setenv("TAHUNA_API_URL", server.URL)
+		writeNotFound(w)
+	})
 
 	output := captureStdout(t, func() {
 		envVarList(nil)
@@ -39,21 +79,18 @@ func TestEnvVarList_DefaultHumanReadable(t *testing.T) {
 }
 
 func TestEnvVarGet_DefaultHumanReadable(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		if r.Method == http.MethodGet && r.URL.Path == "/api/env_vars/WANDB_API_KEY" {
+	setupEnvVarServer(t, "env-test", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet &&
+			r.URL.Path == "/api/env_vars/WANDB_API_KEY" &&
+			r.URL.Query().Get("environment_id") == "env-test" {
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"name":  "WANDB_API_KEY",
 				"value": "secret-value",
 			})
 			return
 		}
-		w.WriteHeader(http.StatusNotFound)
-		_ = json.NewEncoder(w).Encode(map[string]any{"detail": "not found"})
-	}))
-	defer server.Close()
-
-	t.Setenv("TAHUNA_API_URL", server.URL)
+		writeNotFound(w)
+	})
 
 	output := captureStdout(t, func() {
 		envVarGet([]string{"WANDB_API_KEY"})
@@ -65,36 +102,27 @@ func TestEnvVarGet_DefaultHumanReadable(t *testing.T) {
 }
 
 func TestEnvVarSet_NameEqualsValue(t *testing.T) {
-	var payload struct {
-		EnvVars []struct {
-			Name  string `json:"name"`
-			Value string `json:"value"`
-		} `json:"env_vars"`
-	}
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
+	var payload envVarSetPayload
+	setupEnvVarServer(t, "env-test", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost && r.URL.Path == "/api/env_vars" {
 			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 				t.Fatalf("failed to decode payload: %v", err)
 			}
 			_ = json.NewEncoder(w).Encode(map[string]any{
-				"env_vars": []map[string]any{
-					{"name": "HF_TOKEN"},
-				},
+				"env_vars": []map[string]any{{"name": "HF_TOKEN"}},
 			})
 			return
 		}
-		w.WriteHeader(http.StatusNotFound)
-		_ = json.NewEncoder(w).Encode(map[string]any{"detail": "not found"})
-	}))
-	defer server.Close()
-
-	t.Setenv("TAHUNA_API_URL", server.URL)
+		writeNotFound(w)
+	})
 
 	output := captureStdout(t, func() {
 		envVarSet([]string{"HF_TOKEN=hf-secret"})
 	})
 
+	if payload.EnvironmentID != "env-test" {
+		t.Fatalf("expected environment_id=env-test, got %q", payload.EnvironmentID)
+	}
 	if len(payload.EnvVars) != 1 || payload.EnvVars[0].Name != "HF_TOKEN" || payload.EnvVars[0].Value != "hf-secret" {
 		t.Fatalf("unexpected payload: %#v", payload.EnvVars)
 	}
@@ -107,36 +135,27 @@ func TestEnvVarSet_NameEqualsValue(t *testing.T) {
 }
 
 func TestEnvVarSet_ValueFlag(t *testing.T) {
-	var payload struct {
-		EnvVars []struct {
-			Name  string `json:"name"`
-			Value string `json:"value"`
-		} `json:"env_vars"`
-	}
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
+	var payload envVarSetPayload
+	setupEnvVarServer(t, "env-test", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost && r.URL.Path == "/api/env_vars" {
 			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 				t.Fatalf("failed to decode payload: %v", err)
 			}
 			_ = json.NewEncoder(w).Encode(map[string]any{
-				"env_vars": []map[string]any{
-					{"name": "WANDB_BASE_URL"},
-				},
+				"env_vars": []map[string]any{{"name": "WANDB_BASE_URL"}},
 			})
 			return
 		}
-		w.WriteHeader(http.StatusNotFound)
-		_ = json.NewEncoder(w).Encode(map[string]any{"detail": "not found"})
-	}))
-	defer server.Close()
-
-	t.Setenv("TAHUNA_API_URL", server.URL)
+		writeNotFound(w)
+	})
 
 	output := captureStdout(t, func() {
 		envVarSet([]string{"WANDB_BASE_URL", "--value", "https://api.wandb.ai"})
 	})
 
+	if payload.EnvironmentID != "env-test" {
+		t.Fatalf("expected environment_id=env-test, got %q", payload.EnvironmentID)
+	}
 	if len(payload.EnvVars) != 1 || payload.EnvVars[0].Name != "WANDB_BASE_URL" || payload.EnvVars[0].Value != "https://api.wandb.ai" {
 		t.Fatalf("unexpected payload: %#v", payload.EnvVars)
 	}
@@ -146,14 +165,8 @@ func TestEnvVarSet_ValueFlag(t *testing.T) {
 }
 
 func TestEnvVarSet_DefaultFileLookupPrefersEnvLocal(t *testing.T) {
-	var payload struct {
-		EnvVars []struct {
-			Name  string `json:"name"`
-			Value string `json:"value"`
-		} `json:"env_vars"`
-	}
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
+	var payload envVarSetPayload
+	setupEnvVarServer(t, "env-test", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost && r.URL.Path == "/api/env_vars" {
 			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 				t.Fatalf("failed to decode payload: %v", err)
@@ -166,12 +179,8 @@ func TestEnvVarSet_DefaultFileLookupPrefersEnvLocal(t *testing.T) {
 			})
 			return
 		}
-		w.WriteHeader(http.StatusNotFound)
-		_ = json.NewEncoder(w).Encode(map[string]any{"detail": "not found"})
-	}))
-	defer server.Close()
-
-	t.Setenv("TAHUNA_API_URL", server.URL)
+		writeNotFound(w)
+	})
 
 	tempDir := t.TempDir()
 	cwd, err := os.Getwd()
@@ -190,11 +199,17 @@ func TestEnvVarSet_DefaultFileLookupPrefersEnvLocal(t *testing.T) {
 	t.Cleanup(func() {
 		_ = os.Chdir(cwd)
 	})
+	if err := saveLinkedEnvironmentID("env-test"); err != nil {
+		t.Fatalf("failed to save linked environment id: %v", err)
+	}
 
 	output := captureStdout(t, func() {
 		envVarSet(nil)
 	})
 
+	if payload.EnvironmentID != "env-test" {
+		t.Fatalf("expected environment_id=env-test, got %q", payload.EnvironmentID)
+	}
 	if len(payload.EnvVars) != 2 {
 		t.Fatalf("expected two env vars, got %#v", payload.EnvVars)
 	}
@@ -202,7 +217,7 @@ func TestEnvVarSet_DefaultFileLookupPrefersEnvLocal(t *testing.T) {
 		t.Fatalf("expected .env.local HF_TOKEN, got %#v", payload.EnvVars[0])
 	}
 	if payload.EnvVars[1].Name != "WANDB_PROJECT" || payload.EnvVars[1].Value != "local project" {
-		t.Fatalf("expected parsed quoted project name, got %#v", payload.EnvVars[1])
+		t.Fatalf("expected parsed quoted value, got %#v", payload.EnvVars[1])
 	}
 	if !strings.Contains(output, ".env.local") {
 		t.Fatalf("expected output to mention .env.local, got: %s", output)
@@ -210,8 +225,7 @@ func TestEnvVarSet_DefaultFileLookupPrefersEnvLocal(t *testing.T) {
 }
 
 func TestParseEnvVarFileSupportsCommentsAndDuplicates(t *testing.T) {
-	tempDir := t.TempDir()
-	path := filepath.Join(tempDir, "vars.env")
+	path := filepath.Join(t.TempDir(), "vars.env")
 	if err := os.WriteFile(path, []byte(strings.Join([]string{
 		"# comment",
 		"export HF_TOKEN=one",
@@ -238,21 +252,18 @@ func TestParseEnvVarFileSupportsCommentsAndDuplicates(t *testing.T) {
 }
 
 func TestEnvVarRemove(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		if r.Method == http.MethodDelete && r.URL.Path == "/api/env_vars/HF_TOKEN" {
+	setupEnvVarServer(t, "env-test", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodDelete &&
+			r.URL.Path == "/api/env_vars/HF_TOKEN" &&
+			r.URL.Query().Get("environment_id") == "env-test" {
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"name":    "HF_TOKEN",
 				"deleted": true,
 			})
 			return
 		}
-		w.WriteHeader(http.StatusNotFound)
-		_ = json.NewEncoder(w).Encode(map[string]any{"detail": "not found"})
-	}))
-	defer server.Close()
-
-	t.Setenv("TAHUNA_API_URL", server.URL)
+		writeNotFound(w)
+	})
 
 	output := captureStdout(t, func() {
 		envVarRemove([]string{"HF_TOKEN"})

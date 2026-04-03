@@ -6,7 +6,7 @@ import { action, internalAction, internalMutation, internalQuery, mutation, quer
 import { R2 } from "@convex-dev/r2"
 import { RUN_CONFIG } from "@convex/appConfig"
 import { requireUser } from "@convex/auth"
-import { buildProvisionedRuntimeEnv, resolveUserEnvVarsForUserId } from "@convex/envVars"
+import { buildProvisionedRuntimeEnv, resolveEnvironmentEnvVarsForEnvironmentId } from "@convex/envVars"
 import { RUN_STATUS } from "@convex/runsConstants"
 import { buildManifestObjectKey } from "@convex/cli/shared"
 import { resolveConfiguredDependencyGroup } from "@/lib/dependency-selection"
@@ -23,7 +23,6 @@ import { SERVE_STATUS, TERMINAL_SERVE_STATUSES } from "@convex/servesConstants"
 import {
   provisionRuntimePod,
   resolveImageName,
-  resolveWandbBaseURL,
   terminateRuntimePodWithRetry,
 } from "@convex/runtimeProvisioning"
 import {
@@ -1455,7 +1454,10 @@ export const provisionServe = internalAction({
     if (await ctx.runQuery(internal.serves.internalShouldAbortProvisioning, { serveId: args.serveId })) {
       return null
     }
-    const userEnv = await resolveUserEnvVarsForUserId(ctx, provisioningPayload.user_id)
+    const environmentEnv = await resolveEnvironmentEnvVarsForEnvironmentId(
+      ctx,
+      provisioningPayload.environment_id as Id<"environments">,
+    )
 
     let provisionedPodId = ""
     try {
@@ -1514,10 +1516,7 @@ export const provisionServe = internalAction({
         },
         buildEnv: ({ runtimeToken, runtimeApiBase, runtimeRequestTimeoutSeconds }) =>
           buildProvisionedRuntimeEnv({
-            userEnv,
-            defaultEnv: {
-              WANDB_BASE_URL: resolveWandbBaseURL(runtimeApiBase),
-            },
+            environmentEnv,
             systemEnv: {
               TAHUNA_SERVE_ID: provisioningPayload.serve_id,
               TAHUNA_ENVIRONMENT_ID: provisioningPayload.environment_id,

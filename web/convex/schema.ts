@@ -152,15 +152,15 @@ export default defineSchema({
   }).index("by_user", ["userId"]),
 
   envVars: defineTable({
-    userId: v.string(),
+    environmentId: v.id("environments"),
     name: v.string(),
     valueCiphertext: v.string(),
     valueIv: v.string(),
     valueVersion: v.number(),
     updatedAt: v.number(),
   })
-    .index("by_user", ["userId"])
-    .index("by_user_and_name", ["userId", "name"]),
+    .index("by_environment", ["environmentId"])
+    .index("by_environment_and_name", ["environmentId", "name"]),
 
   runtimeIncompatibilities: defineTable({
     compatibilityKey: v.string(),

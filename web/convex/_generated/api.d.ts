@@ -25,7 +25,6 @@ import type * as crons from "../crons.js";
 import type * as crypto from "../crypto.js";
 import type * as data from "../data.js";
 import type * as envVars from "../envVars.js";
-import type * as envVarsStore from "../envVarsStore.js";
 import type * as environments from "../environments.js";
 import type * as http from "../http.js";
 import type * as ids from "../ids.js";
@@ -81,7 +80,6 @@ declare const fullApi: ApiFromModules<{
   crypto: typeof crypto;
   data: typeof data;
   envVars: typeof envVars;
-  envVarsStore: typeof envVarsStore;
   environments: typeof environments;
   http: typeof http;
   ids: typeof ids;

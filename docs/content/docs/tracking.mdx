@@ -41,15 +41,11 @@ for step in range(5):
 run.finish()
 ```
 
-### 2. Let Tahuna manage the endpoint and auth
+### 2. Configure W&B through environment env vars
 
-On Tahuna-managed runtime images, `WANDB_BASE_URL` is already configured to point at Tahuna's compatibility endpoint.
+Tahuna does not auto-inject `WANDB_*` settings.
 
-You usually do not need to set `WANDB_API_KEY` yourself:
-
-- If `WANDB_BASE_URL` points to Tahuna and `WANDB_API_KEY` is unset, Tahuna injects `WANDB_API_KEY` automatically for the run.
-- If you already set `WANDB_API_KEY`, Tahuna leaves your value untouched.
-- If you override `WANDB_BASE_URL` to a non-Tahuna endpoint, Tahuna does not inject credentials for you.
+If your code uses the W&B-compatible endpoint, set the needed `WANDB_*` variables on the Tahuna environment explicitly.
 
 ## What Tahuna captures
 
@@ -73,10 +69,10 @@ After the run starts emitting metrics:
 Use this checklist to confirm the integration is working in your environment:
 
 1. Launch a Tahuna run with training code that calls `wandb.init()` and `wandb.log()`.
-2. Confirm the run does not require a manually supplied `WANDB_API_KEY` when using Tahuna's default endpoint.
+2. Confirm the required `WANDB_*` variables are set on the Tahuna environment before launch.
 3. Open the run in the dashboard and verify that logged numeric metrics appear in the live charts.
 4. Refresh the run page and confirm the metrics still appear after reload.
-5. If you intentionally point `WANDB_BASE_URL` somewhere other than Tahuna, confirm Tahuna no longer auto-injects `WANDB_API_KEY`.
+5. If you intentionally point `WANDB_BASE_URL` somewhere other than Tahuna, confirm your environment configuration still matches that endpoint.
 
 ## Current compatibility surface
 
