@@ -73,18 +73,18 @@ An environment is a named, user-scoped container that holds runtime configuratio
 
 | Command | Endpoint | Description |
 |---------|----------|-------------|
-| `tahuna env delete --id <id>` | `DELETE /api/environments/{id}` | Cascade delete |
+| `tahuna env rm --id <id>` | `DELETE /api/environments/{id}` | Cascade delete |
 
 **Cascade behavior:**
 1. Delete all runs belonging to this environment (including run events, logs, metrics).
 2. Delete all synced code/data blobs and manifests in R2 under this environment's prefix.
 3. Delete the environment record.
-4. CLI should also remove local `.tahuna/environment_id` if it matches.
+4. CLI should also remove local `.tahuna/` if it matches.
 
 ### Pull (future)
 
 - `tahuna pull` — list remote environments and link one to the current project directory.
-- Creates `.tahuna/environment_id` pointing to existing environment.
+- Creates `.tahuna/` or any tahuna related local files pointing to existing environment.
 - Does not duplicate data.
 
 ## Spec Defaults and Overrides
