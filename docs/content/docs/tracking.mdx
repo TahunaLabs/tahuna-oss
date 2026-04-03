@@ -47,6 +47,31 @@ Tahuna does not auto-inject `WANDB_*` settings.
 
 If your code uses the W&B-compatible endpoint, set the needed `WANDB_*` variables on the Tahuna environment explicitly.
 
+### 3. Manage environment env vars with the CLI
+
+Tahuna env vars are scoped to an environment, not to a user.
+
+The `tahuna env_vars ...` commands operate on the linked environment in the current project, so run `tahuna init .` first if the project is not linked yet.
+
+Examples:
+
+```bash
+tahuna env_vars list
+tahuna env_vars get HF_TOKEN
+tahuna env_vars set HF_TOKEN=hf_example
+tahuna env_vars set WANDB_BASE_URL --value https://tahuna.app/api/monitoring/wandb
+tahuna env_vars set --from-file .env.local
+tahuna env_vars rm HF_TOKEN
+```
+
+Output behavior:
+
+- `list` returns env var names only so secret values are not printed accidentally.
+- `get <name>` returns a single `NAME=value` pair for that env var.
+- `set` without arguments loads `.env.local` first, then `.env`, from the current working directory.
+
+Reserved keys such as `TAHUNA_*`, `PATH`, `VIRTUAL_ENV`, and `UV_PROJECT_ENVIRONMENT` are managed by Tahuna and cannot be set through this interface.
+
 ## What Tahuna captures
 
 Tahuna stores compatibility data for the run and mirrors logged metrics into the normal Tahuna run metrics stream.

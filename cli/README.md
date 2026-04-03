@@ -61,6 +61,8 @@ tahuna-dev env list   # dev  → http://localhost:3000 (config: ~/.config/tahuna
 tahuna env_vars list  # runtime env vars for the linked environment
 ```
 
+`env_vars` is environment-scoped. `list` returns names only, `get` returns one value, and `set` can load a single `NAME=value`, `NAME --value <value>`, or a `.env.local` / `.env` file for the linked environment.
+
 ## Run locally
 
 ```bash
