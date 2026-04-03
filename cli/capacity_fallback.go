@@ -227,6 +227,7 @@ func persistFallbackEnvironmentGPU(path, gpuType string) {
 
 func persistFallbackServeCompute(environmentID, gpuType string, gpuCount, volumeGB int) {
 	persistFallbackProjectCompute(environmentID, gpuType, "serve", func(cfg *projectConfig, selectedGPU string) {
+		cfg.ServeEnabled = true
 		cfg.ServeGPUType = selectedGPU
 		if gpuCount > 0 {
 			cfg.ServeGPUCount = gpuCount

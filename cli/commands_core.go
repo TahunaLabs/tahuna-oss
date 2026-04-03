@@ -88,7 +88,10 @@ func initProject(target string) error {
 	); err != nil {
 		return fmt.Errorf("failed to resolve training dependency selection: %w", err)
 	}
-	if len(dependencyGroups) == 0 {
+	if !projectCfg.ServeEnabled {
+		projectCfg.ServeDependencyConfigured = false
+		projectCfg.ServeDependencyGroup = ""
+	} else if len(dependencyGroups) == 0 {
 		setServeDependencyGroup(&projectCfg, "")
 	} else if _, err := ensureConfiguredDependencyGroup(
 		&projectCfg,
@@ -103,8 +106,10 @@ func initProject(target string) error {
 	if err := ensureProjectFile("train.py", defaultTrainEntrypointTemplate(projectCfg)); err != nil {
 		return fmt.Errorf("failed to create train entrypoint: %w", err)
 	}
-	if err := ensureProjectFile("inference.py", defaultInferenceEntrypointTemplate(projectCfg)); err != nil {
-		return fmt.Errorf("failed to create inference entrypoint: %w", err)
+	if projectCfg.ServeEnabled {
+		if err := ensureProjectFile("inference.py", defaultInferenceEntrypointTemplate(projectCfg)); err != nil {
+			return fmt.Errorf("failed to create inference entrypoint: %w", err)
+		}
 	}
 	if err := os.MkdirAll(projectCfg.DataDir, 0o755); err != nil {
 		return fmt.Errorf("failed to create data directory: %w", err)
@@ -126,9 +131,11 @@ func initProject(target string) error {
 	projectCfg.GPUType = setup.gpuType
 	projectCfg.GPUCount = setup.gpuCount
 	projectCfg.VolumeGB = setup.volumeGB
-	projectCfg.ServeGPUType = setup.gpuType
-	projectCfg.ServeGPUCount = setup.gpuCount
-	projectCfg.ServeVolumeGB = setup.volumeGB
+	if projectCfg.ServeEnabled {
+		projectCfg.ServeGPUType = setup.gpuType
+		projectCfg.ServeGPUCount = setup.gpuCount
+		projectCfg.ServeVolumeGB = setup.volumeGB
+	}
 	if err := saveProjectConfig(projectCfg); err != nil {
 		return fmt.Errorf("failed to save project config: %w", err)
 	}
@@ -907,6 +914,7 @@ func environmentUpdate(args []string) {
 	if serveCommandUpdate {
 		parsedCommand, err := parseShellCommand(normalizeCommandString(strings.TrimSpace(*serveEntrypointCmd)))
 		must(err)
+		cfg.ServeEnabled = true
 		cfg.ServeCommand = parsedCommand
 	}
 	if value := strings.TrimSpace(*gpuType); value != "" {
@@ -919,12 +927,15 @@ func environmentUpdate(args []string) {
 		cfg.VolumeGB = *volumeGB
 	}
 	if value := strings.TrimSpace(*serveGPUType); value != "" {
+		cfg.ServeEnabled = true
 		cfg.ServeGPUType = value
 	}
 	if *serveGPUCount > 0 {
+		cfg.ServeEnabled = true
 		cfg.ServeGPUCount = *serveGPUCount
 	}
 	if *serveVolumeGB > 0 {
+		cfg.ServeEnabled = true
 		cfg.ServeVolumeGB = *serveVolumeGB
 	}
 

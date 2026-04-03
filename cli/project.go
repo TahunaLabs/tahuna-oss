@@ -50,6 +50,7 @@ type projectConfig struct {
 	TrainDependencyGroup         string
 	TrainDependencyConfigured    bool
 	TrainOutputModelPath         string
+	ServeEnabled                 bool
 	ServeCommand                 []string
 	ServeDependencyGroup         string
 	ServeDependencyConfigured    bool
@@ -223,8 +224,10 @@ func collectProjectInitConfig() (projectConfig, string, error) {
 
 	if fileExists("inference.py") {
 		fmt.Printf("✓ Found %sinference.py%s\n", cAmpGold, cReset)
+		cfg.ServeEnabled = true
 	} else {
 		fmt.Printf("%s?%s No inference.py found\n", cAmpGold, cReset)
+		cfg.ServeEnabled = promptEnableServe()
 	}
 	if dirExists(cfg.DataDir) {
 		fmt.Printf("✓ Found %s%s/%s\n", cAmpGold, cfg.DataDir, cReset)
@@ -277,6 +280,14 @@ func collectProjectInitConfig() (projectConfig, string, error) {
 	}
 
 	return cfg, framework, nil
+}
+
+func promptEnableServe() bool {
+	if !supportsInteractivePrompts() {
+		return false
+	}
+	choice := promptChoice("Do you want to serve this project?", []string{"No", "Yes"}, 0)
+	return choice == "Yes"
 }
 
 func choosePathWhenFound(label, detectedPath, defaultCreatePath string) string {
@@ -615,9 +626,6 @@ func validateProjectConfigBindings(environmentID string) (projectConfig, error) 
 	if err := validateCanonicalProjectFile("train.py"); err != nil {
 		return cfg, err
 	}
-	if err := validateCanonicalProjectFile("inference.py"); err != nil {
-		return cfg, err
-	}
 	if err := validateCanonicalProjectFile("pyproject.toml"); err != nil {
 		return cfg, err
 	}
@@ -634,63 +642,68 @@ func validateProjectConfigBindings(environmentID string) (projectConfig, error) 
 	if err := validateProjectSubpathBinding("train.output_model_path", cfg.TrainOutputModelPath, cfg.OutputDir); err != nil {
 		return cfg, err
 	}
-	if strings.TrimSpace(cfg.ServeDefaultModelPath) != "" {
-		if err := validateProjectSubpathBinding("serve.default_model_path", cfg.ServeDefaultModelPath, cfg.OutputDir); err != nil {
-			return cfg, err
-		}
-	}
-	if err := validateServeComputeConfig(path, cfg); err != nil {
-		return cfg, err
-	}
-	if !strings.HasPrefix(strings.TrimSpace(cfg.ServeHealthPath), "/") {
-		return cfg, fmt.Errorf("invalid serve.health_path in %s: expected an absolute HTTP path beginning with /", path)
-	}
-	if cfg.ServePort < 1 || cfg.ServePort > 65535 {
-		return cfg, fmt.Errorf("invalid serve.port %d in %s: expected 1-65535", cfg.ServePort, path)
-	}
-	if cfg.ServeStartupTimeoutSeconds < 1 ||
-		cfg.ServeHealthIntervalSeconds < 1 ||
-		cfg.ServeHealthTimeoutSeconds < 1 ||
-		cfg.ServeHealthFailureThreshold < 1 ||
-		cfg.ServeGracefulShutdownSeconds < 1 {
-		return cfg, fmt.Errorf("invalid serve timing values in %s: all serve timeouts and thresholds must be positive integers", path)
-	}
-	if strings.TrimSpace(cfg.ServePythonVersion) != "" && !isSimplePythonVersion(strings.TrimSpace(cfg.ServePythonVersion)) {
-		return cfg, fmt.Errorf("invalid serve.python_version %q in %s: expected major.minor (for example 3.11)", cfg.ServePythonVersion, path)
-	}
-	if cfg.ServeHealthTimeoutSeconds > cfg.ServeHealthIntervalSeconds {
-		return cfg, fmt.Errorf("invalid serve health timing in %s: health_timeout_seconds must be <= health_interval_seconds", path)
-	}
-	if cfg.ServeStartupTimeoutSeconds < cfg.ServeHealthIntervalSeconds {
-		return cfg, fmt.Errorf("invalid serve.startup_timeout_seconds in %s: must be >= health_interval_seconds", path)
-	}
-	if cfg.ServeGracefulShutdownSeconds > cfg.ServeStartupTimeoutSeconds {
-		return cfg, fmt.Errorf("invalid serve.graceful_shutdown_seconds in %s: must be <= startup_timeout_seconds", path)
-	}
 	if cfg.TrainOutputModelPath == "" {
 		return cfg, fmt.Errorf("missing train.output_model_path binding in %s", path)
 	}
-	if cfg.ServeDefaultModelPath == "" {
-		return cfg, fmt.Errorf("missing serve.default_model_path binding in %s", path)
-	}
-	if cfg.ServeHealthPath == "" {
-		return cfg, fmt.Errorf("missing serve.health_path binding in %s", path)
-	}
-	if cfg.ServePort == 0 {
-		return cfg, fmt.Errorf("missing serve.port binding in %s", path)
-	}
-	if cfg.ServeHealthIntervalSeconds == 0 ||
-		cfg.ServeHealthTimeoutSeconds == 0 ||
-		cfg.ServeHealthFailureThreshold == 0 ||
-		cfg.ServeStartupTimeoutSeconds == 0 ||
-		cfg.ServeGracefulShutdownSeconds == 0 {
-		return cfg, fmt.Errorf("missing serve timing bindings in %s", path)
-	}
-	if cfg.ServePythonVersion == "" {
-		cfg.ServePythonVersion = cfg.PythonVersion
-	}
-	if !isSimplePythonVersion(cfg.ServePythonVersion) {
-		return cfg, fmt.Errorf("invalid serve.python_version %q in %s: expected major.minor (for example 3.11)", cfg.ServePythonVersion, path)
+	if cfg.ServeEnabled {
+		if err := validateCanonicalProjectFile("inference.py"); err != nil {
+			return cfg, err
+		}
+		if strings.TrimSpace(cfg.ServeDefaultModelPath) != "" {
+			if err := validateProjectSubpathBinding("serve.default_model_path", cfg.ServeDefaultModelPath, cfg.OutputDir); err != nil {
+				return cfg, err
+			}
+		}
+		if err := validateServeComputeConfig(path, cfg); err != nil {
+			return cfg, err
+		}
+		if !strings.HasPrefix(strings.TrimSpace(cfg.ServeHealthPath), "/") {
+			return cfg, fmt.Errorf("invalid serve.health_path in %s: expected an absolute HTTP path beginning with /", path)
+		}
+		if cfg.ServePort < 1 || cfg.ServePort > 65535 {
+			return cfg, fmt.Errorf("invalid serve.port %d in %s: expected 1-65535", cfg.ServePort, path)
+		}
+		if cfg.ServeStartupTimeoutSeconds < 1 ||
+			cfg.ServeHealthIntervalSeconds < 1 ||
+			cfg.ServeHealthTimeoutSeconds < 1 ||
+			cfg.ServeHealthFailureThreshold < 1 ||
+			cfg.ServeGracefulShutdownSeconds < 1 {
+			return cfg, fmt.Errorf("invalid serve timing values in %s: all serve timeouts and thresholds must be positive integers", path)
+		}
+		if strings.TrimSpace(cfg.ServePythonVersion) != "" && !isSimplePythonVersion(strings.TrimSpace(cfg.ServePythonVersion)) {
+			return cfg, fmt.Errorf("invalid serve.python_version %q in %s: expected major.minor (for example 3.11)", cfg.ServePythonVersion, path)
+		}
+		if cfg.ServeHealthTimeoutSeconds > cfg.ServeHealthIntervalSeconds {
+			return cfg, fmt.Errorf("invalid serve health timing in %s: health_timeout_seconds must be <= health_interval_seconds", path)
+		}
+		if cfg.ServeStartupTimeoutSeconds < cfg.ServeHealthIntervalSeconds {
+			return cfg, fmt.Errorf("invalid serve.startup_timeout_seconds in %s: must be >= health_interval_seconds", path)
+		}
+		if cfg.ServeGracefulShutdownSeconds > cfg.ServeStartupTimeoutSeconds {
+			return cfg, fmt.Errorf("invalid serve.graceful_shutdown_seconds in %s: must be <= startup_timeout_seconds", path)
+		}
+		if cfg.ServeDefaultModelPath == "" {
+			return cfg, fmt.Errorf("missing serve.default_model_path binding in %s", path)
+		}
+		if cfg.ServeHealthPath == "" {
+			return cfg, fmt.Errorf("missing serve.health_path binding in %s", path)
+		}
+		if cfg.ServePort == 0 {
+			return cfg, fmt.Errorf("missing serve.port binding in %s", path)
+		}
+		if cfg.ServeHealthIntervalSeconds == 0 ||
+			cfg.ServeHealthTimeoutSeconds == 0 ||
+			cfg.ServeHealthFailureThreshold == 0 ||
+			cfg.ServeStartupTimeoutSeconds == 0 ||
+			cfg.ServeGracefulShutdownSeconds == 0 {
+			return cfg, fmt.Errorf("missing serve timing bindings in %s", path)
+		}
+		if cfg.ServePythonVersion == "" {
+			cfg.ServePythonVersion = cfg.PythonVersion
+		}
+		if !isSimplePythonVersion(cfg.ServePythonVersion) {
+			return cfg, fmt.Errorf("invalid serve.python_version %q in %s: expected major.minor (for example 3.11)", cfg.ServePythonVersion, path)
+		}
 	}
 
 	// Validate framework+version+python combo against the catalog.
@@ -743,6 +756,9 @@ func mergeProjectConfig(base, next projectConfig) projectConfig {
 	}
 	if value := strings.TrimSpace(next.TrainOutputModelPath); value != "" {
 		base.TrainOutputModelPath = normalizeProjectPath(value)
+	}
+	if next.ServeEnabled {
+		base.ServeEnabled = true
 	}
 	if len(next.ServeCommand) > 0 {
 		base.ServeCommand = append([]string{}, normalizeCommandTokens(next.ServeCommand)...)
@@ -812,21 +828,14 @@ func hasTrainSection(cfg projectConfig) bool {
 }
 
 func hasServeSection(cfg projectConfig) bool {
-	return len(cfg.ServeCommand) > 0 ||
+	return cfg.ServeEnabled ||
+		len(cfg.ServeCommand) > 0 ||
 		cfg.ServeDependencyConfigured ||
 		strings.TrimSpace(cfg.ServeDependencyGroup) != "" ||
 		strings.TrimSpace(cfg.ServePythonVersion) != "" ||
 		strings.TrimSpace(cfg.ServeGPUType) != "" ||
 		cfg.ServeGPUCount > 0 ||
-		cfg.ServeVolumeGB > 0 ||
-		cfg.ServePort > 0 ||
-		strings.TrimSpace(cfg.ServeHealthPath) != "" ||
-		strings.TrimSpace(cfg.ServeDefaultModelPath) != "" ||
-		cfg.ServeStartupTimeoutSeconds > 0 ||
-		cfg.ServeHealthIntervalSeconds > 0 ||
-		cfg.ServeHealthTimeoutSeconds > 0 ||
-		cfg.ServeHealthFailureThreshold > 0 ||
-		cfg.ServeGracefulShutdownSeconds > 0
+		cfg.ServeVolumeGB > 0
 }
 
 func escapeProjectConfigValue(value string) string {
@@ -1046,6 +1055,7 @@ func projectConfigFromFile(file projectConfigFile, defined map[string]struct{}) 
 		cfg.TrainOutputModelPath = normalizeProjectPath(file.Train.OutputModelPath)
 	}
 	if file.Serve != nil {
+		cfg.ServeEnabled = true
 		cfg.ServeCommand = normalizeCommandTokens(file.Serve.Command)
 		cfg.ServeDependencyGroup = normalizeDependencyGroup(file.Serve.DependencyGroup)
 		cfg.ServeDependencyConfigured = tomlKeyDefined(defined, "serve.dependency_group")

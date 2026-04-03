@@ -267,6 +267,46 @@ func TestPreRunSync_ConfigValidationDetectsMissingInferenceEntrypoint(t *testing
 	}
 }
 
+func TestPreRunSync_AllowsMissingInferenceWhenServeIsDisabled(t *testing.T) {
+	mock := newSyncBackendMock()
+	installSyncStubs(t, mock)
+	setupTestProject(t, true)
+
+	if err := os.Remove("inference.py"); err != nil {
+		t.Fatalf("failed to remove inference.py: %v", err)
+	}
+
+	cfg, err := loadProjectConfig()
+	if err != nil {
+		t.Fatalf("failed to load project config: %v", err)
+	}
+	cfg.ServeEnabled = false
+	cfg.ServeCommand = nil
+	cfg.ServeDependencyConfigured = false
+	cfg.ServeDependencyGroup = ""
+	cfg.ServePythonVersion = ""
+	cfg.ServeGPUType = ""
+	cfg.ServeGPUCount = 0
+	cfg.ServeVolumeGB = 0
+	if err := saveProjectConfig(cfg); err != nil {
+		t.Fatalf("failed to save project config: %v", err)
+	}
+
+	if err := preRunSync("env-test"); err != nil {
+		t.Fatalf("expected preRunSync to succeed without serve enabled, got: %v", err)
+	}
+
+	mock.mu.Lock()
+	defer mock.mu.Unlock()
+	if len(mock.commitBodies) == 0 {
+		t.Fatalf("expected at least one commit payload")
+	}
+	lastCommit := mock.commitBodies[len(mock.commitBodies)-1]
+	if _, ok := lastCommit["serve_snapshot"]; ok {
+		t.Fatalf("did not expect serve_snapshot in sync payload when serve is disabled: %#v", lastCommit["serve_snapshot"])
+	}
+}
+
 func TestPreRunSync_SyncsCodeAndData(t *testing.T) {
 	mock := newSyncBackendMock()
 	installSyncStubs(t, mock)

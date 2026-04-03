@@ -127,6 +127,7 @@ func setupTestProject(t *testing.T, withData bool) string {
 		GPUCount:                  1,
 		VolumeGB:                  80,
 		TrainOutputModelPath:      "outputs/model",
+		ServeEnabled:              true,
 		TrainDependencyConfigured: true,
 		ServeGPUType:              "NVIDIA A100 80GB",
 		ServeGPUCount:             1,

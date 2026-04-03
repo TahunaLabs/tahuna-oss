@@ -148,11 +148,13 @@ func buildSyncCommitPayload(environmentID string, prepared []preparedManifest, c
 	} else {
 		commitPayload["output_dir"] = "outputs"
 	}
-	serveSnapshot, err := resolveServeSnapshot(cfg)
-	if err != nil {
-		return nil, err
+	if hasServeSection(cfg) {
+		serveSnapshot, err := resolveServeSnapshot(cfg)
+		if err != nil {
+			return nil, err
+		}
+		commitPayload["serve_snapshot"] = serveSnapshot
 	}
-	commitPayload["serve_snapshot"] = serveSnapshot
 	return commitPayload, nil
 }
 

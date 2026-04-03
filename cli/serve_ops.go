@@ -125,6 +125,13 @@ func ensureServeDependencySelection(environmentID string) error {
 	if err != nil {
 		return err
 	}
+	if !cfg.ServeEnabled {
+		if fileExists("inference.py") {
+			cfg.ServeEnabled = true
+		} else {
+			return fmt.Errorf("project has no serving entrypoint configured; rerun `tahuna init .` with serving enabled or add inference.py")
+		}
+	}
 	changed, err := ensureConfiguredDependencyGroup(
 		&cfg,
 		"serve",
