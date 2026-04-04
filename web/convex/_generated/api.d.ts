@@ -29,7 +29,6 @@ import type * as environments from "../environments.js";
 import type * as http from "../http.js";
 import type * as ids from "../ids.js";
 import type * as maintenance from "../maintenance.js";
-import type * as migrations from "../migrations.js";
 import type * as monitoring_wandb from "../monitoring/wandb.js";
 import type * as resend from "../resend.js";
 import type * as runBilling from "../runBilling.js";
@@ -85,7 +84,6 @@ declare const fullApi: ApiFromModules<{
   http: typeof http;
   ids: typeof ids;
   maintenance: typeof maintenance;
-  migrations: typeof migrations;
   "monitoring/wandb": typeof monitoring_wandb;
   resend: typeof resend;
   runBilling: typeof runBilling;

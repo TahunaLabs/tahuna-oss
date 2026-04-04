@@ -32,10 +32,10 @@ export default defineSchema({
     latestCodeManifestHash: v.optional(v.string()),
     latestDataManifestHash: v.optional(v.string()),
     latestSyncAt: v.optional(v.number()),
-    command: v.optional(v.array(v.string())),
+    command: v.array(v.string()),
     trainDependencyMode: v.optional(v.string()),
     trainDependencyGroup: v.optional(v.string()),
-    outputDir: v.optional(v.string()),
+    outputDir: v.string(),
     serveSnapshot: v.optional(v.object({
       command: v.array(v.string()),
       dependencyMode: v.optional(v.string()),
