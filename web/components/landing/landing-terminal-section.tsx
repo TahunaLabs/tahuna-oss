@@ -52,7 +52,7 @@ export function LandingTerminalSection() {
             for post-training
           </h2>
           <p className="mt-4 max-w-sm text-base leading-relaxed text-muted-foreground">
-            Post-training is the new frontier, but reinforcement learning infrastructure hasn&apos;t caught up yet.
+            Post-training is the new frontier, but the infrastructure hasn&apos;t caught up yet.
           </p>
           <p className="mt-3 max-w-sm text-base leading-relaxed text-muted-foreground">
             Tahuna is a gentle control plane for post-training that keeps your code and your loop intact while

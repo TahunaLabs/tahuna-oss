@@ -17,8 +17,8 @@ export function LandingHero() {
           <div className="flex flex-col gap-10 lg:flex-row lg:items-start lg:justify-between">
             <div className="max-w-xl">
               <p className="text-lg leading-relaxed text-foreground/85 md:text-xl">
-                The future of artificial intelligence is a wide field of specialized systems. Post-training and
-                reinforcement learning infrastructure should be easily accessible.
+                The future of artificial intelligence is a wide field of specialized systems. Post-training
+                infrastructure should be easily accessible.
               </p>
             </div>
 
