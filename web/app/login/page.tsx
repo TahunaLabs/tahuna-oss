@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label"
 import { Notice } from "@/components/ui/notice"
 import { authClient } from "@/lib/auth-client"
 import { useConvexAuth } from "convex/react"
+import { GitHubIcon } from "@/components/icons/github-icon"
 import { ArrowLeft, Mail } from "lucide-react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useEffect, useRef, useState, type FormEvent } from "react"
@@ -28,6 +29,7 @@ export default function LoginPage() {
   const [otp, setOtp] = useState("")
   const [step, setStep] = useState<"email" | "otp">("email")
   const [loading, setLoading] = useState(false)
+  const [socialLoading, setSocialLoading] = useState(false)
   const [error, setError] = useState("")
 
   const otpRef = useRef<HTMLInputElement>(null)
@@ -79,6 +81,20 @@ export default function LoginPage() {
     }
   }
 
+  async function onGitHubSignIn() {
+    setSocialLoading(true)
+    setError("")
+    try {
+      await authClient.signIn.social({
+        provider: "github",
+        callbackURL: redirectPath,
+      })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unexpected error")
+      setSocialLoading(false)
+    }
+  }
+
   function onBack() {
     setStep("email")
     setOtp("")
@@ -104,37 +120,59 @@ export default function LoginPage() {
           <div className="relative w-full max-w-sm">
             <div className="rounded-xl border border-border bg-card px-6 py-7 shadow-sm">
               {step === "email" ? (
-                <form onSubmit={onSendCode} className="space-y-5">
+                <div className="space-y-5">
                   <div className="space-y-1">
                     <h1 className="text-base font-medium tracking-tight text-foreground">
                       Sign in
                     </h1>
                     <p className="text-sm text-muted-foreground">
-                      Enter your email to receive a one-time code.
+                      Continue with GitHub or enter your email.
                     </p>
                   </div>
 
-                  <div className="space-y-1.5">
-                    <Label htmlFor="email">Email</Label>
-                    <Input
-                      id="email"
-                      type="email"
-                      autoComplete="email"
-                      autoFocus
-                      required
-                      placeholder="you@example.com"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                    />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={socialLoading || loading}
+                    className="w-full"
+                    onClick={onGitHubSignIn}
+                  >
+                    <GitHubIcon className="size-4" />
+                    {socialLoading ? "Redirecting…" : "Continue with GitHub"}
+                  </Button>
+
+                  <div className="relative">
+                    <div className="absolute inset-0 flex items-center">
+                      <span className="w-full border-t border-border" />
+                    </div>
+                    <div className="relative flex justify-center text-xs uppercase">
+                      <span className="bg-card px-2 text-muted-foreground">or</span>
+                    </div>
                   </div>
 
-                  {error ? <Notice variant="error">{error}</Notice> : null}
+                  <form onSubmit={onSendCode} className="space-y-5">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="email">Email</Label>
+                      <Input
+                        id="email"
+                        type="email"
+                        autoComplete="email"
+                        autoFocus
+                        required
+                        placeholder="you@example.com"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                      />
+                    </div>
 
-                  <Button type="submit" disabled={loading} className="w-full">
-                    <Mail className="size-4" />
-                    {loading ? "Sending…" : "Send code"}
-                  </Button>
-                </form>
+                    {error ? <Notice variant="error">{error}</Notice> : null}
+
+                    <Button type="submit" disabled={loading || socialLoading} className="w-full">
+                      <Mail className="size-4" />
+                      {loading ? "Sending…" : "Send code"}
+                    </Button>
+                  </form>
+                </div>
               ) : (
                 <form onSubmit={onVerifyCode} className="space-y-5">
                   <div className="space-y-1">
@@ -191,7 +229,7 @@ export default function LoginPage() {
             </div>
 
             <p className="mt-5 text-center text-xs text-muted-foreground">
-              No password needed — just your email.
+              No password needed — sign in with GitHub or email.
             </p>
           </div>
         </div>

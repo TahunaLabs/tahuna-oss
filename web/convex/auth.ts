@@ -36,6 +36,12 @@ export const createAuth = (ctx: GenericCtx<DataModel>) => {
       enabled: false,
       requireEmailVerification: false,
     },
+    socialProviders: {
+      github: {
+        clientId: process.env.GITHUB_CLIENT_ID as string,
+        clientSecret: process.env.GITHUB_CLIENT_SECRET as string,
+      },
+    },
     plugins: [
       emailOTP({
         async sendVerificationOTP({ email, otp }) {
