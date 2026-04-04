@@ -2,10 +2,9 @@ name: Build Runtime Images
 
 on:
   push:
-    # MVP phase: trigger from develop.
-    # TODO: switch this back to `main` once MVP is complete.
     branches:
       - develop
+      - main
     paths:
       - runtime/images/**
       - runtime/images/prebake/**
@@ -55,6 +54,7 @@ jobs:
       packages: write
     env:
       REGISTRY: ghcr.io/pazuzzu
+      IMAGE_REPO: ${{ github.ref_name == 'main' && 'tahuna' || 'tahuna-dev' }}
     strategy:
       fail-fast: false
       max-parallel: 2
@@ -95,12 +95,12 @@ jobs:
           file: runtime/images/Dockerfile
           pull: true
           push: true
-          tags: ${{ env.REGISTRY }}/tahuna:${{ matrix.tag }}
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_REPO }}:${{ matrix.tag }}
           build-args: |
             BASE_IMAGE=${{ matrix.base }}
             PREBAKE_FRAMEWORK=${{ matrix.framework }}
             PREBAKE_VERSION=${{ matrix.version }}
             PREBAKE_PYTHON_VERSION=${{ matrix.python_version }}
             PREBAKE_PROTECTED_PACKAGES=${{ matrix.protected_packages }}
-          cache-from: type=registry,ref=${{ env.REGISTRY }}/tahuna:cache-${{ matrix.tag }}
-          cache-to: type=registry,ref=${{ env.REGISTRY }}/tahuna:cache-${{ matrix.tag }},mode=max
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_REPO }}:cache-${{ matrix.tag }}
+          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_REPO }}:cache-${{ matrix.tag }},mode=max
