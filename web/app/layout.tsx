@@ -1,14 +1,15 @@
+import { siteMetadata } from "@/app/site-metadata"
 import { ConvexClientProvider } from "@/components/convex-client-provider"
 import { ThemeProvider } from "@/components/theme-provider"
 import { Card } from "@/components/ui/card"
 import { Toaster } from "@/components/ui/toaster"
 import { TooltipProvider } from "@/components/ui/tooltip"
-import { siteMetadata } from "@/app/site-metadata"
 import { CDN_CONFIG } from "@/config"
 import { getToken } from "@/lib/auth-server"
 import { Analytics } from "@vercel/analytics/next"
-import { cookies } from "next/headers"
+import { SpeedInsights } from "@vercel/speed-insights/next"
 import { Cormorant_Garamond, Geist, Geist_Mono } from "next/font/google"
+import { cookies } from "next/headers"
 import { NuqsAdapter } from "nuqs/adapters/next/app"
 import type React from "react"
 import "./globals.css"
@@ -53,6 +54,7 @@ export default async function RootLayout({
           </Card>
         </ThemeProvider>
         <Analytics />
+        <SpeedInsights />
       </body>
     </html>
   )
