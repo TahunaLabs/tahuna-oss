@@ -41,6 +41,10 @@ export const createAuth = (ctx: GenericCtx<DataModel>) => {
         clientId: process.env.GITHUB_CLIENT_ID as string,
         clientSecret: process.env.GITHUB_CLIENT_SECRET as string,
       },
+      huggingface: {
+        clientId: process.env.HUGGINGFACE_CLIENT_ID as string,
+        clientSecret: process.env.HUGGINGFACE_CLIENT_SECRET as string,
+      },
     },
     plugins: [
       emailOTP({

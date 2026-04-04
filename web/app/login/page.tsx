@@ -8,6 +8,7 @@ import { Notice } from "@/components/ui/notice"
 import { authClient } from "@/lib/auth-client"
 import { useConvexAuth } from "convex/react"
 import { GitHubIcon } from "@/components/icons/github-icon"
+import { HuggingFaceIcon } from "@/components/icons/huggingface-icon"
 import { ArrowLeft, Mail } from "lucide-react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useEffect, useRef, useState, type FormEvent } from "react"
@@ -81,12 +82,12 @@ export default function LoginPage() {
     }
   }
 
-  async function onGitHubSignIn() {
+  async function onSocialSignIn(provider: "github" | "huggingface") {
     setSocialLoading(true)
     setError("")
     try {
       await authClient.signIn.social({
-        provider: "github",
+        provider,
         callbackURL: redirectPath,
       })
     } catch (err) {
@@ -126,20 +127,32 @@ export default function LoginPage() {
                       Sign in
                     </h1>
                     <p className="text-sm text-muted-foreground">
-                      Continue with GitHub or enter your email.
+                      Continue with a provider or enter your email.
                     </p>
                   </div>
 
-                  <Button
-                    type="button"
-                    variant="outline"
-                    disabled={socialLoading || loading}
-                    className="w-full"
-                    onClick={onGitHubSignIn}
-                  >
-                    <GitHubIcon className="size-4" />
-                    {socialLoading ? "Redirecting…" : "Continue with GitHub"}
-                  </Button>
+                  <div className="flex flex-col gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={socialLoading || loading}
+                      className="w-full"
+                      onClick={() => onSocialSignIn("github")}
+                    >
+                      <GitHubIcon className="size-4" />
+                      Continue with GitHub
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={socialLoading || loading}
+                      className="w-full"
+                      onClick={() => onSocialSignIn("huggingface")}
+                    >
+                      <HuggingFaceIcon className="size-4" />
+                      Continue with Hugging Face
+                    </Button>
+                  </div>
 
                   <div className="relative">
                     <div className="absolute inset-0 flex items-center">
@@ -229,7 +242,7 @@ export default function LoginPage() {
             </div>
 
             <p className="mt-5 text-center text-xs text-muted-foreground">
-              No password needed — sign in with GitHub or email.
+              No password needed — sign in with a provider or email.
             </p>
           </div>
         </div>
