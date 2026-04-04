@@ -7,7 +7,7 @@ const badgeVariants = cva("inline-flex items-center font-mono", {
   variants: {
     variant: {
       default:
-        "rounded border border-border px-2 py-0.5 text-ui-micro uppercase tracking-wider text-muted-foreground",
+        "rounded-full border border-border px-2 py-0.5 text-ui-micro uppercase tracking-wider text-muted-foreground",
       filled:
         "bg-secondary px-2 py-1 text-xs uppercase tracking-widest text-foreground",
       ghost: "text-xs uppercase tracking-widest text-muted-foreground",

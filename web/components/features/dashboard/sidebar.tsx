@@ -24,6 +24,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { Badge } from "@/components/ui/badge"
 import { CreditsGauge } from "@/components/ui/credits-gauge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { type DashboardView } from "@/components/features/dashboard-model"
@@ -34,6 +35,7 @@ interface NavItem {
   icon: React.ElementType
   label: string
   view: DashboardView
+  badge?: string
 }
 
 interface NavDocItem {
@@ -59,7 +61,7 @@ interface SidebarProps {
 const DEFAULT_NAV_PLATFORM: NavItem[] = [
   { icon: HardDrive, label: "Storage", view: "storage" },
   { icon: Server, label: "Environments", view: "environments" },
-  { icon: Rocket, label: "Serving", view: "serving" },
+  { icon: Rocket, label: "Serving", view: "serving", badge: "Beta" },
   { icon: Play, label: "Runs", view: "runs" },
 ]
 
@@ -107,11 +109,12 @@ export function Sidebar({
           <SidebarGroupLabel>Platform</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {navPlatform.map(({ icon: Icon, label, view }) => (
+              {navPlatform.map(({ icon: Icon, label, view, badge }) => (
                 <SidebarMenuItem key={view}>
                   <SidebarMenuButton isActive={activeView === view} onClick={() => onViewChange(view)}>
                     <Icon />
                     <span>{label}</span>
+                    {badge && <Badge variant="default" className="ml-auto">{badge}</Badge>}
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
