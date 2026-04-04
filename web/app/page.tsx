@@ -1,7 +1,15 @@
 import { PublicHome } from "@/components/landing/public-home"
 import { CDN_CONFIG, LINKS_CONFIG } from "@/config"
 import { isAuthenticated } from "@/lib/auth-server"
+import type { Metadata } from "next"
 import { redirect } from "next/navigation"
+
+export const metadata: Metadata = {
+  title: "Tahuna | A gentle control plane for post-training",
+  description:
+    "Train, fine-tune, and run reinforcement learning on your AI models — no research lab required. Tahuna gives you full control over post-training with managed GPU infrastructure.",
+  alternates: { canonical: "/" },
+}
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL?.trim() || "https://tahuna.app"
 
