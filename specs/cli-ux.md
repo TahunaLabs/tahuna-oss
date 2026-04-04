@@ -46,7 +46,7 @@ tahuna
     show     <id> [-v]
     watch    <id> [--interval N]
     logs     <id> [-n N] [-f] [-v]
-    metrics  <id>... -m <metric> [-m <metric>...] [-n N] [-f] [--interval N] [-v]
+    metrics  <id>... -m <name>... [-n N] [-f] [--interval N] [-v]
     cancel   <id> [-f]
     delete   <id>
 
@@ -62,7 +62,7 @@ All commands follow these consistent flag rules:
 | `-v` | `--verbose` | Show HTTP details + timing | All commands |
 | `-n` | `--tail` | Number of items/lines to show (newest first) | `run list`, `run logs`, `run metrics`, `serve logs` |
 | `-n` | `--name` | Human-readable run name | `run create` |
-| `-m` | `--metric` | Metric name to display (repeatable) | `run metrics` |
+| `-m` | `--metric` | Metric names to display (multi-value) | `run metrics` |
 | `-f` | `--follow` | Follow/stream output (like `docker logs -f`) | `run logs`, `run metrics` |
 | `-d` | `--detached` | Create and exit without monitoring | `train`, `run create` |
 | `-a` | `--all` | Show all items (no limit) | `run list` |

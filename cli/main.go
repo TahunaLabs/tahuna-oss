@@ -122,7 +122,7 @@ Run commands:
   tahuna run rename <run_id|run_name> --name <new_name>
   tahuna run watch <run_id|run_name> [--interval 5]
   tahuna run logs <run_id|run_name> [--verbose] [--follow] [--tail|-n <N>]
-  tahuna run metrics <run>... -m <metric> [-m <metric>...] [--tail|-n <N>] [--follow]
+  tahuna run metrics <run>... --metric|-m <name>... [--tail|-n <N>] [--follow]
   tahuna run cancel <run_id|run_name> [-f]
   tahuna run rm <run_id|run_name|pattern>... [--all|-a] [--cancel|-c] [--force|-f]
 

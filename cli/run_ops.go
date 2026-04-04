@@ -638,20 +638,36 @@ func resolveRunDeleteTarget(target string, runs []runDeleteTarget) ([]string, er
 	return nil, fmt.Errorf("run %q not found", target)
 }
 
-// metricsFlag collects repeatable --metric / -m values.
-type metricsFlag []string
-
-func (f *metricsFlag) String() string { return strings.Join(*f, ", ") }
-func (f *metricsFlag) Set(v string) error {
-	*f = append(*f, strings.TrimSpace(v))
-	return nil
+// extractMetricArgs splits --metric / -m values (multi-value) out of the arg
+// list and returns the remaining args plus the collected metric names.
+// Everything after --metric / -m that does not start with "-" is a metric name.
+func extractMetricArgs(args []string) (remaining []string, metrics []string) {
+	remaining = make([]string, 0, len(args))
+	metrics = make([]string, 0, 4)
+	collecting := false
+	for _, arg := range args {
+		if arg == "--metric" || arg == "-m" {
+			collecting = true
+			continue
+		}
+		if collecting {
+			if strings.HasPrefix(arg, "-") {
+				collecting = false
+				remaining = append(remaining, arg)
+			} else {
+				metrics = append(metrics, strings.TrimSpace(arg))
+			}
+			continue
+		}
+		remaining = append(remaining, arg)
+	}
+	return remaining, metrics
 }
 
 func runMetrics(args []string) {
+	cleanedArgs, metrics := extractMetricArgs(args)
+
 	fs := flag.NewFlagSet("run metrics", flag.ExitOnError)
-	var metrics metricsFlag
-	fs.Var(&metrics, "metric", "Metric name to display (repeatable)")
-	fs.Var(&metrics, "m", "Metric name to display (repeatable)")
 	tail := fs.Int("tail", 0, "Show only the last N steps per run (0 = all)")
 	fs.IntVar(tail, "n", 0, "Show only the last N steps per run (0 = all)")
 	follow := fs.Bool("follow", false, "Follow metric output (stream until runs finish)")
@@ -659,7 +675,7 @@ func runMetrics(args []string) {
 	verbose := fs.Bool("verbose", false, "Show full JSON payload")
 	fs.BoolVar(verbose, "v", false, "Show full JSON payload")
 	interval := fs.Int("interval", 2, "Polling interval seconds when following")
-	mustParseFlags(fs, args)
+	mustParseFlags(fs, cleanedArgs)
 
 	positional := fs.Args()
 	require(len(positional) >= 1, "at least one run_id or run_name is required (usage: tahuna run metrics <run>... --metric <name>)")
