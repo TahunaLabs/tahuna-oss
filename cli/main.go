@@ -115,7 +115,7 @@ Usage:
 Run commands:
   tahuna run help
   tahuna run list                Show last 5 runs (tail order; newest at bottom)
-  tahuna run list -l <N>         Show last N runs
+  tahuna run list -n <N>         Show last N runs
   tahuna run list -a             Show all runs
   tahuna run list --verbose      Show full JSON payload
   tahuna run show <run_id|run_name>

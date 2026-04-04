@@ -15,8 +15,8 @@ import (
 
 func runList(args []string) {
 	fs := flag.NewFlagSet("run list", flag.ExitOnError)
-	limit := fs.Int("lines", 5, "Show only the last N runs (tail order)")
-	fs.IntVar(limit, "l", 5, "Show only the last N runs (tail order)")
+	limit := fs.Int("tail", 5, "Show only the last N runs (tail order)")
+	fs.IntVar(limit, "n", 5, "Show only the last N runs (tail order)")
 	all := fs.Bool("all", false, "Show all runs")
 	fs.BoolVar(all, "a", false, "Show all runs")
 	verbose := fs.Bool("verbose", false, "Show full run payload")
@@ -175,8 +175,8 @@ func runWatch(args []string) {
 func runLogs(args []string) {
 	fs := flag.NewFlagSet("run logs", flag.ExitOnError)
 	id := fs.String("id", "", "Run ID")
-	lines := fs.Int("lines", 0, "Show only the last N log lines (0 = all)")
-	fs.IntVar(lines, "l", 0, "Show only the last N log lines (0 = all)")
+	lines := fs.Int("tail", 0, "Show only the last N log lines (0 = all)")
+	fs.IntVar(lines, "n", 0, "Show only the last N log lines (0 = all)")
 	follow := fs.Bool("follow", false, "Follow log output (stream until run finishes)")
 	fs.BoolVar(follow, "f", false, "Follow log output (stream until run finishes)")
 	verbose := fs.Bool("verbose", false, "Show full logs payload")

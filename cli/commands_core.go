@@ -369,7 +369,7 @@ func handleRun(args []string) {
 func runUsage() {
 	fmt.Print(`Run commands:
   tahuna run help
-  tahuna run list [-l <N>] [--all|-a] [--verbose|-v]
+  tahuna run list [-n <N>] [--all|-a] [--verbose|-v]
   tahuna run show <run_id|run_name> [--verbose|-v]
   tahuna run create [--name <name>] [--gpu-type <gpu>] [--gpu-count <n>] [--volume-gb <n>] [--detached|-d]
   tahuna run rename <run_id|run_name> --name <new_name>

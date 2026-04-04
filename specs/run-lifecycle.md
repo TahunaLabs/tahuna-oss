@@ -246,10 +246,10 @@ Periodic output sync (future):
 | `tahuna train -d` | Sync + create run + exit (detached) |
 | `tahuna run create [-n NAME]` | Same as `tahuna train` + optional run name |
 | `tahuna run rename <id|name> --name <new-name>` | Rename an existing run |
-| `tahuna run list [-l N] [-a]` | List runs (newest first, default 10) |
+| `tahuna run list [-n N] [-a]` | List runs (newest first, default 10) |
 | `tahuna run show <id>` | Show run details + artifact keys |
 | `tahuna run watch <id>` | Live-follow run status |
-| `tahuna run logs <id> [-l N] [-f]` | Show/follow run logs |
+| `tahuna run logs <id> [-n N] [-f]` | Show/follow run logs |
 | `tahuna run delete <id>` | Delete run and its artifacts |
 | `tahuna run cancel <id> [-f]` | Cancel a running/queued run |
 

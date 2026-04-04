@@ -42,10 +42,10 @@ tahuna
   run
     create   [-d] [-n NAME] [--gpu-type TYPE] [--gpu-count N] [--volume-gb N]
     rename   <id|name> --name NEW_NAME
-    list     [-l N] [-a] [-v]
+    list     [-n N] [-a] [-v]
     show     <id> [-v]
     watch    <id> [--interval N]
-    logs     <id> [-l N] [-f] [-v]
+    logs     <id> [-n N] [-f] [-v]
     cancel   <id> [-f]
     delete   <id>
 
@@ -59,7 +59,7 @@ All commands follow these consistent flag rules:
 | Flag | Long form | Meaning | Applies to |
 |------|-----------|---------|------------|
 | `-v` | `--verbose` | Show HTTP details + timing | All commands |
-| `-l` | `--lines` | Number of items/lines to show (newest first) | `run list`, `run logs` |
+| `-n` | `--tail` | Number of items/lines to show (newest first) | `run list`, `run logs`, `serve logs` |
 | `-n` | `--name` | Human-readable run name | `run create` |
 | `-f` | `--follow` | Follow/stream output (like `docker logs -f`) | `run logs` |
 | `-d` | `--detached` | Create and exit without monitoring | `train`, `run create` |
@@ -73,9 +73,9 @@ All commands follow these consistent flag rules:
 
 ### Flag Rules
 
-- Short flags use single dash + single letter: `-v`, `-l`, `-n`, `-f`, `-d`, `-a`.
-- Long flags use double dash + full word: `--verbose`, `--lines`, `--follow`.
-- Flags that take values: `-l 10`, `-n "my-run"`, `--gpu-type "NVIDIA A100"`.
+- Short flags use single dash + single letter: `-v`, `-n`, `-f`, `-d`, `-a`.
+- Long flags use double dash + full word: `--verbose`, `--tail`, `--follow`.
+- Flags that take values: `-n 10`, `--name "my-run"`, `--gpu-type "NVIDIA A100"`.
 - Boolean flags: `-v`, `-f`, `-d`, `-a` (presence = true).
 - Positional args: resource IDs come after the subcommand (`run show <id>`, not `run show --id <id>`). Exception: `env show --id <id>` for backward compatibility.
 

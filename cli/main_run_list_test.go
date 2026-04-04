@@ -83,7 +83,7 @@ func TestRunList_LimitFlag(t *testing.T) {
 	t.Setenv("TAHUNA_API_URL", server.URL)
 
 	output := captureStdout(t, func() {
-		runList([]string{"-l", "2"})
+		runList([]string{"-n", "2"})
 	})
 
 	lines := strings.Split(strings.TrimSpace(output), "\n")

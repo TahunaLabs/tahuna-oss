@@ -46,7 +46,7 @@ func serveUsage() {
   tahuna serve create --from-storage-prefix <prefix> [--verbose|-v]
   tahuna serve list [--verbose|-v]
   tahuna serve show <serve_id> | --id <serve_id> [--verbose|-v]
-  tahuna serve logs <serve_id> | --id <serve_id> [--lines|-l <N>] [--verbose|-v]
+  tahuna serve logs <serve_id> | --id <serve_id> [--tail|-n <N>] [--verbose|-v]
   tahuna serve stop <serve_id> | --id <serve_id> [--force|-f]
 `)
 }
@@ -220,13 +220,13 @@ func serveShow(args []string) {
 func serveLogs(args []string) {
 	fs := flag.NewFlagSet("serve logs", flag.ExitOnError)
 	id := fs.String("id", "", "Serve ID")
-	lines := fs.Int("lines", 0, "Show only the last N log lines (0 = all)")
-	fs.IntVar(lines, "l", 0, "Show only the last N log lines (0 = all)")
+	lines := fs.Int("tail", 0, "Show only the last N log lines (0 = all)")
+	fs.IntVar(lines, "n", 0, "Show only the last N log lines (0 = all)")
 	verbose := fs.Bool("verbose", false, "Show full logs payload")
 	fs.BoolVar(verbose, "v", false, "Show full logs payload")
 	mustParseFlags(fs, args)
 
-	require(*lines >= 0, "--lines must be >= 0")
+	require(*lines >= 0, "--tail must be >= 0")
 	serveID := resolveServeID(*id, fs.Args(), "tahuna serve logs <serve_id>")
 
 	if *verbose {
