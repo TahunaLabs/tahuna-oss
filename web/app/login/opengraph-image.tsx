@@ -5,7 +5,12 @@ export const alt = "Sign in | Tahuna"
 export const size = { width: 1200, height: 630 }
 export const contentType = "image/png"
 
-export default function OgImage() {
+export default async function OgImage() {
+  const [geistBold, geistRegular] = await Promise.all([
+    fetch("https://cdn.jsdelivr.net/fontsource/fonts/geist-sans@latest/latin-700-normal.woff").then((r) => r.arrayBuffer()),
+    fetch("https://cdn.jsdelivr.net/fontsource/fonts/geist-sans@latest/latin-400-normal.woff").then((r) => r.arrayBuffer()),
+  ])
+
   return new ImageResponse(
     (
       <div
@@ -19,6 +24,7 @@ export default function OgImage() {
           padding: "80px",
           backgroundColor: "#0a0a0a",
           color: "#fafafa",
+          fontFamily: "Geist",
         }}
       >
         <div style={{ display: "flex", fontSize: 32, fontWeight: 400, color: "#a1a1aa", marginBottom: 24 }}>
@@ -32,6 +38,12 @@ export default function OgImage() {
         </div>
       </div>
     ),
-    { ...size },
+    {
+      ...size,
+      fonts: [
+        { name: "Geist", data: geistBold, weight: 700, style: "normal" },
+        { name: "Geist", data: geistRegular, weight: 400, style: "normal" },
+      ],
+    },
   )
 }

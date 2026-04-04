@@ -1,18 +1,16 @@
 import type { MetadataRoute } from "next"
 
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL?.trim() || "https://tahuna.app"
+import { NETWORK_CONFIG } from "@/config"
 
 export default function sitemap(): MetadataRoute.Sitemap {
   return [
     {
-      url: siteUrl,
-      lastModified: new Date(),
+      url: NETWORK_CONFIG.siteUrl,
       changeFrequency: "weekly",
       priority: 1,
     },
     {
-      url: `${siteUrl}/login`,
-      lastModified: new Date(),
+      url: `${NETWORK_CONFIG.siteUrl}/login`,
       changeFrequency: "monthly",
       priority: 0.5,
     },

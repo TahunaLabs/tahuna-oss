@@ -1,6 +1,6 @@
 import type { MetadataRoute } from "next"
 
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL?.trim() || "https://tahuna.app"
+import { NETWORK_CONFIG } from "@/config"
 
 export default function robots(): MetadataRoute.Robots {
   return {
@@ -11,7 +11,6 @@ export default function robots(): MetadataRoute.Robots {
         disallow: ["/dashboard/", "/api/", "/auth/"],
       },
     ],
-    sitemap: `${siteUrl}/sitemap.xml`,
-    host: siteUrl,
+    sitemap: `${NETWORK_CONFIG.siteUrl}/sitemap.xml`,
   }
 }

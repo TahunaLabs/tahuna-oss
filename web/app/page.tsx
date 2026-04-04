@@ -1,5 +1,5 @@
 import { PublicHome } from "@/components/landing/public-home"
-import { CDN_CONFIG, LINKS_CONFIG } from "@/config"
+import { CDN_CONFIG, LINKS_CONFIG, NETWORK_CONFIG } from "@/config"
 import { isAuthenticated } from "@/lib/auth-server"
 import type { Metadata } from "next"
 import { redirect } from "next/navigation"
@@ -11,15 +11,13 @@ export const metadata: Metadata = {
   alternates: { canonical: "/" },
 }
 
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL?.trim() || "https://tahuna.app"
-
 const jsonLd = {
   "@context": "https://schema.org",
   "@graph": [
     {
       "@type": "Organization",
       name: "Tahuna",
-      url: siteUrl,
+      url: NETWORK_CONFIG.siteUrl,
       logo: `${CDN_CONFIG.baseUrl}${CDN_CONFIG.faviconPath}/favicon-96x96.png`,
       sameAs: [LINKS_CONFIG.repoUrl],
     },
@@ -28,7 +26,7 @@ const jsonLd = {
       name: "Tahuna",
       applicationCategory: "DeveloperApplication",
       operatingSystem: "Linux, macOS",
-      url: siteUrl,
+      url: NETWORK_CONFIG.siteUrl,
       description:
         "A gentle control plane for post-training. Where AI agents practice, adapt, and improve through experience — no research lab required.",
       offers: {
