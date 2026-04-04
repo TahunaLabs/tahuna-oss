@@ -16,6 +16,7 @@ import { images } from "@convex/catalog";
 import { shortId } from "@convex/ids";
 import { R2 } from "@convex-dev/r2";
 import { PYTHON_CONFIG } from "@convex/appConfig";
+import { deleteRunDataBatch } from "@convex/runsLifecycle";
 import { ENVIRONMENT_CONFIG_FILE_NAME, parseEnvironmentConfig, renderEnvironmentConfig } from "@/lib/environment-config";
 import { resolveConfiguredDependencyGroup } from "@/lib/dependency-selection";
 
@@ -74,28 +75,29 @@ const commitSyncResponseValidator = v.object({
   data_manifest_hash: v.optional(v.string()),
 });
 const SHA256_HEX_RE = /^[a-f0-9]{64}$/i;
-const manifestRefValidator = v.object({
-  kind: v.union(v.literal("code"), v.literal("data")),
-  manifestHash: v.string(),
-  environmentId: v.string(),
-  dataId: v.string(),
-});
-
-type ManifestKind = "code" | "data";
-type ManifestRef = {
-  kind: ManifestKind;
-  manifestHash: string;
-  environmentId: string;
-  dataId: string;
-};
 
 const r2 = new R2(components.r2);
-const RUN_CLEANUP_QUERY_BATCH_SIZE = 12;
-const RUN_CLEANUP_DELETE_BATCH_SIZE = 200;
-const ARTIFACT_DELETE_BATCH_SIZE = 24;
+const ENVIRONMENT_DELETE_BATCH_SIZE = 200;
+const ENVIRONMENT_STORAGE_DELETE_BATCH_SIZE = 200;
 
 function environmentPath(environmentId: string) {
   return `environments/${environmentId}`;
+}
+
+function environmentManifestPrefix(environmentId: string) {
+  return `${environmentPath(environmentId)}/manifests/code/`;
+}
+
+function dataManifestPrefix(dataId: string) {
+  return `data/${dataId}/manifests/`;
+}
+
+function dataManifestObjectKey(dataId: string, manifestHash: string) {
+  return `${dataManifestPrefix(dataId)}${manifestHash}.json`;
+}
+
+function storagePrefixUpperBound(prefix: string) {
+  return `${prefix}\uffff`;
 }
 
 function normalizeManifestHash(value: string | undefined | null): string | null {
@@ -109,36 +111,6 @@ function normalizeManifestHash(value: string | undefined | null): string | null 
   return normalized;
 }
 
-function addManifestRef(
-  refs: ManifestRef[],
-  kind: ManifestKind,
-  manifestHash: string | undefined | null,
-  environmentId: string,
-  dataId: string,
-) {
-  const normalized = normalizeManifestHash(manifestHash);
-  if (!normalized) {
-    return;
-  }
-  refs.push({
-    kind,
-    manifestHash: normalized,
-    environmentId,
-    dataId,
-  });
-}
-
-function manifestRefKey(ref: ManifestRef) {
-  return `${ref.kind}:${ref.manifestHash}:${ref.environmentId}:${ref.dataId}`;
-}
-
-function manifestObjectKey(ref: ManifestRef) {
-  if (ref.kind === "data") {
-    return `data/${ref.dataId}/manifests/${ref.manifestHash}.json`;
-  }
-  return `environments/${ref.environmentId}/manifests/code/${ref.manifestHash}.json`;
-}
-
 async function upsertDataManifestIndexRow(
   ctx: MutationCtx,
   args: {
@@ -147,12 +119,7 @@ async function upsertDataManifestIndexRow(
     manifestHash: string;
   },
 ) {
-  const key = manifestObjectKey({
-    kind: "data",
-    manifestHash: args.manifestHash,
-    environmentId: "",
-    dataId: args.dataId,
-  });
+  const key = dataManifestObjectKey(args.dataId, args.manifestHash);
   const existing = await ctx.db
     .query("storageObjects")
     .withIndex("by_user_and_key", (q) => q.eq("userId", args.userId).eq("key", key))
@@ -178,43 +145,46 @@ async function upsertDataManifestIndexRow(
   });
 }
 
-async function deleteIndexedStorageKeys(ctx: MutationCtx, userId: string, keys: Iterable<string>) {
-  const seen = new Set<string>();
-  for (const rawKey of keys) {
-    const key = rawKey.trim();
-    if (!key || seen.has(key)) {
-      continue;
-    }
-    seen.add(key);
-    const row = await ctx.db
-      .query("storageObjects")
-      .withIndex("by_user_and_key", (q) => q.eq("userId", userId).eq("key", key))
-      .first();
-    if (row) {
-      await ctx.db.delete("storageObjects", row._id);
-    }
-  }
-}
-
-async function deleteIndexedStorageByPrefix(ctx: MutationCtx, userId: string, prefixes: string[]) {
-  const filtered = prefixes.map((prefix) => prefix.trim()).filter((prefix) => prefix.length > 0);
-  if (filtered.length === 0) {
-    return;
+async function deleteIndexedStoragePrefixBatch(ctx: MutationCtx, userId: string, prefix: string): Promise<boolean> {
+  const normalizedPrefix = prefix.trim();
+  if (!normalizedPrefix) {
+    return false;
   }
   const rows = await ctx.db
     .query("storageObjects")
-    .withIndex("by_user", (q) => q.eq("userId", userId))
-    .collect();
-  for (const row of rows) {
-    if (filtered.some((prefix) => row.key.startsWith(prefix))) {
-      await ctx.db.delete("storageObjects", row._id);
-    }
-  }
+    .withIndex("by_user_and_key", (q) =>
+      q.eq("userId", userId).gte("key", normalizedPrefix).lt("key", storagePrefixUpperBound(normalizedPrefix)),
+    )
+    .take(ENVIRONMENT_STORAGE_DELETE_BATCH_SIZE + 1);
+  const toDelete = rows
+    .filter((row) => row.key.startsWith(normalizedPrefix))
+    .slice(0, ENVIRONMENT_STORAGE_DELETE_BATCH_SIZE);
+  await Promise.all(toDelete.map((row) => ctx.db.delete("storageObjects", row._id)));
+  return rows.length > ENVIRONMENT_STORAGE_DELETE_BATCH_SIZE;
 }
 
-async function loadManifestBlobHashes(ctx: ActionCtx, ref: ManifestRef): Promise<Set<string>> {
+async function deleteServeDataBatch(ctx: MutationCtx, serveId: Id<"serves">): Promise<boolean> {
+  const tables = [
+    { table: "serveEvents" as const, index: "by_serve" as const },
+    { table: "serveRuntimeLogs" as const, index: "by_serve" as const },
+  ];
+  let hasMore = false;
+  for (const { table, index } of tables) {
+    const rows = await ctx.db
+      .query(table)
+      .withIndex(index, (q) => q.eq("serveId", serveId))
+      .take(ENVIRONMENT_DELETE_BATCH_SIZE + 1);
+    if (rows.length > ENVIRONMENT_DELETE_BATCH_SIZE) {
+      hasMore = true;
+    }
+    const toDelete = rows.slice(0, ENVIRONMENT_DELETE_BATCH_SIZE);
+    await Promise.all(toDelete.map((row) => ctx.db.delete(row._id)));
+  }
+  return hasMore;
+}
+
+async function loadManifestBlobHashesFromObjectKey(ctx: ActionCtx, key: string): Promise<Set<string>> {
   const hashes = new Set<string>();
-  const key = manifestObjectKey(ref);
   const downloadUrl = await ctx.runQuery(internal.cli.sync.internalGetObjectDownloadUrl, { key });
   if (!downloadUrl) {
     return hashes;
@@ -251,6 +221,47 @@ async function loadManifestBlobHashes(ctx: ActionCtx, ref: ManifestRef): Promise
   return hashes;
 }
 
+async function collectManifestBlobHashesForPrefix(ctx: ActionCtx, prefix: string): Promise<Set<string>> {
+  const hashes = new Set<string>();
+  let cursor: string | null = null;
+  let pages = 0;
+  while (pages < 100) {
+    const result = await r2.listMetadata(ctx, 100, cursor);
+    for (const item of result.page) {
+      if (!item.key.startsWith(prefix) || !item.key.endsWith(".json")) {
+        continue;
+      }
+      const itemHashes = await loadManifestBlobHashesFromObjectKey(ctx, item.key);
+      for (const hash of itemHashes) {
+        hashes.add(hash);
+      }
+    }
+    if (result.isDone) {
+      return hashes;
+    }
+    cursor = result.continueCursor;
+    pages += 1;
+  }
+  return hashes;
+}
+
+async function collectManifestBlobHashesForPrefixes(ctx: ActionCtx, prefixes: Iterable<string>): Promise<Set<string>> {
+  const hashes = new Set<string>();
+  const seen = new Set<string>();
+  for (const rawPrefix of prefixes) {
+    const prefix = rawPrefix.trim();
+    if (!prefix || seen.has(prefix)) {
+      continue;
+    }
+    seen.add(prefix);
+    const prefixHashes = await collectManifestBlobHashesForPrefix(ctx, prefix);
+    for (const hash of prefixHashes) {
+      hashes.add(hash);
+    }
+  }
+  return hashes;
+}
+
 async function deleteObjectsByPrefix(ctx: MutationCtx | ActionCtx, prefix: string) {
   let cursor: string | null = null;
   let pages = 0;
@@ -271,185 +282,6 @@ async function deleteObjectsByPrefix(ctx: MutationCtx | ActionCtx, prefix: strin
     }
     cursor = result.continueCursor;
     pages += 1;
-  }
-}
-
-type RunCleanupRows = {
-  runId: Id<"runs">;
-  events: Array<Doc<"runEvents">>;
-  runtimeLogs: Array<Doc<"runRuntimeLogs">>;
-  runtimeMetrics: Array<Doc<"runRuntimeMetrics">>;
-  wandbRuns: Array<Doc<"wandbRuns">>;
-  wandbMetrics: Array<Doc<"wandbMetrics">>;
-};
-
-type ServeCleanupRows = {
-  serveId: Id<"serves">;
-  events: Array<Doc<"serveEvents">>;
-  runtimeLogs: Array<Doc<"serveRuntimeLogs">>;
-};
-
-async function loadRunCleanupRows(
-  ctx: MutationCtx,
-  runIds: Array<Id<"runs">>,
-): Promise<RunCleanupRows[]> {
-  const out: RunCleanupRows[] = [];
-  for (let start = 0; start < runIds.length; start += RUN_CLEANUP_QUERY_BATCH_SIZE) {
-    const chunk = runIds.slice(start, start + RUN_CLEANUP_QUERY_BATCH_SIZE);
-    const chunkRows = await Promise.all(
-      chunk.map(async (runId) => {
-        const [events, runtimeLogs, runtimeMetrics, wandbRuns, wandbMetrics] = await Promise.all([
-          ctx.db
-            .query("runEvents")
-            .withIndex("by_run", (q) => q.eq("runId", runId))
-            .collect(),
-          ctx.db
-            .query("runRuntimeLogs")
-            .withIndex("by_run", (q) => q.eq("runId", runId))
-            .collect(),
-          ctx.db
-            .query("runRuntimeMetrics")
-            .withIndex("by_run", (q) => q.eq("runId", runId))
-            .collect(),
-          ctx.db
-            .query("wandbRuns")
-            .withIndex("by_run", (q) => q.eq("runId", runId))
-            .collect(),
-          ctx.db
-            .query("wandbMetrics")
-            .withIndex("by_run", (q) => q.eq("runId", runId))
-            .collect(),
-        ]);
-        return { runId, events, runtimeLogs, runtimeMetrics, wandbRuns, wandbMetrics };
-      }),
-    );
-    out.push(...chunkRows);
-  }
-  return out;
-}
-
-async function deleteRunCleanupRows(ctx: MutationCtx, rows: RunCleanupRows[]) {
-  const eventIds: Array<Id<"runEvents">> = [];
-  const runtimeLogIds: Array<Id<"runRuntimeLogs">> = [];
-  const runtimeMetricIds: Array<Id<"runRuntimeMetrics">> = [];
-  const wandbRunIds: Array<Id<"wandbRuns">> = [];
-  const wandbMetricIds: Array<Id<"wandbMetrics">> = [];
-  const runIds: Array<Id<"runs">> = [];
-
-  for (const row of rows) {
-    runIds.push(row.runId);
-    for (const event of row.events) {
-      eventIds.push(event._id);
-    }
-    for (const log of row.runtimeLogs) {
-      runtimeLogIds.push(log._id);
-    }
-    for (const metric of row.runtimeMetrics) {
-      runtimeMetricIds.push(metric._id);
-    }
-    for (const wandbRun of row.wandbRuns) {
-      wandbRunIds.push(wandbRun._id);
-    }
-    for (const wandbMetric of row.wandbMetrics) {
-      wandbMetricIds.push(wandbMetric._id);
-    }
-  }
-
-  for (let start = 0; start < eventIds.length; start += RUN_CLEANUP_DELETE_BATCH_SIZE) {
-    const chunk = eventIds.slice(start, start + RUN_CLEANUP_DELETE_BATCH_SIZE);
-    await Promise.all(chunk.map((id) => ctx.db.delete("runEvents", id)));
-  }
-  for (let start = 0; start < runtimeLogIds.length; start += RUN_CLEANUP_DELETE_BATCH_SIZE) {
-    const chunk = runtimeLogIds.slice(start, start + RUN_CLEANUP_DELETE_BATCH_SIZE);
-    await Promise.all(chunk.map((id) => ctx.db.delete("runRuntimeLogs", id)));
-  }
-  for (let start = 0; start < runtimeMetricIds.length; start += RUN_CLEANUP_DELETE_BATCH_SIZE) {
-    const chunk = runtimeMetricIds.slice(start, start + RUN_CLEANUP_DELETE_BATCH_SIZE);
-    await Promise.all(chunk.map((id) => ctx.db.delete("runRuntimeMetrics", id)));
-  }
-  for (let start = 0; start < wandbRunIds.length; start += RUN_CLEANUP_DELETE_BATCH_SIZE) {
-    const chunk = wandbRunIds.slice(start, start + RUN_CLEANUP_DELETE_BATCH_SIZE);
-    await Promise.all(chunk.map((id) => ctx.db.delete("wandbRuns", id)));
-  }
-  for (let start = 0; start < wandbMetricIds.length; start += RUN_CLEANUP_DELETE_BATCH_SIZE) {
-    const chunk = wandbMetricIds.slice(start, start + RUN_CLEANUP_DELETE_BATCH_SIZE);
-    await Promise.all(chunk.map((id) => ctx.db.delete("wandbMetrics", id)));
-  }
-  for (let start = 0; start < runIds.length; start += RUN_CLEANUP_DELETE_BATCH_SIZE) {
-    const chunk = runIds.slice(start, start + RUN_CLEANUP_DELETE_BATCH_SIZE);
-    await Promise.all(chunk.map((id) => ctx.db.delete("runs", id)));
-  }
-}
-
-async function loadServeCleanupRows(
-  ctx: MutationCtx,
-  serveIds: Array<Id<"serves">>,
-): Promise<ServeCleanupRows[]> {
-  const out: ServeCleanupRows[] = [];
-  for (let start = 0; start < serveIds.length; start += RUN_CLEANUP_QUERY_BATCH_SIZE) {
-    const chunk = serveIds.slice(start, start + RUN_CLEANUP_QUERY_BATCH_SIZE);
-    const chunkRows = await Promise.all(
-      chunk.map(async (serveId) => {
-        const [events, runtimeLogs] = await Promise.all([
-          ctx.db
-            .query("serveEvents")
-            .withIndex("by_serve", (q) => q.eq("serveId", serveId))
-            .collect(),
-          ctx.db
-            .query("serveRuntimeLogs")
-            .withIndex("by_serve", (q) => q.eq("serveId", serveId))
-            .collect(),
-        ]);
-        return { serveId, events, runtimeLogs };
-      }),
-    );
-    out.push(...chunkRows);
-  }
-  return out;
-}
-
-async function deleteServeCleanupRows(ctx: MutationCtx, rows: ServeCleanupRows[]) {
-  const eventIds: Array<Id<"serveEvents">> = [];
-  const runtimeLogIds: Array<Id<"serveRuntimeLogs">> = [];
-  const serveIds: Array<Id<"serves">> = [];
-
-  for (const row of rows) {
-    serveIds.push(row.serveId);
-    for (const event of row.events) {
-      eventIds.push(event._id);
-    }
-    for (const log of row.runtimeLogs) {
-      runtimeLogIds.push(log._id);
-    }
-  }
-
-  for (let start = 0; start < eventIds.length; start += RUN_CLEANUP_DELETE_BATCH_SIZE) {
-    const chunk = eventIds.slice(start, start + RUN_CLEANUP_DELETE_BATCH_SIZE);
-    await Promise.all(chunk.map((id) => ctx.db.delete("serveEvents", id)));
-  }
-  for (let start = 0; start < runtimeLogIds.length; start += RUN_CLEANUP_DELETE_BATCH_SIZE) {
-    const chunk = runtimeLogIds.slice(start, start + RUN_CLEANUP_DELETE_BATCH_SIZE);
-    await Promise.all(chunk.map((id) => ctx.db.delete("serveRuntimeLogs", id)));
-  }
-  for (let start = 0; start < serveIds.length; start += RUN_CLEANUP_DELETE_BATCH_SIZE) {
-    const chunk = serveIds.slice(start, start + RUN_CLEANUP_DELETE_BATCH_SIZE);
-    await Promise.all(chunk.map((id) => ctx.db.delete("serves", id)));
-  }
-}
-
-async function deleteArtifactObjects(ctx: MutationCtx, keys: Set<string>) {
-  const keyList = Array.from(keys);
-  for (let start = 0; start < keyList.length; start += ARTIFACT_DELETE_BATCH_SIZE) {
-    const chunk = keyList.slice(start, start + ARTIFACT_DELETE_BATCH_SIZE);
-    await Promise.all(
-      chunk.map(async (key) => {
-        try {
-          await r2.deleteObject(ctx, key);
-        } catch {
-          // best-effort cleanup
-        }
-      }),
-    );
   }
 }
 
@@ -599,6 +431,7 @@ async function listByUserId(ctx: QueryCtx, userId: string) {
 
   return {
     environments: rows
+      .filter((row) => typeof row.deletionScheduledAt !== "number")
       .sort((a, b) => b._creationTime - a._creationTime)
       .map((row) =>
         toEnvironmentResponse(
@@ -620,6 +453,9 @@ async function getAccessibleEnvironment(
     throw new ConvexError("environment not found");
   }
   if (row.userId !== userId) {
+    throw new ConvexError("environment not found");
+  }
+  if (typeof row.deletionScheduledAt === "number") {
     throw new ConvexError("environment not found");
   }
   return row;
@@ -852,132 +688,37 @@ async function updateEnvironmentConfigForUserId(
   return await toEnvironmentConfigResponse(ctx, updated);
 }
 
+async function deleteEnvironmentStorageIndexesBatch(
+  ctx: MutationCtx,
+  userId: string,
+  environmentId: string,
+  dataId: string,
+  deleteDataPrefix: boolean,
+) {
+  const prefixes = [
+    `${environmentPath(environmentId)}/`,
+    `runs/${environmentId}/`,
+    `serves/${environmentId}/`,
+    ...(deleteDataPrefix ? [`data/${dataId}/`] : []),
+  ];
+  for (const prefix of prefixes) {
+    const hasMore = await deleteIndexedStoragePrefixBatch(ctx, userId, prefix);
+    if (hasMore) {
+      return true;
+    }
+  }
+  return false;
+}
+
 async function removeEnvironmentForUserId(ctx: MutationCtx, userId: string, environmentId: Id<"environments">) {
-  const env = await getAccessibleEnvironment(ctx, userId, environmentId);
-  const artifactKeys = new Set<string>();
-  const siblingEnvironments = await ctx.db
-    .query("environments")
-    .withIndex("by_user", (q) => q.eq("userId", userId))
-    .collect();
-  const otherEnvironments = siblingEnvironments.filter((candidate) => candidate._id !== environmentId);
-  const envIdString = String(environmentId);
-  const envDataId = env.dataId || envIdString;
-  const deleteRefs: ManifestRef[] = [];
-  const retainRefs: ManifestRef[] = [];
-
-  // Cascade: delete all runs belonging to this environment
-  const runs = await ctx.db
-    .query("runs")
-    .withIndex("by_user_and_environment", (q) => q.eq("userId", userId).eq("environmentId", environmentId))
-    .collect();
-  const serves = await ctx.db
-    .query("serves")
-    .withIndex("by_user_and_environment", (q) => q.eq("userId", userId).eq("environmentId", environmentId))
-    .collect();
-  const allRunsForUser = await ctx.db
-    .query("runs")
-    .withIndex("by_user", (q) => q.eq("userId", userId))
-    .collect();
-  const otherRuns = allRunsForUser.filter((run) => run.environmentId !== environmentId);
-  const runIdsToDelete = runs.map((run) => run._id);
-  const serveIdsToDelete = serves.map((serve) => serve._id);
-  const podsToTerminate: Array<{ runId: Id<"runs">; podId: string; runpodCredentialId?: Id<"runpodCredentials"> }> = [];
-  const servePodsToTerminate: Array<{ serveId: Id<"serves">; podId: string; runpodCredentialId?: Id<"runpodCredentials"> }> = [];
-
-  addManifestRef(deleteRefs, "code", env.latestCodeManifestHash, envIdString, envDataId);
-  addManifestRef(deleteRefs, "data", env.latestDataManifestHash, envIdString, envDataId);
-  for (const other of otherEnvironments) {
-    const otherEnvId = String(other._id);
-    const otherDataId = other.dataId || otherEnvId;
-    addManifestRef(retainRefs, "code", other.latestCodeManifestHash, otherEnvId, otherDataId);
-    addManifestRef(retainRefs, "data", other.latestDataManifestHash, otherEnvId, otherDataId);
-  }
-
-  for (const run of runs) {
-    const runDataId = run.dataId || envDataId;
-    addManifestRef(deleteRefs, "code", run.codeManifestHash, String(run.environmentId), runDataId);
-    addManifestRef(deleteRefs, "data", run.dataManifestHash, String(run.environmentId), runDataId);
-
-    // Terminate Runpod pod if active
-    if (run.podId) {
-      podsToTerminate.push({
-        runId: run._id,
-        podId: run.podId,
-        runpodCredentialId: run.runpodCredentialId,
-      });
-    }
-    for (const key of run.artifactKeys || []) {
-      artifactKeys.add(key);
-    }
-  }
-  for (const serve of serves) {
-    if (serve.podId) {
-      servePodsToTerminate.push({
-        serveId: serve._id,
-        podId: serve.podId,
-        runpodCredentialId: serve.runpodCredentialId,
-      });
-    }
-  }
-  for (let start = 0; start < podsToTerminate.length; start += RUN_CLEANUP_QUERY_BATCH_SIZE) {
-    const chunk = podsToTerminate.slice(start, start + RUN_CLEANUP_QUERY_BATCH_SIZE);
-    await Promise.all(
-      chunk.map((pod) =>
-        ctx.scheduler.runAfter(0, internal.runs.internalTerminatePod, {
-          runId: pod.runId,
-          podId: pod.podId,
-          runpodCredentialId: pod.runpodCredentialId,
-          force: true,
-        }),
-      ),
-    );
-  }
-  for (let start = 0; start < servePodsToTerminate.length; start += RUN_CLEANUP_QUERY_BATCH_SIZE) {
-    const chunk = servePodsToTerminate.slice(start, start + RUN_CLEANUP_QUERY_BATCH_SIZE);
-    await Promise.all(
-      chunk.map((pod) =>
-        ctx.scheduler.runAfter(0, internal.serves.internalTerminatePod, {
-          serveId: pod.serveId,
-          podId: pod.podId,
-          runpodCredentialId: pod.runpodCredentialId,
-          force: true,
-        }),
-      ),
-    );
-  }
-  const runCleanupRows = await loadRunCleanupRows(ctx, runIdsToDelete);
-  await deleteRunCleanupRows(ctx, runCleanupRows);
-  const serveCleanupRows = await loadServeCleanupRows(ctx, serveIdsToDelete);
-  await deleteServeCleanupRows(ctx, serveCleanupRows);
-
-  for (const run of otherRuns) {
-    const runDataId = run.dataId || String(run.environmentId);
-    addManifestRef(retainRefs, "code", run.codeManifestHash, String(run.environmentId), runDataId);
-    addManifestRef(retainRefs, "data", run.dataManifestHash, String(run.environmentId), runDataId);
-  }
-
-  const indexedDeleteKeys = new Set<string>(artifactKeys);
-  for (const ref of deleteRefs) {
-    indexedDeleteKeys.add(manifestObjectKey(ref));
-  }
-  const dataStillReferenced = retainRefs.some((ref) => ref.dataId === envDataId);
-  await deleteIndexedStorageKeys(ctx, userId, indexedDeleteKeys);
-  await deleteIndexedStorageByPrefix(ctx, userId, [
-    `runs/${envIdString}/`,
-    `serves/${envIdString}/`,
-    ...(dataStillReferenced ? [] : [`data/${envDataId}/`]),
-  ]);
-
-  await deleteArtifactObjects(ctx, artifactKeys);
-  await ctx.scheduler.runAfter(0, internal.environments.internalCleanupDedupBlobs, {
-    userId,
-    environmentId: String(environmentId),
-    dataId: envDataId,
-    deleteRefs,
-    retainRefs,
+  await getAccessibleEnvironment(ctx, userId, environmentId);
+  await ctx.db.patch("environments", environmentId, {
+    deletionScheduledAt: Date.now(),
   });
-
-  await ctx.db.delete("environments", environmentId);
+  await ctx.scheduler.runAfter(0, internal.environments.internalDeleteEnvironmentBatch, {
+    userId,
+    environmentId,
+  });
   return { deleted: true, environment_id: String(environmentId) };
 }
 
@@ -1108,40 +849,139 @@ export const internalRemove = internalMutation({
   },
 });
 
+export const internalDeleteEnvironmentBatch = internalMutation({
+  args: { userId: v.string(), environmentId: v.id("environments") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const env = await ctx.db.get("environments", args.environmentId);
+    if (!env || env.userId !== args.userId) {
+      return null;
+    }
+
+    const nextRun = await ctx.db
+      .query("runs")
+      .withIndex("by_user_and_environment", (q) => q.eq("userId", args.userId).eq("environmentId", args.environmentId))
+      .first();
+    if (nextRun) {
+      if (nextRun.podId) {
+        await ctx.scheduler.runAfter(0, internal.runs.internalTerminatePod, {
+          runId: nextRun._id,
+          podId: nextRun.podId,
+          runpodCredentialId: nextRun.runpodCredentialId,
+          force: true,
+        });
+      }
+      const hasMore = await deleteRunDataBatch(ctx, nextRun._id);
+      if (!hasMore) {
+        await ctx.db.delete("runs", nextRun._id);
+      }
+      await ctx.scheduler.runAfter(0, internal.environments.internalDeleteEnvironmentBatch, args);
+      return null;
+    }
+
+    const nextServe = await ctx.db
+      .query("serves")
+      .withIndex("by_user_and_environment", (q) => q.eq("userId", args.userId).eq("environmentId", args.environmentId))
+      .first();
+    if (nextServe) {
+      if (nextServe.podId) {
+        await ctx.scheduler.runAfter(0, internal.serves.internalTerminatePod, {
+          serveId: nextServe._id,
+          podId: nextServe.podId,
+          runpodCredentialId: nextServe.runpodCredentialId,
+          force: true,
+        });
+      }
+      const hasMore = await deleteServeDataBatch(ctx, nextServe._id);
+      if (!hasMore) {
+        await ctx.db.delete("serves", nextServe._id);
+      }
+      await ctx.scheduler.runAfter(0, internal.environments.internalDeleteEnvironmentBatch, args);
+      return null;
+    }
+
+    const environmentId = String(args.environmentId);
+    const dataId = env.dataId || environmentId;
+    const siblingEnvironments = await ctx.db
+      .query("environments")
+      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .collect();
+    const deleteDataPrefix = !siblingEnvironments.some(
+      (candidate) =>
+        candidate._id !== args.environmentId &&
+        (candidate.dataId || String(candidate._id)) === dataId,
+    );
+
+    const hasMoreStorage = await deleteEnvironmentStorageIndexesBatch(
+      ctx,
+      args.userId,
+      environmentId,
+      dataId,
+      deleteDataPrefix,
+    );
+    if (hasMoreStorage) {
+      await ctx.scheduler.runAfter(0, internal.environments.internalDeleteEnvironmentBatch, args);
+      return null;
+    }
+
+    await ctx.scheduler.runAfter(0, internal.environments.internalCleanupDedupBlobs, {
+      userId: args.userId,
+      environmentId,
+      dataId,
+    });
+    await ctx.db.delete("environments", args.environmentId);
+    return null;
+  },
+});
+
+export const internalListManifestPrefixes = internalQuery({
+  args: { userId: v.string() },
+  returns: v.array(
+    v.object({
+      environmentId: v.string(),
+      dataId: v.string(),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    const rows = await ctx.db
+      .query("environments")
+      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .collect();
+    return rows
+      .map((row) => ({
+        environmentId: String(row._id),
+        dataId: row.dataId || String(row._id),
+      }));
+  },
+});
+
 export const internalCleanupDedupBlobs = internalAction({
   args: {
     userId: v.string(),
     environmentId: v.string(),
     dataId: v.string(),
-    deleteRefs: v.array(manifestRefValidator),
-    retainRefs: v.array(manifestRefValidator),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const uniqueDeleteRefs = new Map<string, ManifestRef>();
-    const uniqueRetainRefs = new Map<string, ManifestRef>();
-    for (const ref of args.deleteRefs) {
-      uniqueDeleteRefs.set(manifestRefKey(ref), ref);
-    }
-    for (const ref of args.retainRefs) {
-      uniqueRetainRefs.set(manifestRefKey(ref), ref);
+    const remainingEnvironments = await ctx.runQuery(internal.environments.internalListManifestPrefixes, {
+      userId: args.userId,
+    });
+    const deleteDataPrefix = !remainingEnvironments.some((env) => env.dataId === args.dataId);
+    const retainPrefixes = new Set<string>();
+    for (const env of remainingEnvironments) {
+      if (env.environmentId === args.environmentId) {
+        continue;
+      }
+      retainPrefixes.add(environmentManifestPrefix(env.environmentId));
+      retainPrefixes.add(dataManifestPrefix(env.dataId));
     }
 
-    const deleteBlobHashes = new Set<string>();
-    const retainBlobHashes = new Set<string>();
-
-    for (const ref of uniqueDeleteRefs.values()) {
-      const hashes = await loadManifestBlobHashes(ctx, ref);
-      for (const hash of hashes) {
-        deleteBlobHashes.add(hash);
-      }
-    }
-    for (const ref of uniqueRetainRefs.values()) {
-      const hashes = await loadManifestBlobHashes(ctx, ref);
-      for (const hash of hashes) {
-        retainBlobHashes.add(hash);
-      }
-    }
+    const deletePrefixes = [
+      environmentManifestPrefix(args.environmentId),
+      ...(deleteDataPrefix ? [dataManifestPrefix(args.dataId)] : []),
+    ];
+    const deleteBlobHashes = await collectManifestBlobHashesForPrefixes(ctx, deletePrefixes);
+    const retainBlobHashes = await collectManifestBlobHashesForPrefixes(ctx, retainPrefixes);
 
     for (const hash of deleteBlobHashes) {
       if (retainBlobHashes.has(hash)) {
@@ -1154,11 +994,11 @@ export const internalCleanupDedupBlobs = internalAction({
       }
     }
     await deleteObjectsByPrefix(ctx, `${environmentPath(args.environmentId)}/`);
-    const dataStillReferenced = args.retainRefs.some((ref) => ref.dataId === args.dataId);
-    if (!dataStillReferenced) {
+    if (deleteDataPrefix) {
       await deleteObjectsByPrefix(ctx, `data/${args.dataId}/`);
     }
     await deleteObjectsByPrefix(ctx, `runs/${args.environmentId}/`);
+    await deleteObjectsByPrefix(ctx, `serves/${args.environmentId}/`);
     return null;
   },
 });

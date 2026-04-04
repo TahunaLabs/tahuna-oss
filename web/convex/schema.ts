@@ -20,6 +20,7 @@ export default defineSchema({
     name: v.string(),
     artifacts: v.string(),
     dataId: v.optional(v.string()),
+    deletionScheduledAt: v.optional(v.number()),
     pythonVersion: v.optional(v.string()),
     boundDataIds: v.optional(v.array(v.string())),
     boundDataManifestHashes: v.optional(v.array(v.string())),

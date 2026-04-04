@@ -31,6 +31,9 @@ export async function getAccessibleEnvironment(
   if (env.userId !== userId) {
     throw new ConvexError("environment not found");
   }
+  if (typeof env.deletionScheduledAt === "number") {
+    throw new ConvexError("environment not found");
+  }
   return env;
 }
 
