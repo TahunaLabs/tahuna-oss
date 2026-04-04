@@ -21,7 +21,7 @@ export const siteMetadata: Metadata = {
   title: SITE_TITLE,
   description: SITE_DESCRIPTION,
   applicationName: "Tahuna",
-  keywords: ["Tahuna", "RL", "Reinforcement Learning", "AI Training", "Post-training", "Agents", "Infrastructure"],
+  keywords: ["Tahuna", "post-training", "reinforcement learning infrastructure", "AI agent training", "RL", "Reinforcement Learning", "AI Training", "fine-tuning", "GPU infrastructure"],
   authors: [{ name: "Tahuna" }],
   creator: "Tahuna",
   openGraph: {

@@ -47,7 +47,8 @@ export function LandingLayersSection() {
 
           <div className="flex items-center gap-6">
             <p className="max-w-md text-lg font-serif font-medium text-foreground md:text-xl">
-              You keep the training loop. Tahuna handles everything around it in four clear steps.
+              You keep your reinforcement learning loop. Tahuna handles the infrastructure around it in four clear
+              steps.
             </p>
           </div>
         </div>
