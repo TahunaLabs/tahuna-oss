@@ -7,7 +7,7 @@ const GIB = 1024 * MIB;
 export const NETWORK_CONFIG = {
   defaultApiUrl: "http://localhost:3000",
   get siteUrl(): string {
-    return process.env.SITE_URL!.trim();
+    return process.env.NEXT_PUBLIC_SITE_URL!.trim();
   },
 } as const;
 
