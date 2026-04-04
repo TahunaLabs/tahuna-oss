@@ -6,7 +6,9 @@ const GIB = 1024 * MIB;
 // Global app config: committed to git and shared by web + convex code.
 export const NETWORK_CONFIG = {
   defaultApiUrl: "http://localhost:3000",
-  siteUrl: process.env.NEXT_PUBLIC_SITE_URL!.trim(),
+  get siteUrl(): string {
+    return process.env.NEXT_PUBLIC_SITE_URL!.trim();
+  },
 } as const;
 
 export const AUTH_CONFIG = {
