@@ -134,9 +134,8 @@ export default function LoginPage() {
                   <div className="flex flex-col gap-2">
                     <Button
                       type="button"
-                      variant="outline"
                       disabled={socialLoading || loading}
-                      className="w-full"
+                      className="w-full bg-foreground text-background hover:bg-foreground/90"
                       onClick={() => onSocialSignIn("github")}
                     >
                       <GitHubIcon className="size-4" />
@@ -144,9 +143,8 @@ export default function LoginPage() {
                     </Button>
                     <Button
                       type="button"
-                      variant="outline"
                       disabled={socialLoading || loading}
-                      className="w-full"
+                      className="w-full bg-foreground text-background hover:bg-foreground/90"
                       onClick={() => onSocialSignIn("huggingface")}
                     >
                       <HuggingFaceIcon className="size-4" />
