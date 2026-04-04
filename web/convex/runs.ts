@@ -52,6 +52,7 @@ import {
 import {
   provisionRuntimePod,
   resolveImageName,
+  resolveWandbBaseURL,
   terminateRuntimePodWithRetry,
 } from "@convex/runtimeProvisioning";
 import { ACTIVE_STATUSES, RUN_STATUS, TERMINAL_STATUSES } from "@convex/runsConstants";
@@ -1336,6 +1337,10 @@ export const provisionRun = internalAction({
         },
         buildEnv: ({ runtimeToken, runtimeApiBase, runtimeRequestTimeoutSeconds }) =>
           buildProvisionedRuntimeEnv({
+            defaultEnv: {
+              WANDB_API_KEY: runtimeToken,
+              WANDB_BASE_URL: resolveWandbBaseURL(runtimeApiBase),
+            },
             environmentEnv,
             systemEnv: {
               TAHUNA_RUN_ID: provisioningPayload.run_id,

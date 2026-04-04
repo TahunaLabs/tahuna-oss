@@ -43,9 +43,11 @@ run.finish()
 
 ### 2. Configure W&B through environment env vars
 
-Tahuna does not auto-inject `WANDB_*` settings.
+Tahuna injects its own default `WANDB_BASE_URL` and `WANDB_API_KEY` for Tahuna's W&B-compatible tracking endpoint.
 
-If your code uses the W&B-compatible endpoint, set the needed `WANDB_*` variables on the Tahuna environment explicitly.
+If you want to use Tahuna's tracking endpoint, you do not need to set them manually.
+
+If you want different W&B settings, define `WANDB_*` variables on the Tahuna environment explicitly. User-defined environment env vars override Tahuna's injected defaults.
 
 ### 3. Manage environment env vars with the CLI
 

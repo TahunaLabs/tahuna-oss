@@ -174,9 +174,17 @@ export async function resolveEnvironmentEnvVarsForEnvironmentId(
 }
 
 export function buildProvisionedRuntimeEnv(args: {
+  defaultEnv?: Record<string, string>;
   environmentEnv: Record<string, string>;
   systemEnv: Record<string, string>;
 }) {
+  const injectedDefaultEnv: Record<string, string> = {};
+  for (const [name, value] of Object.entries(args.defaultEnv || {})) {
+    if (!shouldInjectEnvironmentEnvVar(name)) {
+      continue;
+    }
+    injectedDefaultEnv[name] = value;
+  }
   const injectedEnvironmentEnv: Record<string, string> = {};
   for (const [name, value] of Object.entries(args.environmentEnv)) {
     if (!shouldInjectEnvironmentEnvVar(name)) {
@@ -185,6 +193,7 @@ export function buildProvisionedRuntimeEnv(args: {
     injectedEnvironmentEnv[name] = value;
   }
   return {
+    ...injectedDefaultEnv,
     ...injectedEnvironmentEnv,
     ...args.systemEnv,
   };

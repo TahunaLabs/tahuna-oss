@@ -23,6 +23,7 @@ import { SERVE_STATUS, TERMINAL_SERVE_STATUSES } from "@convex/servesConstants"
 import {
   provisionRuntimePod,
   resolveImageName,
+  resolveWandbBaseURL,
   terminateRuntimePodWithRetry,
 } from "@convex/runtimeProvisioning"
 import {
@@ -1516,6 +1517,10 @@ export const provisionServe = internalAction({
         },
         buildEnv: ({ runtimeToken, runtimeApiBase, runtimeRequestTimeoutSeconds }) =>
           buildProvisionedRuntimeEnv({
+            defaultEnv: {
+              WANDB_API_KEY: runtimeToken,
+              WANDB_BASE_URL: resolveWandbBaseURL(runtimeApiBase),
+            },
             environmentEnv,
             systemEnv: {
               TAHUNA_SERVE_ID: provisioningPayload.serve_id,
