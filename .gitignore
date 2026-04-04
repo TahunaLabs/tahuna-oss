@@ -77,3 +77,4 @@ test_ml_project/data/*
 
 
 scripts/
+.claude/
