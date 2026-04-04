@@ -8,6 +8,7 @@ import (
 	"net/http"
 	neturl "net/url"
 	"path"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -635,4 +636,260 @@ func resolveRunDeleteTarget(target string, runs []runDeleteTarget) ([]string, er
 		return nil, fmt.Errorf("multiple runs found with name %q; use run_id instead", target)
 	}
 	return nil, fmt.Errorf("run %q not found", target)
+}
+
+// metricsFlag collects repeatable --metric / -m values.
+type metricsFlag []string
+
+func (f *metricsFlag) String() string { return strings.Join(*f, ", ") }
+func (f *metricsFlag) Set(v string) error {
+	*f = append(*f, strings.TrimSpace(v))
+	return nil
+}
+
+func runMetrics(args []string) {
+	fs := flag.NewFlagSet("run metrics", flag.ExitOnError)
+	var metrics metricsFlag
+	fs.Var(&metrics, "metric", "Metric name to display (repeatable)")
+	fs.Var(&metrics, "m", "Metric name to display (repeatable)")
+	tail := fs.Int("tail", 0, "Show only the last N steps per run (0 = all)")
+	fs.IntVar(tail, "n", 0, "Show only the last N steps per run (0 = all)")
+	follow := fs.Bool("follow", false, "Follow metric output (stream until runs finish)")
+	fs.BoolVar(follow, "f", false, "Follow metric output (stream until runs finish)")
+	verbose := fs.Bool("verbose", false, "Show full JSON payload")
+	fs.BoolVar(verbose, "v", false, "Show full JSON payload")
+	interval := fs.Int("interval", 2, "Polling interval seconds when following")
+	mustParseFlags(fs, args)
+
+	positional := fs.Args()
+	require(len(positional) >= 1, "at least one run_id or run_name is required (usage: tahuna run metrics <run>... --metric <name>)")
+	require(len(metrics) > 0, "at least one --metric (-m) is required")
+	require(*interval > 0, "--interval must be >= 1")
+	require(!(*follow && *verbose), "--follow (-f) cannot be used with --verbose (-v)")
+
+	type resolvedRun struct {
+		label string
+		id    string
+	}
+	runs := make([]resolvedRun, 0, len(positional))
+	for _, arg := range positional {
+		label := strings.TrimSpace(arg)
+		resolvedID, err := resolveRunIDByIDOrName(label)
+		must(err)
+		runs = append(runs, resolvedRun{label: label, id: resolvedID})
+	}
+
+	if *verbose {
+		combined := make(map[string]any, len(runs))
+		for _, run := range runs {
+			resp, err := doJSON(http.MethodGet, "/runs/"+run.id+"/logs", nil)
+			must(err)
+			combined[run.label] = resp
+		}
+		printJSON(combined)
+		return
+	}
+
+	fetchAllMetrics := func() map[string][]metricResponse {
+		out := make(map[string][]metricResponse, len(runs))
+		for _, run := range runs {
+			resp, err := doJSONAs[runLogsResponse](http.MethodGet, "/runs/"+run.id+"/logs", nil)
+			must(err)
+			out[run.label] = resp.RecentMetrics
+		}
+		return out
+	}
+
+	labels := make([]string, 0, len(runs))
+	for _, r := range runs {
+		labels = append(labels, r.label)
+	}
+
+	if !*follow {
+		allMetrics := fetchAllMetrics()
+		for _, metricName := range metrics {
+			printMetricTable(metricName, labels, allMetrics, *tail)
+		}
+		return
+	}
+
+	fmt.Printf("%sFollowing metrics for %s (Ctrl+C to stop)%s\n", cAmpMuted, strings.Join(labels, ", "), cReset)
+
+	// Track seen steps per metric per run to only print new rows.
+	seen := make(map[string]map[string]map[int64]struct{}) // metric -> run -> step
+	for _, m := range metrics {
+		seen[m] = make(map[string]map[int64]struct{})
+		for _, label := range labels {
+			seen[m][label] = make(map[int64]struct{})
+		}
+	}
+
+	// Seed seen set from initial fetch.
+	allMetrics := fetchAllMetrics()
+	for _, metricName := range metrics {
+		for _, label := range labels {
+			for _, m := range allMetrics[label] {
+				if strings.TrimSpace(m.Name) != metricName || m.Step == nil {
+					continue
+				}
+				seen[metricName][label][*m.Step] = struct{}{}
+			}
+		}
+		printMetricTable(metricName, labels, allMetrics, 0)
+	}
+
+	consecutivePollErrors := 0
+	const maxConsecutivePollErrors = 12
+
+	for {
+		// Check if all runs are terminal.
+		allTerminal := true
+		for _, run := range runs {
+			statusResp, err := doJSONAs[runResponse](http.MethodGet, "/runs/"+run.id, nil)
+			if err != nil {
+				if isRetryableRunPollError(err) {
+					consecutivePollErrors++
+					logWarn("unable to poll run status (%v); retrying in %ds (%d/%d)",
+						err, *interval, consecutivePollErrors, maxConsecutivePollErrors)
+					if consecutivePollErrors >= maxConsecutivePollErrors {
+						must(fmt.Errorf("run status polling failed %d times in a row: %w", consecutivePollErrors, err))
+					}
+					allTerminal = false
+					break
+				}
+				must(err)
+			}
+			if !isTerminalRunStatus(statusResp.Status) {
+				allTerminal = false
+			}
+		}
+
+		latestMetrics := fetchAllMetrics()
+		if consecutivePollErrors > 0 {
+			logInfo("recovered metric polling")
+			consecutivePollErrors = 0
+		}
+
+		for _, metricName := range metrics {
+			// Collect only new rows.
+			newMetrics := make(map[string][]metricResponse, len(labels))
+			hasNew := false
+			for _, label := range labels {
+				for _, m := range latestMetrics[label] {
+					if strings.TrimSpace(m.Name) != metricName || m.Step == nil {
+						continue
+					}
+					if _, exists := seen[metricName][label][*m.Step]; exists {
+						continue
+					}
+					seen[metricName][label][*m.Step] = struct{}{}
+					newMetrics[label] = append(newMetrics[label], m)
+					hasNew = true
+				}
+			}
+			if hasNew {
+				fmt.Printf("%s── %s (%s) ──%s\n", cAmpMuted, metricName, strings.Join(labels, ", "), cReset)
+				printMetricTable(metricName, labels, newMetrics, 0)
+			}
+		}
+
+		if allTerminal {
+			return
+		}
+		runLogsFollowSleep(time.Duration(*interval) * time.Second)
+	}
+}
+
+func printMetricTable(metricName string, runLabels []string, allMetrics map[string][]metricResponse, tailN int) {
+	// Collect values per run keyed by step.
+	runValues := make(map[string]map[int64]float64, len(runLabels))
+	stepsSet := make(map[int64]struct{})
+	for _, label := range runLabels {
+		runValues[label] = make(map[int64]float64)
+		for _, m := range allMetrics[label] {
+			if strings.TrimSpace(m.Name) != metricName {
+				continue
+			}
+			if m.Step == nil {
+				continue
+			}
+			runValues[label][*m.Step] = m.Value
+			stepsSet[*m.Step] = struct{}{}
+		}
+	}
+
+	steps := make([]int64, 0, len(stepsSet))
+	for s := range stepsSet {
+		steps = append(steps, s)
+	}
+	sort.Slice(steps, func(i, j int) bool { return steps[i] < steps[j] })
+
+	if tailN > 0 && len(steps) > tailN {
+		steps = steps[len(steps)-tailN:]
+	}
+
+	if len(steps) == 0 {
+		fmt.Printf("\nMetric: %s\n(no data points)\n\n", metricName)
+		return
+	}
+
+	// Compute column widths.
+	stepColWidth := 6 // "  STEP"
+	for _, s := range steps {
+		w := len(strconv.FormatInt(s, 10))
+		if w+2 > stepColWidth {
+			stepColWidth = w + 2
+		}
+	}
+
+	colWidths := make([]int, len(runLabels))
+	for i, label := range runLabels {
+		colWidths[i] = len(label) + 2
+		if colWidths[i] < 10 {
+			colWidths[i] = 10
+		}
+	}
+
+	for i, label := range runLabels {
+		for _, s := range steps {
+			if v, ok := runValues[label][s]; ok {
+				w := len(formatMetricValue(v)) + 2
+				if w > colWidths[i] {
+					colWidths[i] = w
+				}
+			}
+		}
+	}
+
+	fmt.Printf("\nMetric: %s\n\n", metricName)
+
+	// Header.
+	fmt.Printf("%*s", stepColWidth, "STEP")
+	for i, label := range runLabels {
+		fmt.Printf("%*s", colWidths[i], label)
+	}
+	fmt.Println()
+
+	// Rows.
+	for _, s := range steps {
+		fmt.Printf("%*d", stepColWidth, s)
+		for i, label := range runLabels {
+			if v, ok := runValues[label][s]; ok {
+				fmt.Printf("%*s", colWidths[i], formatMetricValue(v))
+			} else {
+				fmt.Printf("%*s", colWidths[i], "-")
+			}
+		}
+		fmt.Println()
+	}
+	fmt.Println()
+}
+
+func formatMetricValue(v float64) string {
+	s := strconv.FormatFloat(v, 'f', -1, 64)
+	// Cap decimal places at 4 for readability.
+	if idx := strings.Index(s, "."); idx >= 0 && len(s)-idx-1 > 4 {
+		s = strconv.FormatFloat(v, 'f', 4, 64)
+	}
+	return s
 }

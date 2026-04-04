@@ -355,6 +355,8 @@ func handleRun(args []string) {
 		runWatch(args[1:])
 	case "logs":
 		runLogs(args[1:])
+	case "metrics":
+		runMetrics(args[1:])
 	case "cancel":
 		runCancel(args[1:])
 	case "rm":
