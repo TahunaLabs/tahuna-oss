@@ -6,7 +6,12 @@ const nextConfig = {
     ignoreBuildErrors: true,
   },
   images: {
-    unoptimized: true,
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "pub-5f7c225fd68446a9b652150d7c7e52e9.r2.dev",
+      },
+    ],
   },
   async rewrites() {
     if (!convexSiteUrl) {
