@@ -6,6 +6,7 @@
 **/log/
 **/logs/
 db.json
+todo.md
 presets/
 
 **/dummy/

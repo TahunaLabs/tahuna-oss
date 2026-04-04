@@ -9,7 +9,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { TruncatedTooltip } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 
-const installerScriptCommand = "curl -fsSL https://raw.githubusercontent.com/Pazuzzu/tahuna-cli/main/scripts/install-tahuna.sh"
+const installerScriptCommand = "curl -fsSL https://tahuna.app/install.sh"
 
 const commands = {
   stable: `${installerScriptCommand} | bash`,
