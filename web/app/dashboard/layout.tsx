@@ -5,6 +5,7 @@ import { redirect } from "next/navigation"
 export const metadata: Metadata = {
   title: "Dashboard | Tahuna",
   description: "Manage your AI training runs, environments, GPU providers, and billing from the Tahuna dashboard.",
+  alternates: { canonical: "/dashboard" },
 }
 
 export default async function DashboardLayout({

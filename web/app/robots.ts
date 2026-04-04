@@ -1,4 +1,3 @@
-import { LINKS_CONFIG } from "@/config"
 import type { MetadataRoute } from "next"
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL?.trim() || "https://tahuna.app"
