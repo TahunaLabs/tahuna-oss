@@ -250,6 +250,7 @@ Periodic output sync (future):
 | `tahuna run show <id>` | Show run details + artifact keys |
 | `tahuna run watch <id>` | Live-follow run status |
 | `tahuna run logs <id> [-n N] [-f]` | Show/follow run logs |
+| `tahuna run metrics <id>... -m <metric> [-n N] [-f]` | Compare metrics across runs in a table |
 | `tahuna run delete <id>` | Delete run and its artifacts |
 | `tahuna run cancel <id> [-f]` | Cancel a running/queued run |
 

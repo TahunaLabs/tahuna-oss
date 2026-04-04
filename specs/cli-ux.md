@@ -46,6 +46,7 @@ tahuna
     show     <id> [-v]
     watch    <id> [--interval N]
     logs     <id> [-n N] [-f] [-v]
+    metrics  <id>... -m <metric> [-m <metric>...] [-n N] [-f] [--interval N] [-v]
     cancel   <id> [-f]
     delete   <id>
 
@@ -59,9 +60,10 @@ All commands follow these consistent flag rules:
 | Flag | Long form | Meaning | Applies to |
 |------|-----------|---------|------------|
 | `-v` | `--verbose` | Show HTTP details + timing | All commands |
-| `-n` | `--tail` | Number of items/lines to show (newest first) | `run list`, `run logs`, `serve logs` |
+| `-n` | `--tail` | Number of items/lines to show (newest first) | `run list`, `run logs`, `run metrics`, `serve logs` |
 | `-n` | `--name` | Human-readable run name | `run create` |
-| `-f` | `--follow` | Follow/stream output (like `docker logs -f`) | `run logs` |
+| `-m` | `--metric` | Metric name to display (repeatable) | `run metrics` |
+| `-f` | `--follow` | Follow/stream output (like `docker logs -f`) | `run logs`, `run metrics` |
 | `-d` | `--detached` | Create and exit without monitoring | `train`, `run create` |
 | `-a` | `--all` | Show all items (no limit) | `run list` |
 | | `--rename` | Target run identifier for rename compatibility alias | `run create` (compat), `run rename` (canonical command uses positional id/name) |
