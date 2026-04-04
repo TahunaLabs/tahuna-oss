@@ -19,8 +19,9 @@ function frameworkIcon(filename: string) {
 export function FrameworksBar() {
     return (
         <section className="shrink-0 px-8 py-8">
+            <h2 className="sr-only">Works with your stack</h2>
             <div className="flex items-center gap-8">
-                <Eyebrow className="shrink-0">
+                <Eyebrow className="shrink-0" aria-hidden="true">
                     Works with your stack
                 </Eyebrow>
 
