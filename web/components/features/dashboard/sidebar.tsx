@@ -61,7 +61,7 @@ interface SidebarProps {
 const DEFAULT_NAV_PLATFORM: NavItem[] = [
   { icon: HardDrive, label: "Storage", view: "storage" },
   { icon: Server, label: "Environments", view: "environments" },
-  { icon: Rocket, label: "Serving", view: "serving", badge: "Beta" },
+  { icon: Rocket, label: "Serving", view: "serving", badge: "beta" },
   { icon: Play, label: "Runs", view: "runs" },
 ]
 
