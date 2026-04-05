@@ -1,0 +1,17 @@
+# Generated for the Verifiers wiki-search RL example.
+[project]
+data_dir = "data"
+output_dir = "outputs"
+
+[environment]
+framework = "pt"
+version = "2.8.0-cu128"
+python_version = "3.11"
+gpu_type = "NVIDIA A100-SXM4-80GB"
+gpu_count = 2
+volume_gb = 120
+
+[train]
+command = ["uv", "run", "--active", "--no-sync", "vf-rl", "@", "configs/vf-rl/wiki-search.toml"]
+dependency_group = "train"
+output_model_path = "outputs/model"
