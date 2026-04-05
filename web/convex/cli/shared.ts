@@ -210,6 +210,7 @@ const SAFE_CLIENT_ERROR_PATTERNS: RegExp[] = [
   /\bmanifest\b.*\b(not found|invalid|mismatch)\b/i,
   /\bblob exceeds limit\b/i,
   /\bmanifest exceeds limit\b/i,
+  /\bcompute provider account balance is insufficient\b/i,
 ];
 
 export function toClientErrorDetail(err: unknown, fallback: string): string {

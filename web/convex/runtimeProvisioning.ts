@@ -164,10 +164,13 @@ export async function createRunpodPod(args: CreateRunpodPodArgs) {
     body = null;
   }
   if (!response.ok) {
+    const bodyObj = body && typeof body === "object" ? (body as Record<string, unknown>) : null;
     const detail =
-      body && typeof body === "object" && "message" in body && typeof (body as Record<string, unknown>).message === "string"
-        ? String((body as Record<string, unknown>).message)
-        : (rawText.trim() || `http ${response.status}`);
+      typeof bodyObj?.message === "string"
+        ? bodyObj.message
+        : typeof bodyObj?.error === "string"
+          ? bodyObj.error
+          : (rawText.trim() || `http ${response.status}`);
     throw new Error(`Runpod pod creation failed: ${detail}`);
   }
   const row = (body || {}) as Record<string, unknown>;

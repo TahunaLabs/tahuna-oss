@@ -64,6 +64,22 @@ export function buildRuntimeCompatibilityKey(fingerprint: RuntimeCompatibilityFi
   ].join("|");
 }
 
+const NORMALIZED_ERRORS: { regex: RegExp; message: string }[] = [
+  {
+    regex: /balance.*too low|insufficient.*balance|add funds|not enough.*credit|low.*balance/i,
+    message: "compute provider account balance is insufficient; please add funds to your account",
+  },
+];
+
+export function normalizeProvisioningError(detail: string): string {
+  for (const { regex, message } of NORMALIZED_ERRORS) {
+    if (regex.test(detail)) {
+      return message;
+    }
+  }
+  return detail;
+}
+
 export function classifyRuntimeIncompatibility(detail: string): {
   code: string;
   cooldownSeconds: number;

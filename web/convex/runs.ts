@@ -15,6 +15,7 @@ import { HeadObjectCommand } from "@aws-sdk/client-s3";
 import {
   buildRuntimeCompatibilityKey,
   classifyRuntimeIncompatibility,
+  normalizeProvisioningError,
   resolveRunpodCloudType,
   type RuntimeCompatibilityFingerprint,
 } from "@/lib/runtime-incompatibility";
@@ -1382,7 +1383,8 @@ export const provisionRun = internalAction({
         },
       );
     } catch (error) {
-      const detail = error instanceof Error ? error.message : "pod bootstrap failed";
+      const raw = error instanceof Error ? error.message : "pod bootstrap failed";
+      const detail = normalizeProvisioningError(raw);
       const incompatibility = classifyRuntimeIncompatibility(detail);
       if (incompatibility) {
         await ctx.runMutation(internal.runs.upsertRuntimeIncompatibility, {
