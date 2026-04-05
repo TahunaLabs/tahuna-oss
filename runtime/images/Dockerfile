@@ -24,7 +24,7 @@ ENV TAHUNA_PREBAKED_PROTECTED_PACKAGES=${PREBAKE_PROTECTED_PACKAGES}
 ENV TAHUNA_PREBAKED_PROTECTED_VERSIONS_FILE=/opt/tahuna/protected-package-versions.json
 ENV UV_CACHE_DIR=/opt/tahuna/.uv-cache
 RUN apt-get update -qq && apt-get install -y --no-install-recommends python3 python3-pip && rm -rf /var/lib/apt/lists/*
-RUN python3 -m pip install --no-cache-dir uv \
+RUN python3 -m pip install --no-cache-dir --break-system-packages uv \
     && uv python install "${PREBAKE_PYTHON_VERSION}" \
     && mkdir -p /opt/tahuna \
     && uv venv --python "${PREBAKE_PYTHON_VERSION}" "${TAHUNA_PREBAKED_VENV}" \
