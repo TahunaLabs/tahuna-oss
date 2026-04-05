@@ -23,8 +23,8 @@ export function resolveImageName(framework: string, version: string, pythonVersi
 
 export function resolveRuntimeApiBase() {
   const candidates = [
-    process.env.SITE_URL,
     process.env.NEXT_PUBLIC_CONVEX_SITE_URL,
+    process.env.SITE_URL,
   ];
   for (const candidate of candidates) {
     const trimmed = (candidate || "").trim();
