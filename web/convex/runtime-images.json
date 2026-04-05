@@ -1,5 +1,29 @@
 {
   "pt": {
+    "2.11.0-cu130": {
+      "base": "nvidia/cuda:13.0.1-devel-ubuntu24.04",
+      "python": ["3.11", "3.12", "3.13"]
+    },
+    "2.11.0-cu128": {
+      "base": "nvidia/cuda:12.8.1-devel-ubuntu24.04",
+      "python": ["3.11", "3.12", "3.13"]
+    },
+    "2.10.0-cu130": {
+      "base": "nvidia/cuda:13.0.1-devel-ubuntu24.04",
+      "python": ["3.11", "3.12", "3.13"]
+    },
+    "2.10.0-cu128": {
+      "base": "nvidia/cuda:12.8.1-devel-ubuntu24.04",
+      "python": ["3.11", "3.12", "3.13"]
+    },
+    "2.9.1-cu130": {
+      "base": "nvidia/cuda:13.0.1-devel-ubuntu24.04",
+      "python": ["3.11", "3.12", "3.13"]
+    },
+    "2.9.1-cu128": {
+      "base": "nvidia/cuda:12.8.1-devel-ubuntu24.04",
+      "python": ["3.11", "3.12", "3.13"]
+    },
     "2.8.0-cu128": {
       "base": "runpod/pytorch:1.0.2-cu1281-torch280-ubuntu2404",
       "python": ["3.11", "3.12", "3.13"]
