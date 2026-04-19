@@ -9,7 +9,6 @@ const cardVariants = cva("overflow-hidden rounded-lg text-foreground", {
       default: "border border-border bg-card",
       surface: "border border-border bg-background",
       panel: "border border-border bg-background/80",
-      frame: "mt-2 ml-2 h-full border border-border bg-background shadow-xl",
       ghost: "bg-transparent",
     },
   },

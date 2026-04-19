@@ -44,14 +44,12 @@ export default async function RootLayout({
     <html lang="en" className={`${geist.variable} ${geistMono.variable} ${cormorant.variable} ${initialTheme}`}>
       <body style={bodyStyle} className="font-sans antialiased bg-sidebar h-svh overflow-hidden">
         <ThemeProvider initialTheme={initialTheme}>
-          <Card variant="frame" className="h-full overflow-hidden">
             <TooltipProvider>
               <NuqsAdapter>
                 <ConvexClientProvider initialToken={token}>{children}</ConvexClientProvider>
               </NuqsAdapter>
             </TooltipProvider>
             <Toaster />
-          </Card>
         </ThemeProvider>
         <Analytics />
         <SpeedInsights />
