@@ -1,7 +1,6 @@
 import { siteMetadata } from "@/app/site-metadata"
 import { ConvexClientProvider } from "@/components/convex-client-provider"
 import { ThemeProvider } from "@/components/theme-provider"
-import { Card } from "@/components/ui/card"
 import { Toaster } from "@/components/ui/toaster"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { CDN_CONFIG } from "@/config"

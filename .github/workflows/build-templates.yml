@@ -53,7 +53,7 @@ jobs:
       contents: read
       packages: write
     env:
-      REGISTRY: ghcr.io/pazuzzu
+      REGISTRY: ghcr.io/tahunalabs
       IMAGE_REPO: ${{ github.ref_name == 'main' && 'tahuna' || 'tahuna-dev' }}
     strategy:
       fail-fast: false
@@ -96,6 +96,9 @@ jobs:
           pull: true
           push: true
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_REPO }}:${{ matrix.tag }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
           build-args: |
             BASE_IMAGE=${{ matrix.base }}
             PREBAKE_FRAMEWORK=${{ matrix.framework }}

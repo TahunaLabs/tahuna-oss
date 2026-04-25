@@ -34,7 +34,7 @@ This section is non-normative. It records rollout status in the current codebase
 - PR10 is done.
   Tahuna now exposes an authenticated serve inference proxy rooted at `/api/serves/{serve_id}/inference[/...]`, accepts browser-session or API-key auth at the Tahuna edge, and adds a minimal canonical invoke surface without freezing the user app's inference payload schema.
 - Runtime image registry alignment is done.
-  The managed runtime image catalog now defaults to `ghcr.io/pazuzzu/tahuna`, matching the image build workflow. `TAHUNA_RUNTIME_IMAGE_REPO` remains the override.
+  The managed runtime image catalog now defaults to `ghcr.io/tahunalabs/tahuna`, matching the TahunaLabs-owned image build workflow. `TAHUNA_RUNTIME_IMAGE_REPO` remains the override.
 - The next implementation step is inference hardening and provider isolation.
   The proxy surface now exists, but the next slice must remove provider metadata leakage, tighten browser-session protections, add request and timeout guardrails, and make direct provider access non-viable without turning the proxy into an example-specific API adapter.
 
@@ -620,7 +620,7 @@ Rules:
 - user libraries such as `vllm`, `sglang`, `transformers`, `fastapi`, or `uvicorn` come from `pyproject.toml` and `uv.lock`
 - Tahuna must not require the user to select a serving engine in `tahuna.toml`
 - Tahuna must not infer serving behavior from dependency names
-- the managed runtime image catalog defaults to `ghcr.io/pazuzzu/tahuna` unless `TAHUNA_RUNTIME_IMAGE_REPO` overrides it
+- the managed runtime image catalog defaults to `ghcr.io/tahunalabs/tahuna` unless `TAHUNA_RUNTIME_IMAGE_REPO` overrides it
 - the default image repo and the runtime image publishing workflow must stay aligned
 
 ## Clarification On `triton`
