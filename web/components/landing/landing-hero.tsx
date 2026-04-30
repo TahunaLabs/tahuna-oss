@@ -1,7 +1,6 @@
 import Link from "next/link"
 import { ArrowRight } from "lucide-react"
 
-import { LandingFoundersIncBadge } from "@/components/landing/landing-founders-inc-badge"
 import { Button } from "@/components/ui/button"
 
 export function LandingHero() {
@@ -48,10 +47,6 @@ export function LandingHero() {
                 </Link>
               </Button>
             </div>
-          </div>
-
-          <div className="mt-10 flex justify-center">
-            <LandingFoundersIncBadge />
           </div>
         </div>
       </div>
