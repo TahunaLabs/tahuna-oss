@@ -1,6 +1,7 @@
 import Link from "next/link"
 import { ArrowRight } from "lucide-react"
 
+import { LandingFoundersIncBadge } from "@/components/landing/landing-founders-inc-badge"
 import { Button } from "@/components/ui/button"
 
 export function LandingHero() {
@@ -46,6 +47,8 @@ export function LandingHero() {
                   <ArrowRight />
                 </Link>
               </Button>
+
+              <LandingFoundersIncBadge />
             </div>
           </div>
         </div>
