@@ -24,9 +24,6 @@
   --color-fd-accent-foreground: #1a1c12;
   --color-fd-border: #d6e2e0;
   --color-fd-ring: #c8a84e;
-  --app-shell-background-image-opacity: 0.9;
-  --app-shell-background-image-filter: none;
-  --app-shell-background-overlay-opacity: 0.7;
 }
 
 :is(.dark, [data-theme="dark"]) {
@@ -46,45 +43,6 @@
   --color-fd-accent-foreground: #0b1d1f;
   --color-fd-border: #1e3e40;
   --color-fd-ring: #c8a84e;
-  --app-shell-background-image-opacity: 0.34;
-  --app-shell-background-image-filter: brightness(0.55) saturate(0.8);
-  --app-shell-background-overlay-opacity: 0.78;
-}
-
-@layer base {
-  body {
-    position: relative;
-    min-height: 100vh;
-    isolation: isolate;
-  }
-
-  body::before {
-    content: "";
-    position: fixed;
-    inset: 0;
-    z-index: -2;
-    pointer-events: none;
-    background: var(--app-shell-background-image) center / cover no-repeat;
-    opacity: var(--app-shell-background-image-opacity);
-    filter: var(--app-shell-background-image-filter);
-  }
-
-  body::after {
-    content: "";
-    position: fixed;
-    inset: 0;
-    z-index: 9999;
-    pointer-events: none;
-    background: var(--app-shell-background-image) center / cover no-repeat;
-    mix-blend-mode: multiply;
-    opacity: var(--app-shell-background-overlay-opacity);
-  }
-
-  :is(.dark, [data-theme="dark"]) body::after {
-    z-index: -1;
-    background: var(--color-fd-background);
-    mix-blend-mode: normal;
-  }
 }
 
 html {

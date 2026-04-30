@@ -54,9 +54,6 @@
   --status-dot-running: #16a34a;
   --status-dot-failed: #dc2626;
   --status-dot-cancelling: #ea580c;
-  --app-shell-background-image-opacity: 0.9;
-  --app-shell-background-image-filter: none;
-  --app-shell-background-overlay-opacity: 0.7;
 }
 
 .dark {
@@ -97,9 +94,6 @@
   --status-dot-running: #4ade80;
   --status-dot-failed: #f87171;
   --status-dot-cancelling: #fb923c;
-  --app-shell-background-image-opacity: 0.34;
-  --app-shell-background-image-filter: brightness(0.55) saturate(0.8);
-  --app-shell-background-overlay-opacity: 0.78;
 }
 
 @theme inline {
@@ -173,37 +167,6 @@
 
   body {
     @apply bg-background text-foreground;
-    position: relative;
-    min-height: 100vh;
-    isolation: isolate;
-  }
-
-  body::before {
-    content: "";
-    position: fixed;
-    inset: 0;
-    z-index: -2;
-    pointer-events: none;
-    background: var(--app-shell-background-image) center / cover no-repeat;
-    opacity: var(--app-shell-background-image-opacity);
-    filter: var(--app-shell-background-image-filter);
-  }
-
-  body::after {
-    content: "";
-    position: fixed;
-    inset: 0;
-    z-index: 9999;
-    pointer-events: none;
-    background: var(--app-shell-background-image) center / cover no-repeat;
-    mix-blend-mode: multiply;
-    opacity: var(--app-shell-background-overlay-opacity);
-  }
-
-  .dark body::after {
-    z-index: -1;
-    background: var(--background);
-    mix-blend-mode: normal;
   }
 }
 

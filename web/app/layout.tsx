@@ -3,7 +3,6 @@ import { ConvexClientProvider } from "@/components/convex-client-provider"
 import { ThemeProvider } from "@/components/theme-provider"
 import { Toaster } from "@/components/ui/toaster"
 import { TooltipProvider } from "@/components/ui/tooltip"
-import { CDN_CONFIG } from "@/config"
 import { getToken } from "@/lib/auth-server"
 import { Analytics } from "@vercel/analytics/next"
 import { SpeedInsights } from "@vercel/speed-insights/next"
@@ -21,10 +20,6 @@ const cormorant = Cormorant_Garamond({
   variable: "--font-serif",
 })
 
-function backgroundArtefact(filename: string) {
-  return `${CDN_CONFIG.baseUrl}${CDN_CONFIG.artefactsPath}/${filename}`
-}
-
 export const metadata = siteMetadata
 
 export default async function RootLayout({
@@ -35,13 +30,10 @@ export default async function RootLayout({
   const token = await getToken()
   const themeCookie = (await cookies()).get("tahuna-theme")?.value
   const initialTheme = themeCookie === "dark" ? "dark" : "light"
-  const bodyStyle = {
-    "--app-shell-background-image": `url("${backgroundArtefact("background.avif")}")`,
-  } as React.CSSProperties
 
   return (
     <html lang="en" className={`${geist.variable} ${geistMono.variable} ${cormorant.variable} ${initialTheme}`}>
-      <body style={bodyStyle} className="font-sans antialiased bg-sidebar h-svh overflow-hidden">
+      <body className="font-sans antialiased bg-sidebar h-svh overflow-hidden">
         <ThemeProvider initialTheme={initialTheme}>
             <TooltipProvider>
               <NuqsAdapter>
