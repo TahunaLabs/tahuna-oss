@@ -103,6 +103,5 @@ export const LINKS_CONFIG = {
   runsUrl: "https://docs.tahuna.app/runs",
   cliReferenceUrl: "https://docs.tahuna.app/cli",
   changelogUrl: "https://github.com/Pazuzzu/tahuna/releases",
-  repoUrl: "https://github.com/Pazuzzu/tahuna",
   bugReportUrl: "https://insigh.to/b/tahuna/p/tahuna",
 } as const;

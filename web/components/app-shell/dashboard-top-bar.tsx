@@ -1,7 +1,6 @@
 "use client"
 
 import type * as React from "react"
-import { GitHubLogoIcon } from "@radix-ui/react-icons"
 import { Bug, Moon, Sun } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -28,16 +27,6 @@ function DashboardTopBar(props: React.ComponentProps<"header">) {
             aria-label="Report a bug on Linear"
           >
             <Bug className="size-4" />
-          </a>
-        </Button>
-        <Button variant="ghost" size="icon" asChild>
-          <a
-            href={LINKS_CONFIG.repoUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-label="GitHub repository"
-          >
-            <GitHubLogoIcon className="size-4" />
           </a>
         </Button>
         <Button

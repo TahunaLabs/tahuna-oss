@@ -1,5 +1,5 @@
 import { PublicHome } from "@/components/landing/public-home"
-import { CDN_CONFIG, LINKS_CONFIG, NETWORK_CONFIG } from "@/config"
+import { CDN_CONFIG, NETWORK_CONFIG } from "@/config"
 import { isAuthenticated } from "@/lib/auth-server"
 import type { Metadata } from "next"
 import { redirect } from "next/navigation"
@@ -19,7 +19,6 @@ const jsonLd = {
       name: "Tahuna",
       url: NETWORK_CONFIG.siteUrl,
       logo: `${CDN_CONFIG.baseUrl}${CDN_CONFIG.faviconPath}/favicon-96x96.png`,
-      sameAs: [LINKS_CONFIG.repoUrl],
     },
     {
       "@type": "SoftwareApplication",

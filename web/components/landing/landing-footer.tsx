@@ -22,7 +22,6 @@ const FOOTER_SECTIONS = [
   {
     title: "Resources",
     links: [
-      { label: "GitHub", href: LINKS_CONFIG.repoUrl, external: true },
       { label: "Changelog", href: LINKS_CONFIG.changelogUrl, external: true },
     ],
   },
