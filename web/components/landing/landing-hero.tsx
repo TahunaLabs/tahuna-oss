@@ -47,9 +47,11 @@ export function LandingHero() {
                   <ArrowRight />
                 </Link>
               </Button>
-
-              <LandingFoundersIncBadge />
             </div>
+          </div>
+
+          <div className="mt-10 flex justify-center">
+            <LandingFoundersIncBadge />
           </div>
         </div>
       </div>
