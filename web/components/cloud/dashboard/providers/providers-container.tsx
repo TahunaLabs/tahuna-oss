@@ -1,11 +1,14 @@
 "use client"
 
 import { useState } from "react"
-import { useAction, useMutation, useQuery } from "convex/react"
-import { api } from "@convex/_generated/api"
 
-import { ProvidersView } from "@/components/features/dashboard/providers-view"
-import type { RunpodCredentialStatus } from "@/components/features/dashboard-providers-model"
+import {
+  useCloudDashboardRunpodCredentialStatus,
+  useRevokeCloudDashboardRunpodCredential,
+  useSaveCloudDashboardRunpodCredential,
+} from "@/cloud/dashboard-api"
+import { ProvidersView } from "@/components/cloud/dashboard/providers/providers-view"
+import type { CloudRunpodCredentialStatus } from "@/cloud/dashboard-api-types"
 
 type Props = {
   shouldLoadQueries: boolean
@@ -15,13 +18,12 @@ export function ProvidersContainer({ shouldLoadQueries }: Props) {
   const [savingRunpod, setSavingRunpod] = useState(false)
   const [revokingRunpod, setRevokingRunpod] = useState(false)
 
-  const runpodStatus = useQuery(
-    api.runpodCredentials.getMyRunpodCredentialStatus,
-    shouldLoadQueries ? {} : "skip",
-  ) as RunpodCredentialStatus | undefined
+  const runpodStatus = useCloudDashboardRunpodCredentialStatus(shouldLoadQueries) as
+    | CloudRunpodCredentialStatus
+    | undefined
 
-  const revokeMyRunpodCredentialMutation = useMutation(api.runpodCredentials.revokeMyRunpodCredential)
-  const saveMyRunpodCredentialAction = useAction(api.runpodCredentials.saveMyRunpodCredential)
+  const revokeMyRunpodCredentialMutation = useRevokeCloudDashboardRunpodCredential()
+  const saveMyRunpodCredentialAction = useSaveCloudDashboardRunpodCredential()
 
   async function saveRunpodCredential(apiKey: string) {
     setSavingRunpod(true)

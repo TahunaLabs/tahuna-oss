@@ -1,11 +1,9 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { useAction } from "convex/react"
 import { toast } from "sonner"
-import { api } from "@convex/_generated/api"
 import { validateArtifactRenameName, type StorageItem } from "@/components/features/dashboard-model"
-import type { Id } from "@convex/_generated/dataModel"
+import { useRenameDashboardArtifact } from "@/lib/dashboard-api"
 
 type UseArtifactRenameArgs = {
   storageItems: StorageItem[]
@@ -17,7 +15,7 @@ function useArtifactRename({ storageItems, onSuccess }: UseArtifactRenameArgs) {
   const [renameDraft, setRenameDraft] = useState("")
   const [renameBusyId, setRenameBusyId] = useState<string | null>(null)
 
-  const renameArtifactAction = useAction(api.storage.renameArtifact)
+  const renameArtifactAction = useRenameDashboardArtifact()
 
   // Cancel rename if the item disappears
   useEffect(() => {
@@ -59,7 +57,7 @@ function useArtifactRename({ storageItems, onSuccess }: UseArtifactRenameArgs) {
     setRenameBusyId(item.id)
     try {
       const renamed = await renameArtifactAction({
-        runId: runId as Id<"runs">,
+        runId,
         key: item.key,
         name: nextName,
       })

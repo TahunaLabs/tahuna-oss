@@ -1,28 +1,28 @@
 import Link from "next/link"
 
+import { CLOUD_LINKS_CONFIG } from "@/cloud/links"
 import { Logo } from "@/components/logo"
-import { LINKS_CONFIG } from "@/config"
 
 const FOOTER_SECTIONS = [
   {
     title: "Platform",
     links: [
-      { label: "Quickstart", href: LINKS_CONFIG.quickstartUrl, external: true },
-      { label: "Environments", href: LINKS_CONFIG.environmentsUrl, external: true },
-      { label: "Runs", href: LINKS_CONFIG.runsUrl, external: true },
+      { label: "Quickstart", href: CLOUD_LINKS_CONFIG.quickstartUrl, external: true },
+      { label: "Environments", href: CLOUD_LINKS_CONFIG.environmentsUrl, external: true },
+      { label: "Runs", href: CLOUD_LINKS_CONFIG.runsUrl, external: true },
     ],
   },
   {
     title: "Documentation",
     links: [
-      { label: "Documentation", href: LINKS_CONFIG.docsUrl, external: true },
-      { label: "CLI Reference", href: LINKS_CONFIG.cliReferenceUrl, external: true },
+      { label: "Documentation", href: CLOUD_LINKS_CONFIG.docsUrl, external: true },
+      { label: "CLI Reference", href: CLOUD_LINKS_CONFIG.cliReferenceUrl, external: true },
     ],
   },
   {
     title: "Resources",
     links: [
-      { label: "Changelog", href: LINKS_CONFIG.changelogUrl, external: true },
+      { label: "Changelog", href: CLOUD_LINKS_CONFIG.changelogUrl, external: true },
     ],
   },
   {

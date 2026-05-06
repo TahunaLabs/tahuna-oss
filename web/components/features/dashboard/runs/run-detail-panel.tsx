@@ -179,8 +179,8 @@ function RunDiagnosticsCard({ runDetail }: { runDetail: RunDetail }) {
           <dd className="truncate font-mono text-xs text-foreground">{runDetail.environment_id}</dd>
         </div>
         <div className="flex justify-between gap-3">
-          <dt className="text-muted-foreground">Pod ID</dt>
-          <dd className="font-mono text-xs text-foreground">{runDetail.pod_id || "—"}</dd>
+          <dt className="text-muted-foreground">Provider machine ID</dt>
+          <dd className="font-mono text-xs text-foreground">{runDetail.provider_machine_id || "—"}</dd>
         </div>
         <div className="flex justify-between gap-3">
           <dt className="text-muted-foreground">Infra</dt>

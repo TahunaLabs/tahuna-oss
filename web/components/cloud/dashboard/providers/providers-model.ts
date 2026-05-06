@@ -1,5 +1,3 @@
-import type { Id } from "@convex/_generated/dataModel"
-
 import { CDN_CONFIG } from "@/config"
 
 function providerIcon(filename: string) {
@@ -21,11 +19,3 @@ export const PROVIDERS_CONFIG: ProviderDef[] = [
   { id: "azure",  label: "Azure",  logo: providerIcon("azure_logo.svg"),  supported: false }, // TODO: implement Azure credentials
   { id: "aws",    label: "AWS",    logo: providerIcon("aws_logo.svg"),     supported: false }, // TODO: implement AWS credentials
 ]
-
-export type RunpodCredentialStatus = {
-  configured: boolean
-  credential_id: Id<"runpodCredentials"> | null
-  key_prefix: string
-  validated_at?: number
-  updated_at?: number
-}

@@ -1,22 +1,26 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { useMutation, useQuery } from "convex/react"
 import { parseAsStringLiteral, useQueryState } from "nuqs"
 import { toast } from "sonner"
-import { api } from "@convex/_generated/api"
 import { RunsView } from "@/components/features/dashboard/runs-view"
 import {
   RUN_TAB_VALUES,
   TERMINAL_STATUSES,
-  type EnvironmentRow,
   type RunDetail,
   type RunLogsOnlyDetail,
   type RunMetricsOnlyDetail,
   type RunRow,
 } from "@/components/features/dashboard-model"
-import type { Id } from "@convex/_generated/dataModel"
-
+import {
+  useCancelDashboardRun,
+  useDashboardEnvironments,
+  useDashboardRunDetail,
+  useDashboardRunLogs,
+  useDashboardRunMetrics,
+  useDashboardRuns,
+  useRemoveDashboardRun,
+} from "@/lib/dashboard-api"
 
 type Props = {
   shouldLoadQueries: boolean
@@ -34,10 +38,8 @@ export function RunsContainer({ shouldLoadQueries, onOpenShareDialog }: Props) {
 
   const [runsTab, setRunsTab] = useQueryState("runTab", parseAsStringLiteral(RUN_TAB_VALUES).withDefault("all"))
 
-  const envResult = useQuery(api.environments.list, shouldLoadQueries ? {} : "skip") as
-    | { environments: EnvironmentRow[] }
-    | undefined
-  const runResult = useQuery(api.runs.list, shouldLoadQueries ? {} : "skip") as { runs: RunRow[] } | undefined
+  const envResult = useDashboardEnvironments(shouldLoadQueries)
+  const runResult = useDashboardRuns(shouldLoadQueries)
 
   const runs = runResult?.runs
   const environments = envResult?.environments
@@ -49,28 +51,21 @@ export function RunsContainer({ shouldLoadQueries, onOpenShareDialog }: Props) {
   const hasTerminalLogsCache = terminalLogsCache !== null && terminalLogsCache.runId === selectedRunId
   const hasTerminalMetricsCache = terminalMetricsCache !== null && terminalMetricsCache.runId === selectedRunId
 
-  const runDetail = useQuery(
-    api.runs.get,
-    shouldLoadRunDetail ? { runId: selectedRunId as Id<"runs"> } : "skip",
-  ) as RunDetail | undefined
-  const runLogsLive = useQuery(
-    api.runs.getRunLogs,
-    shouldLoadRunDetail && !(isSelectedRunTerminal && hasTerminalLogsCache)
-      ? { runId: selectedRunId as Id<"runs"> }
-      : "skip",
+  const runDetail = useDashboardRunDetail(selectedRunId, shouldLoadRunDetail) as RunDetail | undefined
+  const runLogsLive = useDashboardRunLogs(
+    selectedRunId,
+    shouldLoadRunDetail && !(isSelectedRunTerminal && hasTerminalLogsCache),
   ) as RunLogsOnlyDetail | undefined
-  const runMetricsLive = useQuery(
-    api.runs.getRunMetrics,
-    shouldLoadRunDetail && !(isSelectedRunTerminal && hasTerminalMetricsCache)
-      ? { runId: selectedRunId as Id<"runs"> }
-      : "skip",
+  const runMetricsLive = useDashboardRunMetrics(
+    selectedRunId,
+    shouldLoadRunDetail && !(isSelectedRunTerminal && hasTerminalMetricsCache),
   ) as RunMetricsOnlyDetail | undefined
 
   const runLogs = runLogsLive ?? (hasTerminalLogsCache ? terminalLogsCache.logs : undefined)
   const runMetrics = runMetricsLive ?? (hasTerminalMetricsCache ? terminalMetricsCache.metrics : undefined)
 
-  const cancelRunMutation = useMutation(api.runs.cancel)
-  const removeRunMutation = useMutation(api.runs.remove)
+  const cancelRunMutation = useCancelDashboardRun()
+  const removeRunMutation = useRemoveDashboardRun()
 
   // Cache logs/metrics for terminal runs so queries can unsubscribe
   useEffect(() => {
@@ -107,20 +102,20 @@ export function RunsContainer({ shouldLoadQueries, onOpenShareDialog }: Props) {
     }
   }
 
-  async function cancelRun(runId: Id<"runs">) {
+  async function cancelRun(runId: RunRow["run_id"]) {
     await withBusy(async () => {
-      await cancelRunMutation({ runId, force: false })
+      await cancelRunMutation(runId)
       toast.success(`Run ${runId} cancellation requested.`)
     })
   }
 
-  async function deleteRuns(runIds: Id<"runs">[]) {
+  async function deleteRuns(runIds: RunRow["run_id"][]) {
     if (runIds.length === 0) return
     await withBusy(async () => {
       for (const runId of runIds) {
-        await removeRunMutation({ runId, cancelActive: true, force: false })
+        await removeRunMutation(runId)
       }
-      if (selectedRunId && runIds.includes(selectedRunId as Id<"runs">)) {
+      if (selectedRunId && runIds.includes(selectedRunId)) {
         setSelectedRunId(null)
       }
       const count = runIds.length

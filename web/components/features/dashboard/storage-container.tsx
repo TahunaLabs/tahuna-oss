@@ -1,10 +1,8 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { useAction, useMutation } from "convex/react"
 import { parseAsInteger, parseAsString, parseAsStringLiteral, useQueryState } from "nuqs"
 import { toast } from "sonner"
-import { api } from "@convex/_generated/api"
 import { StorageView } from "@/components/features/dashboard/storage-view"
 import { useArtifactRename } from "@/components/features/dashboard/storage/use-artifact-rename"
 import { useStorageUpload } from "@/components/features/dashboard/storage/use-storage-upload"
@@ -15,6 +13,11 @@ import {
   type StorageItem,
   type StorageListResult,
 } from "@/components/features/dashboard-model"
+import {
+  useDeleteDashboardStorageItems,
+  useListDashboardStorage,
+  useSetDashboardStorageVisibility,
+} from "@/lib/dashboard-api"
 import { useDebounce } from "@/lib/use-debounce"
 
 
@@ -41,9 +44,9 @@ export function StorageContainer({ shouldLoadQueries, onOpenShareDialog }: Props
   const [storageReloadToken, setStorageReloadToken] = useState(0)
   const [storageDeleteBusy, setStorageDeleteBusy] = useState(false)
 
-  const listStorageAction = useAction(api.storage.list)
-  const deleteStorageMutation = useMutation(api.storage.deleteMany)
-  const setStorageVisibilityMutation = useMutation(api.storage.setVisibility)
+  const listStorageAction = useListDashboardStorage()
+  const deleteStorageMutation = useDeleteDashboardStorageItems()
+  const setStorageVisibilityMutation = useSetDashboardStorageVisibility()
 
   const storageItems = storageResult?.items ?? []
   const storageTotal = storageResult?.total ?? 0

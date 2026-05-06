@@ -1,17 +1,20 @@
 "use client"
 
 import { useState } from "react"
-import { useMutation, useQuery } from "convex/react"
 import { toast } from "sonner"
 
-import { api } from "@convex/_generated/api"
-import type { Id } from "@convex/_generated/dataModel"
 import {
   type EnvironmentRow,
   type ServeLogsOnlyDetail,
   type ServeRow,
 } from "@/components/features/dashboard-model"
 import { ServingView } from "@/components/features/dashboard/serving-view"
+import {
+  useDashboardEnvironments,
+  useDashboardServeLogs,
+  useDashboardServes,
+  useStopDashboardServe,
+} from "@/lib/dashboard-api"
 
 type Props = {
   shouldLoadQueries: boolean
@@ -21,25 +24,19 @@ export function ServingContainer({ shouldLoadQueries }: Props) {
   const [busy, setBusy] = useState(false)
   const [selectedServeId, setSelectedServeId] = useState<string | null>(null)
 
-  const envResult = useQuery(api.environments.list, shouldLoadQueries ? {} : "skip") as
-    | { environments: EnvironmentRow[] }
-    | undefined
-  const serveResult = useQuery(api.serves.list, shouldLoadQueries ? {} : "skip") as
-    | { serves: ServeRow[] }
-    | undefined
+  const envResult = useDashboardEnvironments(shouldLoadQueries) as { environments: EnvironmentRow[] } | undefined
+  const serveResult = useDashboardServes(shouldLoadQueries) as { serves: ServeRow[] } | undefined
 
   const serves = serveResult?.serves
   const environments = envResult?.environments
   const selectedServe = serves?.find((serve) => serve.serve_id === selectedServeId) ?? null
 
-  const serveLogs = useQuery(
-    api.serves.getLogs,
-    shouldLoadQueries && selectedServeId !== null && selectedServe !== null
-      ? { serveId: selectedServeId as Id<"serves"> }
-      : "skip",
+  const serveLogs = useDashboardServeLogs(
+    selectedServeId,
+    shouldLoadQueries && selectedServeId !== null && selectedServe !== null,
   ) as ServeLogsOnlyDetail | undefined
 
-  const stopServeMutation = useMutation(api.serves.stop)
+  const stopServeMutation = useStopDashboardServe()
 
   async function withBusy(task: () => Promise<void>) {
     setBusy(true)
@@ -54,9 +51,9 @@ export function ServingContainer({ shouldLoadQueries }: Props) {
     }
   }
 
-  async function stopServe(serveId: Id<"serves">) {
+  async function stopServe(serveId: ServeRow["serve_id"]) {
     await withBusy(async () => {
-      const result = await stopServeMutation({ serveId, force: false })
+      const result = await stopServeMutation(serveId)
       toast.success(`Serve ${result.serve_id} is ${result.status}.`)
     })
   }

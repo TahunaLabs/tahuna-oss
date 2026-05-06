@@ -1,17 +1,7 @@
-import type { Id } from "@convex/_generated/dataModel"
 import { z } from "zod"
+import type { ApiKeyRow } from "@/lib/dashboard-api-types"
 
-export type ApiKeyRow = {
-  _id: Id<"apiKeys">
-  _creationTime: number
-  name: string
-  keyPrefix: string
-  machineId?: string
-  status: "active" | "expired" | "revoked"
-  expiresAt: number
-  lastUsedAt?: number
-  revokedAt?: number
-}
+export type { ApiKeyRow }
 
 export const settingsNameFormSchema = z.object({
   username: z.string()

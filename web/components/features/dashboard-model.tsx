@@ -1,58 +1,69 @@
 "use client"
 
 import { Button } from "@/components/ui/button"
-import type { Id } from "@convex/_generated/dataModel"
-import { ACTIVE_STATUSES, TERMINAL_STATUSES as _TERMINAL_STATUSES } from "@convex/runsConstants"
+import {
+  ACTIVE_STATUSES,
+  RESOURCE_TYPE_VALUES,
+  STORAGE_SORT_VALUES,
+  STORAGE_SOURCE_FILTER_VALUES,
+  TERMINAL_STATUSES as DASHBOARD_TERMINAL_STATUSES,
+} from "@/lib/dashboard-api-types"
+import type {
+  DataBlobRow,
+  EnvironmentConfigDetail,
+  EnvironmentRow,
+  MetricChartSeries,
+  ResourceType,
+  RunDetail,
+  RunLogsOnlyDetail,
+  RunMetricsOnlyDetail,
+  RunRow,
+  ServeLogsOnlyDetail,
+  ServeModelSnapshot,
+  ServeRow,
+  ServeSnapshot,
+  StorageItem,
+  StorageListResult,
+  StorageSort,
+  StorageSourceFilter,
+} from "@/lib/dashboard-api-types"
 import { Database, Play, Rocket, Server, type LucideIcon } from "lucide-react"
 import type { ReactNode } from "react"
 
 export type MainSection = "data" | "environments" | "runs"
 
-export const DASHBOARD_VIEW_VALUES = ["storage", "environments", "serving", "runs", "machines", "billing", "audit_logs", "settings", "providers"] as const
+export const DASHBOARD_VIEW_VALUES = ["storage", "environments", "serving", "runs", "machines", "audit_logs", "settings"] as const
 export type DashboardView = (typeof DASHBOARD_VIEW_VALUES)[number]
 
-export const STORAGE_SOURCE_FILTER_VALUES = ["all", "shared", "private"] as const
-export type StorageSourceFilter = (typeof STORAGE_SOURCE_FILTER_VALUES)[number]
+export { RESOURCE_TYPE_VALUES, STORAGE_SORT_VALUES, STORAGE_SOURCE_FILTER_VALUES }
+export type {
+  DataBlobRow,
+  EnvironmentConfigDetail,
+  EnvironmentRow,
+  MetricChartSeries,
+  ResourceType,
+  RunDetail,
+  RunLogsOnlyDetail,
+  RunMetricsOnlyDetail,
+  RunRow,
+  ServeLogsOnlyDetail,
+  ServeModelSnapshot,
+  ServeRow,
+  ServeSnapshot,
+  StorageItem,
+  StorageListResult,
+  StorageSort,
+  StorageSourceFilter,
+}
 
 export const ENVIRONMENT_ACCESS_FILTER_VALUES = ["all", "private", "shared"] as const
 export type EnvironmentAccessFilter = (typeof ENVIRONMENT_ACCESS_FILTER_VALUES)[number]
 
-export const RESOURCE_TYPE_VALUES = ["environment", "run", "data"] as const
-export type ResourceType = (typeof RESOURCE_TYPE_VALUES)[number]
-
 export const AUDIT_ACTION_FILTER_VALUES = ["all", "active", "completed", "failed", "cancelled"] as const
 export type AuditActionFilter = (typeof AUDIT_ACTION_FILTER_VALUES)[number]
 
-export type StorageItem = {
-  id: string
-  source: "data" | "run_artifact"
-  object_kind: "data_upload" | "data_manifest" | "run_artifact"
-  visibility: "shared" | "private"
-  key: string
-  name: string
-  path: string
-  size: number
-  download_url: string
-  created_at: number
-  run?: { id: string; name: string }
-  environment?: { id: string; name: string }
-  data_blob_id?: string
-}
-
-export const STORAGE_SORT_VALUES = ["created_desc", "created_asc", "name_asc", "name_desc", "size_desc", "size_asc"] as const
-export type StorageSort = (typeof STORAGE_SORT_VALUES)[number]
-
 export const RUN_TAB_VALUES = ["all", "active", "completed"] as const
 export type RunTab = (typeof RUN_TAB_VALUES)[number]
-
-export type StorageListResult = {
-  items: StorageItem[]
-  total: number
-  offset: number
-  limit: number
-  has_more: boolean
-  next_offset: number | null
-}
 
 export function primarySyncedDataHref(dataId: string) {
   const params = new URLSearchParams({
@@ -60,182 +71,6 @@ export function primarySyncedDataHref(dataId: string) {
     storageQ: dataId,
   })
   return `/dashboard?${params.toString()}`
-}
-
-export type ServeSnapshot = {
-  command: string[]
-  python_version: string
-  gpu_type: string
-  gpu_count: number
-  volume_gb: number
-  port: number
-  health_path: string
-  default_model_path: string
-  startup_timeout_seconds: number
-  health_interval_seconds: number
-  health_timeout_seconds: number
-  health_failure_threshold: number
-  graceful_shutdown_seconds: number
-}
-
-export type ServeModelSnapshot = {
-  source_type: "run" | "storage"
-  source_run_id: string | null
-  source_object_prefix: string | null
-  source_model_path: string | null
-  object_count: number
-  total_bytes: number
-}
-
-export type ServeRow = {
-  serve_id: Id<"serves">
-  created_at: number
-  environment_id: string
-  inference_path: string
-  status: string
-  error: string
-  python_version: string
-  gpu_type: string
-  gpu_count: number
-  volume_gb: number
-  model_snapshot: ServeModelSnapshot
-}
-
-export type ServeLogsOnlyDetail = {
-  serve_id: string
-  status: string
-  recent_logs: Array<{
-    timestamp: number
-    level: string
-    source: string
-    message: string
-  }>
-}
-
-export type EnvironmentRow = {
-  environment_id: Id<"environments">
-  data_id: string
-  access: "private" | "shared"
-  created_at: number
-  last_updated_at: number
-  latest_data_manifest_hash: string | null
-  bound_data_ids: string[]
-  bound_data_manifest_hashes: string[]
-  name: string
-  gpu_type: string
-  gpu_count: number
-  volume_gb: number
-  python_version: string
-  framework: string
-  version: string
-  serve_snapshot: ServeSnapshot | null
-}
-
-export type EnvironmentConfigDetail = {
-  environment: EnvironmentRow
-  config_name: string
-  config_text: string
-}
-
-export type DataBlobRow = {
-  blob_id: string
-  filename: string
-  key: string
-  content_type: string
-  size: number
-  download_url: string
-  created_at: number
-}
-
-export type RunRow = {
-  run_id: Id<"runs">
-  name: string
-  created_at: number
-  uptime_ms: number
-  environment_id: string
-  status: string
-  effective_gpu_type: string
-  effective_gpu_count: number
-  effective_volume_gb: number
-}
-
-export type RunDetail = {
-  run_id: string
-  name: string
-  created_at: number
-  uptime_ms: number
-  environment_id: string
-  input: string
-  output: string
-  logs: string
-  status: string
-  error: string
-  pod_id: string
-  effective_gpu_type: string
-  effective_gpu_count: number
-  effective_volume_gb: number
-  code_manifest_hash: string
-  data_manifest_hash: string
-  cancellation_requested: boolean
-  artifact_keys: string[]
-}
-
-export type RunLogsOnlyDetail = {
-  run_id: string
-  status: string
-  logs_path: string
-  log_file: string
-  note: string
-  logs_window: {
-    tail_limit: number
-    startup_scan_limit: number
-    pinned_bootstrap_limit: number
-    scanned_tail: number
-    scanned_startup: number
-    pinned_bootstrap_count: number
-    returned_logs: number
-    includes_pinned_bootstrap: boolean
-  }
-  recent_logs: Array<{
-    timestamp: number
-    level: string
-    source: string
-    message: string
-  }>
-}
-
-export type RunMetricsOnlyDetail = {
-  run_id: string
-  status: string
-  metrics_window: {
-    scan_limit: number
-    series_limit: number
-    per_series_limit: number
-    scanned_points: number
-    scanned_series: number
-    returned_series: number
-    returned_points: number
-    dropped_series_count: number
-    dropped_points_count: number
-  }
-  recent_metrics: Array<{
-    timestamp: number
-    name: string
-    value: number
-    step: number | null
-    unit: string | null
-    source: string
-  }>
-}
-
-export type MetricChartSeries = {
-  name: string
-  source: string
-  category: "model" | "runtime" | "system"
-  latestValue: number
-  pointCount: number
-  xAxis: "step" | "time"
-  points: Array<{ x: number; label: string; value: number; step: number | null }>
 }
 
 const SYSTEM_METRIC_PREFIXES = ["bootstrap_", "artifacts_"]
@@ -361,8 +196,8 @@ export const FEATURE_ITEMS: SidebarItem[] = [
   { id: "runs", label: "Runs", icon: Play, section: "runs" },
 ]
 
-export { ACTIVE_STATUSES as CANCELLABLE_STATUSES }
-export const TERMINAL_STATUSES = _TERMINAL_STATUSES
+export { ACTIVE_STATUSES, ACTIVE_STATUSES as CANCELLABLE_STATUSES }
+export const TERMINAL_STATUSES = DASHBOARD_TERMINAL_STATUSES
 export const STORAGE_PAGE_LIMIT = 25
 export const MAX_ARTIFACT_NAME_CHARS = 255
 

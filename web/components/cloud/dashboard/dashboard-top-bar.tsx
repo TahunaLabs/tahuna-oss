@@ -6,9 +6,9 @@ import { Bug, Moon, Sun } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useTheme } from "@/components/theme-provider"
 import { SidebarTrigger } from "@/components/ui/sidebar"
-import { LINKS_CONFIG } from "@/config"
+import { CLOUD_LINKS_CONFIG } from "@/cloud/links"
 
-function DashboardTopBar(props: React.ComponentProps<"header">) {
+function CloudDashboardTopBar(props: React.ComponentProps<"header">) {
   const { theme, setTheme } = useTheme()
 
   return (
@@ -21,7 +21,7 @@ function DashboardTopBar(props: React.ComponentProps<"header">) {
       <div className="ml-auto flex items-center gap-1">
         <Button variant="ghost" size="icon" asChild>
           <a
-            href={LINKS_CONFIG.bugReportUrl}
+            href={CLOUD_LINKS_CONFIG.bugReportUrl}
             target="_blank"
             rel="noopener noreferrer"
             aria-label="Report a bug on Linear"
@@ -42,4 +42,4 @@ function DashboardTopBar(props: React.ComponentProps<"header">) {
   )
 }
 
-export { DashboardTopBar }
+export { CloudDashboardTopBar }

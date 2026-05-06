@@ -5,9 +5,6 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Notice } from "@/components/ui/notice"
 import { PageLoader } from "@/components/loader"
-import { api } from "@convex/_generated/api"
-import type { Id } from "@convex/_generated/dataModel"
-import { useConvexAuth, useQuery } from "convex/react"
 import Link from "next/link"
 import { useParams } from "next/navigation"
 import { useEffect, useState } from "react"
@@ -18,6 +15,12 @@ import {
   type RunLogsOnlyDetail,
   type RunMetricsOnlyDetail,
 } from "@/components/features/dashboard-model"
+import {
+  useDashboardAuthState,
+  useDashboardRunDetail,
+  useDashboardRunLogs,
+  useDashboardRunMetrics,
+} from "@/lib/dashboard-api"
 import {
   CartesianGrid,
   Line,
@@ -31,24 +34,20 @@ import {
 export default function RunDetailPage() {
   const params = useParams<{ id: string }>()
   const runId = typeof params?.id === "string" ? params.id : ""
-  const { isAuthenticated, isLoading } = useConvexAuth()
+  const { isAuthenticated, isLoading } = useDashboardAuthState()
   const shouldLoadQueries = !isLoading && isAuthenticated && runId !== ""
 
-  const run = useQuery(api.runs.get, shouldLoadQueries ? { runId: runId as Id<"runs"> } : "skip") as RunDetail | undefined
+  const run = useDashboardRunDetail(runId, shouldLoadQueries) as RunDetail | undefined
   const isTerminal = run !== undefined && TERMINAL_STATUSES.has(run.status)
   const [logsCache, setLogsCache] = useState<RunLogsOnlyDetail | undefined>(undefined)
   const [metricsCache, setMetricsCache] = useState<RunMetricsOnlyDetail | undefined>(undefined)
-  const logsLive = useQuery(
-    api.runs.getRunLogs,
-    shouldLoadQueries && !(isTerminal && logsCache !== undefined)
-      ? { runId: runId as Id<"runs"> }
-      : "skip"
+  const logsLive = useDashboardRunLogs(
+    runId,
+    shouldLoadQueries && !(isTerminal && logsCache !== undefined),
   ) as RunLogsOnlyDetail | undefined
-  const metricsLive = useQuery(
-    api.runs.getRunMetrics,
-    shouldLoadQueries && !(isTerminal && metricsCache !== undefined)
-      ? { runId: runId as Id<"runs"> }
-      : "skip"
+  const metricsLive = useDashboardRunMetrics(
+    runId,
+    shouldLoadQueries && !(isTerminal && metricsCache !== undefined),
   ) as RunMetricsOnlyDetail | undefined
 
   useEffect(() => {
@@ -108,8 +107,8 @@ export default function RunDetailPage() {
               <dd className="font-mono text-xs">{run.environment_id}</dd>
             </div>
             <div className="flex justify-between gap-3">
-              <dt className="text-muted-foreground">Pod ID</dt>
-              <dd className="font-mono text-xs">{run.pod_id || "—"}</dd>
+              <dt className="text-muted-foreground">Provider machine ID</dt>
+              <dd className="font-mono text-xs">{run.provider_machine_id || "—"}</dd>
             </div>
             <div className="flex justify-between gap-3">
               <dt className="text-muted-foreground">Infra</dt>

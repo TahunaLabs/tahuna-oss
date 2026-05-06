@@ -1,13 +1,11 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { useMutation, useQuery } from "convex/react"
 import { toast } from "sonner"
-import { api } from "@convex/_generated/api"
 import type { EnvironmentConfigDetail, EnvironmentRow } from "@/components/features/dashboard-model"
 import type { EnvironmentConfigEditor } from "@/components/features/dashboard/environments/environments-grid-view"
 import { ENVIRONMENT_CONFIG_FILE_NAME, renderEnvironmentConfig } from "@/lib/environment-config"
-import type { Id } from "@convex/_generated/dataModel"
+import { useDashboardEnvironmentConfig, useUpdateDashboardEnvironmentConfig } from "@/lib/dashboard-api"
 
 type UseEnvironmentConfigEditorArgs = {
   environments: EnvironmentRow[]
@@ -26,12 +24,11 @@ function useEnvironmentConfigEditor({ environments, shouldLoadQueries }: UseEnvi
   const [configSaving, setConfigSaving] = useState(false)
 
   const shouldLoadConfig = shouldLoadQueries && configEditorEnvironmentId !== null
-  const environmentConfig = useQuery(
-    api.environments.getConfig,
-    shouldLoadConfig ? { environmentId: configEditorEnvironmentId as Id<"environments"> } : "skip",
-  ) as EnvironmentConfigDetail | undefined
+  const environmentConfig = useDashboardEnvironmentConfig(configEditorEnvironmentId, shouldLoadConfig) as
+    | EnvironmentConfigDetail
+    | undefined
 
-  const updateConfigMutation = useMutation(api.environments.updateConfig)
+  const updateConfigMutation = useUpdateDashboardEnvironmentConfig()
 
   // Close editor if its environment is deleted
   useEffect(() => {
@@ -75,11 +72,11 @@ function useEnvironmentConfigEditor({ environments, shouldLoadQueries }: UseEnvi
     setConfigError("")
   }
 
-  async function save(environmentId: Id<"environments">) {
+  async function save(environmentId: EnvironmentRow["environment_id"]) {
     setConfigSaving(true)
     setConfigError("")
     try {
-      const saved = await updateConfigMutation({ environmentId, config_text: configDraft })
+      const saved = await updateConfigMutation(environmentId, configDraft)
       setConfigSourceText(saved.config_text)
       setConfigDraft(saved.config_text)
       toast.success(`Saved config for environment ${environmentId}.`)

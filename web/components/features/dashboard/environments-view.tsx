@@ -46,6 +46,7 @@ type EnvironmentsViewProps = {
   onDeleteEnvironments: (environmentIds: EnvironmentRow["environment_id"][]) => Promise<boolean>
   sharedByMeResourceIds?: ReadonlySet<string>
   onShareEnvironment?: (environmentId: string) => void
+  quickstartHref?: string
 }
 
 export function EnvironmentsView({
@@ -65,6 +66,7 @@ export function EnvironmentsView({
   onDeleteEnvironments,
   sharedByMeResourceIds,
   onShareEnvironment,
+  quickstartHref,
 }: EnvironmentsViewProps) {
   const [searchQuery, setSearchQuery] = useState("")
   const [viewMode, setViewMode] = useState<"grid" | "table">("table")
@@ -146,7 +148,7 @@ export function EnvironmentsView({
           <p className="text-sm text-muted-foreground">Loading environments…</p>
         </Card>
       ) : environments.length === 0 ? (
-        <EnvironmentsEmptyState />
+        <EnvironmentsEmptyState quickstartHref={quickstartHref} />
       ) : visibleEnvironments.length === 0 ? (
         <Card variant="ghost" className="flex min-h-72 items-center justify-center">
           <p className="text-sm text-muted-foreground">No environments match your current filters.</p>

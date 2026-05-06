@@ -19,15 +19,14 @@ import { MachinesActionsMenu } from "@/components/features/dashboard/machines/ma
 import { TableCell, TableRow } from "@/components/ui/table"
 import { formatDate } from "@/lib/utils"
 import type { ApiKeyRow } from "@/components/features/dashboard-settings-model"
-import type { Id } from "@convex/_generated/dataModel"
 import { cn } from "@/lib/utils"
 
 type MachinesTableRowProps = {
   apiKey: ApiKeyRow
-  revokingId: Id<"apiKeys"> | null
+  revokingId: string | null
   selected: boolean
-  onToggleSelected: (id: Id<"apiKeys">) => void
-  onRevoke: (id: Id<"apiKeys">, name: string) => void
+  onToggleSelected: (id: string) => void
+  onRevoke: (id: string, name: string) => void
 }
 
 function MachinesTableRow({

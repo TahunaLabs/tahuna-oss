@@ -1,7 +1,8 @@
 "use client"
 
 import Link from "next/link"
-import { HardDrive, Server, Play, Monitor, LogOut, ClipboardList, Settings, BookOpen, FileText, Layers, ChevronsUpDown, ChevronRight, Wallet, Cloud, Rocket } from "lucide-react"
+import type { ElementType, ReactNode } from "react"
+import { HardDrive, Server, Play, LogOut, Settings, ChevronsUpDown, ChevronRight, Rocket } from "lucide-react"
 import {
   SidebarContent,
   SidebarFooter,
@@ -25,58 +26,49 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Badge } from "@/components/ui/badge"
-import { CreditsGauge } from "@/components/ui/credits-gauge"
 import { Skeleton } from "@/components/ui/skeleton"
-import { type DashboardView } from "@/components/features/dashboard-model"
 import { Logo } from "@/components/logo"
-import { LINKS_CONFIG } from "@/config"
 
-interface NavItem {
-  icon: React.ElementType
+export interface DashboardNavItem {
+  icon: ElementType
   label: string
-  view: DashboardView
+  view: string
   badge?: string
 }
 
-interface NavDocItem {
-  icon: React.ElementType
+export interface DashboardNavDocItem {
+  icon: ElementType
   label: string
   href: string
 }
 
 interface SidebarProps {
-  activeView: DashboardView
-  onViewChange: (view: DashboardView) => void
+  activeView: string
+  onViewChange: (view: string) => void
   userInitial: string
   userAccountLabel: string
   userLoading?: boolean
   onLogout: () => void
-  navPlatform?: NavItem[]
-  navAdmin?: NavItem[]
-  navDocs?: NavDocItem[]
-  balanceCents?: number
-  maxCents?: number
+  navPlatform?: DashboardNavItem[]
+  navAdmin?: DashboardNavItem[]
+  navDocs?: DashboardNavDocItem[]
+  footerMeter?: ReactNode
+  footerMeterIcon?: ElementType
+  footerMeterTooltip?: string
 }
 
-const DEFAULT_NAV_PLATFORM: NavItem[] = [
+const DEFAULT_NAV_PLATFORM: DashboardNavItem[] = [
   { icon: HardDrive, label: "Storage", view: "storage" },
   { icon: Server, label: "Environments", view: "environments" },
   { icon: Rocket, label: "Serving", view: "serving", badge: "beta" },
   { icon: Play, label: "Runs", view: "runs" },
 ]
 
-const DEFAULT_NAV_ADMIN: NavItem[] = [
-  { icon: Cloud, label: "Providers", view: "providers" },
-  { icon: Monitor, label: "Machines", view: "machines" },
-  { icon: ClipboardList, label: "Audit logs", view: "audit_logs" },
+const DEFAULT_NAV_ADMIN: DashboardNavItem[] = [
   { icon: Settings, label: "Settings", view: "settings" },
 ]
 
-const DEFAULT_NAV_DOCS: NavDocItem[] = [
-  { icon: BookOpen, label: "Documentation", href: LINKS_CONFIG.docsUrl },
-  { icon: FileText, label: "CLI reference", href: LINKS_CONFIG.cliReferenceUrl },
-  { icon: Layers, label: "Changelog", href: LINKS_CONFIG.changelogUrl },
-]
+const DEFAULT_NAV_DOCS: DashboardNavDocItem[] = []
 
 export function Sidebar({
   activeView,
@@ -88,8 +80,9 @@ export function Sidebar({
   navPlatform = DEFAULT_NAV_PLATFORM,
   navAdmin = DEFAULT_NAV_ADMIN,
   navDocs = DEFAULT_NAV_DOCS,
-  balanceCents,
-  maxCents,
+  footerMeter,
+  footerMeterIcon: FooterMeterIcon,
+  footerMeterTooltip = "Usage",
 }: SidebarProps) {
   return (
     <>
@@ -149,44 +142,41 @@ export function Sidebar({
       </SidebarContent>
 
       <SidebarFooter>
-        {userLoading || (balanceCents !== undefined && maxCents !== undefined) ? (
+        {footerMeter ? (
           <>
             <div className="rounded border border-sidebar-border bg-sidebar-accent/30 p-2.5 group-data-[collapsible=icon]:hidden">
-              {userLoading ? (
-                <div className="flex w-full items-center justify-between gap-3">
-                  <p className="text-xs font-medium text-sidebar-foreground">Credits</p>
-                  <Skeleton className="h-2 w-24 rounded-sm" />
-                </div>
-              ) : (
-                <CreditsGauge balanceCents={balanceCents!} maxCents={maxCents!} />
-              )}
+              {footerMeter}
             </div>
-            <SidebarMenu className="hidden group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:flex-col group-data-[collapsible=icon]:items-center">
-              <SidebarMenuItem>
-                <SidebarMenuButton tooltip="Credits">
-                  <Wallet />
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            </SidebarMenu>
-          </>
-        ) : null}
-        <SidebarGroup>
-          <SidebarGroupLabel>Help</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu className="group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:flex-col group-data-[collapsible=icon]:items-center group-data-[collapsible=icon]:gap-2">
-              {navDocs.map(({ icon: Icon, label, href }) => (
-                <SidebarMenuItem key={label}>
-                  <SidebarMenuButton asChild tooltip={label}>
-                    <a href={href} target="_blank" rel="noopener noreferrer">
-                      <Icon className="size-4" />
-                      <span className="group-data-[collapsible=icon]:hidden">{label}</span>
-                    </a>
+            {FooterMeterIcon ? (
+              <SidebarMenu className="hidden group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:flex-col group-data-[collapsible=icon]:items-center">
+                <SidebarMenuItem>
+                  <SidebarMenuButton tooltip={footerMeterTooltip}>
+                    <FooterMeterIcon />
                   </SidebarMenuButton>
                 </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+              </SidebarMenu>
+            ) : null}
+          </>
+        ) : null}
+        {navDocs.length > 0 ? (
+          <SidebarGroup>
+            <SidebarGroupLabel>Help</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu className="group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:flex-col group-data-[collapsible=icon]:items-center group-data-[collapsible=icon]:gap-2">
+                {navDocs.map(({ icon: Icon, label, href }) => (
+                  <SidebarMenuItem key={label}>
+                    <SidebarMenuButton asChild tooltip={label}>
+                      <a href={href} target="_blank" rel="noopener noreferrer">
+                        <Icon className="size-4" />
+                        <span className="group-data-[collapsible=icon]:hidden">{label}</span>
+                      </a>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        ) : null}
 
         <SidebarMenu>
           <SidebarMenuItem>

@@ -20,7 +20,7 @@ const cliCommands = [
   },
 ]
 
-function EnvironmentsEmptyState() {
+function EnvironmentsEmptyState({ quickstartHref }: { quickstartHref?: string }) {
   return (
     <Card variant="ghost" className="flex min-h-72 items-center justify-center">
       <div className="w-full max-w-md space-y-5 text-center">
@@ -50,11 +50,13 @@ function EnvironmentsEmptyState() {
             ))}
           </CardContent>
         </Card>
-        <Button asChild variant="secondary" size="compact" className="w-full justify-center rounded-lg text-sm">
-          <Link href="https://docs.tahuna.app/quickstart" target="_blank" rel="noopener noreferrer">
-            Get started
-          </Link>
-        </Button>
+        {quickstartHref ? (
+          <Button asChild variant="secondary" size="compact" className="w-full justify-center rounded-lg text-sm">
+            <Link href={quickstartHref} target="_blank" rel="noopener noreferrer">
+              Get started
+            </Link>
+          </Button>
+        ) : null}
       </div>
     </Card>
   )

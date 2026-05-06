@@ -1,10 +1,9 @@
 "use client"
 
 import { useState } from "react"
-import { useMutation } from "convex/react"
 import { toast } from "sonner"
 import type { FormEvent } from "react"
-import { api } from "@convex/_generated/api"
+import { useGenerateDashboardUploadUrl, useSyncDashboardDataMetadata } from "@/lib/dashboard-api"
 
 type UseStorageUploadArgs = {
   onSuccess: () => void
@@ -15,8 +14,8 @@ function useStorageUpload({ onSuccess }: UseStorageUploadArgs) {
   const [uploading, setUploading] = useState(false)
   const [fileInputKey, setFileInputKey] = useState(0)
 
-  const generateUploadUrlMutation = useMutation(api.data.generateUploadUrl)
-  const syncMetadataMutation = useMutation(api.data.syncMetadata)
+  const generateUploadUrlMutation = useGenerateDashboardUploadUrl()
+  const syncMetadataMutation = useSyncDashboardDataMetadata()
 
   async function upload(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -42,7 +41,7 @@ function useStorageUpload({ onSuccess }: UseStorageUploadArgs) {
       const msg = e instanceof Error ? e.message : "unexpected error"
       toast.error(
         msg === "Failed to fetch"
-          ? "Upload failed. Check the R2 bucket CORS policy for PUT requests from this app origin."
+          ? "Upload failed. Check the object storage CORS policy for PUT requests from this app origin."
           : msg,
       )
     } finally {

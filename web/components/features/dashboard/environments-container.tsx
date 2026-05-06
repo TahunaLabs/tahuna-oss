@@ -1,37 +1,42 @@
 "use client"
 
 import { useState } from "react"
-import { useMutation, useQuery } from "convex/react"
 import { toast } from "sonner"
-import { api } from "@convex/_generated/api"
 import { EnvironmentsView } from "@/components/features/dashboard/environments-view"
 import { useEnvironmentConfigEditor } from "@/components/features/dashboard/environments/use-environment-config-editor"
 import {
   type DataBlobRow,
   type EnvironmentRow,
 } from "@/components/features/dashboard-model"
-import type { RunpodCredentialStatus } from "@/components/features/dashboard-providers-model"
-import type { Id } from "@convex/_generated/dataModel"
+import {
+  useBindDashboardEnvironmentData,
+  useCreateDashboardRun,
+  useDashboardDataBlobs,
+  useDashboardEnvironments,
+  useRemoveDashboardEnvironment,
+  useUnbindDashboardEnvironmentData,
+} from "@/lib/dashboard-api"
 
 type Props = {
   shouldLoadQueries: boolean
   onOpenShareDialog: (resourceType: "environment", resourceId: string) => void
+  providerCredentialConfigured?: boolean
+  providerCredentialMissingMessage?: string
+  quickstartHref?: string
 }
 
-export function EnvironmentsContainer({ shouldLoadQueries, onOpenShareDialog }: Props) {
+export function EnvironmentsContainer({
+  shouldLoadQueries,
+  onOpenShareDialog,
+  providerCredentialConfigured,
+  providerCredentialMissingMessage = "No compute provider configured.",
+  quickstartHref,
+}: Props) {
   const [busy, setBusy] = useState(false)
   const [bindSelectionByEnvironment, setBindSelectionByEnvironment] = useState<Record<string, string>>({})
 
-  const envResult = useQuery(api.environments.list, shouldLoadQueries ? {} : "skip") as
-    | { environments: EnvironmentRow[] }
-    | undefined
-  const dataResult = useQuery(api.data.list, shouldLoadQueries ? {} : "skip") as
-    | { blobs: DataBlobRow[] }
-    | undefined
-  const runpodCredentialStatus = useQuery(
-    api.runpodCredentials.getMyRunpodCredentialStatus,
-    shouldLoadQueries ? {} : "skip",
-  ) as RunpodCredentialStatus | undefined
+  const envResult = useDashboardEnvironments(shouldLoadQueries) as { environments: EnvironmentRow[] } | undefined
+  const dataResult = useDashboardDataBlobs(shouldLoadQueries) as { blobs: DataBlobRow[] } | undefined
 
   const environments = envResult?.environments ?? []
   const dataBlobs = dataResult?.blobs ?? []
@@ -52,10 +57,10 @@ export function EnvironmentsContainer({ shouldLoadQueries, onOpenShareDialog }: 
     shouldLoadQueries,
   })
 
-  const removeEnvMutation = useMutation(api.environments.remove)
-  const createRunMutation = useMutation(api.runs.create)
-  const bindDataMutation = useMutation(api.environments.bindData)
-  const unbindDataMutation = useMutation(api.environments.unbindData)
+  const removeEnvMutation = useRemoveDashboardEnvironment()
+  const createRunMutation = useCreateDashboardRun()
+  const bindDataMutation = useBindDashboardEnvironmentData()
+  const unbindDataMutation = useUnbindDashboardEnvironmentData()
 
   async function withBusy(task: () => Promise<void>) {
     setBusy(true)
@@ -70,29 +75,29 @@ export function EnvironmentsContainer({ shouldLoadQueries, onOpenShareDialog }: 
     }
   }
 
-  async function deleteEnvironments(environmentIds: Id<"environments">[]): Promise<boolean> {
+  async function deleteEnvironments(environmentIds: EnvironmentRow["environment_id"][]): Promise<boolean> {
     if (environmentIds.length === 0) return false
     return withBusy(async () => {
       for (const environmentId of environmentIds) {
-        await removeEnvMutation({ environmentId })
+        await removeEnvMutation(environmentId)
       }
       const count = environmentIds.length
       toast.success(count === 1 ? "Deleted 1 environment." : `Deleted ${count} environments.`)
     })
   }
 
-  async function launchRun(environmentId: Id<"environments">) {
-    if (runpodCredentialStatus?.configured === false) {
-      toast.error("No compute provider configured. Add one in Settings → Providers.")
+  async function launchRun(environmentId: EnvironmentRow["environment_id"]) {
+    if (providerCredentialConfigured === false) {
+      toast.error(providerCredentialMissingMessage)
       return
     }
     await withBusy(async () => {
-      await createRunMutation({ environmentId })
+      await createRunMutation(environmentId)
       toast.success("Run launched.")
     })
   }
 
-  async function bindSelectedData(environmentId: Id<"environments">, selectedDataId: string) {
+  async function bindSelectedData(environmentId: EnvironmentRow["environment_id"], selectedDataId: string) {
     const trimmedDataId = selectedDataId.trim()
     if (!trimmedDataId) {
       toast.error("Select a dataset to bind.")
@@ -101,15 +106,15 @@ export function EnvironmentsContainer({ shouldLoadQueries, onOpenShareDialog }: 
     if (busy) return
     setBindSelectionByEnvironment((current) => ({ ...current, [environmentId]: trimmedDataId }))
     await withBusy(async () => {
-      await bindDataMutation({ environmentId, data_ids: [trimmedDataId] })
+      await bindDataMutation(environmentId, [trimmedDataId])
       setBindSelectionByEnvironment((current) => ({ ...current, [environmentId]: "" }))
       toast.success(`Bound ${trimmedDataId} to environment ${environmentId}.`)
     })
   }
 
-  async function unbindDataFromEnvironment(environmentId: Id<"environments">, dataId: string) {
+  async function unbindDataFromEnvironment(environmentId: EnvironmentRow["environment_id"], dataId: string) {
     await withBusy(async () => {
-      await unbindDataMutation({ environmentId, data_ids: [dataId] })
+      await unbindDataMutation(environmentId, [dataId])
       toast.success(`Unbound ${dataId} from environment ${environmentId}.`)
     })
   }
@@ -134,6 +139,7 @@ export function EnvironmentsContainer({ shouldLoadQueries, onOpenShareDialog }: 
         onOpenConfigEditor={openConfigEditor}
         onDeleteEnvironments={deleteEnvironments}
         onShareEnvironment={(environmentId) => onOpenShareDialog("environment", environmentId)}
+        quickstartHref={quickstartHref}
       />
     </>
   )

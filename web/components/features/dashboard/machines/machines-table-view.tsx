@@ -7,12 +7,11 @@ import { useTableSelection } from "@/components/features/dashboard/use-table-sel
 import { TableSelectHeadCell } from "@/components/features/dashboard/table-select-head-cell"
 import { TableSelectionBar } from "@/components/features/dashboard/table-selection-bar"
 import { TableHead } from "@/components/ui/table"
-import type { Id } from "@convex/_generated/dataModel"
 
 type MachinesTableViewProps = {
   keys: ApiKeyRow[]
-  revokingId: Id<"apiKeys"> | null
-  onRevoke: (id: Id<"apiKeys">, name: string) => void
+  revokingId: string | null
+  onRevoke: (id: string, name: string) => void
 }
 
 function MachinesTableView({

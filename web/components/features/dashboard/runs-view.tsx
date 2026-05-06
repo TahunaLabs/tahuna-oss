@@ -12,8 +12,9 @@ import {
   type RunMetricsOnlyDetail,
   type RunRow,
   type RunTab,
+  ACTIVE_STATUSES,
+  TERMINAL_STATUSES,
 } from "@/components/features/dashboard-model"
-import { ACTIVE_STATUSES, TERMINAL_STATUSES } from "@convex/runsConstants"
 import { RunDetailPanel } from "@/components/features/dashboard/runs/run-detail-panel"
 import { RunsToolbar } from "@/components/features/dashboard/runs/runs-toolbar"
 import { RunTableRow } from "@/components/features/dashboard/runs/run-table-row"

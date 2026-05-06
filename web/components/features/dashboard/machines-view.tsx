@@ -6,12 +6,11 @@ import { DashboardViewLayout } from "@/components/app-shell/dashboard-view-layou
 import { type ApiKeyRow } from "@/components/features/dashboard-settings-model"
 import { MachinesEmptyState } from "@/components/features/dashboard/machines/machines-empty-state"
 import { MachinesTableView } from "@/components/features/dashboard/machines/machines-table-view"
-import type { Id } from "@convex/_generated/dataModel"
 
 type MachinesViewProps = {
   keys: ApiKeyRow[]
-  revokingId: Id<"apiKeys"> | null
-  onRevoke: (id: Id<"apiKeys">, name: string) => void
+  revokingId: string | null
+  onRevoke: (id: string, name: string) => void
 }
 
 export function MachinesView({ keys, revokingId, onRevoke }: MachinesViewProps) {

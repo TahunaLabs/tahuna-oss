@@ -1,4 +1,5 @@
 import { Gauge } from "@/components/ui/gauge"
+import { Skeleton } from "@/components/ui/skeleton"
 
 type CreditsGaugeProps = {
   balanceCents: number
@@ -16,4 +17,13 @@ function CreditsGauge({ balanceCents, maxCents }: CreditsGaugeProps) {
   )
 }
 
-export { CreditsGauge }
+function CreditsGaugeSkeleton() {
+  return (
+    <div className="flex w-full items-center justify-between gap-3">
+      <p className="text-xs font-medium text-sidebar-foreground">Credits</p>
+      <Skeleton className="h-2 w-24 rounded-sm" />
+    </div>
+  )
+}
+
+export { CreditsGauge, CreditsGaugeSkeleton }

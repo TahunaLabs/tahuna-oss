@@ -1,31 +1,56 @@
 "use client"
 
 import { AuditLogsContainer } from "@/components/features/dashboard/audit-logs-container"
-import { BillingContainer } from "@/components/features/dashboard/billing-container"
+import {
+  useCloudDashboardCredits,
+  useCloudDashboardRunpodCredentialStatus,
+  useEnsureCloudDashboardBillingAccount,
+} from "@/cloud/dashboard-api"
+import { CLOUD_LINKS_CONFIG } from "@/cloud/links"
+import { BillingContainer } from "@/components/cloud/dashboard/billing/billing-container"
+import {
+  CLOUD_DASHBOARD_VIEW_VALUES,
+  type CloudDashboardView,
+} from "@/components/cloud/dashboard/dashboard-model"
+import { CreditsGauge, CreditsGaugeSkeleton } from "@/components/cloud/dashboard/credits-gauge"
+import { CloudDashboardTopBar } from "@/components/cloud/dashboard/dashboard-top-bar"
+import { ProvidersContainer } from "@/components/cloud/dashboard/providers/providers-container"
+import { CLOUD_DASHBOARD_DOCS_NAV } from "@/components/cloud/dashboard/sidebar-links"
 import { EnvironmentsContainer } from "@/components/features/dashboard/environments-container"
 import { MachinesContainer } from "@/components/features/dashboard/machines-container"
-import { ProvidersContainer } from "@/components/features/dashboard/providers-container"
 import { RunsContainer } from "@/components/features/dashboard/runs-container"
 import { SettingsContainer } from "@/components/features/dashboard/settings-container"
 import { ServingContainer } from "@/components/features/dashboard/serving-container"
 import { StorageContainer } from "@/components/features/dashboard/storage-container"
 import { ShareDialog } from "@/components/features/dashboard/share-dialog"
-import { Sidebar } from "@/components/features/dashboard/sidebar"
+import { Sidebar, type DashboardNavItem } from "@/components/features/dashboard/sidebar"
 import { DashboardAppLayout } from "@/components/app-shell/dashboard-app-layout"
 import { DashboardContentShell } from "@/components/app-shell/dashboard-content-shell"
-import { DASHBOARD_VIEW_VALUES, type ResourceType } from "@/components/features/dashboard-model"
-import { api } from "@convex/_generated/api"
-import type { Id } from "@convex/_generated/dataModel"
+import { type ResourceType } from "@/components/features/dashboard-model"
 import { authClient } from "@/lib/auth-client"
-import { useConvexAuth, useMutation, useQuery } from "convex/react"
+import {
+  useCreateDashboardShareLink,
+  useDashboardAuthState,
+  useDashboardCurrentUser,
+  useDashboardShareLinks,
+  useRevokeDashboardShareLink,
+} from "@/lib/dashboard-api"
 import { useRouter } from "next/navigation"
 import { parseAsStringLiteral, useQueryState } from "nuqs"
 import { toast } from "sonner"
 import { useEffect, useState } from "react"
+import { ClipboardList, Cloud, Monitor, Settings, Wallet } from "lucide-react"
+
+const CLOUD_NAV_ADMIN: DashboardNavItem[] = [
+  { icon: Cloud, label: "Providers", view: "providers" },
+  { icon: Monitor, label: "Machines", view: "machines" },
+  { icon: ClipboardList, label: "Audit logs", view: "audit_logs" },
+  { icon: Settings, label: "Settings", view: "settings" },
+]
 
 export default function DashboardPage() {
   const router = useRouter()
-  const { isAuthenticated, isLoading: authLoading } = useConvexAuth()
+  const { isAuthenticated, isLoading: authLoading } = useDashboardAuthState()
   const [loggingOut, setLoggingOut] = useState(false)
   const [shareDialogOpen, setShareDialogOpen] = useState(false)
   const [shareTarget, setShareTarget] = useState<{ resourceType: ResourceType; resourceId: string } | null>(null)
@@ -33,36 +58,30 @@ export default function DashboardPage() {
 
   const [activeView, setActiveView] = useQueryState(
     "view",
-    parseAsStringLiteral(DASHBOARD_VIEW_VALUES).withDefault("environments"),
+    parseAsStringLiteral(CLOUD_DASHBOARD_VIEW_VALUES).withDefault("environments"),
   )
 
   const shouldLoadQueries = !authLoading && isAuthenticated && !loggingOut
 
-  const currentUser = useQuery(api.auth.getCurrentUser, shouldLoadQueries ? {} : "skip")
+  const currentUser = useDashboardCurrentUser(shouldLoadQueries)
   const userMenuLoading = authLoading || loggingOut || (shouldLoadQueries && currentUser === undefined)
-  const myCredits = useQuery(api.auth.getMyCredits, shouldLoadQueries ? {} : "skip") as
-    | { balance_cents: number; currency: string; initialized: boolean }
-    | undefined
+  const myCredits = useCloudDashboardCredits(shouldLoadQueries)
+  const runpodCredentialStatus = useCloudDashboardRunpodCredentialStatus(shouldLoadQueries)
 
-  const ensureMyLedgerMutation = useMutation(api.auth.ensureMyLedger)
-  const createShareLinkMutation = useMutation(api.sharing.createShareLink)
-  const revokeShareLinkMutation = useMutation(api.sharing.revokeShareLink)
+  const ensureMyBillingAccountMutation = useEnsureCloudDashboardBillingAccount()
+  const createShareLinkMutation = useCreateDashboardShareLink()
+  const revokeShareLinkMutation = useRevokeDashboardShareLink()
 
   const shouldLoadSharesForResource = shouldLoadQueries && shareDialogOpen && shareTarget !== null
-  const shareLinksForResource = useQuery(
-    api.sharing.listShareLinksForResource,
-    shouldLoadSharesForResource
-      ? { resourceType: shareTarget!.resourceType, resourceId: shareTarget!.resourceId }
-      : "skip",
-  )
+  const shareLinksForResource = useDashboardShareLinks(shouldLoadSharesForResource, shareTarget)
 
-  // Bootstrap billing ledger on first login
+  // Bootstrap hosted billing after session auth succeeds.
   useEffect(() => {
     if (!shouldLoadQueries || myCredits?.initialized === true) return
-    void ensureMyLedgerMutation({}).catch(() => {
+    void ensureMyBillingAccountMutation({}).catch(() => {
       // Ignore — subsequent renders will retry
     })
-  }, [ensureMyLedgerMutation, myCredits?.initialized, shouldLoadQueries])
+  }, [ensureMyBillingAccountMutation, myCredits?.initialized, shouldLoadQueries])
 
   useEffect(() => {
     if (authLoading || isAuthenticated) return
@@ -104,7 +123,7 @@ export default function DashboardPage() {
   async function handleRevokeLink(shareLinkId: string) {
     setShareBusy(true)
     try {
-      await revokeShareLinkMutation({ shareLinkId: shareLinkId as Id<"shareLinks"> })
+      await revokeShareLinkMutation(shareLinkId)
       toast.success("Link revoked.")
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to revoke link")
@@ -125,7 +144,15 @@ export default function DashboardPage() {
       case "storage":
         return <StorageContainer shouldLoadQueries={shouldLoadQueries} onOpenShareDialog={openShareDialog} />
       case "environments":
-        return <EnvironmentsContainer shouldLoadQueries={shouldLoadQueries} onOpenShareDialog={openShareDialog} />
+        return (
+          <EnvironmentsContainer
+            shouldLoadQueries={shouldLoadQueries}
+            onOpenShareDialog={openShareDialog}
+            providerCredentialConfigured={runpodCredentialStatus?.configured}
+            providerCredentialMissingMessage="No compute provider configured. Add one in Settings → Providers."
+            quickstartHref={CLOUD_LINKS_CONFIG.quickstartUrl}
+          />
+        )
       case "serving":
         return <ServingContainer shouldLoadQueries={shouldLoadQueries} />
       case "runs":
@@ -155,16 +182,24 @@ export default function DashboardPage() {
   return (
     <>
       <DashboardAppLayout
+        topBar={<CloudDashboardTopBar />}
         sidebar={(
           <Sidebar
             activeView={activeView}
-            onViewChange={(view) => { void setActiveView(view) }}
+            onViewChange={(view) => { void setActiveView(view as CloudDashboardView) }}
             userInitial={userInitial}
             userAccountLabel={userAccountLabel}
             userLoading={userMenuLoading}
             onLogout={logout}
-            balanceCents={myCredits?.balance_cents}
-            maxCents={100 * 100}
+            navAdmin={CLOUD_NAV_ADMIN}
+            navDocs={CLOUD_DASHBOARD_DOCS_NAV}
+            footerMeter={userMenuLoading ? (
+              <CreditsGaugeSkeleton />
+            ) : myCredits ? (
+              <CreditsGauge balanceCents={myCredits.balance_cents} maxCents={100 * 100} />
+            ) : null}
+            footerMeterIcon={Wallet}
+            footerMeterTooltip="Credits"
           />
         )}
       >

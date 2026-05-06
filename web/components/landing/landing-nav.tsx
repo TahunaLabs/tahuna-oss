@@ -3,14 +3,14 @@
 import { Moon, Sun } from "lucide-react"
 import Link from "next/link"
 
+import { CLOUD_LINKS_CONFIG } from "@/cloud/links"
 import { Logo } from "@/components/logo"
 import { Button } from "@/components/ui/button"
 import { useTheme } from "@/components/theme-provider"
-import { LINKS_CONFIG } from "@/config"
 
 const NAV_LINKS = [
   { label: "Dashboard", href: "/dashboard", external: false },
-  { label: "Docs", href: LINKS_CONFIG.docsUrl, external: true },
+  { label: "Docs", href: CLOUD_LINKS_CONFIG.docsUrl, external: true },
   // { label: "Blog", href: "#" },
 ] as const
 

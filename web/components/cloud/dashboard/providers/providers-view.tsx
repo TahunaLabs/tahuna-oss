@@ -5,9 +5,9 @@ import Image from "next/image"
 import { Cloud } from "lucide-react"
 
 import { DashboardViewLayout } from "@/components/app-shell/dashboard-view-layout"
-import { RunpodSettingsCard } from "@/components/features/dashboard/runpod-settings-card"
-import { PROVIDERS_CONFIG, type ProviderId } from "@/components/features/dashboard-providers-model"
-import type { RunpodCredentialStatus } from "@/components/features/dashboard-providers-model"
+import { RunpodSettingsCard } from "@/components/cloud/dashboard/providers/runpod-settings-card"
+import { PROVIDERS_CONFIG, type ProviderId } from "@/components/cloud/dashboard/providers/providers-model"
+import type { CloudRunpodCredentialStatus } from "@/cloud/dashboard-api-types"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -29,7 +29,7 @@ const ACTIVE_PROVIDER_OPTIONS: { id: ActiveProvider; label: string; available: b
 ]
 
 type ProvidersViewProps = {
-  runpodStatus?: RunpodCredentialStatus
+  runpodStatus?: CloudRunpodCredentialStatus
   savingRunpod: boolean
   revokingRunpod: boolean
   onSaveRunpod: (apiKey: string) => Promise<void>

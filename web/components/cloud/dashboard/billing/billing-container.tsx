@@ -1,34 +1,24 @@
 "use client"
 
-import { useQuery } from "convex/react"
-import { api } from "@convex/_generated/api"
-import { BillingView } from "@/components/features/dashboard/billing-view"
-import { BILLING_CONFIG } from "@/config"
+import { CLOUD_BILLING_CONFIG } from "@/cloud/config"
+import { BillingView } from "@/components/cloud/dashboard/billing/billing-view"
 import type { EnvironmentRow, RunRow } from "@/components/features/dashboard-model"
+import {
+  useCloudDashboardCredits,
+  useCloudDashboardUsageEvents,
+} from "@/cloud/dashboard-api"
+import {
+  useDashboardEnvironments,
+  useDashboardRuns,
+} from "@/lib/dashboard-api"
 
 type Props = { shouldLoadQueries: boolean }
 
 export function BillingContainer({ shouldLoadQueries }: Props) {
-  const myCredits = useQuery(api.auth.getMyCredits, shouldLoadQueries ? {} : "skip") as
-    | { balance_cents: number; currency: string; initialized: boolean }
-    | undefined
-  const usageEvents = useQuery(api.auth.listMyUsageEvents, shouldLoadQueries ? { limit: 100 } : "skip") as
-    | Array<{
-        event_type: string
-        credits_delta_cents: number
-        balance_after_cents: number
-        reference_type: string | null
-        reference_id: string | null
-        metadata: unknown | null
-        created_at: number
-      }>
-    | undefined
-  const envResult = useQuery(api.environments.list, shouldLoadQueries ? {} : "skip") as
-    | { environments: EnvironmentRow[] }
-    | undefined
-  const runResult = useQuery(api.runs.list, shouldLoadQueries ? {} : "skip") as
-    | { runs: RunRow[] }
-    | undefined
+  const myCredits = useCloudDashboardCredits(shouldLoadQueries)
+  const usageEvents = useCloudDashboardUsageEvents(shouldLoadQueries, 100)
+  const envResult = useDashboardEnvironments(shouldLoadQueries) as { environments: EnvironmentRow[] } | undefined
+  const runResult = useDashboardRuns(shouldLoadQueries) as { runs: RunRow[] } | undefined
 
   const environments = envResult?.environments ?? []
   const runs = runResult?.runs ?? []
@@ -51,8 +41,8 @@ export function BillingContainer({ shouldLoadQueries }: Props) {
   return (
     <BillingView
       balanceCents={myCredits?.balance_cents ?? 0}
-      bootstrapCreditCents={BILLING_CONFIG.initialCreditCents}
-      currency={myCredits?.currency ?? BILLING_CONFIG.currency}
+      bootstrapCreditCents={CLOUD_BILLING_CONFIG.initialCreditCents}
+      currency={myCredits?.currency ?? CLOUD_BILLING_CONFIG.currency}
       initialized={myCredits?.initialized === true}
       usageEvents={usageEventsWithContext}
     />

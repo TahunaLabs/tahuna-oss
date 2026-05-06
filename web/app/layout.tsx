@@ -1,11 +1,10 @@
 import { siteMetadata } from "@/app/site-metadata"
+import { CloudVercelAnalytics } from "@/cloud/vercel-analytics"
 import { ConvexClientProvider } from "@/components/convex-client-provider"
 import { ThemeProvider } from "@/components/theme-provider"
 import { Toaster } from "@/components/ui/toaster"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { getToken } from "@/lib/auth-server"
-import { Analytics } from "@vercel/analytics/next"
-import { SpeedInsights } from "@vercel/speed-insights/next"
 import { Cormorant_Garamond, Geist, Geist_Mono } from "next/font/google"
 import { cookies } from "next/headers"
 import { NuqsAdapter } from "nuqs/adapters/next/app"
@@ -42,8 +41,7 @@ export default async function RootLayout({
             </TooltipProvider>
             <Toaster />
         </ThemeProvider>
-        <Analytics />
-        <SpeedInsights />
+        <CloudVercelAnalytics />
       </body>
     </html>
   )

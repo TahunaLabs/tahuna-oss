@@ -4,13 +4,13 @@ import { useState } from "react"
 import { ShieldCheck } from "lucide-react"
 import { toast } from "sonner"
 
-import type { RunpodCredentialStatus } from "@/components/features/dashboard-providers-model"
+import type { CloudRunpodCredentialStatus } from "@/cloud/dashboard-api-types"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { formatDate } from "@/lib/utils"
 
 type RunpodSettingsCardProps = {
-  status?: RunpodCredentialStatus
+  status?: CloudRunpodCredentialStatus
   saving: boolean
   revoking: boolean
   onSave: (apiKey: string) => Promise<void>

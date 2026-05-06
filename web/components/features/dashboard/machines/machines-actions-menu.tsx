@@ -5,12 +5,11 @@ import { ShieldOff } from "lucide-react"
 import { ActionsMenu } from "@/components/features/dashboard/actions-menu"
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu"
 import type { ApiKeyRow } from "@/components/features/dashboard-settings-model"
-import type { Id } from "@convex/_generated/dataModel"
 
 type MachinesActionsMenuProps = {
   apiKey: ApiKeyRow
   busy: boolean
-  onRevokeRequest: (id: Id<"apiKeys">, name: string) => void
+  onRevokeRequest: (id: string, name: string) => void
 }
 
 function MachinesActionsMenu({ apiKey, busy, onRevokeRequest }: MachinesActionsMenuProps) {
