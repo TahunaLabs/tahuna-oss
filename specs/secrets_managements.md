@@ -1,58 +1,44 @@
 # Secrets Management
 
-Last updated: 2026-04-03
+Last reviewed: 2026-05-07
 
-Tahuna stores runtime env vars as environment-scoped secrets in Convex. Any env var configured on an environment that is not explicitly reserved by Tahuna is injected into the runtime as-is.
+## Current Behavior
 
-Tahuna does not special-case Hugging Face env vars. Tahuna only stores artifacts and runtime metadata.
+Runtime environment variables are stored per environment in `envVars`. Values are encrypted at rest and decrypted only for authenticated users with access to the environment or for backend provisioning of a specific run or serve.
+
+`env_vars` CLI commands operate on the linked environment:
+
+- `list`
+- `get`
+- `set`
+- `rm`
 
 ## User-Managed Env Vars
 
-Any runtime env var is user-managed unless it is explicitly reserved by Tahuna.
+Users can store application-specific env vars such as:
 
-These values are attached to a Tahuna environment, not directly to the user account.
+- Hugging Face tokens/cache paths
+- W&B variables
+- dataset or service credentials
+- any other non-reserved runtime variable
 
-This includes:
+Tahuna injects the effective env var set into the provisioned runtime.
 
-- `HF_TOKEN`
-- `HUGGINGFACE_HUB_TOKEN`
-- `HF_HOME`
-- `HF_HUB_CACHE`
-- `HUGGINGFACE_HUB_CACHE`
-- `HF_XET_CACHE`
-- `HF_DATASETS_CACHE`
-- `WANDB_PROJECT`
-- `WANDB_ENTITY`
-- `WANDB_API_KEY`
-- `WANDB_BASE_URL`
-- any other app-specific key required by user code
+## Reserved Env Vars
 
-Whatever is set on the environment is injected into the runtime.
+Tahuna reserves runtime/bootstrap variables required for correctness:
 
-If a user wants to override Tahuna's default W&B behavior, they can do so with `WANDB_PROJECT`, `WANDB_ENTITY`, `WANDB_API_KEY`, and `WANDB_BASE_URL`.
-
-## System-Managed Env Vars
-
-Tahuna reserves only the vars required for runtime/bootstrap correctness and the vars it already injects today.
-
-Reserved keys:
-
-- all `TAHUNA_*` vars
+- all `TAHUNA_*`
 - `PATH`
 - `VIRTUAL_ENV`
 - `UV_PROJECT_ENVIRONMENT`
 
-Everything else is environment-managed user config and injected into the runtime.
+## Provider Credentials
 
-## Security
+Runpod API keys are not runtime env vars. They live in `runpodCredentials` and are used by the control plane to provision compute.
 
-- values are encrypted at rest with `TAHUNA_CREDENTIALS_SECRET`
-- values are stored as environment-scoped records in Convex
-- `list` returns names only, never decrypted values
-- `get NAME` returns one decrypted value for an authenticated user with access to that environment
-- env-var CRUD stays behind normal user API auth and environment access checks
-- Warden does not get broad secret-read access
-- the backend resolves the selected environment env set at run or serve launch and injects only the effective env for that resource
-- runtime bearer tokens must not be allowed to list or read the whole env-var store
-- logs and errors must never print plaintext secret values
-- the Runpod API key remains separate in `runpodCredentials`; it is a control-plane credential, not a runtime env var
+## Invariants
+
+- List operations return names, not secret values.
+- Plaintext secrets must not be logged.
+- Runtime tokens cannot list or read the whole env-var store.

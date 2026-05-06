@@ -1,227 +1,59 @@
-# Spec: CLI UX & Interactive Shell
+# CLI UX
 
-## Scope
+Last reviewed: 2026-05-07
 
-Command-line interface for all Tahuna operations. Provides human-readable output by default, standardized flag conventions, an interactive REPL shell, and clear error messages.
+## Current Behavior
 
-## Elements
+The Tahuna CLI is a Go binary with human-readable output by default and JSON under `--verbose` or `-v` on commands that support it. Top-level commands are dispatched in `cli/main.go`.
 
-| Element | Type | Description |
-|---------|------|-------------|
-| `tahuna` binary | Go executable | Single binary, all commands built in |
-| Interactive shell | REPL mode | `tahuna shell` — command loop without `tahuna` prefix |
-| Config file | Local file | `~/.config/tahuna/config.env` |
-| Project state | Local directory | `.tahuna/` in project root |
+Supported command groups:
 
-## Command Tree
+- `login`
+- `init`, `start`, `up`
+- `sync`
+- `train`
+- `env` / `environment`
+- `env_vars`
+- `gpus`
+- `data`
+- `run`
+- `serve`
+- `shell`
+- `version`
 
-```
-tahuna
-  login                          # Browser-based authentication
-  init [. | <project-name>]      # Project setup + environment creation
-  up                             # Alias: tahuna init .
-  shell                          # Interactive REPL
+Command groups support `help`, `-h`, and `--help`. Unknown or missing subcommands print group usage and exit non-zero.
 
-  env
-    list      [-v]               # List environments
-    show      <id> [-v]          # Show environment details
-    update    [<id>] [--gpu-type TYPE] [--gpu-count N] [--volume-gb N]
-    specs                        # Alias: env update
-    delete    <id>               # Delete environment (cascade)
+## Configuration
 
-  catalog
-    gpus                        # List available GPUs with max count per type
+The CLI resolves:
 
-  data
-    list      [-v]              # List existing data items available for binding
-    show      <id> [-v]         # Show data item details
+- `TAHUNA_API_KEY`
+- `TAHUNA_API_URL`
+- `TAHUNA_BROWSER_URL`
+- `TAHUNA_CONFIG_DIR`
 
-  sync      [code | data]        # Manual sync
+Production defaults to `https://tahuna.app`. Development defaults to `http://localhost:3000`. The `tahuna` binary refuses localhost API targets; `tahuna-dev` refuses the production host.
 
-  train     [-d] [--gpu-type TYPE] [--gpu-count N] [--volume-gb N]
-  run
-    create   [-d] [-n NAME] [--gpu-type TYPE] [--gpu-count N] [--volume-gb N]
-    rename   <id|name> --name NEW_NAME
-    list     [-n N] [-a] [-v]
-    show     <id> [-v]
-    watch    <id> [--interval N]
-    logs     <id> [-n N] [-f] [-v]
-    metrics  <id>... -m <name>... [-n N] [-f] [--interval N] [-v]
-    cancel   <id> [-f]
-    delete   <id>
+Project state lives in `.tahuna/environment_id`. Project config lives in `tahuna.toml`.
 
-  version                        # Print CLI version
-```
+## Output Style
 
-## Standardized Flag Conventions
+- Default list/show commands print compact tables or summaries.
+- `--verbose` prints raw JSON payloads.
+- Run and serve logs print persisted runtime log lines.
+- `train` and `run watch` poll run status; `train` also streams logs.
 
-All commands follow these consistent flag rules:
+## Notable Commands
 
-| Flag | Long form | Meaning | Applies to |
-|------|-----------|---------|------------|
-| `-v` | `--verbose` | Show HTTP details + timing | All commands |
-| `-n` | `--tail` | Number of items/lines to show (newest first) | `run list`, `run logs`, `run metrics`, `serve logs` |
-| `-n` | `--name` | Human-readable run name | `run create` |
-| `-m` | `--metric` | Metric names to display (multi-value) | `run metrics` |
-| `-f` | `--follow` | Follow/stream output (like `docker logs -f`) | `run logs`, `run metrics` |
-| `-d` | `--detached` | Create and exit without monitoring | `train`, `run create` |
-| `-a` | `--all` | Show all items (no limit) | `run list` |
-| | `--rename` | Target run identifier for rename compatibility alias | `run create` (compat), `run rename` (canonical command uses positional id/name) |
-| | `--gpu-type` | GPU type override | `train`, `run create`, `env update` |
-| | `--gpu-count` | GPU count override | `train`, `run create`, `env update` |
-| | `--volume-gb` | Volume size override | `train`, `run create`, `env update` |
-| | `--interval` | Poll interval in seconds | `run watch` |
-| | `--id` | Resource identifier | `env show`, `env delete` |
-
-### Flag Rules
-
-- Short flags use single dash + single letter: `-v`, `-n`, `-f`, `-d`, `-a`.
-- Long flags use double dash + full word: `--verbose`, `--tail`, `--follow`.
-- Flags that take values: `-n 10`, `--name "my-run"`, `--gpu-type "NVIDIA A100"`.
-- Boolean flags: `-v`, `-f`, `-d`, `-a` (presence = true).
-- Positional args: resource IDs come after the subcommand (`run show <id>`, not `run show --id <id>`). Exception: `env show --id <id>` for backward compatibility.
-
-## Output Format
-
-### Default: Human-Readable Tables
-
-```
-$ tahuna run list
- ID          NAME             STATUS      GPU TYPE         GPU#  VOL    CREATED
- run_abc123  warm-river-fox   completed   NVIDIA A100 80GB 1     80GB   2 hours ago
- run_def456  brave-cloud-owl  running     NVIDIA H100 80GB 2     120GB  10 minutes ago
- run_ghi789  calm-lake-ant    failed      NVIDIA A100 80GB 1     80GB   1 day ago
-```
-
-### Verbose: Adds HTTP details + extended fields
-
-```
-$ tahuna run list -v
- GET /api/runs (200, 142ms)
- ID          NAME             STATUS      GPU TYPE         GPU#  VOL    CODE HASH    CREATED
- run_abc123  warm-river-fox   completed   NVIDIA A100 80GB 1     80GB   a1b2c3d4     2h ago
- run_def456  brave-cloud-owl  running     NVIDIA H100 80GB 2     120GB  e5f6g7h8     10m ago
-```
-
-- Verbose shows: request URL, response code, duration, and extended columns.
-- No raw JSON dump in verbose mode. Verbose is for debugging, not data export.
-- If `run create` is called without `--name`, backend assigns a word-based random name (for example `warm-river-fox`).
-- Canonical rename syntax is `tahuna run rename <id|name> --name <new-name>`.
-- Compatibility alias: `tahuna run create --rename <id|name> --name <new-name>`.
-
-## Interactive Shell (`tahuna shell`)
-
-### Purpose
-
-Command REPL — type commands without the `tahuna` prefix.
-
-### Behavior
-
-```
-$ tahuna shell
-tahuna> run list
- ID          NAME             STATUS      GPU TYPE         GPU#  VOL    CREATED
- run_abc123  warm-river-fox   completed   NVIDIA A100 80GB 1     80GB   2 hours ago
-
-tahuna> train -d
-Syncing code... done.
-Syncing data... done.
-Run created: run_xyz789 (bold-snow-wolf, detached)
-
-tahuna> exit
-$
-```
-
-- Prompt: `tahuna> `
-- All commands available except `login`, `init`, `shell` (no nesting).
-- `exit` or `quit` or Ctrl+D to leave.
-- Command history (arrow keys) and basic line editing.
-- No tab completion in v1.
-
-## Error UX
-
-### Default: User-Friendly Messages
-
-```
-$ tahuna train
-Error: Not authenticated. Run `tahuna login` first.
-
-$ tahuna train --gpu-type "INVALID"
-Error: GPU type "INVALID" is not available. Run `tahuna env list -v` to see options.
-
-$ tahuna run show nonexistent
-Error: Run not found.
-```
-
-### Verbose: Adds Raw Details
-
-```
-$ tahuna train -v
- POST /api/environments/env_123/runs (401, 89ms)
- Response: {"error": "invalid_api_key", "message": "API key not found or revoked"}
-Error: Not authenticated. Run `tahuna login` first.
-```
-
-### Error Message Mapping
-
-| Backend Error | User-Facing Message |
-|---------------|---------------------|
-| 401 (any) | "Not authenticated. Run `tahuna login` first." |
-| 401 (expired) | "Session expired. Run `tahuna login` to re-authenticate." |
-| 403 | "Access denied." |
-| 404 (environment) | "Environment not found." |
-| 404 (run) | "Run not found." |
-| 409 (no capacity) | "No GPU capacity for <type>." + alternate GPU prompt (interactive) |
-| 400 (validation) | Forward the specific validation message from backend. |
-| 500 | "Something went wrong. Try again or check status." |
-| Network error | "Cannot reach Tahuna backend. Check your connection." |
-
-## Config Resolution
-
-### API URL Resolution Order
-
-1. `TAHUNA_API_URL` environment variable
-2. Mode default by binary name:
-   - `tahuna`: `https://tahuna.app`
-   - `tahuna-dev`: `http://localhost:3000`
-
-- If URL ends with `/api`, CLI does not double-prefix.
-- CLI auto-prefixes requests with `/api`.
-- No legacy URL alias env vars are part of CLI config resolution.
-
-### Browser URL Resolution
-
-1. `TAHUNA_BROWSER_URL` environment variable
-2. Auto-detected and persisted on first `tahuna login`
-3. Stored in `~/.config/tahuna/config.env`
+- `tahuna init .` creates or links a project, creates the backend environment, writes `tahuna.toml`, and runs sync.
+- `tahuna sync [code|data]` uploads changed code and/or data manifests and commits the environment snapshot.
+- `tahuna train [-d]` creates a run from the linked environment. Without `-d`, it watches and streams logs.
+- `tahuna run create --name <name>` creates a named run; unnamed runs get generated names.
+- `tahuna run rename <run_id|run_name> --name <new_name>` renames a run.
+- `tahuna serve create` creates a serve from a completed run or storage prefix.
 
 ## Invariants
 
-- All commands use the same flag conventions (no command uses `-v` for something other than verbose).
-- Default output is always human-readable tables. Never raw JSON by default.
-- Verbose adds HTTP debugging info, not full JSON payloads.
-- The shell is a local REPL only. It does not connect to a remote pod.
-- Error messages are actionable: they tell the user what to do next.
-- `-l` always means "number of items, newest first" (like `tail`).
-- `-n`/`--name` always means "resource name" on create/rename commands.
-- `-f` always means "follow/stream" (like `tail -f` or `docker logs -f`).
-
-## Shared Defaults & Constants
-
-- Retry counts, grace/timeout durations, and polling intervals are defined in `web/config.ts`.
-- CLI help and error text should reference behavior from these shared constants rather than hardcoded numbers.
-
-## Error States
-
-| Condition | Behavior |
-|-----------|----------|
-| Unknown command | "Unknown command: <cmd>. Run `tahuna help` for usage." |
-| Unknown flag | "Unknown flag: <flag>. Run `tahuna <cmd> --help` for usage." |
-| Missing required arg | "Missing required argument: <arg>. Usage: tahuna <cmd> <arg>" |
-| No project initialized | "No Tahuna project found. Run `tahuna init` first." (when .tahuna/ missing) |
-
-## Dependencies
-
-- Auth (API key for all API calls)
-- Config file (`~/.config/tahuna/config.env`)
-- Project state (`.tahuna/` directory)
+- Flags are parsed per subcommand with isolated `FlagSet`s.
+- Human output is the default; JSON is opt-in.
+- CLI API errors surface the backend `detail` message when it is safe for clients.
