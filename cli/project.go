@@ -1687,8 +1687,9 @@ func normalizeCommandString(s string) string {
 	return strings.Join(strings.Fields(s), " ")
 }
 
-// parseShellCommand splits a shell-like command string into tokens,
-// respecting single-quoted and double-quoted spans and backslash escapes.
+// parseShellCommand supports the CLI entrypoint string flags' limited
+// compatibility surface: whitespace tokenization, simple quotes, and
+// backslash escapes. It does not implement shell expansion or operators.
 func parseShellCommand(s string) ([]string, error) {
 	var tokens []string
 	var current strings.Builder

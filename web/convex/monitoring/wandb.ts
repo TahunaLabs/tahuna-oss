@@ -128,7 +128,7 @@ function normalizeWandbRunId(value: string) {
   return trimmed || "default";
 }
 
-function normalizeTimestamp(raw: unknown) {
+function normalizeWandbTimestamp(raw: unknown) {
   if (typeof raw !== "number" || !Number.isFinite(raw)) {
     return Date.now();
   }
@@ -136,7 +136,7 @@ function normalizeTimestamp(raw: unknown) {
   return Math.max(0, Math.floor(candidate));
 }
 
-function parseOperationName(query: string, operationName: unknown) {
+function parseWandbOperationName(query: string, operationName: unknown) {
   if (typeof operationName === "string" && operationName.trim()) {
     return operationName.trim();
   }
@@ -228,7 +228,7 @@ function parseHistoryMetrics(lines: string[]) {
     if (!row) {
       continue;
     }
-    const timestamp = normalizeTimestamp(row._timestamp);
+    const timestamp = normalizeWandbTimestamp(row._timestamp);
     const step =
       typeof row._step === "number" && Number.isFinite(row._step)
         ? Math.floor(row._step)
@@ -254,7 +254,7 @@ function parseHistoryMetrics(lines: string[]) {
 
 function parseSummaryMetrics(payload: Record<string, unknown>) {
   const out: ParsedMetrics[] = [];
-  const timestamp = normalizeTimestamp(payload._timestamp);
+  const timestamp = normalizeWandbTimestamp(payload._timestamp);
   const step =
     typeof payload._step === "number" && Number.isFinite(payload._step)
       ? Math.floor(payload._step)
@@ -494,7 +494,7 @@ export const ingestMetrics = internalMutation({
       if (!key || !Number.isFinite(point.value)) {
         continue;
       }
-      const timestamp = normalizeTimestamp(point.timestamp);
+      const timestamp = normalizeWandbTimestamp(point.timestamp);
       const step =
         typeof point.step === "number" && Number.isFinite(point.step)
           ? Math.floor(point.step)
@@ -536,7 +536,7 @@ export const graphql = httpAction(async (ctx, request) => {
     return jsonResponse({ errors: [{ message: "query is required" }] });
   }
 
-  const operationName = parseOperationName(query, body?.operationName);
+  const operationName = parseWandbOperationName(query, body?.operationName);
   const variables = extractVariables(body);
 
   if (operationName === "ServerFeaturesQuery") {

@@ -389,8 +389,16 @@ export const commitSync = httpAction(async (ctx, request) => {
     typeof body?.code_manifest_hash === "string" ? body.code_manifest_hash : undefined;
   const dataManifestHashRaw =
     typeof body?.data_manifest_hash === "string" ? body.data_manifest_hash : undefined;
-  // Legacy payload keys (`code_manifest`, `data_manifest`) are tolerated
-  // but no longer required. Validation now uses uploaded manifest objects.
+  const hasLegacyManifestKeys =
+    body !== null &&
+    typeof body === "object" &&
+    ("code_manifest" in body || "data_manifest" in body);
+  if (hasLegacyManifestKeys) {
+    return new Response(JSON.stringify({ detail: "use code_manifest_hash and data_manifest_hash" }), {
+      status: 400,
+      headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+    });
+  }
   const codeManifestHash =
     typeof codeManifestHashRaw === "undefined" ? undefined : (normalizeSha256(codeManifestHashRaw) ?? undefined);
   const dataManifestHash =
