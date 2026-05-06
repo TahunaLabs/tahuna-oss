@@ -24,10 +24,66 @@ Use these rules when fixing the findings:
 5. Compatibility layers and fallback names should be removed unless explicitly
    approved for the current change.
 6. Shared contracts should have one owning module or generated source.
+7. Security-sensitive IDs, tokens, and share permissions must not rely on
+   heuristic ownership checks or non-cryptographic randomness.
+8. Build and validation guardrails should fail closed; do not hide type errors
+   or deployment misconfiguration behind permissive defaults.
 
 ## Really Bad Quality Code
 
 These are correctness risks and should be fixed first.
+
+### API keys use non-cryptographic randomness
+
+Files:
+
+- `web/convex/ids.ts`
+- `web/convex/auth.ts`
+- `web/convex/runtimeProvisioning.ts`
+
+`shortId` uses `Math.random()`, and API key plaintext is currently assembled
+from two `shortId()` calls. That is not acceptable for secrets. The runtime
+token path already uses `crypto.getRandomValues`, so the repo has a better
+local pattern.
+
+Fix direction:
+
+- Stop using `shortId()` for API key material.
+- Use cryptographic randomness for all API keys and bearer tokens.
+- Keep non-secret display IDs separate from secret token generation.
+- Respect the local `web/convex/auth.ts` ownership rule when implementing the
+  fix; move reusable token generation into an allowed helper if needed.
+
+### Data share ownership check ignores the requested data blob
+
+File: `web/convex/sharing.ts`
+
+`isOwner(..., "data", resourceId)` checks whether the current user owns any
+`dataBlobs` row, not whether they own the requested `resourceId`. That can let
+a user create a share link for another user's data whenever they own at least
+one data blob.
+
+Fix direction:
+
+- Validate `resourceId` against the specific `dataBlobs` row being shared.
+- Use the same canonical data identifier that the storage UI passes into share
+  creation.
+- Add authorization coverage for environment, run, and data share creation.
+
+### Next build ignores TypeScript errors
+
+File: `web/next.config.mjs`
+
+`typescript.ignoreBuildErrors = true` lets production builds succeed with type
+errors. That weakens the frontend validation contract and can hide broken API
+or route types until runtime.
+
+Fix direction:
+
+- Remove `ignoreBuildErrors`.
+- Fix any build/type errors that surface after removal.
+- Keep `cd web && bun run lint` as the pre-commit validation for frontend and
+  Convex changes.
 
 ### Missing entrypoint can report success
 
@@ -108,8 +164,9 @@ Fix direction:
 
 Files:
 
-- `web/lib/run-compute-pricing.ts`
-- `web/lib/runpod-gpu-pricing.ts`
+- `web/cloud/billing/run-compute-pricing.ts`
+- `web/cloud/providers/runpod-gpu-pricing.ts`
+- `web/cloud/config.ts`
 - `specs/ledger.md`
 
 The ledger spec says GPU hourly inputs come from strict mapping with no
@@ -260,6 +317,29 @@ Fix direction:
 - Do not repeat `row.dataId || String(row._id)` inline.
 - Update storage, runs, serves, and deletion code together.
 
+### Share token and share route contract
+
+Files:
+
+- `web/components/features/dashboard/share-dialog.tsx`
+- `web/convex/sharing.ts`
+- `web/app/dashboard/page.tsx`
+
+The dashboard generates `/share/{token}` URLs and Convex has a
+`resolveShareToken` query, but the share route and access semantics are not
+documented as one contract in this plan. This is not exactly guesswork in the
+runtime path, but it is an incomplete source-of-truth boundary around
+cross-account access.
+
+Fix direction:
+
+- Define the share URL, token resolution, permission semantics, and supported
+  resource types in one spec section.
+- Ensure the frontend route and backend query/mutations implement that same
+  contract.
+- Make unsupported resources fail explicitly instead of producing copyable
+  links that do not resolve.
+
 ### Runtime and CLI defaults
 
 Defaults are scattered across Go, TypeScript, Docker, and specs:
@@ -323,18 +403,96 @@ Fix direction:
 - Make Warden consume the synced value only.
 - Delete compatibility fields once migrated.
 
+## Other Heuristics And Compatibility Surfaces
+
+These are lower severity than the runtime/security findings, but they should
+stay visible so they do not become hidden contracts.
+
+### CLI entrypoint flag parsing is shell-like but not shell-equivalent
+
+File: `cli/project.go`
+
+`parseShellCommand` manually tokenizes `--entrypoint-command` and
+`--serve-entrypoint-command`. It supports simple quotes and escapes, but it is
+not a full shell parser. That can surprise users who paste commands with env
+assignments, command substitution, shell operators, or other shell syntax.
+
+Fix direction:
+
+- Prefer explicit TOML command arrays as the canonical config surface.
+- For CLI flags, either document the supported tokenizer subset or accept
+  repeated command-token flags instead of parsing a command string.
+- Do not add more shell parsing behavior unless it is backed by a real parser.
+
+### W&B-compatible monitoring uses protocol heuristics
+
+File: `web/convex/monitoring/wandb.ts`
+
+The W&B-compatible endpoint normalizes timestamps by guessing seconds vs
+milliseconds from magnitude and extracts GraphQL operation names with a regex.
+This may be acceptable for compatibility, but it should remain bounded to the
+W&B compatibility surface and not leak into canonical Tahuna metrics APIs.
+
+Fix direction:
+
+- Keep these heuristics local to the W&B-compatible adapter.
+- Prefer explicit timestamps and operation fields when Tahuna controls the
+  client contract.
+- Document tolerated compatibility behavior in tracking docs/specs.
+
+### Legacy sync payload keys are still tolerated
+
+File: `web/convex/cli/sync.ts`
+
+`commitSync` still tolerates legacy `code_manifest` and `data_manifest` payload
+keys while validating uploaded manifest objects. That may be a deliberate
+migration window, but it conflicts with the repo rule against compatibility
+layers unless explicitly requested.
+
+Fix direction:
+
+- Decide whether this compatibility window is still required.
+- If required, document the removal condition and owner.
+- If not required, remove the tolerated legacy keys in the same change that
+  updates CLI/docs.
+
+### Provider settings contain explicit MVP placeholders
+
+Files:
+
+- `web/components/cloud/dashboard/providers/providers-view.tsx`
+- `web/components/cloud/dashboard/providers/providers-model.ts`
+
+The providers view keeps local `activeProvider` state and renders disabled
+GCP/Azure/AWS credential placeholders. This is visible product scaffolding, not
+silent runtime guesswork, but it should be treated as incomplete cloud-provider
+contract work.
+
+Fix direction:
+
+- Either persist active provider preference in Convex or remove the selector
+  until multiple providers exist.
+- Keep unsupported providers disabled until their credential and provisioning
+  paths exist end to end.
+- Avoid presenting provider choices that cannot affect run creation.
+
 ## Recommended Fix Order
 
-1. Make Warden fail on missing or unstartable configured commands.
-2. Remove runtime entrypoint inference.
-3. Make runtime catalog validation fail closed outside interactive recovery.
-4. Replace raw text framework detection with structured TOML/uv parsing.
-5. Validate runtime image repo env configuration.
-6. Resolve GPU pricing policy mismatch between implementation and ledger spec.
-7. Collapse dependency selection to one canonical field.
-8. Centralize storage key builders.
-9. Centralize or require environment `dataId`.
-10. Consolidate defaults and URL/env var ownership.
+1. Replace API key secret generation with cryptographic randomness.
+2. Fix data share ownership to validate the specific requested resource.
+3. Remove `ignoreBuildErrors` and fix any surfaced frontend type failures.
+4. Make Warden fail on missing or unstartable configured commands.
+5. Remove runtime entrypoint inference.
+6. Make runtime catalog validation fail closed outside interactive recovery.
+7. Replace raw text framework detection with structured TOML/uv parsing.
+8. Validate runtime image repo env configuration.
+9. Resolve GPU pricing policy mismatch between implementation and ledger spec.
+10. Collapse dependency selection to one canonical field.
+11. Centralize storage key builders.
+12. Centralize or require environment `dataId`.
+13. Consolidate defaults and URL/env var ownership.
+14. Bound or remove lower-severity compatibility surfaces: CLI command string
+    parsing, W&B heuristics, legacy sync payload keys, and provider placeholders.
 
 ## Validation Expectations For Follow-Up Fixes
 
