@@ -26,7 +26,7 @@ func TestRunLogs_DefaultHumanReadable(t *testing.T) {
 				"run_id":    "run-123",
 				"logs_path": "runs/env-1/123/logs",
 				"log_file":  "runs/env-1/123/logs/run.log",
-				"note":      "Runtime logs/metrics are streamed by the pod and persisted in Convex.",
+				"note":      "Runtime logs/metrics are streamed by the machine and persisted in Convex.",
 				"recent_logs": []map[string]any{
 					{
 						"timestamp": 1773159537484,
@@ -98,7 +98,7 @@ func TestRunLogs_VerboseShowsJSON(t *testing.T) {
 				"run_id":         "run-456",
 				"logs_path":      "runs/env-2/456/logs",
 				"log_file":       "runs/env-2/456/logs/run.log",
-				"note":           "Runtime logs/metrics are streamed by the pod and persisted in Convex.",
+				"note":           "Runtime logs/metrics are streamed by the machine and persisted in Convex.",
 				"recent_logs":    []map[string]any{},
 				"recent_metrics": []map[string]any{},
 			})
@@ -187,7 +187,7 @@ func TestRunLogs_FollowStreamsUntilTerminal(t *testing.T) {
 				"run_id":         "run-follow",
 				"logs_path":      "runs/env-follow/1/logs",
 				"log_file":       "runs/env-follow/1/logs/run.log",
-				"note":           "Runtime logs/metrics are streamed by the pod and persisted in Convex.",
+				"note":           "Runtime logs/metrics are streamed by the machine and persisted in Convex.",
 				"recent_logs":    logs,
 				"recent_metrics": []map[string]any{},
 			})
@@ -295,7 +295,7 @@ func TestRunLogs_FollowRetriesTransientStatusPollError(t *testing.T) {
 				"run_id":         "run-retry",
 				"logs_path":      "runs/env-follow/1/logs",
 				"log_file":       "runs/env-follow/1/logs/run.log",
-				"note":           "Runtime logs/metrics are streamed by the pod and persisted in Convex.",
+				"note":           "Runtime logs/metrics are streamed by the machine and persisted in Convex.",
 				"recent_logs":    logs,
 				"recent_metrics": []map[string]any{},
 			})

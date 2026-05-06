@@ -39,7 +39,7 @@ type serveResponse struct {
 	Logs                    string                     `json:"logs"`
 	Status                  string                     `json:"status"`
 	Error                   string                     `json:"error"`
-	PodID                   string                     `json:"pod_id"`
+	ProviderMachineID       string                     `json:"provider_machine_id"`
 	CodeManifestHash        string                     `json:"code_manifest_hash"`
 	DataManifestHash        string                     `json:"data_manifest_hash"`
 	PythonVersion           string                     `json:"python_version"`

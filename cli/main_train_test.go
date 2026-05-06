@@ -170,7 +170,7 @@ func TestTrainAttached_MonitorsUntilCompletion(t *testing.T) {
 				"run_id":         "run-attached",
 				"logs_path":      "runs/env-test/1/logs",
 				"log_file":       "runs/env-test/1/logs/run.log",
-				"note":           "Runtime logs/metrics are streamed by the pod and persisted in Convex.",
+				"note":           "Runtime logs/metrics are streamed by the machine and persisted in Convex.",
 				"recent_logs":    logs,
 				"recent_metrics": []map[string]any{},
 			})
@@ -293,7 +293,7 @@ func TestMonitorRunWithLogs_RetriesTransientStatusPollError(t *testing.T) {
 				"run_id":         "run-monitor",
 				"logs_path":      "runs/env-monitor/1/logs",
 				"log_file":       "runs/env-monitor/1/logs/run.log",
-				"note":           "Runtime logs/metrics are streamed by the pod and persisted in Convex.",
+				"note":           "Runtime logs/metrics are streamed by the machine and persisted in Convex.",
 				"recent_logs":    logs,
 				"recent_metrics": []map[string]any{},
 			})

@@ -1,10 +1,10 @@
 # Tahuna Runtime
 
-Runtime subtree for pod execution and runtime image publishing.
+Runtime subtree for machine execution and runtime image publishing.
 
 ## Warden (`runtime/warden`)
 
-- In-pod binary invoked at container startup.
+- In-machine binary invoked at container startup.
 - Handles workspace/data materialization, dependency install, training execution, logs/metrics, and artifact upload.
 
 ## Images (`runtime/images`)

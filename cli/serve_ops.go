@@ -327,8 +327,8 @@ func printServeSummary(serve serveResponse) {
 	if serve.CreatedAt > 0 {
 		fmt.Printf("Created: %s\n", formatUnixMillis(int64(serve.CreatedAt)))
 	}
-	if strings.TrimSpace(serve.PodID) != "" {
-		fmt.Printf("Pod ID: %s\n", serve.PodID)
+	if strings.TrimSpace(serve.ProviderMachineID) != "" {
+		fmt.Printf("Provider machine ID: %s\n", serve.ProviderMachineID)
 	}
 	if strings.TrimSpace(serve.PythonVersion) != "" {
 		fmt.Printf("Python: %s\n", serve.PythonVersion)

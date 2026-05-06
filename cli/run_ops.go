@@ -490,8 +490,8 @@ func runDelete(args []string) {
 	fs.BoolVar(all, "a", false, "Delete all runs")
 	cancel := fs.Bool("cancel", false, "Cancel run first, then delete")
 	fs.BoolVar(cancel, "c", false, "Cancel run first, then delete")
-	force := fs.Bool("force", false, "Force delete active run (terminates pod immediately)")
-	fs.BoolVar(force, "f", false, "Force delete active run (terminates pod immediately)")
+	force := fs.Bool("force", false, "Force delete active run (terminates machine immediately)")
+	fs.BoolVar(force, "f", false, "Force delete active run (terminates machine immediately)")
 	mustParseFlags(fs, args)
 	rawTargets := append([]string{}, fs.Args()...)
 	if strings.TrimSpace(*id) != "" {
