@@ -8,7 +8,6 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -37,16 +36,7 @@ func RunEntrypoint(
 	}
 	emitLog(hooks, "info", "train", "using command: "+strings.Join(normalized, " "))
 
-	entrypoint := resolveEntrypoint(normalized)
-	if entrypoint != "" {
-		entrypointPath := filepath.Join(workspaceRoot, entrypoint)
-		if _, statErr := os.Stat(entrypointPath); statErr != nil {
-			emitLog(hooks, "info", "train", "no entrypoint found at "+entrypointPath+" (bootstrap only)")
-			return 0, false, nil
-		}
-	}
-
-	emitLog(hooks, "info", "train", "starting entrypoint")
+	emitLog(hooks, "info", "train", "starting command")
 	cmd := exec.Command(normalized[0], normalized[1:]...) // #nosec G204
 	cmd.Dir = workspaceRoot
 	trainEnv := os.Environ()
@@ -61,7 +51,7 @@ func RunEntrypoint(
 	cmd.Stderr = cmd.Stdout
 
 	if err := cmd.Start(); err != nil {
-		return 0, false, fmt.Errorf("start entrypoint: %w", err)
+		return 0, false, fmt.Errorf("start command: %w", err)
 	}
 
 	lineCh := make(chan string, 128)
@@ -100,14 +90,14 @@ func RunEntrypoint(
 				step = emitTrainOutputLine(hooks, metricPattern, buffered, step)
 			}
 			if scanErr := <-scanErrCh; scanErr != nil && !isBenignStreamReadError(scanErr) {
-				return 0, cancelled, fmt.Errorf("stream entrypoint output: %w", scanErr)
+				return 0, cancelled, fmt.Errorf("stream command output: %w", scanErr)
 			}
 			if waitErr == nil {
 				return 0, cancelled, nil
 			}
 			exitErr, ok := waitErr.(*exec.ExitError)
 			if !ok {
-				return 0, cancelled, fmt.Errorf("entrypoint wait failed: %w", waitErr)
+				return 0, cancelled, fmt.Errorf("command wait failed: %w", waitErr)
 			}
 			return exitErr.ExitCode(), cancelled, nil
 		case <-ctx.Done():
@@ -129,7 +119,7 @@ func RunEntrypoint(
 			}
 		case <-ticker.C:
 			if cancelled && !forceKillAt.IsZero() && time.Now().After(forceKillAt) {
-				emitLog(hooks, "warn", "bootstrap", "grace period expired, force killing entrypoint")
+				emitLog(hooks, "warn", "bootstrap", "grace period expired, force killing command")
 				if cmd.Process != nil {
 					_ = cmd.Process.Kill()
 				}
@@ -169,24 +159,11 @@ func emitTrainOutputLine(
 }
 
 func NormalizeCommand(command []string) ([]string, error) {
-	//
 	if len(command) == 0 {
 		return nil, fmt.Errorf("command is required: environment has no command configured")
 	}
 	normalized := append([]string(nil), command...)
 	return normalized, nil
-}
-
-func resolveEntrypoint(command []string) string {
-	for i, token := range command {
-		if i == 0 {
-			continue
-		}
-		if strings.HasSuffix(strings.TrimSpace(token), ".py") {
-			return strings.TrimSpace(token)
-		}
-	}
-	return ""
 }
 
 func extractMetrics(pattern *regexp.Regexp, line string, step int64) []runtimeapi.MetricSample {
