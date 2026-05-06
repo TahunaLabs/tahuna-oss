@@ -494,6 +494,204 @@ Fix direction:
 14. Bound or remove lower-severity compatibility surfaces: CLI command string
     parsing, W&B heuristics, legacy sync payload keys, and provider placeholders.
 
+## Bite-Sized PR Plan
+
+Split remediation by risk boundary. Each PR should stay one logical unit with
+affected-subrepo validation only.
+
+### PR 1: Fix data share ownership
+
+Scope:
+
+- `web/convex/sharing.ts`
+
+Make `data` ownership validate the exact requested data resource instead of
+checking whether the user owns any data blob.
+
+Validation:
+
+- `cd web && bun run lint`
+
+### PR 2: Restore frontend build guardrail
+
+Scope:
+
+- `web/next.config.mjs`
+- Any files with type errors surfaced after the guardrail is restored
+
+Remove `typescript.ignoreBuildErrors = true` and fix only the type errors that
+block the build/typecheck.
+
+Validation:
+
+- `cd web && bun run lint`
+- Optionally `cd web && bun run build` if the PR changes build behavior beyond
+  removing the guardrail.
+
+### PR 3: Use cryptographic API key generation
+
+Scope:
+
+- `web/convex/ids.ts`
+- `web/convex/auth.ts`
+- Any new helper needed to keep secret generation separate from display IDs
+
+Keep `shortId()` only for non-secret identifiers. Generate API key plaintext
+with cryptographic randomness, following the runtime token pattern in
+`web/convex/runtimeProvisioning.ts`.
+
+Guardrail:
+
+- The repo currently says never modify `web/convex/auth.ts`. Treat this PR as
+  requiring explicit approval or a guardrail update before implementation.
+
+Validation:
+
+- `cd web && bun run lint`
+
+### PR 4: Make Warden execute configured commands without entrypoint guessing
+
+Scope:
+
+- `runtime/warden/internal/train/train.go`
+
+Delete `.py` token inference. Execute the configured command directly and
+report missing or unstartable commands as run failures.
+
+Validation:
+
+- `make validate-warden`
+
+### PR 5: Fail closed on runtime catalog validation
+
+Scope:
+
+- `cli/project.go`
+
+For sync/run/serve execution paths, fail when catalog validation cannot be
+performed. Keep any interactive recovery explicit and user-selected.
+
+Validation:
+
+- `make validate-cli`
+
+### PR 6: Replace raw-text framework detection
+
+Scope:
+
+- `cli/project.go`
+
+Parse `pyproject.toml` as TOML and inspect structured dependency declarations
+instead of searching raw text for framework names.
+
+Validation:
+
+- `make validate-cli`
+
+### PR 7: Validate runtime image repository configuration
+
+Scope:
+
+- `web/convex/catalog.ts`
+
+Require `TAHUNA_RUNTIME_IMAGE_REPO` before building image names. Fail with a
+clear deployment/configuration error when it is missing.
+
+Validation:
+
+- `cd web && bun run lint`
+
+### PR 8: Resolve GPU pricing policy
+
+Scope:
+
+- `web/cloud/billing/run-compute-pricing.ts`
+- `web/cloud/providers/runpod-gpu-pricing.ts`
+- `web/cloud/config.ts`
+- `specs/ledger.md`
+
+Prefer strict mapping: unknown GPU pricing should fail before reservation or
+billing. If fallback pricing is intentionally kept, document it in the ledger
+spec and expose the fallback in API/UI metadata.
+
+Validation:
+
+- `cd web && bun run lint`
+
+### PR 9: Collapse dependency selection compatibility fields
+
+Scope:
+
+- `web/lib/dependency-selection.ts`
+- `web/convex/schema.ts`
+- `web/convex/environments.ts`
+- `web/convex/runsLifecycle.ts`
+- `web/convex/runs.ts`
+- `web/convex/serves.ts`
+- `cli/project.go`
+- `runtime/warden/internal/deps/install.go`
+
+Use `dependencyGroup` as the only canonical field. Preserve empty string as the
+base dependency selection. Remove `dependencyMode` after any needed migration
+or explicit decision that no migration is needed.
+
+Validation:
+
+- `cd web && bun run lint`
+- `make validate-cli` if CLI sync/config code changes
+- `make validate-warden` if runtime dependency install contracts change
+
+### PR 10: Centralize environment data identity
+
+Scope:
+
+- `web/convex/environments.ts`
+- `web/convex/runsLifecycle.ts`
+- `web/convex/runs.ts`
+- `web/convex/serves.ts`
+- `web/convex/storage.ts`
+
+Replace repeated `dataId || environmentId` expressions with one named contract,
+or backfill and require `dataId`.
+
+Validation:
+
+- `cd web && bun run lint`
+
+### PR 11: Centralize storage key builders
+
+Scope:
+
+- `web/convex/core/storage.ts`
+- Convex callers that still build storage keys or prefixes locally
+
+Move remaining manifest, blob, data, environment, run artifact, and serve
+snapshot key construction into one storage-key owner.
+
+Validation:
+
+- `cd web && bun run lint`
+
+### PR 12: Bound lower-severity compatibility surfaces
+
+Scope:
+
+- `cli/project.go`
+- `web/convex/monitoring/wandb.ts`
+- `web/convex/cli/sync.ts`
+- `web/components/cloud/dashboard/providers/providers-view.tsx`
+- `web/components/cloud/dashboard/providers/providers-model.ts`
+
+This can split further if it grows. Document or remove CLI command-string
+tokenizer assumptions, keep W&B heuristics local to the compatibility adapter,
+decide the legacy sync payload removal window, and remove or persist provider
+placeholder state.
+
+Validation:
+
+- `make validate-cli` for CLI parsing changes
+- `cd web && bun run lint` for frontend/Convex changes
+
 ## Validation Expectations For Follow-Up Fixes
 
 Use affected-subrepo validation only:
