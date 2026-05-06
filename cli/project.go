@@ -333,18 +333,72 @@ func promptPath(label, defaultValue string) string {
 }
 
 func detectFramework() string {
-	raw, err := os.ReadFile("pyproject.toml")
-	if err != nil {
+	type pyprojectFrameworkDependencies struct {
+		Project struct {
+			Dependencies []string `toml:"dependencies"`
+		} `toml:"project"`
+		DependencyGroups map[string][]string `toml:"dependency-groups"`
+	}
+
+	var parsed pyprojectFrameworkDependencies
+	if _, err := toml.DecodeFile("pyproject.toml", &parsed); err != nil {
 		return ""
 	}
-	lower := strings.ToLower(string(raw))
-	if strings.Contains(lower, "tensorflow") || strings.Contains(lower, "keras") {
-		return "tf"
+
+	if framework := detectFrameworkFromDependencies(parsed.DependencyGroups["train"]); framework != "" {
+		return framework
 	}
-	if strings.Contains(lower, "torch") || strings.Contains(lower, "pytorch") {
-		return "pt"
+	if framework := detectFrameworkFromDependencies(parsed.Project.Dependencies); framework != "" {
+		return framework
 	}
-	return ""
+
+	groups := make([]string, 0, len(parsed.DependencyGroups))
+	for group := range parsed.DependencyGroups {
+		if group != "train" {
+			groups = append(groups, group)
+		}
+	}
+	sort.Strings(groups)
+	detected := ""
+	for _, group := range groups {
+		if framework := detectFrameworkFromDependencies(parsed.DependencyGroups[group]); framework != "" {
+			if detected != "" && detected != framework {
+				return ""
+			}
+			detected = framework
+		}
+	}
+	return detected
+}
+
+func detectFrameworkFromDependencies(dependencies []string) string {
+	framework := ""
+	for _, dependency := range dependencies {
+		switch dependencyPackageName(dependency) {
+		case "tensorflow", "tensorflow-cpu", "tensorflow-gpu", "keras":
+			if framework == "pt" {
+				return ""
+			}
+			framework = "tf"
+		case "torch", "pytorch":
+			if framework == "tf" {
+				return ""
+			}
+			framework = "pt"
+		}
+	}
+	return framework
+}
+
+func dependencyPackageName(dependency string) string {
+	name := strings.ToLower(strings.TrimSpace(dependency))
+	for index, char := range name {
+		if !(char >= 'a' && char <= 'z') && !(char >= '0' && char <= '9') && char != '-' && char != '_' && char != '.' {
+			name = name[:index]
+			break
+		}
+	}
+	return strings.ReplaceAll(strings.Trim(name, "-_."), "_", "-")
 }
 
 func detectPythonVersion() string {
