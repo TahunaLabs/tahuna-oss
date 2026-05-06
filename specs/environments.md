@@ -105,7 +105,7 @@ Environment specs (gpu_type, gpu_count, volume_gb)
        |
        | validated against GPU catalog guardrails
        v
-   Pod provisioning (Runpod API)
+   Machine provisioning (Runpod API)
 ```
 
 - Environment specs are **defaults**, not hard constraints.
@@ -121,7 +121,7 @@ Environment specs (gpu_type, gpu_count, volume_gb)
 - Manifest pointers are only written by sync commit, never by user commands.
 - The environment stores the resolved training dependency selection. `""` means base `[project.dependencies]`.
 - `serveSnapshot` exists only when serving is enabled for the project.
-- Framework and Python version are detected from uv files (`pyproject.toml`, `uv.lock`) and determine pod image selection.
+- Framework and Python version are detected from uv files (`pyproject.toml`, `uv.lock`) and determine runtime image selection.
 
 ## Error States
 

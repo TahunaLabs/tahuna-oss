@@ -2,7 +2,7 @@
 
 ## Scope
 
-A run is a single training execution on a provisioned GPU pod. Runs are created from an environment, pinned to specific code/data versions, and progress through a defined state machine until completion, failure, or cancellation.
+A run is a single training execution on a provisioned GPU machine. Runs are created from an environment, pinned to specific code/data versions, and progress through a defined state machine until completion, failure, or cancellation.
 
 ## Elements
 
@@ -10,11 +10,11 @@ A run is a single training execution on a provisioned GPU pod. Runs are created 
 |---------|------|-------------|
 | Run record | Convex table row | `runs` table entry |
 | Run events | Convex table rows | `runEvents` — immutable audit log of state transitions |
-| Run logs | Convex table rows | `runRuntimeLogs` — stdout/stderr from pod |
+| Run logs | Convex table rows | `runRuntimeLogs` — stdout/stderr from machine |
 | Run metrics | Convex table rows | `runRuntimeMetrics` — extracted training metrics |
-| Runtime token | Credential | One-time bearer token for pod -> backend communication |
-| Pod | Runpod resource | GPU compute instance running the training |
-| Artifacts | R2 objects | Training outputs uploaded from pod |
+| Runtime token | Credential | One-time bearer token for machine -> backend communication |
+| Machine | Provider resource | GPU compute instance running the training |
+| Artifacts | R2 objects | Training outputs uploaded from machine |
 
 ### Run Record Schema
 
@@ -25,13 +25,13 @@ A run is a single training execution on a provisioned GPU pod. Runs are created 
 | `name` | string | User-facing run name (word-based random default if omitted) |
 | `status` | enum | Current state (see state machine) |
 | `error` | string? | Error message if failed |
-| `podId` | string? | Runpod pod identifier |
+| `providerMachineId` | string? | Provider-native machine identifier |
 | `effectiveGpuType` | string | Actual GPU used (may differ from env default) |
 | `effectiveGpuCount` | number | Actual GPU count used |
 | `effectiveVolumeGb` | number | Actual volume size used |
 | `codeManifestHash` | string | Pinned code version at creation |
 | `dataManifestHash` | string? | Pinned data version at creation |
-| `runtimeTokenHash` | string | SHA256 of pod runtime token |
+| `runtimeTokenHash` | string | SHA256 of machine runtime token |
 | `artifactKeys` | string[]? | R2 keys of uploaded artifacts |
 | `cancellationRequested` | boolean | Whether user requested cancellation |
 
@@ -52,7 +52,7 @@ A run is a single training execution on a provisioned GPU pod. Runs are created 
              +------+------+         +-------------+
                     |                 (or: prompt user
                     |                  for alt GPU,
-              (pod ready)              retry from QUEUED)
+              (machine ready)          retry from QUEUED)
                     |
                     v
              +------+------+
@@ -82,8 +82,8 @@ A run is a single training execution on a provisioned GPU pod. Runs are created 
 | State | Description | Terminal? |
 |-------|-------------|-----------|
 | `queued` | Run record created, waiting for provisioning | No |
-| `provisioning` | Pod creation requested to Runpod | No |
-| `running` | Pod is executing the training entrypoint | No |
+| `provisioning` | Machine creation requested to Runpod | No |
+| `running` | Machine is executing the training entrypoint | No |
 | `cancelling` | Cancellation requested, waiting for graceful shutdown | No |
 | `completed` | Entrypoint exited with code 0, artifacts uploaded | Yes |
 | `failed` | Entrypoint exited non-zero, or provisioning/bootstrap error | Yes |
@@ -126,9 +126,9 @@ A run is a single training execution on a provisioned GPU pod. Runs are created 
    - Backend creates run in QUEUED state
    - Generates runtime token (random, stored as SHA256 hash)
 
-4. PROVISION POD
-   - Backend calls Runpod API to create pod
-   - If success: transition to PROVISIONING, store podId
+4. PROVISION MACHINE
+   - Backend calls Runpod API to create machine
+   - If success: transition to PROVISIONING, store `providerMachineId`
    - If no capacity:
      a. Roll back run record (delete it)
      b. Return 409 to CLI
@@ -173,7 +173,7 @@ CLI receives 409 (no capacity):
 ```
 tahuna run cancel <run_id> [--force/-f]:
   |
-  |-- If --force: immediate pod termination, no artifact save
+  |-- If --force: immediate machine termination, no artifact save
   |
   |-- If no --force (default):
        |-- Prompt: "Cancel run <id>? This will attempt graceful shutdown. [y/N]"
@@ -227,9 +227,9 @@ After entrypoint exits 0:
 
 Periodic output sync (future):
   - Every configured interval while running (`RUN_OUTPUT_SYNC_INTERVAL_SECONDS`), sync output directory to R2
-  - Ensures partial results are preserved even on pod failure
+  - Ensures partial results are preserved even on machine failure
   - Cadence comes from shared config
-  - When periodic sync stops (pod gone), backend terminates the pod
+  - When periodic sync stops (machine gone), backend terminates the machine
 ```
 
 ### Artifact Size Limits
@@ -287,6 +287,6 @@ Periodic output sync (future):
 - Sync (code/data must be synced before run creation)
 - Environments (parent, default specs)
 - Auth (user scoping, runtime token)
-- Runpod API (pod provisioning)
+- Runpod API (machine provisioning)
 - R2 (artifact storage)
 - GPU catalog (spec validation)

@@ -5,11 +5,11 @@ output_dir = "outputs"
 
 [environment]
 framework = "pt"
-version = "2.8.0-cu128"
+version = "2.10.0-cu128"
 python_version = "3.11"
-gpu_type = "NVIDIA RTX A4500"
+gpu_type = "NVIDIA GeForce RTX 3090"
 gpu_count = 1
-volume_gb = 2
+volume_gb = 10
 
 [train]
 command = ["uv", "run", "--active", "--no-sync", "python", "-u", "train.py"]
@@ -18,11 +18,11 @@ output_model_path = "outputs/model"
 
 [serve]
 command = ["uv", "run", "--active", "--no-sync", "python", "-u", "inference.py"]
-dependency_group = "inference"
+dependency_group = "serve"
 python_version = "3.11"
-gpu_type = "NVIDIA RTX A4500"
+gpu_type = "NVIDIA L4"
 gpu_count = 1
-volume_gb = 2
+volume_gb = 10
 port = 8000
 health_path = "/health"
 default_model_path = "outputs/model"

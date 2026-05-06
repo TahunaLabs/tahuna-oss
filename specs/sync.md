@@ -158,7 +158,7 @@ Data sync includes:
 
 Output sync rules:
   - configured output directory is always excluded from local -> remote sync
-  - output artifacts are synced only from pod -> Storage/R2
+  - output artifacts are synced only from machine -> Storage/R2
   - output artifact view keeps latest snapshot state (not rollback/version history)
 ```
 
@@ -173,7 +173,7 @@ Output sync rules:
 
 ### Output Artifact Sync Semantics
 
-- Selected output directory contents are uploaded by pod runtime callbacks.
+- Selected output directory contents are uploaded by machine runtime callbacks.
 - Output artifact keys are stored on the run record and surfaced in Storage.
 - Re-uploads overwrite latest visible artifact state for that run path; historical output snapshots are not retained in v1.
 - If historical output versioning is required later, it should be introduced as a separate artifact version index.

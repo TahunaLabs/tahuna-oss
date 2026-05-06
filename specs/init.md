@@ -83,7 +83,7 @@ Guided project setup that detects/scaffolds local project files, selects runtime
    - Parse uv.lock (or pyproject `requires-python`) for Python version
    - Map "torch"/"pytorch" -> `pt`, "tensorflow"/"keras" -> `tf`
    - If ambiguous or not found: prompt user to select
-   - Framework + version + Python version determine catalog filtering AND pod image
+   - Framework + version + Python version determine catalog filtering AND runtime image
 
 6. DEPENDENCY SELECTION
    - Parse `[dependency-groups]` from pyproject.toml

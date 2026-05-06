@@ -20,7 +20,7 @@ The design intentionally mirrors `tahuna train` structurally:
 - CLI validates config against a server-side catalog
 - the project keeps local runtime intent in `tahuna.toml`
 - the backend resolves a compatible runtime image
-- the pod runtime launches one canonical process and reports lifecycle events
+- the machine runtime launches one canonical process and reports lifecycle events
 
 The design intentionally differs from training semantically:
 
@@ -53,9 +53,9 @@ The design intentionally differs from training semantically:
 | Serve record | Control-plane row | Persistent record for one live serving deployment |
 | Serve events | Control-plane rows | Immutable lifecycle audit log |
 | Serve logs | Control-plane rows | Stdout/stderr from the engine process |
-| Runtime token | Credential | One-time bearer token for pod -> backend communication |
-| Pod | Compute resource | Long-lived compute instance running the serving engine |
-| Model manifest | Manifest | Pinned model files to materialize into the pod |
+| Runtime token | Credential | One-time bearer token for machine -> backend communication |
+| Machine | Compute resource | Long-lived compute instance running the serving engine |
+| Model manifest | Manifest | Pinned model files to materialize into the machine |
 | Serve catalog | Backend response | Supported engines, versions, Python versions, image names, and compatibility rules |
 
 ### Serve Record Schema
@@ -71,8 +71,8 @@ The design intentionally differs from training semantically:
 | `task` | string | `chat`, `completion`, `embeddings`, `rerank`, or `predict` |
 | `modelRef` | string | Model reference from `tahuna.toml` |
 | `imageName` | string | Resolved Tahuna runtime image |
-| `podId` | string? | Provisioned compute identifier |
-| `runtimeTokenHash` | string | SHA256 of pod runtime token |
+| `providerMachineId` | string? | Provider-native machine identifier |
+| `runtimeTokenHash` | string | SHA256 of machine runtime token |
 | `port` | number | Internal engine port |
 | `healthPath` | string | Readiness/liveness probe path |
 | `endpointUrl` | string? | User-facing endpoint once healthy |
@@ -376,7 +376,7 @@ The runtime launches one canonical server process per engine and health-checks i
 | Image matrix | framework-based | engine-based |
 | Bootstrap goal | run entrypoint to completion | launch server and keep it healthy |
 | Success condition | exit code `0` | readiness + sustained health |
-| Dependency model | install project deps in pod | use prebuilt engine image |
+| Dependency model | install project deps in machine | use prebuilt engine image |
 | Metrics | training metrics | health + serving metrics later |
 
 ### Consequences

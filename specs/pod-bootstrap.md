@@ -1,8 +1,8 @@
-# Spec: Pod Bootstrap & Runtime
+# Spec: Machine Bootstrap & Runtime
 
 ## Scope
 
-This document describes the run-mode bootstrap path that runs inside a Runpod GPU pod from startup to training completion. It materializes code/data, installs dependencies, runs the entrypoint, extracts metrics, uploads artifacts, and reports status back to the Tahuna backend.
+This document describes the run-mode bootstrap path that runs inside a Runpod GPU machine from startup to training completion. It materializes code/data, installs dependencies, runs the entrypoint, extracts metrics, uploads artifacts, and reports status back to the Tahuna backend.
 
 Warden now also has a serve mode. The serving lifecycle, serve runtime callback contract, readiness/liveness behavior, and `/workspace/model` materialization are defined in `specs/python-inference-app-contract.md`.
 
@@ -10,8 +10,8 @@ Warden now also has a serve mode. The serving lifecycle, serve runtime callback 
 
 | Element | Type | Description |
 |---------|------|-------------|
-| Warden runtime | Embedded Go binary | Bundled into Tahuna runtime image and launched as pod entrypoint |
-| Runtime token | Bearer token | One-time credential for pod -> backend auth |
+| Warden runtime | Embedded Go binary | Bundled into Tahuna runtime image and launched as machine entrypoint |
+| Runtime token | Bearer token | One-time credential for machine -> backend auth |
 | Workspace | Pod filesystem | `/workspace` — root for code, data, and outputs |
 | Bootstrap plan | JSON response | Code/data manifest entries + signed download URLs |
 
@@ -125,7 +125,7 @@ POD STARTS
      a. Walk /workspace/outputs/
      b. Upload new/changed files to R2
      c. POST progress to backend
-   - If this sync stops (pod crash), backend detects and terminates pod
+   - If this sync stops (machine crash), backend detects and terminates machine
     |
     v
 10. ENTRYPOINT EXITS
@@ -195,12 +195,12 @@ Pod receives SIGTERM (from cancel request):
 
 | Rule | Description |
 |------|-------------|
-| Default | Restricted: pod can only reach Tahuna backend + uv/pip package registries |
+| Default | Restricted: machine can only reach Tahuna backend + uv/pip package registries |
 | User override | Configurable: user can enable full internet access per environment |
 | Always allowed | Tahuna API base, PyPI, conda-forge (future) |
 | Always blocked | Nothing explicitly blocked if user enables full access |
 
-## Runtime API Endpoints (pod -> backend)
+## Runtime API Endpoints (machine -> backend)
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
@@ -219,8 +219,8 @@ All runtime endpoints require `Authorization: Bearer {RUNTIME_TOKEN}`.
 - File integrity is verified by SHA256 hash after every download. Hash mismatch = bootstrap failure.
 - Runtime token is valid only for the specific run it was created for.
 - Artifact upload failures never change run completion status.
-- Pod is ephemeral. After termination, local pod state is lost except artifacts already synced from selected output directory to Storage/R2.
-- The runtime is a self-contained Go binary (`/usr/local/bin/warden`) embedded in the pod image.
+- Machine is ephemeral. After termination, local machine state is lost except artifacts already synced from selected output directory to Storage/R2.
+- The runtime is a self-contained Go binary (`/usr/local/bin/warden`) embedded in the runtime image.
 
 ## Shared Defaults & Constants
 
@@ -243,6 +243,6 @@ All runtime endpoints require `Authorization: Bearer {RUNTIME_TOKEN}`.
 
 - Sync (manifests and blobs must exist in R2)
 - Auth (runtime token validation)
-- Runpod (pod provisioning and lifecycle)
+- Runpod (machine provisioning and lifecycle)
 - R2 (blob download, artifact upload)
 - Run lifecycle (status reporting)

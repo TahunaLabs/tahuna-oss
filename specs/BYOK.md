@@ -22,8 +22,8 @@ The current BYOK implementation covers Runpod only.
 It is used for:
 
 - dynamic GPU catalog lookup
-- pod creation
-- pod termination
+- machine creation
+- machine termination
 - termination retry paths
 
 ## Operator Setup
@@ -100,11 +100,11 @@ This makes the UI the canonical credential entry point.
 
 When a run is created, Tahuna snapshots the current Runpod credential onto the run row:
 
-- `runpodCredentialId`
+- `providerCredentialId`
 
 This is required so that:
 
-- a pod can still be terminated even if the user later replaces the active key
+- a machine can still be terminated even if the user later replaces the active key
 - retries and cleanup paths keep using the same provider credential that created the pod
 
 New launches use the currently active credential.
@@ -150,9 +150,9 @@ If Runpod validation fails during save:
 - the key is not stored
 - the user sees the validation error
 
-If pod termination fails:
+If machine termination fails:
 
-- Tahuna retries termination using the run's snapshotted `runpodCredentialId`
+- Tahuna retries termination using the run's snapshotted `providerCredentialId`
 
 ## Verification
 
