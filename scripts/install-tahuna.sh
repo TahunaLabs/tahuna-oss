@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-OWNER="Pazuzzu"
+OWNER="TahunaLabs"
 REPO="tahuna-cli"
 BINARY_NAME="tahuna"
 DEFAULT_BIN_DIR="${HOME}/.local/bin"
-CHANNELS_REPO_OWNER="Pazuzzu"
+CHANNELS_REPO_OWNER="TahunaLabs"
 CHANNELS_REPO_NAME="tahuna-cli"
 CHANNELS_CONFIG_PATH="releases/channels.conf"
 DEFAULT_CHANNEL="stable"
