@@ -43,8 +43,10 @@ install-cli:
 	cd cli && go mod download
 
 install-cli-dev:
-	cd cli && go build -o "$$(go env GOPATH)/bin/tahuna-dev" .
-	@echo "Installed tahuna-dev ✔ (standalone binary; no shell alias required)"
+	@bin_dir="$$(go env GOPATH)/bin"; \
+	mkdir -p "$$bin_dir"; \
+	go build -C cli -o "$$bin_dir/tahuna-dev-go-dev" .; \
+	install -m 755 cli/tahuna-dev-wrapper.sh "$$bin_dir/tahuna-dev"
 
 install-cli-tools:
 	cd cli && GOBIN="$$(go env GOPATH)/bin" go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.8
