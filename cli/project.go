@@ -1238,9 +1238,7 @@ func validateProjectConfigRuntimeValues(path string, cfg projectConfig) error {
 func validateAndResolveRuntimeConfig(cfg projectConfig) (projectConfig, error) {
 	_, versionsByFramework, pythonsByFrameworkVersion, err := fetchGpusAndImages()
 	if err != nil {
-		// If the catalog is unreachable, skip combo validation. The backend will
-		// still reject unsupported combinations at environment/run creation time.
-		return cfg, nil
+		return cfg, fmt.Errorf("runtime catalog validation failed: %w", err)
 	}
 
 	framework := strings.TrimSpace(cfg.Framework)

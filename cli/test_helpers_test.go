@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -313,6 +314,15 @@ func (m *syncBackendMock) uploadBytes(raw []byte, rawURL, contentType string, at
 // originals on cleanup.
 func installSyncStubs(t *testing.T, mock *syncBackendMock) {
 	t.Helper()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if serveGpusAndEnvironment(w, r) {
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	t.Cleanup(server.Close)
+	t.Setenv("TAHUNA_API_URL", server.URL)
+
 	prevDoJSON := syncDoJSON
 	prevUploadFile := syncUploadFileToSignedURLRetry
 	prevUploadBytes := syncUploadBytesToSignedURLRetry
