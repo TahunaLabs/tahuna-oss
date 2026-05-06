@@ -491,10 +491,10 @@ Tahuna differentiates on:
 ---
 ### **Documentation Files Location**
 All documentation files are located at:
-- **User-facing docs:** `/Users/mounselam/Developer/tahuna/web/content/docs/` (MDX files for on-site docs)
-- **Specifications:** `/Users/mounselam/Developer/tahuna/specs/` (detailed technical specs)
-- **Landing page copy:** `/Users/mounselam/Developer/tahuna/web/components/` (hero, manifesto, terminal sections)
-- **Project context:** `/Users/mounselam/Developer/tahuna/CONTEXT.md`, `/Users/mounselam/Developer/tahuna/prompt.md`
+- **User-facing docs:** `web/content/docs/` (MDX files for on-site docs)
+- **Specifications:** `specs/` (detailed technical specs)
+- **Landing page copy:** `web/components/` (hero, manifesto, terminal sections)
+- **Project context:** `CONTEXT.md`, `prompt.md`
 ---
 ### **Key Specification Documents**
 - `specs/cli-ux.md` - CLI command tree, flag conventions, output formatting, error messages

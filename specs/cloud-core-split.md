@@ -612,7 +612,7 @@ Exit criteria:
 Prompt for the next agent:
 
 ```text
-You are working in /Users/mounselam/Developer/tahuna on branch functional-split.
+You are working in this repository on branch functional-split.
 Follow AGENTS.md exactly. This is an implementation task: implement PR9.5 from
 specs/cloud-core-split.md, one logical unit, without starting PR10.
 

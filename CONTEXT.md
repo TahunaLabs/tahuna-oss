@@ -144,7 +144,7 @@ Current operational note:
 
 ### CLI (`/cli`)
 
-- [`cli/main.go`](/Users/pazuzzu/Desktop/gigi/boob-ai/cli/main.go)
+- [`cli/main.go`](cli/main.go)
   - command entrypoint and parsing
   - browser-based login (`tahuna login`) with local callback and automatic browser URL persistence (`TAHUNA_BROWSER_URL`)
   - guided setup (`init`) with local project file prompts/scaffolding
@@ -155,7 +155,7 @@ Current operational note:
   - no-capacity interactive fallback in `train`/`run create`: prompt user to pick another GPU from catalog and retry
   - HTTP client (`doJSON`) with standalone config resolution (`~/.config/tahuna/config.env` + env vars)
 
-- [`cli/main_sync_test.go`](/Users/pazuzzu/Desktop/gigi/boob-ai/cli/main_sync_test.go)
+- [`cli/main_sync_test.go`](cli/main_sync_test.go)
   - regression coverage for incremental sync pipeline:
   - manifest upload + commit finalization retry path
   - no-change sync avoids redundant blob uploads (manifest pointer commit still refreshes)
@@ -163,62 +163,62 @@ Current operational note:
 
 ### Web App (`/web`)
 
-- [`web/app/dashboard/page.tsx`](/Users/pazuzzu/Desktop/gigi/boob-ai/web/app/dashboard/page.tsx)
+- [`web/app/dashboard/page.tsx`](web/app/dashboard/page.tsx)
   - authenticated dashboard UI
   - create/delete environments
   - create/cancel runs
   - upload/remove data blobs
 
-- [`web/components/features/dashboard/serving-container.tsx`](/Users/mounselam/Developer/tahuna/web/components/features/dashboard/serving-container.tsx)
+- [`web/components/features/dashboard/serving-container.tsx`](web/components/features/dashboard/serving-container.tsx)
   - serve-focused dashboard container
   - authenticated list/logs/stop wiring for actual serves
 
-- [`web/app/api-key/page.tsx`](/Users/pazuzzu/Desktop/gigi/boob-ai/web/app/api-key/page.tsx)
+- [`web/app/api-key/page.tsx`](web/app/api-key/page.tsx)
   - legacy API key page; target UX is machine/session management aligned with dashboard theme
 
-- [`web/app/auth/cli/page.tsx`](/Users/pazuzzu/Desktop/gigi/boob-ai/web/app/auth/cli/page.tsx)
+- [`web/app/auth/cli/page.tsx`](web/app/auth/cli/page.tsx)
   - browser authorization step for CLI login callback flow
 
-- [`web/app/api/serves/[serveId]/inference/[[...path]]/route.ts`](/Users/mounselam/Developer/tahuna/web/app/api/serves/[serveId]/inference/[[...path]]/route.ts)
+- [`web/app/api/serves/[serveId]/inference/[[...path]]/route.ts`](web/app/api/serves/[serveId]/inference/[[...path]]/route.ts)
   - Tahuna-owned serve inference proxy route
   - authenticates browser-session or API-key callers at the Tahuna edge
   - preserves app-defined HTTP paths under `/api/serves/{serve_id}/inference/...`
 
 ### Convex Backend (`/web/convex`)
 
-- [`web/convex/schema.ts`](/Users/pazuzzu/Desktop/gigi/boob-ai/web/convex/schema.ts)
+- [`web/convex/schema.ts`](web/convex/schema.ts)
   - tables: `apiKeys`, `environments`, `runs`, `runEvents`, `runRuntimeLogs`, `runRuntimeMetrics`
 
-- [`web/convex/http.ts`](/Users/pazuzzu/Desktop/gigi/boob-ai/web/convex/http.ts)
+- [`web/convex/http.ts`](web/convex/http.ts)
   - HTTP route registration for CLI-style API
 
-- [`web/convex/cli.ts`](/Users/pazuzzu/Desktop/gigi/boob-ai/web/convex/cli.ts)
+- [`web/convex/cli.ts`](web/convex/cli.ts)
   - HTTP handlers for health/catalog/environments/runs
   - API key authentication
   - strict run creation path (`create + provision`) with rollback on no-capacity
   - pod runtime callback endpoints (`/api/runs/{run_id}/runtime/*`) for bootstrap plan + logs/metrics/status
 
-- [`web/convex/environments.ts`](/Users/pazuzzu/Desktop/gigi/boob-ai/web/convex/environments.ts)
+- [`web/convex/environments.ts`](web/convex/environments.ts)
   - environment CRUD and validation
   - environment runtime spec updates (`gpu_type`, `gpu_count`, `volume_gb`)
 
-- [`web/convex/runs.ts`](/Users/pazuzzu/Desktop/gigi/boob-ai/web/convex/runs.ts)
+- [`web/convex/runs.ts`](web/convex/runs.ts)
   - run CRUD + lifecycle events
   - real provisioning flow with Runpod pod creation + in-pod bootstrap materialization contract
   - runtime token validation + ingestion for pod logs/metrics/status
 
-- [`web/convex/serves.ts`](/Users/mounselam/Developer/tahuna/web/convex/serves.ts)
+- [`web/convex/serves.ts`](web/convex/serves.ts)
   - serve CRUD + lifecycle transitions
   - backend provisioning / stop orchestration
   - runtime callback endpoints and dashboard-facing serve queries/mutations
 
-- [`web/convex/servesRead.ts`](/Users/mounselam/Developer/tahuna/web/convex/servesRead.ts)
+- [`web/convex/servesRead.ts`](web/convex/servesRead.ts)
   - serve list/show/log shaping for CLI and dashboard surfaces
 
-- [`web/convex/data.ts`](/Users/pazuzzu/Desktop/gigi/boob-ai/web/convex/data.ts)
+- [`web/convex/data.ts`](web/convex/data.ts)
   - R2 data upload URLs, metadata sync, listing, deletion
 
-- [`web/convex/auth.ts`](/Users/pazuzzu/Desktop/gigi/boob-ai/web/convex/auth.ts)
+- [`web/convex/auth.ts`](web/convex/auth.ts)
   - Better Auth integration
   - API key creation/validation
 
