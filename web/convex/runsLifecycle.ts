@@ -172,7 +172,7 @@ export async function createRunForUserId(
   const effectiveVolumeGb = args.volume_gb ?? env.volumeGb;
   const codeManifestHash = env.latestCodeManifestHash;
   const dataManifestHash = env.latestDataManifestHash;
-  const dataId = env.dataId || String(env._id);
+  const dataId = env.dataId;
   if (!codeManifestHash) {
     throw new ConvexError("environment code is not synced; run `tahuna sync` before creating a run");
   }

@@ -458,14 +458,14 @@ function normalizeRuntimeTimestamp(timestamp: number | undefined) {
 
 function manifestObjectKey(
   environmentId: Id<"environments">,
-  dataId: string | undefined,
+  dataId: string,
   kind: "code" | "data",
   manifestHash?: string,
 ) {
   if (!manifestHash) {
     return null;
   }
-  return storageKeys.manifestObjectKey(String(environmentId), dataId || String(environmentId), kind, manifestHash);
+  return storageKeys.manifestObjectKey(String(environmentId), dataId, kind, manifestHash);
 }
 
 function toProvisioningPayload(row: Doc<"runs">): ProvisioningPayload {

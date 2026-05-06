@@ -214,7 +214,7 @@ export async function requireAccessibleEnvironment(
       userId,
       environmentId: typedEnvironmentId,
     });
-    const dataId = typeof env?.data_id === "string" && env.data_id.trim() ? env.data_id.trim() : environmentId;
+    const dataId = env.data_id.trim();
     return {
       dataId,
     };

@@ -1164,7 +1164,7 @@ export const internalGetProvisioningPayload = internalQuery({
     return {
       serve_id: String(row._id),
       environment_id: String(row.environmentId),
-      environment_data_id: environment.dataId || String(environment._id),
+      environment_data_id: environment.dataId,
       user_id: row.userId,
       command: row.command,
       dependency_group: dependencyGroup,
@@ -1295,7 +1295,7 @@ export const internalGetRuntimeBootstrapContext = internalQuery({
     return {
       serve_id: String(row._id),
       environment_id: String(row.environmentId),
-      environment_data_id: environment.dataId || String(environment._id),
+      environment_data_id: environment.dataId,
       workspace_root: "/workspace",
       model_root: "/workspace/model",
       output_dir: row.outputDir,

@@ -405,12 +405,7 @@ export const internalListIndexedObjects = internalQuery({
       environments.map((environment) => [String(environment._id), environment]),
     );
     const environmentByDataId = new Map<string, (typeof environments)[number]>(
-      environments
-        .map((environment) => {
-          const dataId = environment.dataId?.trim();
-          return dataId ? [dataId, environment] as const : null;
-        })
-        .filter((entry): entry is readonly [string, (typeof environments)[number]] => entry !== null),
+      environments.map((environment) => [environment.dataId, environment]),
     );
     const rows =
       args.visibility === "shared"

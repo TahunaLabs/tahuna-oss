@@ -314,7 +314,7 @@ function toEnvironmentResponse(
   row: Doc<"environments">,
   access: "private" | "shared" = "private",
 ) {
-  const dataId = row.dataId || String(row._id);
+  const dataId = row.dataId;
   const trainDependencyGroup = resolveConfiguredDependencyGroup({
     dependencyGroup: row.trainDependencyGroup,
   });
@@ -896,7 +896,7 @@ export const internalDeleteEnvironmentBatch = internalMutation({
     }
 
     const environmentId = String(args.environmentId);
-    const dataId = env.dataId || environmentId;
+    const dataId = env.dataId;
     const siblingEnvironments = await ctx.db
       .query("environments")
       .withIndex("by_user", (q) => q.eq("userId", args.userId))
@@ -904,7 +904,7 @@ export const internalDeleteEnvironmentBatch = internalMutation({
     const deleteDataPrefix = !siblingEnvironments.some(
       (candidate) =>
         candidate._id !== args.environmentId &&
-        (candidate.dataId || String(candidate._id)) === dataId,
+        candidate.dataId === dataId,
     );
 
     const hasMoreStorage = await deleteEnvironmentStorageIndexesBatch(
@@ -945,7 +945,7 @@ export const internalListManifestPrefixes = internalQuery({
     return rows
       .map((row) => ({
         environmentId: String(row._id),
-        dataId: row.dataId || String(row._id),
+        dataId: row.dataId,
       }));
   },
 });
@@ -1118,7 +1118,7 @@ export const internalCommitSync = internalMutation({
 
     await ctx.db.patch("environments", args.environmentId, patch);
     if (args.data_manifest_hash) {
-      const dataId = env.dataId || String(args.environmentId);
+      const dataId = env.dataId;
       await upsertDataManifestIndexRow(ctx, {
         userId: args.userId,
         dataId,
