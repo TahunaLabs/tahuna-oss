@@ -2,9 +2,6 @@
 const convexSiteUrl = process.env.NEXT_PUBLIC_CONVEX_SITE_URL
 
 const nextConfig = {
-  typescript: {
-    ignoreBuildErrors: true,
-  },
   images: {
     remotePatterns: [
       {
