@@ -7,17 +7,30 @@ import { computeProvider } from "@convex/computeProvider";
 type RuntimeVersionEntry = { base: string; python: string[] };
 type RuntimeImageSpec = Record<string, Record<string, RuntimeVersionEntry>>;
 
+function resolveRuntimeImageRepo() {
+  const repo = process.env.TAHUNA_RUNTIME_IMAGE_REPO?.trim();
+  if (!repo) {
+    throw new Error("deployment configuration error: TAHUNA_RUNTIME_IMAGE_REPO is required to build the runtime image catalog");
+  }
+  return repo;
+}
+
+function buildRuntimeImageName(repo: string, framework: string, version: string, python: string) {
+  const tag = `${framework}-${version}-py${python}`;
+  return `${repo}:${tag}`;
+}
+
 // images[framework][version][pythonVersion] = full image URL
 export const images: Record<string, Record<string, Record<string, string>>> = (() => {
   const spec = runtimeImageBases as RuntimeImageSpec;
+  const repo = resolveRuntimeImageRepo();
   const out: Record<string, Record<string, Record<string, string>>> = {};
   for (const [framework, versions] of Object.entries(spec)) {
     out[framework] = {};
     for (const [version, entry] of Object.entries(versions)) {
       out[framework][version] = {};
       for (const python of entry.python) {
-        const tag = `${framework}-${version}-py${python}`;
-        out[framework][version][python] = `${process.env.TAHUNA_RUNTIME_IMAGE_REPO}:${tag}`;
+        out[framework][version][python] = buildRuntimeImageName(repo, framework, version, python);
       }
     }
   }
