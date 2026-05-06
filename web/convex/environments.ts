@@ -317,12 +317,10 @@ function toEnvironmentResponse(
   const dataId = row.dataId || String(row._id);
   const trainDependencyGroup = resolveConfiguredDependencyGroup({
     dependencyGroup: row.trainDependencyGroup,
-    dependencyMode: row.trainDependencyMode,
   });
   const serveDependencyGroup = row.serveSnapshot
     ? resolveConfiguredDependencyGroup({
         dependencyGroup: row.serveSnapshot.dependencyGroup,
-        dependencyMode: row.serveSnapshot.dependencyMode,
       })
     : null;
   const serveSnapshot = row.serveSnapshot

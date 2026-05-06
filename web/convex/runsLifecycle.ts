@@ -163,7 +163,6 @@ export async function createRunForUserId(
   }
   const dependencyGroup = resolveConfiguredDependencyGroup({
     dependencyGroup: env.trainDependencyGroup,
-    dependencyMode: env.trainDependencyMode,
   });
   if (dependencyGroup === null) {
     throw new ConvexError("environment has no training dependency selection configured; run `tahuna sync` before creating a run");

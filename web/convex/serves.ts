@@ -870,7 +870,6 @@ export const internalPrepareCreate = internalQuery({
     }
     const dependencyGroup = resolveConfiguredDependencyGroup({
       dependencyGroup: serveSnapshot.dependencyGroup,
-      dependencyMode: serveSnapshot.dependencyMode,
     })
     if (dependencyGroup === null) {
       throw new ConvexError("environment has no serve dependency selection configured; run `tahuna sync` before creating a serve")
@@ -1158,7 +1157,6 @@ export const internalGetProvisioningPayload = internalQuery({
     }
     const dependencyGroup = resolveConfiguredDependencyGroup({
       dependencyGroup: row.dependencyGroup,
-      dependencyMode: row.dependencyMode,
     })
     if (dependencyGroup === null) {
       throw new ConvexError("serve dependency selection is missing")
@@ -1290,7 +1288,6 @@ export const internalGetRuntimeBootstrapContext = internalQuery({
     }
     const dependencyGroup = resolveConfiguredDependencyGroup({
       dependencyGroup: row.dependencyGroup,
-      dependencyMode: row.dependencyMode,
     })
     if (dependencyGroup === null) {
       throw new ConvexError("serve dependency selection is missing")

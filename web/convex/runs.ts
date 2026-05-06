@@ -471,7 +471,6 @@ function manifestObjectKey(
 function toProvisioningPayload(row: Doc<"runs">): ProvisioningPayload {
   const dependencyGroup = resolveConfiguredDependencyGroup({
     dependencyGroup: row.dependencyGroup,
-    dependencyMode: row.dependencyMode,
   });
   if (dependencyGroup === null) {
     throw new ConvexError("run dependency selection is missing");
