@@ -8,7 +8,7 @@ import type { DataModel } from "@convex/_generated/dataModel";
 import { internalMutation, mutation, query, type ActionCtx, type MutationCtx, type QueryCtx } from "@convex/_generated/server";
 import authConfig from "@convex/auth.config";
 import { sha256Hex } from "@convex/crypto";
-import { shortId } from "@convex/ids";
+import { generateApiKeyPlaintext } from "@convex/secretTokens";
 import { ensureUserLedger } from "@convex/credits";
 import { sendOtpEmail } from "@convex/resend";
 import { AUTH_CONFIG, BILLING_CONFIG, NETWORK_CONFIG } from "../config";
@@ -230,7 +230,7 @@ export const createApiKey = mutation({
       }
     }
 
-    const plaintext = `tk_${shortId()}${shortId()}`;
+    const plaintext = generateApiKeyPlaintext();
     const keyHash = await sha256Hex(plaintext);
     const keyPrefix = plaintext.slice(0, 10);
 
