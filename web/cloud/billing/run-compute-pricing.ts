@@ -1,8 +1,5 @@
 import { CLOUD_BILLING_CONFIG } from "@/cloud/config";
-import {
-  getRunpodGpuFallbackPricePerHourCents,
-  getRunpodGpuPricePerHourCents,
-} from "@/cloud/providers/runpod-gpu-pricing";
+import { getRunpodGpuPricePerHourCents } from "@/cloud/providers/runpod-gpu-pricing";
 
 export type RunComputePricing = {
   gpuCount: number;
@@ -20,14 +17,6 @@ function safePositiveNumber(value: number | undefined) {
   return Math.max(0, value);
 }
 
-function resolveUnknownGpuFallbackHourlyRateCents() {
-  const configuredPricePerHour = (CLOUD_BILLING_CONFIG as Record<string, unknown>).unknownGpuPricePerHour;
-  if (typeof configuredPricePerHour === "number" && Number.isFinite(configuredPricePerHour) && configuredPricePerHour > 0) {
-    return Math.round(configuredPricePerHour * 100);
-  }
-  return getRunpodGpuFallbackPricePerHourCents();
-}
-
 export function resolveRunComputePricing(args: {
   gpuType: string | undefined;
   gpuCount: number | undefined;
@@ -36,11 +25,14 @@ export function resolveRunComputePricing(args: {
   const gpuCount = safePositiveNumber(args.gpuCount);
   const volumeGb = safePositiveNumber(args.volumeGb);
   const lookupGpuUnitHourlyRateCents = getRunpodGpuPricePerHourCents(args.gpuType || "");
-  const resolvedGpuUnitHourlyRateCents =
-    gpuCount > 0
-      ? (lookupGpuUnitHourlyRateCents ?? resolveUnknownGpuFallbackHourlyRateCents())
-      : (lookupGpuUnitHourlyRateCents ?? 0);
-  const gpuUnitHourlyRateCents = gpuCount > 0 ? resolvedGpuUnitHourlyRateCents : 0;
+  let gpuUnitHourlyRateCents = 0;
+  if (gpuCount > 0) {
+    if (typeof lookupGpuUnitHourlyRateCents !== "number") {
+      const gpuType = args.gpuType?.trim() || "(empty)";
+      throw new Error(`gpu pricing not configured for GPU type: ${gpuType}`);
+    }
+    gpuUnitHourlyRateCents = lookupGpuUnitHourlyRateCents;
+  }
   const gpuHourlyRateCents = gpuCount * gpuUnitHourlyRateCents;
   const volumeHourlyRateCents = volumeGb * CLOUD_BILLING_CONFIG.computeVolumeGbHourlyRateCents;
   return {

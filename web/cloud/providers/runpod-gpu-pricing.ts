@@ -46,11 +46,6 @@ const RUNPOD_GPU_PRICING_BY_KEY = new Map<string, number>(
   RUNPOD_GPU_PRICING_ROWS.map((row) => [normalizeGpuKey(row.gpuType), row.pricePerHour]),
 );
 
-const RUNPOD_GPU_FALLBACK_PRICE_PER_HOUR_CENTS = RUNPOD_GPU_PRICING_ROWS.reduce((max, row) => {
-  const cents = Math.round(row.pricePerHour * 100);
-  return cents > max ? cents : max;
-}, 0);
-
 export function getRunpodGpuPricePerHour(gpuType: string) {
   const normalized = normalizeGpuKey(gpuType);
   if (!normalized) {
@@ -65,10 +60,6 @@ export function getRunpodGpuPricePerHourCents(gpuType: string) {
     return undefined;
   }
   return Math.round(pricePerHour * 100);
-}
-
-export function getRunpodGpuFallbackPricePerHourCents() {
-  return RUNPOD_GPU_FALLBACK_PRICE_PER_HOUR_CENTS;
 }
 
 export function listRunpodGpuPricingRows() {

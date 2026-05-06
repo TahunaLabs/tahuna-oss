@@ -46,7 +46,7 @@ This is internal credits accounting (not external payments yet):
 
 ## Config Used Today
 
-From `web/config.ts`:
+From `web/cloud/config.ts`:
 
 - `currency = "USD"`
 - `initialCreditCents = 1000` (USD 10.00)
@@ -54,7 +54,7 @@ From `web/config.ts`:
 - `storageGiBDeltaRateCents = 3`
 - `minimumChargeCents = 1`
 
-GPU hourly inputs come from `web/lib/runpod-gpu-pricing.ts` (strict mapping, no fallback).
+GPU hourly inputs come from `web/cloud/providers/runpod-gpu-pricing.ts` (strict mapping, no fallback). Run creation and compute billing fail when a positive-GPU run has no mapped hourly price.
 
 ## Balance Initialization
 
