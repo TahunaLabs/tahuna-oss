@@ -1,6 +1,7 @@
 import { internal } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { type ActionCtx, httpAction } from "@convex/_generated/server";
+import { hostedBillingHttpStatus } from "@convex/cloud/errors";
 import {
   authenticateApiRequest,
   corsHeaders,
@@ -425,9 +426,7 @@ export const createRunFromEnvironment = httpAction(async (ctx, request) => {
     const lower = detail.toLowerCase();
     const status = lower.includes("no gpu capacity currently available")
       ? 409
-      : lower.includes("insufficient credits")
-        ? 402
-        : 400;
+      : hostedBillingHttpStatus(detail, 400);
     return new Response(JSON.stringify({ detail }), {
       status,
       headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),

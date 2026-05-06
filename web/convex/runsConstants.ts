@@ -1,25 +1,12 @@
-export const RUN_STATUS = {
-  QUEUED: "queued",
-  PROVISIONING: "provisioning",
-  RUNNING: "running",
-  CANCELLING: "cancelling",
-  COMPLETED: "completed",
-  FAILED: "failed",
-  CANCELLED: "cancelled",
-} as const;
+import {
+  ACTIVE_RUN_STATUSES,
+  RUN_LIFECYCLE_STATUS,
+  TERMINAL_RUN_STATUSES,
+} from "@convex/core/runLifecyclePlan";
 
-export const ACTIVE_STATUSES: ReadonlySet<string> = new Set([
-  RUN_STATUS.QUEUED,
-  RUN_STATUS.PROVISIONING,
-  RUN_STATUS.RUNNING,
-  RUN_STATUS.CANCELLING,
-]);
-
-export const TERMINAL_STATUSES: ReadonlySet<string> = new Set([
-  RUN_STATUS.COMPLETED,
-  RUN_STATUS.FAILED,
-  RUN_STATUS.CANCELLED,
-]);
+export const RUN_STATUS = RUN_LIFECYCLE_STATUS;
+export const ACTIVE_STATUSES = ACTIVE_RUN_STATUSES;
+export const TERMINAL_STATUSES = TERMINAL_RUN_STATUSES;
 
 // Max records to query+delete per table per batch when deleting a run.
 // Each table read counts as 1 + N (index scan + rows returned), and each delete

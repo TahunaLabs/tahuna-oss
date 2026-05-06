@@ -17,13 +17,6 @@ export const AUTH_CONFIG = {
   loginTimeoutSeconds: 5 * 60,
 } as const;
 
-export const EMAIL_CONFIG = {
-  otpFromEmail: {
-    production: "hi@tahuna.app",
-    nonProduction: "onboarding@resend.dev",
-  },
-} as const;
-
 export const BILLING_CONFIG = {
   currency: "USD",
   initialCreditCents: 1000,
@@ -94,14 +87,4 @@ export const CDN_CONFIG = {
   frameworkIconsPath: "/assets/frameworks",
   faviconPath: "/assets/favicon",
   artefactsPath: R2_ARTEFACTS_PATH,
-} as const;
-
-export const LINKS_CONFIG = {
-  docsUrl: "https://docs.tahuna.app",
-  quickstartUrl: "https://docs.tahuna.app/quickstart",
-  environmentsUrl: "https://docs.tahuna.app/environments",
-  runsUrl: "https://docs.tahuna.app/runs",
-  cliReferenceUrl: "https://docs.tahuna.app/cli",
-  changelogUrl: "https://github.com/Pazuzzu/tahuna/releases",
-  bugReportUrl: "https://insigh.to/b/tahuna/p/tahuna",
 } as const;

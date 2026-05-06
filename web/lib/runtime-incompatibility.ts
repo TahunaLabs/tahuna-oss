@@ -48,11 +48,6 @@ function normalizeToken(value: string) {
   return value.trim().toLowerCase().replace(/\s+/g, "-");
 }
 
-export function resolveRunpodCloudType(): "COMMUNITY" | "SECURE" {
-  const cloudType = process.env.RUNPOD_CLOUD_TYPE?.trim().toUpperCase() || "SECURE";
-  return cloudType === "COMMUNITY" ? "COMMUNITY" : "SECURE";
-}
-
 export function buildRuntimeCompatibilityKey(fingerprint: RuntimeCompatibilityFingerprint) {
   return [
     normalizeToken(fingerprint.cloudType),

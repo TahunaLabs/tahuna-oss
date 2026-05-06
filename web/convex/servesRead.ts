@@ -44,6 +44,7 @@ export function toServeResponse(row: Doc<"serves">) {
     logs: row.logs,
     status: row.status,
     error: row.error || "",
+    provider_machine_id: row.providerMachineId || "",
     code_manifest_hash: row.codeManifestHash || "",
     data_manifest_hash: row.dataManifestHash || "",
     python_version: row.pythonVersion,
@@ -62,11 +63,11 @@ export function toServeResponse(row: Doc<"serves">) {
   }
 }
 
-export function toServeInferenceTarget(row: Doc<"serves">) {
+export function toServeInferenceMachineTarget(row: Doc<"serves">) {
   return {
     serve_id: String(row._id),
     status: row.status,
-    pod_id: row.podId || "",
+    provider_machine_id: row.providerMachineId || "",
     port: row.port,
     inference_path: serveInferencePath(String(row._id)),
   }

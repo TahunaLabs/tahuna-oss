@@ -1,13 +1,9 @@
-import { api, components, internal } from "@convex/_generated/api";
+import { api, internal } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import type { ActionCtx } from "@convex/_generated/server";
-import { R2 } from "@convex-dev/r2";
-import { HeadObjectCommand } from "@aws-sdk/client-s3";
-import { SYNC_CONFIG } from "@convex/appConfig";
 import type { SyncKind } from "@convex/syncManifest";
-import { sleepMs } from "@convex/sleep";
-
-export const r2 = new R2(components.r2);
+import { isHostedBillingClientError } from "@convex/cloud/errors";
+import { objectStore } from "@convex/objectStore";
 
 type OwnedEnvironmentRef = {
   dataId: string;
@@ -58,10 +54,6 @@ export async function authenticateApiRequest(ctx: ActionCtx, request: Request): 
   if (!auth) {
     return null;
   }
-  await ctx.runMutation(internal.credits.internalEnsureUserLedger, {
-    userId: auth.userId,
-    source: "api_key",
-  });
   const now = Date.now();
   const shouldTouch = typeof auth.lastUsedAt !== "number" || now - auth.lastUsedAt >= 60_000;
   if (shouldTouch) {
@@ -76,30 +68,6 @@ export async function authenticateApiRequest(ctx: ActionCtx, request: Request): 
   }
 
   return auth.userId;
-}
-
-function dataPrefix(dataId: string) {
-  return `data/${dataId}/`;
-}
-
-function manifestPrefix(environmentId: string, dataId: string, kind: SyncKind) {
-  if (kind === "data") {
-    return `${dataPrefix(dataId)}manifests/`;
-  }
-  return `environments/${environmentId}/manifests/${kind}/`;
-}
-
-export function buildBlobObjectKey(sha256: string) {
-  return `blobs/${sha256}`;
-}
-
-export function buildManifestObjectKey(
-  environmentId: string,
-  dataId: string,
-  kind: SyncKind,
-  manifestHash: string,
-) {
-  return `${manifestPrefix(environmentId, dataId, kind)}${manifestHash}.json`;
 }
 
 export function parseSyncKind(value: unknown): SyncKind | null {
@@ -185,7 +153,6 @@ const SAFE_CLIENT_ERROR_PATTERNS: RegExp[] = [
   /\bmust be\b/i,
   /\binvalid\b/i,
   /\balready\b/i,
-  /\binsufficient credits\b/i,
   /\bno gpu capacity currently available\b/i,
   /\binsufficient capacity\b/i,
   /\bmax gpu count\b/i,
@@ -210,7 +177,6 @@ const SAFE_CLIENT_ERROR_PATTERNS: RegExp[] = [
   /\bmanifest\b.*\b(not found|invalid|mismatch)\b/i,
   /\bblob exceeds limit\b/i,
   /\bmanifest exceeds limit\b/i,
-  /\bcompute provider account balance is insufficient\b/i,
 ];
 
 export function toClientErrorDetail(err: unknown, fallback: string): string {
@@ -223,69 +189,18 @@ export function toClientErrorDetail(err: unknown, fallback: string): string {
   if (!stripped) {
     return fallback;
   }
-  if (SAFE_CLIENT_ERROR_PATTERNS.some((pattern) => pattern.test(stripped))) {
+  if (SAFE_CLIENT_ERROR_PATTERNS.some((pattern) => pattern.test(stripped)) || isHostedBillingClientError(stripped)) {
     return stripped;
   }
   return fallback;
 }
 
-function isS3NotFoundError(error: unknown) {
-  if (!error || typeof error !== "object") {
-    return false;
-  }
-  const row = error as { name?: string; Code?: string; $metadata?: { httpStatusCode?: number } };
-  return row.name === "NotFound" || row.Code === "NotFound" || row.$metadata?.httpStatusCode === 404;
-}
-
-async function objectExistsInR2(key: string): Promise<boolean> {
-  try {
-    await r2.client.send(
-      new HeadObjectCommand({
-        Bucket: r2.config.bucket,
-        Key: key,
-      }),
-    );
-    return true;
-  } catch (error) {
-    if (isS3NotFoundError(error)) {
-      return false;
-    }
-    throw error;
-  }
-}
-
 export async function objectExistsWithMetadataSync(
   ctx: ActionCtx,
   key: string,
-  attempts: number = SYNC_CONFIG.objectMetadataPollAttempts,
+  attempts?: number,
 ): Promise<boolean> {
-  const immediate = await r2.getMetadata(ctx, key);
-  if (immediate?.url) {
-    return true;
-  }
-
-  let delay = SYNC_CONFIG.objectMetadataPollInitialBackoffMs;
-  for (let attempt = 0; attempt < attempts; attempt += 1) {
-    try {
-      const exists = await objectExistsInR2(key);
-      if (exists) {
-        return true;
-      }
-    } catch {
-      // Transient object-store errors are handled by retry loop.
-    }
-    const metadata = await r2.getMetadata(ctx, key);
-    if (metadata) {
-      return true;
-    }
-    if (attempt < attempts - 1) {
-      await sleepMs(delay);
-      if (delay < SYNC_CONFIG.objectMetadataPollMaxBackoffMs) {
-        delay *= 2;
-      }
-    }
-  }
-  return false;
+  return await objectStore.objectExists(ctx, key, { attempts });
 }
 
 export async function requireAccessibleEnvironment(

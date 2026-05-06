@@ -3,19 +3,18 @@ import { httpAction, internalQuery, type ActionCtx } from "@convex/_generated/se
 import { v } from "convex/values";
 import { blobLimitByKind, manifestLimitByKind } from "@convex/appConfig";
 import {
-  buildBlobObjectKey,
-  buildManifestObjectKey,
   authenticateApiRequest,
   corsHeaders,
   objectExistsWithMetadataSync,
   parseSizeBytes,
   parseSyncKind,
-  r2,
   readJsonBody,
   requireAccessibleEnvironment,
   toClientErrorDetail,
 } from "@convex/cli/shared";
+import { storageKeys } from "@convex/core/storage";
 import { internal } from "@convex/_generated/api";
+import { objectStore } from "@convex/objectStore";
 import {
   normalizeSha256,
   parseManifest,
@@ -28,26 +27,18 @@ export const internalGetObjectDownloadUrl = internalQuery({
   args: { key: v.string() },
   returns: v.union(v.string(), v.null()),
   handler: async (ctx, args) => {
-    const metadata = await r2.getMetadata(ctx, args.key);
+    const metadata = await objectStore.getMetadata(ctx, args.key);
     return metadata?.url ?? null;
   },
 });
 
-async function fetchManifestFromR2(
-  _ctx: ActionCtx,
+async function fetchManifestFromObjectStore(
+  ctx: ActionCtx,
   key: string,
   kind: SyncKind,
   expectedHash: string,
 ): Promise<SyncManifestPayload> {
-  const url = await r2.getUrl(key);
-  const response = await fetch(url, { method: "GET" });
-  if (response.status === 404) {
-    throw new Error(`${kind} manifest not found in object storage`);
-  }
-  if (!response.ok) {
-    throw new Error(`${kind} manifest download failed with status ${response.status}`);
-  }
-  const rawText = await response.text();
+  const rawText = new TextDecoder().decode(await objectStore.readBytes(ctx, key));
   const computedHash = await sha256Hex(rawText);
   if (computedHash !== expectedHash) {
     throw new Error(`${kind} manifest hash mismatch`);
@@ -200,7 +191,7 @@ export const listMissingBlobHashes = httpAction(async (ctx, request) => {
           return;
         }
         const hash = hashes[index];
-        const key = buildBlobObjectKey(hash);
+        const key = storageKeys.blobObjectKey(hash);
         const exists = await objectExistsWithMetadataSync(ctx, key, 2);
         if (!exists) {
           missingSet.add(hash);
@@ -273,8 +264,8 @@ export const createBlobUploadUrl = httpAction(async (ctx, request) => {
   }
 
   try {
-    const key = buildBlobObjectKey(sha256);
-    const upload = await r2.generateUploadUrl(key);
+    const key = storageKeys.blobObjectKey(sha256);
+    const upload = await objectStore.createSignedUpload(key);
     return new Response(
       JSON.stringify({
         key: upload.key,
@@ -353,8 +344,8 @@ export const createManifestUploadUrl = httpAction(async (ctx, request) => {
   }
 
   try {
-    const key = buildManifestObjectKey(environmentId, ownedEnvironment.dataId, kind, manifestHash);
-    const upload = await r2.generateUploadUrl(key);
+    const key = storageKeys.manifestObjectKey(environmentId, ownedEnvironment.dataId, kind, manifestHash);
+    const upload = await objectStore.createSignedUpload(key);
     return new Response(
       JSON.stringify({
         key: upload.key,
@@ -425,7 +416,7 @@ export const commitSync = httpAction(async (ctx, request) => {
   }
 
   if (codeManifestHash) {
-    const codeManifestKey = buildManifestObjectKey(
+    const codeManifestKey = storageKeys.manifestObjectKey(
       environmentId,
       ownedEnvironment.dataId,
       "code",
@@ -439,7 +430,7 @@ export const commitSync = httpAction(async (ctx, request) => {
       });
     }
     try {
-      await fetchManifestFromR2(ctx, codeManifestKey, "code", codeManifestHash);
+      await fetchManifestFromObjectStore(ctx, codeManifestKey, "code", codeManifestHash);
     } catch (err) {
       const detail = toClientErrorDetail(err, "code manifest validation failed");
       return new Response(JSON.stringify({ detail }), {
@@ -449,7 +440,7 @@ export const commitSync = httpAction(async (ctx, request) => {
     }
   }
   if (dataManifestHash) {
-    const dataManifestKey = buildManifestObjectKey(
+    const dataManifestKey = storageKeys.manifestObjectKey(
       environmentId,
       ownedEnvironment.dataId,
       "data",
@@ -463,7 +454,7 @@ export const commitSync = httpAction(async (ctx, request) => {
       });
     }
     try {
-      await fetchManifestFromR2(ctx, dataManifestKey, "data", dataManifestHash);
+      await fetchManifestFromObjectStore(ctx, dataManifestKey, "data", dataManifestHash);
     } catch (err) {
       const detail = toClientErrorDetail(err, "data manifest validation failed");
       return new Response(JSON.stringify({ detail }), {

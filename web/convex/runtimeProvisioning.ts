@@ -1,9 +1,7 @@
-import type { Id } from "@convex/_generated/dataModel";
 import type { ActionCtx } from "@convex/_generated/server";
 import { images } from "@convex/catalog";
-import { fetchRunpodGpuTypes, resolveRunpodApiKeyByCredentialId } from "@convex/runpodCredentials";
+import { computeProvider } from "@convex/computeProvider";
 import { sha256Hex } from "@convex/syncManifest";
-import { resolveRunpodCloudType } from "@/lib/runtime-incompatibility";
 
 export function resolveImageName(framework: string, version: string, pythonVersion: string) {
   const frameworkImages = images[framework];
@@ -22,23 +20,11 @@ export function resolveImageName(framework: string, version: string, pythonVersi
 }
 
 export function resolveRuntimeApiBase() {
-  const candidates = [
-    process.env.NEXT_PUBLIC_CONVEX_SITE_URL,
-    process.env.SITE_URL,
-  ];
-  for (const candidate of candidates) {
-    const trimmed = (candidate || "").trim();
-    if (trimmed && !trimmed.includes("localhost") && !trimmed.includes("127.0.0.1")) {
-      return trimmed.replace(/\/+$/, "");
-    }
+  const runtimeApiBase = process.env.NEXT_PUBLIC_CONVEX_SITE_URL?.trim();
+  if (!runtimeApiBase) {
+    throw new Error("NEXT_PUBLIC_CONVEX_SITE_URL is required for machine runtime callbacks");
   }
-  for (const candidate of candidates) {
-    const trimmed = (candidate || "").trim();
-    if (trimmed) {
-      return trimmed.replace(/\/+$/, "");
-    }
-  }
-  throw new Error("SITE_URL is required for pod runtime callbacks");
+  return runtimeApiBase.replace(/\/+$/, "");
 }
 
 export function resolveWandbBaseURL(runtimeApiBase: string) {
@@ -53,14 +39,10 @@ export function generateRuntimeToken() {
     .join("");
 }
 
-function runtimeEntrypoint() {
-  return "/usr/local/bin/warden";
-}
-
-export type CreateRunpodPodArgs = {
+export type CreateRuntimeMachineArgs = {
   ctx: ActionCtx;
   name: string;
-  runpodCredentialId: Id<"runpodCredentials">;
+  providerCredentialId: string;
   imageName: string;
   gpuType: string;
   gpuCount: number;
@@ -69,11 +51,11 @@ export type CreateRunpodPodArgs = {
   ports?: string[];
 };
 
-type ProvisionRuntimePodArgs = {
+type ProvisionRuntimeMachineArgs = {
   ctx: ActionCtx;
   shouldAbort: () => Promise<boolean>;
   setRuntimeTokenHash: (runtimeTokenHash: string) => Promise<void>;
-  createPod: Omit<CreateRunpodPodArgs, "ctx" | "env">;
+  createMachine: Omit<CreateRuntimeMachineArgs, "ctx" | "env">;
   buildEnv: (args: {
     runtimeToken: string;
     runtimeApiBase: string;
@@ -81,110 +63,35 @@ type ProvisionRuntimePodArgs = {
   }) => Record<string, string>;
 };
 
-type TerminateRuntimePodWithRetryArgs = {
+type TerminateRuntimeMachineWithRetryArgs = {
   ctx: ActionCtx;
-  podId: string;
-  runpodCredentialId?: Id<"runpodCredentials"> | null;
+  providerMachineId: string;
+  providerCredentialId?: string | null;
   attempt: number;
   shouldTerminate: () => Promise<boolean>;
-  resolveCredentialId: () => Promise<Id<"runpodCredentials"> | null>;
+  resolveProviderCredentialId: () => Promise<string | null>;
   onTerminated: () => Promise<void>;
   onRetry: (args: {
     nextAttempt: number;
-    runpodCredentialId?: Id<"runpodCredentials">;
+    providerCredentialId?: string;
     error: string;
   }) => Promise<void>;
 };
 
-function normalizeGpuLabel(value: string) {
-  return value.trim().toLowerCase().replace(/\s+/g, " ");
-}
-
-async function resolveRunpodGpuTypeId(apiKey: string, requestedGpu: string) {
-  const trimmed = requestedGpu.trim();
-  if (!trimmed) {
-    throw new Error("GPU type is empty");
-  }
-  const gpuTypes = await fetchRunpodGpuTypes(apiKey);
-  if (gpuTypes.length === 0) {
-    throw new Error("Runpod GPU catalog is empty");
-  }
-
-  const requestedNorm = normalizeGpuLabel(trimmed);
-  const directMatch = gpuTypes.find((gpu) => typeof gpu.id === "string" && gpu.id === trimmed);
-  if (directMatch?.id) {
-    return directMatch.id;
-  }
-  const displayMatch = gpuTypes.find(
-    (gpu) => typeof gpu.displayName === "string" && normalizeGpuLabel(gpu.displayName) === requestedNorm,
-  );
-  if (displayMatch?.id) {
-    return displayMatch.id;
-  }
-
-  const sample = gpuTypes
-    .slice(0, 10)
-    .map((gpu) => gpu.displayName || gpu.id || "")
-    .filter(Boolean)
-    .join(", ");
-  throw new Error(`Runpod GPU type not found: "${trimmed}". Available examples: ${sample}`);
-}
-
-export async function createRunpodPod(args: CreateRunpodPodArgs) {
-  const { apiKey } = await resolveRunpodApiKeyByCredentialId(args.ctx, args.runpodCredentialId);
-  const allowedCloudType = resolveRunpodCloudType();
-  const gpuTypeId = await resolveRunpodGpuTypeId(apiKey, args.gpuType);
-
-  const response = await fetch("https://rest.runpod.io/v1/pods", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      name: args.name,
-      computeType: "GPU",
-      cloudType: allowedCloudType,
-      gpuCount: Math.max(1, args.gpuCount),
-      gpuTypeIds: [gpuTypeId],
-      gpuTypePriority: "custom",
-      imageName: args.imageName,
-      volumeInGb: Math.max(1, args.volumeGb),
-      volumeMountPath: "/workspace",
-      env: args.env,
-      dockerEntrypoint: [runtimeEntrypoint()],
-      ports: args.ports && args.ports.length > 0 ? args.ports : ["22/tcp", "8888/http"],
-    }),
+export async function createRuntimeMachine(args: CreateRuntimeMachineArgs) {
+  return await computeProvider.createMachine(args.ctx, {
+    providerCredentialId: args.providerCredentialId,
+    name: args.name,
+    imageName: args.imageName,
+    gpuType: args.gpuType,
+    gpuCount: args.gpuCount,
+    volumeGb: args.volumeGb,
+    env: args.env,
+    ports: args.ports,
   });
-  const rawText = await response.text();
-  let body: unknown = null;
-  try {
-    body = rawText ? JSON.parse(rawText) : null;
-  } catch {
-    body = null;
-  }
-  if (!response.ok) {
-    const bodyObj = body && typeof body === "object" ? (body as Record<string, unknown>) : null;
-    const detail =
-      typeof bodyObj?.message === "string"
-        ? bodyObj.message
-        : typeof bodyObj?.error === "string"
-          ? bodyObj.error
-          : (rawText.trim() || `http ${response.status}`);
-    throw new Error(`Runpod pod creation failed: ${detail}`);
-  }
-  const row = (body || {}) as Record<string, unknown>;
-  const podId = typeof row.id === "string" ? row.id : (typeof row.podId === "string" ? row.podId : "");
-  if (!podId) {
-    throw new Error("Runpod pod creation failed: missing pod id in response");
-  }
-  return {
-    podId,
-    rawResponse: row,
-  };
 }
 
-export async function provisionRuntimePod(args: ProvisionRuntimePodArgs) {
+export async function provisionRuntimeMachine(args: ProvisionRuntimeMachineArgs) {
   const runtimeToken = generateRuntimeToken();
   const runtimeTokenHash = await sha256Hex(runtimeToken);
   await args.setRuntimeTokenHash(runtimeTokenHash);
@@ -194,9 +101,9 @@ export async function provisionRuntimePod(args: ProvisionRuntimePodArgs) {
 
   const runtimeApiBase = resolveRuntimeApiBase();
   const runtimeRequestTimeoutSeconds = process.env.TAHUNA_RUNTIME_REQUEST_TIMEOUT_SECONDS?.trim() || "120";
-  return await createRunpodPod({
+  return await createRuntimeMachine({
     ctx: args.ctx,
-    ...args.createPod,
+    ...args.createMachine,
     env: args.buildEnv({
       runtimeToken,
       runtimeApiBase,
@@ -205,55 +112,45 @@ export async function provisionRuntimePod(args: ProvisionRuntimePodArgs) {
   });
 }
 
-export async function terminateRunpodPod(
+export async function terminateRuntimeMachine(
   ctx: ActionCtx,
   args: {
-    podId: string;
-    runpodCredentialId: Id<"runpodCredentials">;
+    providerMachineId: string;
+    providerCredentialId: string;
   },
 ) {
-  if (!args.podId) {
+  if (!args.providerMachineId) {
     return;
   }
-  const { apiKey } = await resolveRunpodApiKeyByCredentialId(ctx, args.runpodCredentialId);
-  const response = await fetch(`https://rest.runpod.io/v1/pods/${args.podId}`, {
-    method: "DELETE",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-    },
+  await computeProvider.terminateMachine(ctx, {
+    providerMachineId: args.providerMachineId,
+    providerCredentialId: args.providerCredentialId,
   });
-  if (response.status === 404) {
-    return;
-  }
-  if (!response.ok) {
-    const detail = (await response.text()).trim();
-    throw new Error(detail || `Runpod pod termination failed: http ${response.status}`);
-  }
 }
 
-export async function terminateRuntimePodWithRetry(args: TerminateRuntimePodWithRetryArgs) {
+export async function terminateRuntimeMachineWithRetry(args: TerminateRuntimeMachineWithRetryArgs) {
   const shouldTerminate = await args.shouldTerminate();
   if (!shouldTerminate) {
     return;
   }
 
-  let runpodCredentialId: Id<"runpodCredentials"> | null = args.runpodCredentialId ?? null;
+  let providerCredentialId: string | null = args.providerCredentialId ?? null;
   try {
-    runpodCredentialId = runpodCredentialId ?? await args.resolveCredentialId();
-    if (!runpodCredentialId) {
-      throw new Error("Runpod credential is missing for pod termination");
+    providerCredentialId = providerCredentialId ?? await args.resolveProviderCredentialId();
+    if (!providerCredentialId) {
+      throw new Error("compute provider credential is missing for machine termination");
     }
-    await terminateRunpodPod(args.ctx, {
-      podId: args.podId,
-      runpodCredentialId,
+    await terminateRuntimeMachine(args.ctx, {
+      providerMachineId: args.providerMachineId,
+      providerCredentialId,
     });
     await args.onTerminated();
   } catch (error) {
-    const detail = error instanceof Error ? error.message : "failed to terminate pod";
+    const detail = error instanceof Error ? error.message : "failed to terminate machine";
     const nextAttempt = args.attempt + 1;
     await args.onRetry({
       nextAttempt,
-      runpodCredentialId: runpodCredentialId ?? undefined,
+      providerCredentialId: providerCredentialId ?? undefined,
       error: detail,
     });
   }

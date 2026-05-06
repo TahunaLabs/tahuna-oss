@@ -1,14 +1,31 @@
 import { ConvexError, v } from "convex/values"
-import { CopyObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3"
-import { api, components, internal } from "@convex/_generated/api"
+import { api, internal } from "@convex/_generated/api"
 import type { Id } from "@convex/_generated/dataModel"
 import { action, internalAction, internalMutation, internalQuery, mutation, query, type ActionCtx } from "@convex/_generated/server"
-import { R2 } from "@convex-dev/r2"
 import { RUN_CONFIG } from "@convex/appConfig"
 import { requireUser } from "@convex/auth"
+import { computeProvider } from "@convex/computeProvider"
+import {
+  enqueueTerminateServeMachineJob,
+} from "@convex/convexJobQueue"
+import {
+  createTerminateServeMachineJob,
+} from "@convex/core/jobQueue"
+import {
+  planServeFailure,
+  planServeMachineProvisioned,
+  planServeRuntimeStatusIngestion,
+  planServeStoppedAfterTermination,
+  planServeStopTerminationFailed,
+  planServeTerminationRetry,
+  sanitizeServeRuntimeMessage,
+  shouldEnforceServeStartupTimeout,
+  type ServeLifecycleStatus,
+} from "@convex/core/serveLifecyclePlan"
 import { buildProvisionedRuntimeEnv, resolveEnvironmentEnvVarsForEnvironmentId } from "@convex/envVars"
 import { RUN_STATUS } from "@convex/runsConstants"
-import { buildManifestObjectKey } from "@convex/cli/shared"
+import { storageKeys } from "@convex/core/storage"
+import { objectStore } from "@convex/objectStore"
 import { resolveConfiguredDependencyGroup } from "@/lib/dependency-selection"
 import {
   fetchServeSnapshotManifest,
@@ -21,27 +38,26 @@ import { getAccessibleEnvironment, getAccessibleRun } from "@convex/runsAccess"
 import { getAccessibleServe } from "@convex/servesAccess"
 import { SERVE_STATUS, TERMINAL_SERVE_STATUSES } from "@convex/servesConstants"
 import {
-  provisionRuntimePod,
+  provisionRuntimeMachine,
   resolveImageName,
   resolveWandbBaseURL,
-  terminateRuntimePodWithRetry,
+  terminateRuntimeMachineWithRetry,
 } from "@convex/runtimeProvisioning"
 import {
+  applyServeLifecyclePlan,
   createServeForUserId,
-  scheduleForcedServePodTermination,
   stopServeForUserId,
+  toServeLifecycleState,
 } from "@convex/servesLifecycle"
 import {
   listByUserId,
   listSummariesByUserId,
-  toServeInferenceTarget,
+  toServeInferenceMachineTarget,
   toServeLogsOnlyResponse,
   toServeLogsResponse,
   toServeResponse,
 } from "@convex/servesRead"
 import { sha256Hex } from "@convex/syncManifest"
-
-const r2 = new R2(components.r2)
 
 type ServeModelSnapshotResponse = {
   source_type: "run" | "storage"
@@ -85,6 +101,7 @@ type ServeResponse = {
   logs: string
   status: string
   error: string
+  provider_machine_id: string
   code_manifest_hash: string
   data_manifest_hash: string
   python_version: string
@@ -158,7 +175,7 @@ type ServeProvisioningPayload = {
 
 type ServeProvisionSpec = {
   serve_id: string
-  runpod_credential_id: Id<"runpodCredentials">
+  provider_credential_id: string
   effective_gpu_type: string
   effective_gpu_count: number
   effective_volume_gb: number
@@ -227,7 +244,7 @@ type RuntimeBootstrapContext = {
 
 type StartupTimeoutState = {
   status: string
-  podId: string | null
+  providerMachineId: string | null
 }
 
 const resolvedServeConfigValidator = v.object({
@@ -272,6 +289,7 @@ const serveResponseValidator = v.object({
   logs: v.string(),
   status: v.string(),
   error: v.string(),
+  provider_machine_id: v.string(),
   code_manifest_hash: v.string(),
   data_manifest_hash: v.string(),
   python_version: v.string(),
@@ -369,7 +387,14 @@ const serveLogsOnlyResponseValidator = v.object({
 const serveInferenceTargetValidator = v.object({
   serve_id: v.string(),
   status: v.string(),
-  pod_id: v.string(),
+  ingress_url: v.string(),
+  inference_path: v.string(),
+})
+
+const serveInferenceMachineTargetValidator = v.object({
+  serve_id: v.string(),
+  status: v.string(),
+  provider_machine_id: v.string(),
   port: v.number(),
   inference_path: v.string(),
 })
@@ -451,7 +476,7 @@ const serveProvisioningPayloadValidator = v.object({
 
 const serveProvisionSpecValidator = v.object({
   serve_id: v.string(),
-  runpod_credential_id: v.id("runpodCredentials"),
+  provider_credential_id: v.string(),
   effective_gpu_type: v.string(),
   effective_gpu_count: v.number(),
   effective_volume_gb: v.number(),
@@ -497,7 +522,7 @@ const startupTimeoutStateValidator = v.union(
   v.null(),
   v.object({
     status: v.string(),
-    podId: v.union(v.string(), v.null()),
+    providerMachineId: v.union(v.string(), v.null()),
   }),
 )
 
@@ -584,26 +609,21 @@ function storagePrefixUpperBound(prefix: string) {
   return `${prefix}\uffff`
 }
 
-function buildCopySource(key: string) {
-  return `${r2.config.bucket}/${encodeURIComponent(key).replace(/%2F/g, "/")}`
-}
-
 function createSnapshotBasePrefix(environmentId: string) {
-  const suffix = Math.random().toString(36).slice(2, 8)
-  return `serves/${environmentId}/${Date.now()}-${suffix}`
+  return storageKeys.serveSnapshotBasePrefix(environmentId)
 }
 
 async function deleteObjectsByPrefix(ctx: ActionCtx, prefix: string) {
   let cursor: string | null = null
   let pages = 0
   while (pages < 100) {
-    const result = await r2.listMetadata(ctx, 100, cursor)
+    const result = await objectStore.listMetadata(ctx, 100, cursor)
     for (const item of result.page) {
       if (!item.key.startsWith(prefix)) {
         continue
       }
       try {
-        await r2.deleteObject(ctx, item.key)
+        await objectStore.deleteObject(ctx, item.key)
       } catch {
         // Best-effort cleanup only.
       }
@@ -623,7 +643,7 @@ async function deleteServeSnapshotObjects(ctx: ActionCtx, payload: ServeRemovalP
     keys.add(payload.manifest_key)
     for (const key of keys) {
       try {
-        await r2.deleteObject(ctx, key)
+        await objectStore.deleteObject(ctx, key)
       } catch {
         // Best-effort cleanup only.
       }
@@ -635,7 +655,7 @@ async function deleteServeSnapshotObjects(ctx: ActionCtx, payload: ServeRemovalP
 
   await deleteObjectsByPrefix(ctx, `${payload.object_prefix}/`)
   try {
-    await r2.deleteObject(ctx, payload.manifest_key)
+    await objectStore.deleteObject(ctx, payload.manifest_key)
   } catch {
     // Best-effort cleanup only.
   }
@@ -659,7 +679,7 @@ function normalizeRuntimeLevel(level: string | undefined) {
 
 function normalizeRuntimeSource(source: string | undefined) {
   const trimmed = (source || "").trim()
-  return trimmed || "pod"
+  return trimmed || "machine"
 }
 
 function normalizeRuntimeTimestamp(timestamp: number | undefined) {
@@ -670,42 +690,28 @@ function normalizeRuntimeTimestamp(timestamp: number | undefined) {
 }
 
 function sanitizeRuntimeMessage(message: string) {
-  const trimmed = message.trim()
-  if (!trimmed) {
-    return ""
-  }
-  return trimmed.slice(0, 4000)
+  return sanitizeServeRuntimeMessage(message)
 }
 
-function defaultServeStatusMessage(status: string) {
-  if (status === SERVE_STATUS.PROVISIONING) return "serve provisioning"
-  if (status === SERVE_STATUS.STARTING) return "serve starting"
-  if (status === SERVE_STATUS.SERVING) return "serve healthy and serving"
-  if (status === SERVE_STATUS.STOPPING) return "serve stopping"
-  if (status === SERVE_STATUS.STOPPED) return "serve stopped"
-  return "serve failed"
-}
-
-function canTransitionServeStatus(current: string, next: string) {
-  if (current === next) {
-    return true
+function resolveServeInferenceTarget(target: {
+  serve_id: string
+  status: string
+  provider_machine_id: string
+  port: number
+  inference_path: string
+}) {
+  return {
+    serve_id: target.serve_id,
+    status: target.status,
+    ingress_url:
+      target.status === SERVE_STATUS.SERVING
+        ? computeProvider.resolveIngressEndpoint({
+            providerMachineId: target.provider_machine_id,
+            port: target.port,
+          })
+        : "",
+    inference_path: target.inference_path,
   }
-  if (current === SERVE_STATUS.QUEUED) {
-    return next === SERVE_STATUS.PROVISIONING || next === SERVE_STATUS.FAILED
-  }
-  if (current === SERVE_STATUS.PROVISIONING) {
-    return next === SERVE_STATUS.STARTING || next === SERVE_STATUS.STOPPING || next === SERVE_STATUS.FAILED
-  }
-  if (current === SERVE_STATUS.STARTING) {
-    return next === SERVE_STATUS.SERVING || next === SERVE_STATUS.STOPPING || next === SERVE_STATUS.FAILED
-  }
-  if (current === SERVE_STATUS.SERVING) {
-    return next === SERVE_STATUS.STOPPING || next === SERVE_STATUS.FAILED
-  }
-  if (current === SERVE_STATUS.STOPPING) {
-    return next === SERVE_STATUS.STOPPED
-  }
-  return false
 }
 
 export const list = query({
@@ -733,15 +739,15 @@ export const resolveInferenceTarget = action({
   handler: async (ctx, args): Promise<{
     serve_id: string
     status: string
-    pod_id: string
-    port: number
+    ingress_url: string
     inference_path: string
   }> => {
     const user = await requireUser(ctx)
-    return await ctx.runQuery(internal.serves.internalGetInferenceTarget, {
+    const target = await ctx.runQuery(internal.serves.internalGetInferenceTarget, {
       userId: String(user._id),
       serveId: args.serveId,
     })
+    return resolveServeInferenceTarget(target)
   },
 })
 
@@ -754,8 +760,7 @@ export const resolveInferenceTargetByApiKey = action({
   handler: async (ctx, args): Promise<{
     serve_id: string
     status: string
-    pod_id: string
-    port: number
+    ingress_url: string
     inference_path: string
   }> => {
     const auth = await ctx.runQuery(api.auth.authByApiKey, { apiKey: args.apiKey })
@@ -767,7 +772,7 @@ export const resolveInferenceTargetByApiKey = action({
     const shouldTouch = typeof auth.lastUsedAt !== "number" || now - auth.lastUsedAt >= 60_000
     if (shouldTouch) {
       try {
-        await ctx.scheduler.runAfter(0, internal.auth.internalTouchApiKeyLastUsed, {
+        await ctx.runMutation(internal.auth.internalTouchApiKeyLastUsed, {
           keyId: auth.keyId,
           at: now,
         })
@@ -776,10 +781,11 @@ export const resolveInferenceTargetByApiKey = action({
       }
     }
 
-    return await ctx.runQuery(internal.serves.internalGetInferenceTarget, {
+    const target = await ctx.runQuery(internal.serves.internalGetInferenceTarget, {
       userId: auth.userId,
       serveId: args.serveId,
     })
+    return resolveServeInferenceTarget(target)
   },
 })
 
@@ -814,10 +820,10 @@ export const internalGet = internalQuery({
 
 export const internalGetInferenceTarget = internalQuery({
   args: { userId: v.string(), serveId: v.id("serves") },
-  returns: serveInferenceTargetValidator,
+  returns: serveInferenceMachineTargetValidator,
   handler: async (ctx, args) => {
     const row = await getAccessibleServe(ctx, args.userId, args.serveId)
-    return toServeInferenceTarget(row)
+    return toServeInferenceMachineTarget(row)
   },
 })
 
@@ -1010,23 +1016,19 @@ export const internalCreate = internalAction({
     try {
       for (const entry of preparation.source_entries) {
         const targetKey = `${objectPrefix}/${entry.path}`
-        await r2.client.send(
-          new CopyObjectCommand({
-            Bucket: r2.config.bucket,
-            CopySource: buildCopySource(entry.source_key),
-            Key: targetKey,
-            MetadataDirective: "COPY",
-          }),
-        )
+        await objectStore.copyObject(ctx, {
+          fromKey: entry.source_key,
+          toKey: targetKey,
+        })
         copiedKeys.push(targetKey)
-        await r2.syncMetadata(ctx, targetKey)
-        const metadata = await r2.getMetadata(ctx, targetKey)
+        await objectStore.syncMetadata(ctx, targetKey)
+        const metadata = await objectStore.getMetadata(ctx, targetKey)
         const size = typeof metadata?.size === "number" && Number.isFinite(metadata.size) ? metadata.size : entry.size
         manifestEntries.push({
           path: entry.path,
           key: targetKey,
           size,
-          // Copied run artifacts do not reliably expose checksum metadata in R2.
+          // Copied run artifacts do not reliably expose checksum metadata.
           // Keep the field canonical in the snapshot manifest, but allow it to be empty.
           sha256: metadata?.sha256 || "",
         })
@@ -1035,16 +1037,11 @@ export const internalCreate = internalAction({
 
       const manifestJson = serializeSnapshotManifest(manifestEntries, objectPrefix)
       const manifestHash = await sha256Hex(manifestJson)
-      await r2.client.send(
-        new PutObjectCommand({
-          Bucket: r2.config.bucket,
-          Key: manifestKey,
-          Body: manifestJson,
-          ContentType: "application/json",
-        }),
-      )
+      await objectStore.putTextObject(ctx, manifestKey, manifestJson, {
+        contentType: "application/json",
+      })
       copiedKeys.push(manifestKey)
-      await r2.syncMetadata(ctx, manifestKey)
+      await objectStore.syncMetadata(ctx, manifestKey)
 
       return await ctx.runMutation(internal.serves.internalInsertCreatedServe, {
         userId: args.userId,
@@ -1069,7 +1066,7 @@ export const internalCreate = internalAction({
     } catch (error) {
       for (const key of copiedKeys) {
         try {
-          await r2.deleteObject(ctx, key)
+          await objectStore.deleteObject(ctx, key)
         } catch {
           // Best-effort cleanup only.
         }
@@ -1200,12 +1197,12 @@ export const internalGetServeProvisionSpec = internalQuery({
     if (!environment) {
       throw new ConvexError("environment not found")
     }
-    if (!row.runpodCredentialId) {
-      throw new ConvexError("serve is missing its Runpod credential")
+    if (!row.providerCredentialId) {
+      throw new ConvexError("serve is missing its compute provider credential")
     }
     return {
       serve_id: String(row._id),
-      runpod_credential_id: row.runpodCredentialId,
+      provider_credential_id: row.providerCredentialId,
       effective_gpu_type: row.gpuType,
       effective_gpu_count: row.gpuCount,
       effective_volume_gb: row.volumeGb,
@@ -1218,12 +1215,12 @@ export const internalGetServeProvisionSpec = internalQuery({
   },
 })
 
-export const internalGetRunpodCredentialId = internalQuery({
+export const internalGetProviderCredentialId = internalQuery({
   args: { serveId: v.id("serves") },
-  returns: v.union(v.id("runpodCredentials"), v.null()),
+  returns: v.union(v.string(), v.null()),
   handler: async (ctx, args) => {
     const row = await ctx.db.get("serves", args.serveId)
-    return row?.runpodCredentialId ?? null
+    return row?.providerCredentialId ?? null
   },
 })
 
@@ -1249,7 +1246,7 @@ export const internalGetStartupTimeoutState = internalQuery({
     }
     return {
       status: row.status,
-      podId: row.podId || null,
+      providerMachineId: row.providerMachineId || null,
     }
   },
 })
@@ -1337,7 +1334,7 @@ export const internalGetRuntimeBootstrapPlan = internalAction({
     const codeManifest = await fetchSyncManifest(
       ctx,
       "code",
-      buildManifestObjectKey(
+      storageKeys.manifestObjectKey(
         bootstrap.environment_id,
         bootstrap.environment_data_id,
         "code",
@@ -1352,7 +1349,7 @@ export const internalGetRuntimeBootstrapPlan = internalAction({
       const dataManifest = await fetchSyncManifest(
         ctx,
         "data",
-        buildManifestObjectKey(
+        storageKeys.manifestObjectKey(
           bootstrap.environment_id,
           bootstrap.environment_data_id,
           "data",
@@ -1408,8 +1405,8 @@ export const internalGetRuntimeBootstrapPlan = internalAction({
 export const enforceProvisioningStartupTimeout = internalAction({
   args: {
     serveId: v.id("serves"),
-    podId: v.string(),
-    runpodCredentialId: v.id("runpodCredentials"),
+    providerMachineId: v.string(),
+    providerCredentialId: v.string(),
     startupTimeoutSeconds: v.number(),
   },
   returns: v.null(),
@@ -1417,22 +1414,13 @@ export const enforceProvisioningStartupTimeout = internalAction({
     const state = await ctx.runQuery(internal.serves.internalGetStartupTimeoutState, {
       serveId: args.serveId,
     })
-    if (!state || TERMINAL_SERVE_STATUSES.has(state.status) || state.status !== SERVE_STATUS.PROVISIONING) {
-      return null
-    }
-    if ((state.podId || "") !== args.podId) {
+    if (!shouldEnforceServeStartupTimeout({ state, providerMachineId: args.providerMachineId })) {
       return null
     }
     const detail = `startup timeout: timed out waiting for serve startup after ${args.startupTimeoutSeconds}s`
     await ctx.runMutation(internal.serves.markFailed, {
       serveId: args.serveId,
       error: detail,
-    })
-    await ctx.runAction(internal.serves.internalTerminatePod, {
-      serveId: args.serveId,
-      podId: args.podId,
-      runpodCredentialId: args.runpodCredentialId,
-      force: true,
     })
     return null
   },
@@ -1460,7 +1448,7 @@ export const provisionServe = internalAction({
       provisioningPayload.environment_id as Id<"environments">,
     )
 
-    let provisionedPodId = ""
+    let provisionedProviderMachineId = ""
     try {
       if (!provisioningPayload.code_manifest_hash) {
         throw new Error("missing pinned code manifest hash on serve")
@@ -1469,7 +1457,7 @@ export const provisionServe = internalAction({
       await fetchSyncManifest(
         ctx,
         "code",
-        buildManifestObjectKey(
+        storageKeys.manifestObjectKey(
           provisioningPayload.environment_id,
           provisioningPayload.environment_data_id,
           "code",
@@ -1481,7 +1469,7 @@ export const provisionServe = internalAction({
         await fetchSyncManifest(
           ctx,
           "data",
-          buildManifestObjectKey(
+          storageKeys.manifestObjectKey(
             provisioningPayload.environment_id,
             provisioningPayload.environment_data_id,
             "data",
@@ -1496,7 +1484,7 @@ export const provisionServe = internalAction({
         provisioningPayload.model_manifest_hash,
       )
 
-      const provisionResult = await provisionRuntimePod({
+      const provisionResult = await provisionRuntimeMachine({
         ctx,
         shouldAbort: async () =>
           await ctx.runQuery(internal.serves.internalShouldAbortProvisioning, { serveId: args.serveId }),
@@ -1506,9 +1494,9 @@ export const provisionServe = internalAction({
             runtimeTokenHash,
           })
         },
-        createPod: {
+        createMachine: {
           name: `tahuna-${provisioningPayload.serve_id}`,
-          runpodCredentialId: serveSpec.runpod_credential_id,
+          providerCredentialId: serveSpec.provider_credential_id,
           imageName: resolveImageName(serveSpec.framework, serveSpec.version, serveSpec.python_version),
           gpuType: serveSpec.effective_gpu_type,
           gpuCount: serveSpec.effective_gpu_count,
@@ -1538,31 +1526,23 @@ export const provisionServe = internalAction({
       if (!provisionResult) {
         return null
       }
-      provisionedPodId = provisionResult.podId
-      await ctx.runMutation(internal.serves.markPodProvisioned, {
+      provisionedProviderMachineId = provisionResult.providerMachineId
+      await ctx.runMutation(internal.serves.markMachineProvisioned, {
         serveId: args.serveId,
-        podId: provisionResult.podId,
-        runpodResponse: provisionResult.rawResponse,
+        providerMachineId: provisionResult.providerMachineId,
+        providerCredentialId: serveSpec.provider_credential_id,
+        startupTimeoutSeconds: serveSpec.startup_timeout_seconds,
+        providerMetadata: provisionResult.providerMetadata,
       })
       if (await ctx.runQuery(internal.serves.internalShouldAbortProvisioning, { serveId: args.serveId })) {
-        await ctx.runAction(internal.serves.internalTerminatePod, {
+        await enqueueTerminateServeMachineJob(ctx, createTerminateServeMachineJob({
           serveId: args.serveId,
-          podId: provisionResult.podId,
-          runpodCredentialId: serveSpec.runpod_credential_id,
+          providerMachineId: provisionResult.providerMachineId,
+          providerCredentialId: serveSpec.provider_credential_id,
           force: true,
-        })
+        }))
         return null
       }
-      await ctx.scheduler.runAfter(
-        serveSpec.startup_timeout_seconds * 1000,
-        internal.serves.enforceProvisioningStartupTimeout,
-        {
-          serveId: args.serveId,
-          podId: provisionResult.podId,
-          runpodCredentialId: serveSpec.runpod_credential_id,
-          startupTimeoutSeconds: serveSpec.startup_timeout_seconds,
-        },
-      )
     } catch (error) {
       const detail = error instanceof Error ? error.message : "serve provisioning failed"
       await ctx.runMutation(internal.serves.markFailed, {
@@ -1570,13 +1550,13 @@ export const provisionServe = internalAction({
         error: `serve provisioning failed: ${detail}`,
         provisioningPayload,
       })
-      if (provisionedPodId) {
-        await ctx.runAction(internal.serves.internalTerminatePod, {
+      if (provisionedProviderMachineId) {
+        await enqueueTerminateServeMachineJob(ctx, createTerminateServeMachineJob({
           serveId: args.serveId,
-          podId: provisionedPodId,
-          runpodCredentialId: serveSpec.runpod_credential_id,
+          providerMachineId: provisionedProviderMachineId,
+          providerCredentialId: serveSpec.provider_credential_id,
           force: true,
-        })
+        }))
       }
     }
     return null
@@ -1610,11 +1590,13 @@ export const markProvisioning = internalMutation({
   },
 })
 
-export const markPodProvisioned = internalMutation({
+export const markMachineProvisioned = internalMutation({
   args: {
     serveId: v.id("serves"),
-    podId: v.string(),
-    runpodResponse: v.optional(v.any()),
+    providerMachineId: v.string(),
+    providerCredentialId: v.string(),
+    startupTimeoutSeconds: v.number(),
+    providerMetadata: v.optional(v.any()),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -1622,18 +1604,16 @@ export const markPodProvisioned = internalMutation({
     if (!row || row.status === SERVE_STATUS.STOPPING || TERMINAL_SERVE_STATUSES.has(row.status)) {
       return null
     }
-    await ctx.db.patch("serves", args.serveId, {
-      podId: args.podId,
-    })
-    await ctx.db.insert("serveEvents", {
-      serveId: args.serveId,
-      status: SERVE_STATUS.PROVISIONING,
-      message: "gpu pod provisioned",
-      metadata: {
-        pod_id: args.podId,
-        runpod_response: args.runpodResponse,
+    await applyServeLifecyclePlan(ctx, args.serveId, planServeMachineProvisioned({
+      serve: toServeLifecycleState(row),
+      providerMachineId: args.providerMachineId,
+      providerMetadata: args.providerMetadata,
+      startupTimeout: {
+        delayMs: args.startupTimeoutSeconds * 1000,
+        providerCredentialId: args.providerCredentialId,
+        startupTimeoutSeconds: args.startupTimeoutSeconds,
       },
-    })
+    }))
     return null
   },
 })
@@ -1647,26 +1627,14 @@ export const markFailed = internalMutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const row = await ctx.db.get("serves", args.serveId)
-    if (!row || row.status === SERVE_STATUS.STOPPING || TERMINAL_SERVE_STATUSES.has(row.status)) {
+    if (!row) {
       return null
     }
-    const errorText = sanitizeRuntimeMessage(args.error) || "serve failed"
-    await ctx.db.patch("serves", args.serveId, {
-      status: SERVE_STATUS.FAILED,
-      error: errorText,
-      runtimeTokenHash: "revoked",
-    })
-    await ctx.db.insert("serveEvents", {
-      serveId: args.serveId,
-      status: SERVE_STATUS.FAILED,
-      message: errorText,
-      metadata: args.provisioningPayload
-        ? {
-            provisioning_payload: args.provisioningPayload,
-          }
-        : undefined,
-    })
-    await scheduleForcedServePodTermination(ctx, args.serveId, row.podId, row.runpodCredentialId)
+    await applyServeLifecyclePlan(ctx, args.serveId, planServeFailure({
+      serve: toServeLifecycleState(row),
+      error: args.error,
+      provisioningPayload: args.provisioningPayload,
+    }))
     return null
   },
 })
@@ -1679,22 +1647,13 @@ export const markStoppedAfterTermination = internalMutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const row = await ctx.db.get("serves", args.serveId)
-    if (!row || row.status !== SERVE_STATUS.STOPPING) {
+    if (!row) {
       return null
     }
-    await ctx.db.patch("serves", args.serveId, {
-      status: SERVE_STATUS.STOPPED,
-      runtimeTokenHash: "revoked",
-    })
-    await ctx.db.insert("serveEvents", {
-      serveId: args.serveId,
-      status: SERVE_STATUS.STOPPED,
-      message: args.force === true ? "force stop completed" : "stop completed",
-      metadata: {
-        source: "control-plane",
-        forced: args.force === true,
-      },
-    })
+    await applyServeLifecyclePlan(ctx, args.serveId, planServeStoppedAfterTermination({
+      serve: toServeLifecycleState(row),
+      force: args.force === true,
+    }))
     return null
   },
 })
@@ -1707,24 +1666,13 @@ export const markStopTerminationFailed = internalMutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const row = await ctx.db.get("serves", args.serveId)
-    if (!row || TERMINAL_SERVE_STATUSES.has(row.status)) {
+    if (!row) {
       return null
     }
-    const errorText = sanitizeRuntimeMessage(args.error) || "failed to terminate serve pod"
-    await ctx.db.patch("serves", args.serveId, {
-      status: SERVE_STATUS.FAILED,
-      error: `serve stop failed: ${errorText}`,
-      runtimeTokenHash: "revoked",
-    })
-    await ctx.db.insert("serveEvents", {
-      serveId: args.serveId,
-      status: SERVE_STATUS.FAILED,
-      message: "serve pod termination failed",
-      metadata: {
-        error: errorText,
-        source: "control-plane",
-      },
-    })
+    await applyServeLifecyclePlan(ctx, args.serveId, planServeStopTerminationFailed({
+      serve: toServeLifecycleState(row),
+      error: args.error,
+    }))
     return null
   },
 })
@@ -1743,9 +1691,9 @@ export const recordTerminationFailure = internalMutation({
     await ctx.db.insert("serveEvents", {
       serveId: args.serveId,
       status: row.status,
-      message: "serve pod termination failed",
+      message: "serve machine termination failed",
       metadata: {
-        error: sanitizeRuntimeMessage(args.error) || "failed to terminate serve pod",
+        error: sanitizeRuntimeMessage(args.error) || "failed to terminate serve machine",
         source: "control-plane",
       },
     })
@@ -1756,8 +1704,8 @@ export const recordTerminationFailure = internalMutation({
 export const scheduleTerminationRetry = internalMutation({
   args: {
     serveId: v.id("serves"),
-    podId: v.string(),
-    runpodCredentialId: v.optional(v.id("runpodCredentials")),
+    providerMachineId: v.string(),
+    providerCredentialId: v.optional(v.string()),
     force: v.optional(v.boolean()),
     attempt: v.number(),
     error: v.string(),
@@ -1768,44 +1716,34 @@ export const scheduleTerminationRetry = internalMutation({
     if (!row) {
       return null
     }
-    await ctx.db.insert("serveEvents", {
-      serveId: args.serveId,
-      status: row.status,
-      message: `retrying serve pod termination (attempt ${args.attempt}/${RUN_CONFIG.terminationRetryMaxAttempts})`,
-      metadata: {
-        error: args.error,
-        source: "control-plane",
-      },
-    })
-    await ctx.scheduler.runAfter(
-      RUN_CONFIG.terminationRetryDelaySeconds * 1000,
-      internal.serves.internalTerminatePod,
-      {
-        serveId: args.serveId,
-        podId: args.podId,
-        runpodCredentialId: args.runpodCredentialId,
-        force: args.force === true,
-        attempt: args.attempt,
-      },
-    )
+    await applyServeLifecyclePlan(ctx, args.serveId, planServeTerminationRetry({
+      serve: toServeLifecycleState(row),
+      providerMachineId: args.providerMachineId,
+      providerCredentialId: args.providerCredentialId,
+      force: args.force === true,
+      attempt: args.attempt,
+      maxAttempts: RUN_CONFIG.terminationRetryMaxAttempts,
+      delayMs: RUN_CONFIG.terminationRetryDelaySeconds * 1000,
+      error: args.error,
+    }))
     return null
   },
 })
 
-export const internalTerminatePod = internalAction({
+export const internalTerminateMachine = internalAction({
   args: {
     serveId: v.id("serves"),
-    podId: v.string(),
-    runpodCredentialId: v.optional(v.id("runpodCredentials")),
+    providerMachineId: v.string(),
+    providerCredentialId: v.optional(v.string()),
     force: v.optional(v.boolean()),
     attempt: v.optional(v.number()),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    await terminateRuntimePodWithRetry({
+    await terminateRuntimeMachineWithRetry({
       ctx,
-      podId: args.podId,
-      runpodCredentialId: args.runpodCredentialId ?? null,
+      providerMachineId: args.providerMachineId,
+      providerCredentialId: args.providerCredentialId ?? null,
       attempt: args.attempt ?? 0,
       shouldTerminate: async () => {
         if (args.force === true) {
@@ -1816,20 +1754,20 @@ export const internalTerminatePod = internalAction({
         })
         return !!state && state.status === SERVE_STATUS.STOPPING
       },
-      resolveCredentialId: async () =>
-        await ctx.runQuery(internal.serves.internalGetRunpodCredentialId, { serveId: args.serveId }),
+      resolveProviderCredentialId: async () =>
+        await ctx.runQuery(internal.serves.internalGetProviderCredentialId, { serveId: args.serveId }),
       onTerminated: async () => {
         await ctx.runMutation(internal.serves.markStoppedAfterTermination, {
           serveId: args.serveId,
           force: args.force === true,
         })
       },
-      onRetry: async ({ nextAttempt, runpodCredentialId, error }) => {
+      onRetry: async ({ nextAttempt, providerCredentialId, error }) => {
         if (nextAttempt < RUN_CONFIG.terminationRetryMaxAttempts) {
           await ctx.runMutation(internal.serves.scheduleTerminationRetry, {
             serveId: args.serveId,
-            podId: args.podId,
-            runpodCredentialId,
+            providerMachineId: args.providerMachineId,
+            providerCredentialId,
             force: args.force === true,
             attempt: nextAttempt,
             error,
@@ -1900,61 +1838,17 @@ export const ingestRuntimeStatus = internalMutation({
     if (!row) {
       return { status: "missing" }
     }
-    if (TERMINAL_SERVE_STATUSES.has(row.status)) {
-      return { status: row.status }
-    }
-
-    let nextStatus = args.status
-    if (
-      row.status === SERVE_STATUS.STOPPING
-      && (args.status === SERVE_STATUS.PROVISIONING
-        || args.status === SERVE_STATUS.STARTING
-        || args.status === SERVE_STATUS.SERVING)
-    ) {
-      return { status: SERVE_STATUS.STOPPING }
-    }
-    if (row.status === SERVE_STATUS.STOPPING && (args.status === SERVE_STATUS.FAILED || args.status === SERVE_STATUS.STOPPED)) {
-      nextStatus = SERVE_STATUS.STOPPED
-    }
-    if (!canTransitionServeStatus(row.status, nextStatus)) {
-      throw new ConvexError(`invalid serve status transition: ${row.status} -> ${nextStatus}`)
-    }
-
-    const patch: {
-      status: string;
-      error?: string;
-      runtimeTokenHash?: string;
-    } = { status: nextStatus }
-    if (nextStatus === SERVE_STATUS.FAILED) {
-      patch.error = sanitizeRuntimeMessage(args.error || args.message || "serve failed") || "serve failed"
-      patch.runtimeTokenHash = "revoked"
-    }
-    if (nextStatus === SERVE_STATUS.STOPPED) {
-      patch.runtimeTokenHash = "revoked"
-    }
-    if (nextStatus !== SERVE_STATUS.FAILED && row.error) {
-      patch.error = undefined
-    }
-
-    await ctx.db.patch("serves", args.serveId, patch)
-    await ctx.db.insert("serveEvents", {
-      serveId: args.serveId,
-      status: nextStatus,
-      message:
-        sanitizeRuntimeMessage(
-          nextStatus === SERVE_STATUS.FAILED
-            ? args.error || args.message || defaultServeStatusMessage(nextStatus)
-            : args.message || defaultServeStatusMessage(nextStatus),
-        ) || defaultServeStatusMessage(nextStatus),
-      metadata: {
-        source: "serve-runtime",
-      },
+    const plan = planServeRuntimeStatusIngestion({
+      serve: toServeLifecycleState(row),
+      status: args.status as ServeLifecycleStatus,
+      message: args.message,
+      error: args.error,
     })
-
-    if (nextStatus === SERVE_STATUS.FAILED || nextStatus === SERVE_STATUS.STOPPED) {
-      await scheduleForcedServePodTermination(ctx, args.serveId, row.podId, row.runpodCredentialId)
+    if (plan.error) {
+      throw new ConvexError(plan.error)
     }
+    await applyServeLifecyclePlan(ctx, args.serveId, plan)
 
-    return { status: nextStatus }
+    return { status: plan.resultStatus }
   },
 })

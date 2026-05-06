@@ -1,14 +1,11 @@
-import { R2 } from "@convex-dev/r2";
 import { ConvexError, v } from "convex/values";
-import { CopyObjectCommand } from "@aws-sdk/client-s3";
-import { components, internal } from "@convex/_generated/api";
+import { internal } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { action, internalMutation, internalQuery, mutation, type ActionCtx, type MutationCtx } from "@convex/_generated/server";
 import { requireUser } from "@convex/auth";
-import { buildBlobObjectKey } from "@/convex/cli/shared";
+import { storageKeys } from "@convex/core/storage";
+import { objectStore } from "@convex/objectStore";
 import { parseManifest } from "@/convex/syncManifest";
-
-const r2 = new R2(components.r2);
 
 const DEFAULT_LIMIT = 25;
 const MAX_LIMIT = 100;
@@ -278,14 +275,16 @@ async function resolvePrimaryDataDownload(
   item: StorageItem,
 ): Promise<Pick<StorageItem, "download_url" | "size"> | null> {
   try {
-    const manifestUrl = (await r2.getMetadata(ctx, item.key))?.url || (await r2.getUrl(item.key));
+    const manifestUrl =
+      (await objectStore.getMetadata(ctx, item.key))?.url ||
+      (await objectStore.createSignedDownload(item.key)).url;
     const response = await fetch(manifestUrl, { method: "GET" });
     if (!response.ok) return null;
     const manifest = parseManifest(await response.json(), "data");
     const bundleEntry = manifest?.entries.find((entry) => entry.path === "__tahuna__/data_bundle.tar.gz");
     if (!bundleEntry) return null;
     return {
-      download_url: await r2.getUrl(buildBlobObjectKey(bundleEntry.sha256)),
+      download_url: (await objectStore.createSignedDownload(storageKeys.blobObjectKey(bundleEntry.sha256))).url,
       size: bundleEntry.size,
     };
   } catch {
@@ -354,12 +353,12 @@ async function hydrateDownloadUrls(ctx: ActionCtx, pageItems: StorageItem[]) {
         }
         let metadata: null | { size?: number; lastModified?: string; url?: string } = null;
         try {
-          metadata = await r2.getMetadata(ctx, item.key);
+          metadata = await objectStore.getMetadata(ctx, item.key);
         } catch {
           metadata = null;
         }
         try {
-          const downloadURL = metadata?.url || (await r2.getUrl(item.key));
+          const downloadURL = metadata?.url || (await objectStore.createSignedDownload(item.key)).url;
           return {
             ...item,
             size: typeof metadata?.size === "number" ? metadata.size : item.size,
@@ -470,7 +469,7 @@ export const deleteMany = mutation({
       await Promise.all(
         chunk.map(async (row) => {
           try {
-            await r2.deleteObject(ctx, row.key);
+            await objectStore.deleteObject(ctx, row.key);
           } catch {
             // Best-effort cleanup to avoid leaving stale index rows.
           }
@@ -542,7 +541,10 @@ export const internalPrepareArtifactRename = internalMutation({
       throw new ConvexError("artifact name already exists in this run");
     }
 
-    const [sourceMetadata, targetMetadata] = await Promise.all([r2.getMetadata(ctx, fromKey), r2.getMetadata(ctx, toKey)]);
+    const [sourceMetadata, targetMetadata] = await Promise.all([
+      objectStore.getMetadata(ctx, fromKey),
+      objectStore.getMetadata(ctx, toKey),
+    ]);
     if (!sourceMetadata?.url) {
       throw new ConvexError("artifact object is missing from storage");
     }
@@ -660,18 +662,13 @@ export const renameArtifact = action({
       name: string;
     };
 
-    const copySource = `${r2.config.bucket}/${encodeURIComponent(renamePlan.fromKey).replace(/%2F/g, "/")}`;
-    await r2.client.send(
-      new CopyObjectCommand({
-        Bucket: r2.config.bucket,
-        CopySource: copySource,
-        Key: renamePlan.toKey,
-        MetadataDirective: "COPY",
-      }),
-    );
+    await objectStore.copyObject(ctx, {
+      fromKey: renamePlan.fromKey,
+      toKey: renamePlan.toKey,
+    });
 
-    await r2.syncMetadata(ctx, renamePlan.toKey);
-    const metadata = await r2.getMetadata(ctx, renamePlan.toKey);
+    await objectStore.syncMetadata(ctx, renamePlan.toKey);
+    const metadata = await objectStore.getMetadata(ctx, renamePlan.toKey);
     if (!metadata?.url) {
       throw new ConvexError("renamed artifact metadata could not be loaded");
     }
@@ -687,7 +684,7 @@ export const renameArtifact = action({
       });
     } catch (error) {
       try {
-        await r2.deleteObject(ctx, renamePlan.toKey);
+        await objectStore.deleteObject(ctx, renamePlan.toKey);
       } catch {
         // Ignore rollback cleanup failures and surface the original conflict/error.
       }
@@ -696,7 +693,7 @@ export const renameArtifact = action({
 
     let cleanupWarning = false;
     try {
-      await r2.deleteObject(ctx, renamePlan.fromKey);
+      await objectStore.deleteObject(ctx, renamePlan.fromKey);
     } catch {
       cleanupWarning = true;
     }

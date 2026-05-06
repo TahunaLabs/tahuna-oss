@@ -1,18 +1,60 @@
-import { Workpool } from "@convex-dev/workpool"
 import { ConvexError } from "convex/values"
-import { components, internal } from "@convex/_generated/api"
-import type { Id } from "@convex/_generated/dataModel"
+import type { Doc, Id } from "@convex/_generated/dataModel"
 import type { MutationCtx } from "@convex/_generated/server"
-import { RUN_CONFIG } from "@convex/appConfig"
-import { getLatestActiveRunpodCredentialForUserId } from "@convex/runpodCredentialsStore"
+import { resolveActiveComputeCredentialForUserId } from "@convex/computeProvider"
+import {
+  enqueueServeLifecycleJobs,
+} from "@convex/convexJobQueue"
+import {
+  mergeServeEventMetadata,
+  planForcedServeMachineTermination,
+  planServeProvisioningJobs,
+  planServeStop,
+  type ServeLifecycleEvent,
+  type ServeLifecyclePlan,
+  type ServeLifecycleServeState,
+} from "@convex/core/serveLifecyclePlan"
 import { getAccessibleServe } from "@convex/servesAccess"
 import { SERVE_STATUS } from "@convex/servesConstants"
 import { toServeResponse } from "@convex/servesRead"
 
-const provisionPool = new Workpool(components.workpool, {
-  maxParallelism: RUN_CONFIG.workpoolMaxParallelism,
-  retryActionsByDefault: true,
-})
+export function toServeLifecycleState(row: Doc<"serves">): ServeLifecycleServeState {
+  return {
+    serveId: String(row._id),
+    status: row.status,
+    providerMachineId: row.providerMachineId,
+    providerCredentialId: row.providerCredentialId,
+    runtimeTokenHash: row.runtimeTokenHash,
+    error: row.error,
+  }
+}
+
+async function insertServeLifecycleEvents(
+  ctx: MutationCtx,
+  serveId: Id<"serves">,
+  events: ServeLifecycleEvent[],
+) {
+  for (const event of events) {
+    await ctx.db.insert("serveEvents", {
+      serveId,
+      status: event.status,
+      message: event.message,
+      metadata: mergeServeEventMetadata(event),
+    })
+  }
+}
+
+export async function applyServeLifecyclePlan(
+  ctx: MutationCtx,
+  serveId: Id<"serves">,
+  plan: ServeLifecyclePlan,
+) {
+  if (plan.patch && Object.keys(plan.patch).length > 0) {
+    await ctx.db.patch("serves", serveId, plan.patch)
+  }
+  await insertServeLifecycleEvents(ctx, serveId, plan.events ?? [])
+  await enqueueServeLifecycleJobs(ctx, plan.jobs ?? [])
+}
 
 export async function createServeForUserId(
   ctx: MutationCtx,
@@ -52,10 +94,7 @@ export async function createServeForUserId(
     enqueueProvisioning?: boolean;
   },
 ) {
-  const runpodCredential = await getLatestActiveRunpodCredentialForUserId(ctx, args.userId)
-  if (!runpodCredential) {
-    throw new ConvexError("No compute provider configured. Add one in Settings → Providers.")
-  }
+  const computeCredential = await resolveActiveComputeCredentialForUserId(ctx, args.userId)
 
   const now = Date.now()
   const serveId = await ctx.db.insert("serves", {
@@ -65,7 +104,7 @@ export async function createServeForUserId(
     dataManifestHash: args.serveConfig.dataManifestHash || undefined,
     logs: `serves/${args.environmentId}/${now}/logs`,
     status: SERVE_STATUS.QUEUED,
-    runpodCredentialId: runpodCredential.credentialId,
+    providerCredentialId: String(computeCredential.providerCredentialId),
     modelSnapshot: args.modelSnapshot,
   })
 
@@ -97,9 +136,10 @@ export async function createServeForUserId(
     },
   })
 
-  if (args.enqueueProvisioning ?? true) {
-    await provisionPool.enqueueAction(ctx, internal.serves.provisionServe, { serveId })
-  }
+  await enqueueServeLifecycleJobs(ctx, planServeProvisioningJobs({
+    serveId: String(serveId),
+    enqueueProvisioning: args.enqueueProvisioning ?? true,
+  }))
 
   const row = await ctx.db.get("serves", serveId)
   if (!row) {
@@ -115,59 +155,24 @@ export async function stopServeForUserId(
   force: boolean,
 ) {
   const row = await getAccessibleServe(ctx, userId, serveId)
-
-  if (row.status === SERVE_STATUS.STOPPING) {
-    return { serve_id: String(serveId), stop_requested: true, forced: force, status: SERVE_STATUS.STOPPING }
-  }
-  if (row.status === SERVE_STATUS.STOPPED || row.status === SERVE_STATUS.FAILED) {
-    return { serve_id: String(serveId), stop_requested: true, forced: force, status: row.status }
-  }
-
-  const nextStatus = row.podId ? SERVE_STATUS.STOPPING : SERVE_STATUS.STOPPED
-  await ctx.db.patch("serves", serveId, {
-    status: nextStatus,
-    runtimeTokenHash: nextStatus === SERVE_STATUS.STOPPED ? "revoked" : row.runtimeTokenHash,
+  const plan = planServeStop({
+    serve: toServeLifecycleState(row),
+    force,
   })
-  await ctx.db.insert("serveEvents", {
-    serveId,
-    status: nextStatus,
-    message:
-      nextStatus === SERVE_STATUS.STOPPING
-        ? force
-          ? "force stop requested"
-          : "stop requested"
-        : "serve stopped before runtime start",
-    metadata: {
-      source: "control-plane",
-      forced: force,
-    },
-  })
-  if (nextStatus === SERVE_STATUS.STOPPING) {
-    await ctx.scheduler.runAfter(0, internal.serves.internalTerminatePod, {
-      serveId,
-      podId: row.podId!,
-      runpodCredentialId: row.runpodCredentialId,
-      force: true,
-    })
-  }
+  await applyServeLifecyclePlan(ctx, serveId, plan)
 
-  return { serve_id: String(serveId), stop_requested: true, forced: force, status: nextStatus }
+  return { serve_id: String(serveId), stop_requested: true, forced: force, status: plan.resultStatus }
 }
 
-export async function scheduleForcedServePodTermination(
+export async function scheduleForcedServeMachineTermination(
   ctx: MutationCtx,
   serveId: Id<"serves">,
-  podId: string | undefined,
-  runpodCredentialId: Id<"runpodCredentials"> | undefined,
+  providerMachineId: string | undefined,
+  providerCredentialId: string | undefined,
 ) {
-  const podIdValue = podId?.trim() || ""
-  if (!podIdValue) {
-    return
-  }
-  await ctx.scheduler.runAfter(0, internal.serves.internalTerminatePod, {
-    serveId,
-    podId: podIdValue,
-    runpodCredentialId,
-    force: true,
-  })
+  await enqueueServeLifecycleJobs(ctx, planForcedServeMachineTermination({
+    serveId: String(serveId),
+    providerMachineId,
+    providerCredentialId,
+  }))
 }

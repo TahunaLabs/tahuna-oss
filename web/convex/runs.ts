@@ -1,5 +1,5 @@
 import { ConvexError, v } from "convex/values";
-import { components, internal } from "@convex/_generated/api";
+import { internal } from "@convex/_generated/api";
 import type { Doc, Id } from "@convex/_generated/dataModel";
 import {
   internalAction,
@@ -10,53 +10,80 @@ import {
   type MutationCtx,
 } from "@convex/_generated/server";
 import { requireUser } from "@convex/auth";
-import { R2 } from "@convex-dev/r2";
-import { HeadObjectCommand } from "@aws-sdk/client-s3";
 import {
   buildRuntimeCompatibilityKey,
   classifyRuntimeIncompatibility,
   normalizeProvisioningError,
-  resolveRunpodCloudType,
   type RuntimeCompatibilityFingerprint,
 } from "@/lib/runtime-incompatibility";
 import { PYTHON_CONFIG, RUN_CONFIG } from "@convex/appConfig";
-import { applyStorageDeltaCredits, USAGE_EVENT_TYPE, upsertLedgerDebitTotal } from "@convex/credits";
-import type { ComputeSettlementResult } from "@convex/runBilling";
+import { applyStorageDeltaCredits } from "@convex/cloud/storageUsage";
 import { resolveConfiguredDependencyGroup } from "@/lib/dependency-selection";
 import {
   buildProvisionedRuntimeEnv,
   resolveEnvironmentEnvVarsForEnvironmentId,
 } from "@convex/envVars";
 import {
-  estimateRunUsageFromHourlyRateCents,
-  runLiveDebitIdempotencyKey,
-  resolveRunHourlyRateCents,
-  resolveTerminalRunTiming,
-  settleRunComputeCharge,
-  toUnixMillis,
-} from "@convex/runBilling";
+  createCleanupFailedUploadJob,
+  createFinalizeArtifactJob,
+  createTerminateMachineJob,
+} from "@convex/core/jobQueue";
+import {
+  completeActionJob,
+  enqueueCleanupFailedUploadJob,
+  enqueueRunDataDeletionBatch,
+  enqueueTerminateMachineJob,
+  failActionJob,
+  markCoreJobCompleted,
+  markCoreJobFailed,
+  startActionJob,
+  upsertCoreJobRecord,
+} from "@convex/convexJobQueue";
+import {
+  applyHostedRunLifecyclePlan as applyRunLifecyclePlan,
+  cancelHostedRunForUserId as cancelRunForUserId,
+  createHostedRunForUserId as createRunForUserId,
+  deleteHostedRunForUserId as deleteRunForUserId,
+} from "@convex/cloud/runLifecycleComposition";
+import {
+  isRunArtifactKey,
+  planCancellationTerminationCompleted,
+  planCancellationTerminationFailed,
+  planMachineProvisioned,
+  planMachineRunning,
+  planProvisioningStarted,
+  planRunFailure,
+  planRuntimeArtifactCommit,
+  planRuntimeStatusIngestion,
+  planTerminationRetry,
+  sanitizeRuntimeMessage,
+  shouldAbortProvisioning,
+  shouldEnforceStartupTimeout,
+  shouldTerminateMachine,
+  type RunLifecycleStatus,
+} from "@convex/core/runLifecyclePlan";
 import { getAccessibleRun } from "@convex/runsAccess";
 import { listByUserId, toRunLogsOnlyResponse, toRunLogsResponse, toRunMetricsOnlyResponse, toRunResponse } from "@convex/runsRead";
+import { storageKeys } from "@convex/core/storage";
+import { objectStore } from "@convex/objectStore";
+import { resolveComputeCompatibilityCloudType } from "@convex/computeProvider";
 import {
   fetchSyncManifest,
   resolveSyncManifestDownloadEntries,
   type RuntimeBootstrapEntry,
 } from "@convex/runtimeBootstrap";
 import {
-  cancelRunForUserId,
-  createRunForUserId,
   deleteRunDataBatch,
-  deleteRunForUserId,
   renameRunForUserId,
-  scheduleForcedPodTermination,
+  toRunLifecycleState,
 } from "@convex/runsLifecycle";
 import {
-  provisionRuntimePod,
+  provisionRuntimeMachine,
   resolveImageName,
   resolveWandbBaseURL,
-  terminateRuntimePodWithRetry,
+  terminateRuntimeMachineWithRetry,
 } from "@convex/runtimeProvisioning";
-import { ACTIVE_STATUSES, RUN_STATUS, TERMINAL_STATUSES } from "@convex/runsConstants";
+import { RUN_STATUS, TERMINAL_STATUSES } from "@convex/runsConstants";
 const runResponseValidator = v.object({
   run_id: v.string(),
   name: v.string(),
@@ -68,7 +95,7 @@ const runResponseValidator = v.object({
   logs: v.string(),
   status: v.string(),
   error: v.string(),
-  pod_id: v.string(),
+  provider_machine_id: v.string(),
   effective_gpu_type: v.string(),
   effective_gpu_count: v.number(),
   effective_volume_gb: v.number(),
@@ -79,6 +106,29 @@ const runResponseValidator = v.object({
 });
 const listRunsResponseValidator = v.object({
   runs: v.array(runResponseValidator),
+});
+const coreJobTypeValidator = v.union(
+  v.literal("provision_run"),
+  v.literal("check_startup_timeout"),
+  v.literal("terminate_machine"),
+  v.literal("finalize_artifact"),
+  v.literal("cleanup_failed_upload"),
+  v.literal("provision_serve"),
+  v.literal("check_serve_startup_timeout"),
+  v.literal("terminate_serve_machine"),
+  v.literal("delete_serve_data"),
+);
+const coreJobStatusValidator = v.union(
+  v.literal("scheduled"),
+  v.literal("running"),
+  v.literal("completed"),
+  v.literal("failed"),
+);
+const coreJobRecordInputValidator = v.object({
+  type: coreJobTypeValidator,
+  idempotencyKey: v.string(),
+  delayMs: v.number(),
+  payload: v.any(),
 });
 const runLogsResponseValidator = v.object({
   run_id: v.string(),
@@ -199,11 +249,11 @@ const provisioningPayloadValidator = v.object({
       data_bytes: v.number(),
     }),
   ),
-  runpod_pod_id: v.optional(v.string()),
+  provider_machine_id: v.optional(v.string()),
 });
 const runProvisionSpecValidator = v.object({
   run_id: v.string(),
-  runpod_credential_id: v.id("runpodCredentials"),
+  provider_credential_id: v.string(),
   effective_gpu_type: v.string(),
   effective_gpu_count: v.number(),
   effective_volume_gb: v.number(),
@@ -281,11 +331,9 @@ const startupTimeoutStateValidator = v.union(
   v.object({
     status: v.string(),
     cancellationRequested: v.boolean(),
-    podId: v.optional(v.string()),
+    providerMachineId: v.optional(v.string()),
   }),
 );
-
-const r2 = new R2(components.r2);
 
 type ProvisioningPayload = {
   run_id: string;
@@ -308,7 +356,7 @@ type ProvisioningPayload = {
     data_files: number;
     data_bytes: number;
   };
-  runpod_pod_id?: string;
+  provider_machine_id?: string;
 };
 type RuntimeBootstrapPlan = {
   run_id: string;
@@ -329,15 +377,6 @@ type RuntimeBootstrapPlan = {
 function storageObjectNameFromKey(key: string) {
   const leaf = key.split("/").pop();
   return (leaf && leaf.trim()) || key;
-}
-
-function isRunArtifactKey(outputPath: string, key: string) {
-  const base = outputPath.trim();
-  const candidate = key.trim();
-  if (!base || !candidate) {
-    return false;
-  }
-  return candidate.startsWith(`${base}/`);
 }
 
 function toObjectTimestamp(value: string | undefined, fallback: number) {
@@ -407,7 +446,7 @@ function normalizeRuntimeLevel(level: string | undefined) {
 
 function normalizeRuntimeSource(source: string | undefined) {
   const trimmed = (source || "").trim();
-  return trimmed || "pod";
+  return trimmed || "machine";
 }
 
 function normalizeRuntimeTimestamp(timestamp: number | undefined) {
@@ -417,15 +456,7 @@ function normalizeRuntimeTimestamp(timestamp: number | undefined) {
   return Date.now();
 }
 
-function sanitizeRuntimeMessage(message: string) {
-  const trimmed = message.trim();
-  if (!trimmed) {
-    return "";
-  }
-  return trimmed.slice(0, 4000);
-}
-
-function manifestKey(
+function manifestObjectKey(
   environmentId: Id<"environments">,
   dataId: string | undefined,
   kind: "code" | "data",
@@ -434,11 +465,7 @@ function manifestKey(
   if (!manifestHash) {
     return null;
   }
-  if (kind === "data") {
-    const resolvedDataId = dataId || String(environmentId);
-    return `data/${resolvedDataId}/manifests/${manifestHash}.json`;
-  }
-  return `environments/${environmentId}/manifests/${kind}/${manifestHash}.json`;
+  return storageKeys.manifestObjectKey(String(environmentId), dataId || String(environmentId), kind, manifestHash);
 }
 
 function toProvisioningPayload(row: Doc<"runs">): ProvisioningPayload {
@@ -461,35 +488,10 @@ function toProvisioningPayload(row: Doc<"runs">): ProvisioningPayload {
     logs_path: row.logs,
     code_manifest_hash: row.codeManifestHash ?? null,
     data_manifest_hash: row.dataManifestHash ?? null,
-    code_manifest_key: manifestKey(row.environmentId, row.dataId, "code", row.codeManifestHash),
-    data_manifest_key: manifestKey(row.environmentId, row.dataId, "data", row.dataManifestHash),
+    code_manifest_key: manifestObjectKey(row.environmentId, row.dataId, "code", row.codeManifestHash),
+    data_manifest_key: manifestObjectKey(row.environmentId, row.dataId, "data", row.dataManifestHash),
     contract_version: "sync-incremental-0.1.0",
   };
-}
-
-function isS3NotFoundError(error: unknown) {
-  if (!error || typeof error !== "object") {
-    return false;
-  }
-  const row = error as { name?: string; Code?: string; $metadata?: { httpStatusCode?: number } };
-  return row.name === "NotFound" || row.Code === "NotFound" || row.$metadata?.httpStatusCode === 404;
-}
-
-async function getSignedDownloadUrlByHead(key: string): Promise<string | null> {
-  try {
-    await r2.client.send(
-      new HeadObjectCommand({
-        Bucket: r2.config.bucket,
-        Key: key,
-      }),
-    );
-    return r2.getUrl(key);
-  } catch (error) {
-    if (isS3NotFoundError(error)) {
-      return null;
-    }
-    throw error;
-  }
 }
 
 function normalizeCompatibilityFingerprint(
@@ -671,129 +673,6 @@ export const internalCreate = internalMutation({
   },
 });
 
-export const billRunningComputeMinute = internalMutation({
-  args: {},
-  returns: v.object({
-    processed_runs: v.number(),
-    charged_runs: v.number(),
-    owed_runs: v.number(),
-    skipped_runs: v.number(),
-  }),
-  handler: async (ctx) => {
-    const nowMs = Date.now();
-    const runningRuns = await ctx.db
-      .query("runs")
-      .withIndex("by_status", (q) => q.eq("status", RUN_STATUS.RUNNING))
-      .collect();
-
-    let processedRuns = 0;
-    let chargedRuns = 0;
-    let owedRuns = 0;
-    let skippedRuns = 0;
-
-    for (const row of runningRuns) {
-      const startedAt = typeof row.computeStartedAt === "number" ? toUnixMillis(row.computeStartedAt) : 0;
-      if (startedAt <= 0) {
-        skippedRuns += 1;
-        continue;
-      }
-
-      const durationMs = Math.max(0, nowMs - startedAt);
-      let hourlyRateCents = 0;
-      try {
-        hourlyRateCents = resolveRunHourlyRateCents(row);
-      } catch (error) {
-        const detail = error instanceof Error ? error.message : "run hourly rate is invalid";
-        await ctx.db.patch("runs", row._id, {
-          computeChargeStatus: "owed",
-          computeChargeError: detail,
-        });
-        owedRuns += 1;
-        continue;
-      }
-
-      const targetChargeCents = estimateRunUsageFromHourlyRateCents({
-        hourlyRateCents,
-        durationMs,
-      });
-      const runId = String(row._id);
-      const currentCollectedCents = Math.max(0, Math.floor(row.computeCollectedCents || 0));
-      const debitDeltaCents = targetChargeCents - currentCollectedCents;
-      let nextCollectedCents = currentCollectedCents;
-      let nextOutstandingCents = Math.max(0, targetChargeCents - nextCollectedCents);
-      let nextChargeStatus: "pending" | "charged" | "owed" =
-        targetChargeCents > 0 ? (nextOutstandingCents > 0 ? "owed" : "charged") : "pending";
-      let nextChargeError: string | undefined = undefined;
-
-      if (debitDeltaCents > 0) {
-        const appliedDebit = await upsertLedgerDebitTotal(ctx, {
-          userId: row.userId,
-          targetDebitCents: targetChargeCents,
-          eventType: USAGE_EVENT_TYPE.RUN_COMPUTE_SETTLEMENT_DEBIT,
-          idempotencyKey: runLiveDebitIdempotencyKey(runId),
-          referenceType: "run",
-          referenceId: runId,
-          metadata: {
-            settlement: "live_tick",
-            charge_cents: targetChargeCents,
-            duration_ms: durationMs,
-            gpu_type: row.effectiveGpuType,
-            gpu_count: row.effectiveGpuCount,
-            volume_gb: row.effectiveVolumeGb,
-            hourly_rate_cents: hourlyRateCents,
-          },
-        });
-        nextCollectedCents = Math.min(targetChargeCents, appliedDebit.debitedCents);
-        if (nextCollectedCents > currentCollectedCents) {
-          chargedRuns += 1;
-        }
-      }
-
-      nextOutstandingCents = Math.max(0, targetChargeCents - nextCollectedCents);
-      if (nextOutstandingCents > 0) {
-        nextChargeStatus = "owed";
-        nextChargeError = "outstanding compute settlement";
-        owedRuns += 1;
-      } else if (targetChargeCents > 0) {
-        nextChargeStatus = "charged";
-      } else {
-        nextChargeStatus = "pending";
-      }
-
-      const previousChargeCents = Math.max(0, Math.floor(row.computeChargeCents || 0));
-      const previousCollectedCents = Math.max(0, Math.floor(row.computeCollectedCents || 0));
-      const previousOutstandingCents = Math.max(0, Math.floor(row.computeOutstandingCents || 0));
-      const previousChargeStatus = row.computeChargeStatus || "pending";
-      const previousChargeError = row.computeChargeError;
-      if (
-        previousChargeCents !== targetChargeCents ||
-        previousCollectedCents !== nextCollectedCents ||
-        previousOutstandingCents !== nextOutstandingCents ||
-        previousChargeStatus !== nextChargeStatus ||
-        previousChargeError !== nextChargeError
-      ) {
-        await ctx.db.patch("runs", row._id, {
-          computeChargeCents: targetChargeCents,
-          computeCollectedCents: nextCollectedCents,
-          computeOutstandingCents: nextOutstandingCents,
-          computeChargeStatus: nextChargeStatus,
-          computeChargeError: nextChargeError,
-        });
-        processedRuns += 1;
-      } else {
-        skippedRuns += 1;
-      }
-    }
-
-    return {
-      processed_runs: processedRuns,
-      charged_runs: chargedRuns,
-      owed_runs: owedRuns,
-      skipped_runs: skippedRuns,
-    };
-  },
-});
-
 export const internalRemove = internalMutation({
   args: {
     userId: v.string(),
@@ -810,15 +689,43 @@ export const internalRemove = internalMutation({
   },
 });
 
+export const recordRunJob = internalMutation({
+  args: {
+    job: coreJobRecordInputValidator,
+    status: coreJobStatusValidator,
+  },
+  returns: v.id("jobs"),
+  handler: async (ctx, args) => {
+    const { jobId } = await upsertCoreJobRecord(ctx, args.job, args.status);
+    return jobId;
+  },
+});
+
+export const completeRunJob = internalMutation({
+  args: { jobId: v.id("jobs") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await markCoreJobCompleted(ctx, args.jobId);
+    return null;
+  },
+});
+
+export const failRunJob = internalMutation({
+  args: { jobId: v.id("jobs"), error: v.string() },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await markCoreJobFailed(ctx, args.jobId, args.error);
+    return null;
+  },
+});
+
 export const internalDeleteRunData = internalMutation({
   args: { runId: v.id("runs") },
   returns: v.null(),
   handler: async (ctx, args) => {
     const hasMore = await deleteRunDataBatch(ctx, args.runId);
     if (hasMore) {
-      await ctx.scheduler.runAfter(0, internal.runs.internalDeleteRunData, {
-        runId: args.runId,
-      });
+      await enqueueRunDataDeletionBatch(ctx, args.runId);
     } else {
       await ctx.db.delete("runs", args.runId);
     }
@@ -839,33 +746,13 @@ export const markCancelledAfterTermination = internalMutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const row = await ctx.db.get("runs", args.runId);
-    if (!row || !row.cancellationRequested || TERMINAL_STATUSES.has(row.status)) {
+    if (!row) {
       return null;
     }
-    const terminalTiming = resolveTerminalRunTiming(row);
-    const settlement = await settleRunComputeCharge(ctx, row, terminalTiming);
-    await ctx.db.patch("runs", args.runId, {
-      status: RUN_STATUS.CANCELLED,
-      computeEndedAt: terminalTiming.computeEndedAt,
-      computeChargeCents: settlement.chargeCents,
-      computeCollectedCents: settlement.collectedCents,
-      computeOutstandingCents: settlement.outstandingCents,
-      computeChargeStatus: settlement.chargeStatus,
-      computeChargeError: settlement.chargeError,
-    });
-    await ctx.db.insert("runEvents", {
-      runId: args.runId,
-      status: RUN_STATUS.CANCELLED,
-      message: args.force === true ? "force cancellation completed" : "cancellation completed",
-      metadata: {
-        duration_ms: terminalTiming.durationMs,
-        compute_charge_cents: settlement.chargeCents,
-        compute_charge_delta_cents: settlement.chargeDeltaCents,
-        compute_charge_status: settlement.chargeStatus,
-        compute_charge_error: settlement.chargeError,
-        balance_after_cents: settlement.balanceAfterCents,
-      },
-    });
+    await applyRunLifecyclePlan(ctx, args.runId, row, planCancellationTerminationCompleted({
+      run: toRunLifecycleState(row),
+      force: args.force === true,
+    }));
     return null;
   },
 });
@@ -875,37 +762,13 @@ export const markCancellationTerminationFailed = internalMutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const row = await ctx.db.get("runs", args.runId);
-    if (!row || !row.cancellationRequested || TERMINAL_STATUSES.has(row.status)) {
+    if (!row) {
       return null;
     }
-    const errorText = sanitizeRuntimeMessage(args.error) || "failed to terminate pod during cancellation";
-    const terminalTiming = resolveTerminalRunTiming(row);
-    const settlement = await settleRunComputeCharge(ctx, row, terminalTiming);
-    await ctx.db.patch("runs", args.runId, {
-      status: RUN_STATUS.FAILED,
-      error: `cancellation failed: ${errorText}`,
-      runtimeTokenHash: "revoked",
-      computeEndedAt: terminalTiming.computeEndedAt,
-      computeChargeCents: settlement.chargeCents,
-      computeCollectedCents: settlement.collectedCents,
-      computeOutstandingCents: settlement.outstandingCents,
-      computeChargeStatus: settlement.chargeStatus,
-      computeChargeError: settlement.chargeError,
-    });
-    await ctx.db.insert("runEvents", {
-      runId: args.runId,
-      status: RUN_STATUS.FAILED,
-      message: "cancellation termination failed",
-      metadata: {
-        error: errorText,
-        duration_ms: terminalTiming.durationMs,
-        compute_charge_cents: settlement.chargeCents,
-        compute_charge_delta_cents: settlement.chargeDeltaCents,
-        compute_charge_status: settlement.chargeStatus,
-        compute_charge_error: settlement.chargeError,
-        balance_after_cents: settlement.balanceAfterCents,
-      },
-    });
+    await applyRunLifecyclePlan(ctx, args.runId, row, planCancellationTerminationFailed({
+      run: toRunLifecycleState(row),
+      error: args.error,
+    }));
     return null;
   },
 });
@@ -913,8 +776,8 @@ export const markCancellationTerminationFailed = internalMutation({
 export const scheduleTerminationRetry = internalMutation({
   args: {
     runId: v.id("runs"),
-    podId: v.string(),
-    runpodCredentialId: v.optional(v.id("runpodCredentials")),
+    providerMachineId: v.string(),
+    providerCredentialId: v.optional(v.string()),
     force: v.optional(v.boolean()),
     attempt: v.number(),
     error: v.string(),
@@ -922,28 +785,19 @@ export const scheduleTerminationRetry = internalMutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const row = await ctx.db.get("runs", args.runId);
-    if (!row || !row.cancellationRequested || TERMINAL_STATUSES.has(row.status)) {
+    if (!row) {
       return null;
     }
-    await ctx.db.insert("runEvents", {
-      runId: args.runId,
-      status: RUN_STATUS.CANCELLING,
-      message: `retrying pod termination (attempt ${args.attempt}/${RUN_CONFIG.terminationRetryMaxAttempts})`,
-      metadata: {
-        error: args.error,
-      },
-    });
-    await ctx.scheduler.runAfter(
-      RUN_CONFIG.terminationRetryDelaySeconds * 1000,
-      internal.runs.internalTerminatePod,
-      {
-        runId: args.runId,
-        podId: args.podId,
-        runpodCredentialId: args.runpodCredentialId,
-        force: args.force === true,
-        attempt: args.attempt,
-      },
-    );
+    await applyRunLifecyclePlan(ctx, args.runId, row, planTerminationRetry({
+      run: toRunLifecycleState(row),
+      providerMachineId: args.providerMachineId,
+      providerCredentialId: args.providerCredentialId ? String(args.providerCredentialId) : undefined,
+      force: args.force === true,
+      attempt: args.attempt,
+      maxAttempts: RUN_CONFIG.terminationRetryMaxAttempts,
+      delayMs: RUN_CONFIG.terminationRetryDelaySeconds * 1000,
+      error: args.error,
+    }));
     return null;
   },
 });
@@ -956,39 +810,39 @@ export const internalRename = internalMutation({
   },
 });
 
-export const internalTerminatePod = internalAction({
+export const internalTerminateMachine = internalAction({
   args: {
     runId: v.id("runs"),
-    podId: v.string(),
-    runpodCredentialId: v.optional(v.id("runpodCredentials")),
+    providerMachineId: v.string(),
+    providerCredentialId: v.optional(v.string()),
     force: v.optional(v.boolean()),
     attempt: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    await terminateRuntimePodWithRetry({
+    await terminateRuntimeMachineWithRetry({
       ctx,
-      podId: args.podId,
-      runpodCredentialId: args.runpodCredentialId ?? null,
+      providerMachineId: args.providerMachineId,
+      providerCredentialId: args.providerCredentialId ?? null,
       attempt: args.attempt ?? 0,
       shouldTerminate: async () =>
-        await ctx.runQuery(internal.runs.internalShouldTerminatePod, {
+        await ctx.runQuery(internal.runs.internalShouldTerminateMachine, {
           runId: args.runId,
           force: args.force === true,
         }),
-      resolveCredentialId: async () =>
-        await ctx.runQuery(internal.runs.internalGetRunpodCredentialId, { runId: args.runId }),
+      resolveProviderCredentialId: async () =>
+        await ctx.runQuery(internal.runs.internalGetProviderCredentialId, { runId: args.runId }),
       onTerminated: async () => {
         await ctx.runMutation(internal.runs.markCancelledAfterTermination, {
           runId: args.runId,
           force: args.force === true,
         });
       },
-      onRetry: async ({ nextAttempt, runpodCredentialId, error }) => {
+      onRetry: async ({ nextAttempt, providerCredentialId, error }) => {
         if (nextAttempt < RUN_CONFIG.terminationRetryMaxAttempts) {
           await ctx.runMutation(internal.runs.scheduleTerminationRetry, {
             runId: args.runId,
-            podId: args.podId,
-            runpodCredentialId,
+            providerMachineId: args.providerMachineId,
+            providerCredentialId,
             force: args.force === true,
             attempt: nextAttempt,
             error,
@@ -1030,12 +884,12 @@ export const internalGetRunProvisionSpec = internalQuery({
     if (!env) {
       throw new ConvexError("environment not found");
     }
-    if (!row.runpodCredentialId) {
-      throw new ConvexError("run is missing its Runpod credential");
+    if (!row.providerCredentialId) {
+      throw new ConvexError("run is missing its compute provider credential");
     }
     return {
       run_id: String(row._id),
-      runpod_credential_id: row.runpodCredentialId,
+      provider_credential_id: row.providerCredentialId,
       effective_gpu_type: row.effectiveGpuType || env.gpuType,
       effective_gpu_count: row.effectiveGpuCount || env.gpuCount,
       effective_volume_gb: row.effectiveVolumeGb || env.volumeGb,
@@ -1046,12 +900,12 @@ export const internalGetRunProvisionSpec = internalQuery({
   },
 });
 
-export const internalGetRunpodCredentialId = internalQuery({
+export const internalGetProviderCredentialId = internalQuery({
   args: { runId: v.id("runs") },
-  returns: v.union(v.id("runpodCredentials"), v.null()),
+  returns: v.union(v.string(), v.null()),
   handler: async (ctx, args) => {
     const row = await ctx.db.get("runs", args.runId);
-    return row?.runpodCredentialId ?? null;
+    return row?.providerCredentialId ?? null;
   },
 });
 
@@ -1116,29 +970,19 @@ export const internalShouldAbortProvisioning = internalQuery({
   returns: v.boolean(),
   handler: async (ctx, args) => {
     const row = await ctx.db.get("runs", args.runId);
-    if (!row) {
-      return true;
-    }
-    return row.cancellationRequested || TERMINAL_STATUSES.has(row.status);
+    return shouldAbortProvisioning(row ? toRunLifecycleState(row) : null);
   },
 });
 
-export const internalShouldTerminatePod = internalQuery({
+export const internalShouldTerminateMachine = internalQuery({
   args: { runId: v.id("runs"), force: v.optional(v.boolean()) },
   returns: v.boolean(),
   handler: async (ctx, args) => {
-    if (args.force === true) {
-      // Force paths (including environment cleanup) should terminate even if the run row is gone.
-      return true;
-    }
     const row = await ctx.db.get("runs", args.runId);
-    if (!row) {
-      return false;
-    }
-    if (!row.cancellationRequested) {
-      return false;
-    }
-    return ACTIVE_STATUSES.has(row.status);
+    return shouldTerminateMachine({
+      run: row ? toRunLifecycleState(row) : null,
+      force: args.force === true,
+    });
   },
 });
 
@@ -1153,7 +997,7 @@ export const internalGetStartupTimeoutState = internalQuery({
     return {
       status: row.status,
       cancellationRequested: row.cancellationRequested,
-      podId: row.podId,
+      providerMachineId: row.providerMachineId,
     };
   },
 });
@@ -1161,7 +1005,7 @@ export const internalGetStartupTimeoutState = internalQuery({
 export const upsertRuntimeIncompatibility = internalMutation({
   args: {
     runId: v.id("runs"),
-    podId: v.optional(v.string()),
+    providerMachineId: v.optional(v.string()),
     fingerprint: runtimeCompatibilityFingerprintValidator,
     errorCode: v.string(),
     errorDetail: v.string(),
@@ -1190,7 +1034,7 @@ export const upsertRuntimeIncompatibility = internalMutation({
         failureCount: Math.max(1, Math.floor(existing.failureCount || 0)) + 1,
         cooldownUntil: Math.max(existing.cooldownUntil || 0, nextCooldownUntil),
         lastRunId: args.runId,
-        lastPodId: args.podId?.trim() || existing.lastPodId,
+        lastProviderMachineId: args.providerMachineId?.trim() || existing.lastProviderMachineId,
       });
       return null;
     }
@@ -1209,7 +1053,7 @@ export const upsertRuntimeIncompatibility = internalMutation({
       failureCount: 1,
       cooldownUntil: nextCooldownUntil,
       lastRunId: args.runId,
-      lastPodId: args.podId?.trim() || undefined,
+      lastProviderMachineId: args.providerMachineId?.trim() || undefined,
     });
     return null;
   },
@@ -1231,8 +1075,8 @@ export const setRuntimeTokenHash = internalMutation({
 export const enforceProvisioningStartupTimeout = internalAction({
   args: {
     runId: v.id("runs"),
-    podId: v.string(),
-    runpodCredentialId: v.id("runpodCredentials"),
+    providerMachineId: v.string(),
+    providerCredentialId: v.string(),
     fingerprint: runtimeCompatibilityFingerprintValidator,
   },
   returns: v.null(),
@@ -1240,13 +1084,7 @@ export const enforceProvisioningStartupTimeout = internalAction({
     const state = await ctx.runQuery(internal.runs.internalGetStartupTimeoutState, {
       runId: args.runId,
     });
-    if (!state || state.cancellationRequested || TERMINAL_STATUSES.has(state.status)) {
-      return null;
-    }
-    if (state.status !== RUN_STATUS.PROVISIONING) {
-      return null;
-    }
-    if ((state.podId || "") !== args.podId) {
+    if (!shouldEnforceStartupTimeout({ state, providerMachineId: args.providerMachineId })) {
       return null;
     }
     const detail = `startup timeout: timed out waiting for runtime startup heartbeat after ${RUN_CONFIG.startupTimeoutSeconds}s`;
@@ -1254,7 +1092,7 @@ export const enforceProvisioningStartupTimeout = internalAction({
     if (incompatibility) {
       await ctx.runMutation(internal.runs.upsertRuntimeIncompatibility, {
         runId: args.runId,
-        podId: args.podId,
+        providerMachineId: args.providerMachineId,
         fingerprint: args.fingerprint,
         errorCode: incompatibility.code,
         errorDetail: detail,
@@ -1263,13 +1101,7 @@ export const enforceProvisioningStartupTimeout = internalAction({
     }
     await ctx.runMutation(internal.runs.markFailed, {
       runId: args.runId,
-      error: `pod bootstrap failed: ${detail}`,
-    });
-    await ctx.runAction(internal.runs.internalTerminatePod, {
-      runId: args.runId,
-      podId: args.podId,
-      runpodCredentialId: args.runpodCredentialId,
-      force: true,
+      error: `runtime bootstrap failed: ${detail}`,
     });
     return null;
   },
@@ -1297,14 +1129,14 @@ export const provisionRun = internalAction({
       provisioningPayload.environment_id as Id<"environments">,
     );
     const compatibilityFingerprint = normalizeCompatibilityFingerprint({
-      cloudType: resolveRunpodCloudType(),
+      cloudType: resolveComputeCompatibilityCloudType(),
       framework: runSpec.framework,
       version: runSpec.version,
       pythonVersion: runSpec.python_version,
       gpuType: runSpec.effective_gpu_type,
       imageName: resolveImageName(runSpec.framework, runSpec.version, runSpec.python_version),
     });
-    let provisionedPodId = "";
+    let provisionedProviderMachineId = "";
     try {
       const codeManifestHash = provisioningPayload.code_manifest_hash;
       const dataManifestHash = provisioningPayload.data_manifest_hash;
@@ -1318,7 +1150,7 @@ export const provisionRun = internalAction({
       if (dataManifestHash && dataManifestKey) {
         await fetchSyncManifest(ctx, "data", dataManifestKey, dataManifestHash);
       }
-      const provisionResult = await provisionRuntimePod({
+      const provisionResult = await provisionRuntimeMachine({
         ctx,
         shouldAbort: async () =>
           await ctx.runQuery(internal.runs.internalShouldAbortProvisioning, { runId: args.runId }),
@@ -1328,9 +1160,9 @@ export const provisionRun = internalAction({
             runtimeTokenHash,
           });
         },
-        createPod: {
+        createMachine: {
           name: `tahuna-${String(args.runId)}`,
-          runpodCredentialId: runSpec.runpod_credential_id,
+          providerCredentialId: runSpec.provider_credential_id,
           imageName: compatibilityFingerprint.imageName,
           gpuType: runSpec.effective_gpu_type,
           gpuCount: runSpec.effective_gpu_count,
@@ -1366,30 +1198,22 @@ export const provisionRun = internalAction({
       if (!provisionResult) {
         return null;
       }
-      provisionedPodId = provisionResult.podId;
-      await ctx.runMutation(internal.runs.markPodProvisioned, {
+      provisionedProviderMachineId = provisionResult.providerMachineId;
+      await ctx.runMutation(internal.runs.markMachineProvisioned, {
         runId: args.runId,
-        podId: provisionResult.podId,
-        runpodResponse: provisionResult.rawResponse,
+        providerMachineId: provisionResult.providerMachineId,
+        providerCredentialId: runSpec.provider_credential_id,
+        fingerprint: compatibilityFingerprint,
+        providerMetadata: provisionResult.providerMetadata,
       });
-      await ctx.scheduler.runAfter(
-        RUN_CONFIG.startupTimeoutSeconds * 1000,
-        internal.runs.enforceProvisioningStartupTimeout,
-        {
-          runId: args.runId,
-          podId: provisionResult.podId,
-          runpodCredentialId: runSpec.runpod_credential_id,
-          fingerprint: compatibilityFingerprint,
-        },
-      );
     } catch (error) {
-      const raw = error instanceof Error ? error.message : "pod bootstrap failed";
+      const raw = error instanceof Error ? error.message : "runtime bootstrap failed";
       const detail = normalizeProvisioningError(raw);
       const incompatibility = classifyRuntimeIncompatibility(detail);
       if (incompatibility) {
         await ctx.runMutation(internal.runs.upsertRuntimeIncompatibility, {
           runId: args.runId,
-          podId: provisionedPodId || undefined,
+          providerMachineId: provisionedProviderMachineId || undefined,
           fingerprint: compatibilityFingerprint,
           errorCode: incompatibility.code,
           errorDetail: detail,
@@ -1398,46 +1222,46 @@ export const provisionRun = internalAction({
       }
       await ctx.runMutation(internal.runs.markFailed, {
         runId: args.runId,
-        error: `pod bootstrap failed: ${detail}`,
+        error: `runtime bootstrap failed: ${detail}`,
         provisioningPayload,
       });
-      if (provisionedPodId) {
-        await ctx.runAction(internal.runs.internalTerminatePod, {
-          runId: args.runId,
-          podId: provisionedPodId,
-          runpodCredentialId: runSpec.runpod_credential_id,
+      if (provisionedProviderMachineId) {
+        await enqueueTerminateMachineJob(ctx, createTerminateMachineJob({
+          runId: String(args.runId),
+          providerMachineId: provisionedProviderMachineId,
+          providerCredentialId: runSpec.provider_credential_id,
           force: true,
-        });
+        }));
       }
     }
     return null;
   },
 });
 
-export const markPodProvisioned = internalMutation({
+export const markMachineProvisioned = internalMutation({
   args: {
     runId: v.id("runs"),
-    podId: v.string(),
-    runpodResponse: v.optional(v.any()),
+    providerMachineId: v.string(),
+    providerCredentialId: v.string(),
+    fingerprint: runtimeCompatibilityFingerprintValidator,
+    providerMetadata: v.optional(v.any()),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
     const row = await ctx.db.get("runs", args.runId);
-    if (!row || row.cancellationRequested || TERMINAL_STATUSES.has(row.status)) {
+    if (!row) {
       return null;
     }
-    await ctx.db.patch("runs", args.runId, {
-      podId: args.podId,
-    });
-    await ctx.db.insert("runEvents", {
-      runId: args.runId,
-      status: RUN_STATUS.PROVISIONING,
-      message: "gpu pod provisioned",
-      metadata: {
-        pod_id: args.podId,
-        runpod_response: args.runpodResponse,
+    await applyRunLifecyclePlan(ctx, args.runId, row, planMachineProvisioned({
+      run: toRunLifecycleState(row),
+      providerMachineId: args.providerMachineId,
+      providerMetadata: args.providerMetadata,
+      startupTimeout: {
+        delayMs: RUN_CONFIG.startupTimeoutSeconds * 1000,
+        providerCredentialId: String(args.providerCredentialId),
+        fingerprint: normalizeCompatibilityFingerprint(args.fingerprint as RuntimeCompatibilityFingerprint),
       },
-    });
+    }));
     return null;
   },
 });
@@ -1447,34 +1271,13 @@ export const markProvisioning = internalMutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const row = await ctx.db.get("runs", args.runId);
-    if (!row || row.cancellationRequested || TERMINAL_STATUSES.has(row.status)) {
-      if (row?.cancellationRequested) {
-        const terminalTiming = resolveTerminalRunTiming(row);
-        const settlement = await settleRunComputeCharge(ctx, row, terminalTiming);
-        await ctx.db.patch("runs", args.runId, {
-          status: RUN_STATUS.CANCELLED,
-          computeEndedAt: terminalTiming.computeEndedAt,
-          computeChargeCents: settlement.chargeCents,
-          computeCollectedCents: settlement.collectedCents,
-          computeOutstandingCents: settlement.outstandingCents,
-          computeChargeStatus: settlement.chargeStatus,
-          computeChargeError: settlement.chargeError,
-        });
-      }
+    if (!row) {
       return null;
     }
-    await ctx.db.patch("runs", args.runId, { status: RUN_STATUS.PROVISIONING });
-    await ctx.db.insert("runEvents", {
-      runId: args.runId,
-      status: RUN_STATUS.PROVISIONING,
-      message: "pod bootstrap started",
-      metadata: args.provisioningPayload
-        ? {
-            provisioning_payload: args.provisioningPayload,
-            fetch_strategy: "pod bootstrap downloads pinned code/data manifests and blobs into /workspace",
-          }
-        : undefined,
-    });
+    await applyRunLifecyclePlan(ctx, args.runId, row, planProvisioningStarted({
+      run: toRunLifecycleState(row),
+      provisioningPayload: args.provisioningPayload,
+    }));
     return null;
   },
 });
@@ -1484,38 +1287,14 @@ export const markRunning = internalMutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const row = await ctx.db.get("runs", args.runId);
-    if (!row || row.cancellationRequested || TERMINAL_STATUSES.has(row.status)) {
-      if (row?.cancellationRequested) {
-        const terminalTiming = resolveTerminalRunTiming(row);
-        const settlement = await settleRunComputeCharge(ctx, row, terminalTiming);
-        await ctx.db.patch("runs", args.runId, {
-          status: RUN_STATUS.CANCELLED,
-          computeEndedAt: terminalTiming.computeEndedAt,
-          computeChargeCents: settlement.chargeCents,
-          computeCollectedCents: settlement.collectedCents,
-          computeOutstandingCents: settlement.outstandingCents,
-          computeChargeStatus: settlement.chargeStatus,
-          computeChargeError: settlement.chargeError,
-        });
-      }
+    if (!row) {
       return null;
     }
-
-    await ctx.db.patch("runs", args.runId, {
-      status: RUN_STATUS.RUNNING,
-      computeStartedAt: row.computeStartedAt ?? Date.now(),
-    });
-    await ctx.db.insert("runEvents", {
-      runId: args.runId,
-      status: RUN_STATUS.RUNNING,
-      message: "pod running",
-      metadata: args.provisioningPayload
-        ? {
-            provisioning_payload: args.provisioningPayload,
-            fetch_strategy: "pod runtime is active and reporting logs/metrics via runtime endpoints",
-          }
-        : undefined,
-    });
+    await applyRunLifecyclePlan(ctx, args.runId, row, planMachineRunning({
+      run: toRunLifecycleState(row),
+      provisioningPayload: args.provisioningPayload,
+      nowMs: Date.now(),
+    }));
     return null;
   },
 });
@@ -1529,42 +1308,14 @@ export const markFailed = internalMutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const row = await ctx.db.get("runs", args.runId);
-    if (!row || TERMINAL_STATUSES.has(row.status)) {
+    if (!row) {
       return null;
     }
-    const errorText = args.error.trim() || "pod bootstrap failed";
-    const terminalTiming = resolveTerminalRunTiming(row);
-    const settlement = await settleRunComputeCharge(ctx, row, terminalTiming);
-    await ctx.db.patch("runs", args.runId, {
-      status: RUN_STATUS.FAILED,
-      error: errorText,
-      runtimeTokenHash: "revoked",
-      computeEndedAt: terminalTiming.computeEndedAt,
-      computeChargeCents: settlement.chargeCents,
-      computeCollectedCents: settlement.collectedCents,
-      computeOutstandingCents: settlement.outstandingCents,
-      computeChargeStatus: settlement.chargeStatus,
-      computeChargeError: settlement.chargeError,
-    });
-    await ctx.db.insert("runEvents", {
-      runId: args.runId,
-      status: RUN_STATUS.FAILED,
-      message: errorText,
-      metadata: {
-        duration_ms: terminalTiming.durationMs,
-        compute_charge_cents: settlement.chargeCents,
-        compute_charge_delta_cents: settlement.chargeDeltaCents,
-        compute_charge_status: settlement.chargeStatus,
-        compute_charge_error: settlement.chargeError,
-        balance_after_cents: settlement.balanceAfterCents,
-        ...(args.provisioningPayload
-          ? {
-              provisioning_payload: args.provisioningPayload,
-            }
-          : {}),
-      },
-    });
-    await scheduleForcedPodTermination(ctx, args.runId, row.podId, row.runpodCredentialId);
+    await applyRunLifecyclePlan(ctx, args.runId, row, planRunFailure({
+      run: toRunLifecycleState(row),
+      error: args.error,
+      provisioningPayload: args.provisioningPayload,
+    }));
     return null;
   },
 });
@@ -1647,106 +1398,15 @@ export const ingestRuntimeStatus = internalMutation({
     if (!row) {
       return { status: "missing" };
     }
-    if (TERMINAL_STATUSES.has(row.status)) {
-      return { status: row.status };
-    }
-
-    let status = args.status;
-    if (row.cancellationRequested && (status === RUN_STATUS.PROVISIONING || status === RUN_STATUS.RUNNING)) {
-      status = RUN_STATUS.CANCELLED;
-    }
-    if (row.status === RUN_STATUS.RUNNING && status === RUN_STATUS.PROVISIONING) {
-      status = RUN_STATUS.RUNNING;
-    }
-
-    if (status === RUN_STATUS.FAILED) {
-      const errorText = sanitizeRuntimeMessage(args.error || args.message || "runtime failed") || "runtime failed";
-      const terminalTiming = resolveTerminalRunTiming(row);
-      const settlement = await settleRunComputeCharge(ctx, row, terminalTiming);
-      await ctx.db.patch("runs", args.runId, {
-        status: RUN_STATUS.FAILED,
-        error: errorText,
-        runtimeTokenHash: "revoked",
-        computeEndedAt: terminalTiming.computeEndedAt,
-        computeChargeCents: settlement.chargeCents,
-        computeCollectedCents: settlement.collectedCents,
-        computeOutstandingCents: settlement.outstandingCents,
-        computeChargeStatus: settlement.chargeStatus,
-        computeChargeError: settlement.chargeError,
-      });
-      await ctx.db.insert("runEvents", {
-        runId: args.runId,
-        status: RUN_STATUS.FAILED,
-        message: errorText,
-        metadata: {
-          source: "pod-runtime",
-          duration_ms: terminalTiming.durationMs,
-          compute_charge_cents: settlement.chargeCents,
-          compute_charge_delta_cents: settlement.chargeDeltaCents,
-          compute_charge_status: settlement.chargeStatus,
-          compute_charge_error: settlement.chargeError,
-          balance_after_cents: settlement.balanceAfterCents,
-        },
-      });
-      await scheduleForcedPodTermination(ctx, args.runId, row.podId, row.runpodCredentialId);
-      return { status: RUN_STATUS.FAILED };
-    }
-
-    const patch: {
-      status: string;
-      runtimeTokenHash?: string;
-      computeStartedAt?: number;
-      computeEndedAt?: number;
-      computeChargeCents?: number;
-      computeCollectedCents?: number;
-      computeOutstandingCents?: number;
-      computeChargeStatus?: "charged" | "owed";
-      computeChargeError?: string;
-    } = { status };
-    if (status === RUN_STATUS.RUNNING) {
-      patch.computeStartedAt = row.computeStartedAt ?? Date.now();
-    }
-    const isTerminalStatus = status === RUN_STATUS.COMPLETED || status === RUN_STATUS.CANCELLED;
-    let terminalTiming: { computeEndedAt?: number; durationMs: number } | undefined;
-    let settlement: ComputeSettlementResult | undefined;
-    if (isTerminalStatus) {
-      terminalTiming = resolveTerminalRunTiming(row);
-      settlement = await settleRunComputeCharge(ctx, row, terminalTiming);
-      patch.computeEndedAt = terminalTiming.computeEndedAt;
-      patch.computeChargeCents = settlement.chargeCents;
-      patch.computeCollectedCents = settlement.collectedCents;
-      patch.computeOutstandingCents = settlement.outstandingCents;
-      patch.computeChargeStatus = settlement.chargeStatus;
-      patch.computeChargeError = settlement.chargeError;
-    }
-    if (status === RUN_STATUS.COMPLETED || status === RUN_STATUS.CANCELLED) {
-      patch.runtimeTokenHash = "revoked";
-    }
-    await ctx.db.patch("runs", args.runId, patch);
-    await ctx.db.insert("runEvents", {
-      runId: args.runId,
-      status,
-      message:
-        sanitizeRuntimeMessage(args.message || `runtime status: ${status}`) ||
-        `runtime status: ${status}`,
-      metadata: {
-        source: "pod-runtime",
-        ...(terminalTiming ? { duration_ms: terminalTiming.durationMs } : {}),
-        ...(settlement
-          ? {
-              compute_charge_cents: settlement.chargeCents,
-              compute_charge_delta_cents: settlement.chargeDeltaCents,
-              compute_charge_status: settlement.chargeStatus,
-              compute_charge_error: settlement.chargeError,
-              balance_after_cents: settlement.balanceAfterCents,
-            }
-          : {}),
-      },
+    const plan = planRuntimeStatusIngestion({
+      run: toRunLifecycleState(row),
+      status: args.status as RunLifecycleStatus,
+      message: args.message,
+      error: args.error,
+      nowMs: Date.now(),
     });
-    if (status === RUN_STATUS.COMPLETED || status === RUN_STATUS.CANCELLED) {
-      await scheduleForcedPodTermination(ctx, args.runId, row.podId, row.runpodCredentialId);
-    }
-    return { status };
+    await applyRunLifecyclePlan(ctx, args.runId, row, plan);
+    return { status: plan.resultStatus };
   },
 });
 
@@ -1757,52 +1417,90 @@ export const ingestRuntimeArtifacts = internalAction({
   },
   returns: v.object({ accepted: v.number() }),
   handler: async (ctx, args): Promise<{ accepted: number }> => {
-    const commitContext = await ctx.runQuery(internal.runs.internalGetRunArtifactCommitContext, {
-      runId: args.runId,
-    });
-    if (!commitContext) {
-      return { accepted: 0 };
-    }
+    const job = createFinalizeArtifactJob({ runId: String(args.runId), keys: args.keys });
+    const jobId = await startActionJob(ctx, job);
     const validArtifacts: Array<{ key: string; size: number; createdAt: number }> = [];
-    const inputSeen = new Set<string>();
-    for (const rawKey of args.keys) {
-      const key = rawKey.trim();
-      if (!key || inputSeen.has(key)) {
-        continue;
+    try {
+      const commitContext = await ctx.runQuery(internal.runs.internalGetRunArtifactCommitContext, {
+        runId: args.runId,
+      });
+      if (!commitContext) {
+        await completeActionJob(ctx, jobId);
+        return { accepted: 0 };
       }
-      inputSeen.add(key);
-      if (!isRunArtifactKey(commitContext.outputPath, key)) {
-        continue;
-      }
-      const metadata = await r2.getMetadata(ctx, key);
-      if (!metadata?.url) {
-        const existsByHead = await getSignedDownloadUrlByHead(key);
-        if (!existsByHead) {
+      const inputSeen = new Set<string>();
+      for (const rawKey of args.keys) {
+        const key = rawKey.trim();
+        if (!key || inputSeen.has(key)) {
           continue;
         }
+        inputSeen.add(key);
+        if (!isRunArtifactKey(commitContext.outputPath, key)) {
+          continue;
+        }
+        const metadata = await objectStore.getMetadata(ctx, key);
+        if (!metadata?.url) {
+          const signedDownload = await objectStore.getSignedDownload(ctx, key);
+          if (!signedDownload) {
+            continue;
+          }
+        }
+        validArtifacts.push({
+          key,
+          size: typeof metadata?.size === "number" && Number.isFinite(metadata.size) ? metadata.size : 0,
+          createdAt: toObjectTimestamp(metadata?.lastModified, Date.now()),
+        });
       }
-      validArtifacts.push({
-        key,
-        size: typeof metadata?.size === "number" && Number.isFinite(metadata.size) ? metadata.size : 0,
-        createdAt: toObjectTimestamp(metadata?.lastModified, Date.now()),
-      });
-    }
 
-    try {
-      return await ctx.runMutation(internal.runs.commitRuntimeArtifacts, {
+      const result = await ctx.runMutation(internal.runs.commitRuntimeArtifacts, {
         runId: args.runId,
         artifacts: validArtifacts,
       });
+      await completeActionJob(ctx, jobId);
+      return result;
     } catch (error) {
+      const detail = error instanceof Error ? error.message : "artifact finalization failed";
       for (const artifact of validArtifacts) {
         try {
-          await r2.deleteObject(ctx, artifact.key);
+          await enqueueCleanupFailedUploadJob(ctx, createCleanupFailedUploadJob({
+            runId: String(args.runId),
+            key: artifact.key,
+            reason: detail,
+          }));
         } catch {
-          // Best-effort cleanup when artifact billing/indexing fails.
+          // Best-effort cleanup scheduling when artifact finalization fails.
         }
       }
+      await failActionJob(ctx, jobId, detail);
       throw error;
     }
+  },
+});
+
+export const cleanupFailedArtifactUpload = internalAction({
+  args: {
+    runId: v.id("runs"),
+    key: v.string(),
+    reason: v.optional(v.string()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const jobId = await startActionJob(ctx, createCleanupFailedUploadJob({
+      runId: String(args.runId),
+      key: args.key,
+      reason: args.reason,
+    }));
+    try {
+      await objectStore.deleteObject(ctx, args.key);
+      await completeActionJob(ctx, jobId);
+    } catch (error) {
+      await failActionJob(
+        ctx,
+        jobId,
+        error instanceof Error ? error.message : "failed to clean up artifact upload",
+      );
+    }
+    return null;
   },
 });
 
@@ -1818,17 +1516,12 @@ export const commitRuntimeArtifacts = internalMutation({
       return { accepted: 0 };
     }
 
-    const existing = row.artifactKeys || [];
-    const seen = new Set(existing);
-    const newKeys: string[] = [];
-    for (const artifact of args.artifacts) {
-      if (!isRunArtifactKey(row.output || "", artifact.key)) {
-        continue;
-      }
-      if (!seen.has(artifact.key)) {
-        seen.add(artifact.key);
-        newKeys.push(artifact.key);
-      }
+    const plan = planRuntimeArtifactCommit({
+      outputPath: row.output || "",
+      existingArtifactKeys: row.artifactKeys || [],
+      artifacts: args.artifacts,
+    });
+    for (const artifact of plan.acceptedArtifacts) {
       try {
         await upsertRunArtifactIndexRow(ctx, {
           userId: row.userId,
@@ -1841,12 +1534,10 @@ export const commitRuntimeArtifacts = internalMutation({
         throw error;
       }
     }
-    if (newKeys.length > 0) {
-      await ctx.db.patch("runs", args.runId, {
-        artifactKeys: [...existing, ...newKeys],
-      });
+    if (plan.patch) {
+      await ctx.db.patch("runs", args.runId, plan.patch);
     }
-    return { accepted: newKeys.length };
+    return { accepted: plan.acceptedCount };
   },
 });
 

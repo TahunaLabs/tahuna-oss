@@ -13,14 +13,13 @@ type RouteParams = {
 }
 
 type RouteContext = {
-  params: Promise<RouteParams> | RouteParams
+  params: Promise<RouteParams>
 }
 
 type ServeInferenceTarget = {
   serve_id: string
   status: string
-  pod_id: string
-  port: number
+  ingress_url: string
   inference_path: string
 }
 
@@ -80,18 +79,6 @@ function jsonError(status: number, detail: string) {
 
 function trimErrorLine(value: string) {
   return value.split("\n")[0]?.trim() || ""
-}
-
-function buildRuntimeUpstreamBaseUrl(podId: string, port: number) {
-  const normalizedPodId = podId.trim()
-  const normalizedPort = Number.isFinite(port) ? Math.trunc(port) : 0
-  if (!normalizedPodId) {
-    throw new Error("serve is missing a live inference runtime")
-  }
-  if (normalizedPort <= 0) {
-    throw new Error("serve is missing its inference port")
-  }
-  return `https://${normalizedPodId}-${normalizedPort}.proxy.runpod.net`
 }
 
 function extractBearerToken(authorization: string) {
@@ -188,7 +175,10 @@ function resolveUpstreamUrl(request: Request, target: ServeInferenceTarget) {
 
   let upstreamBase: string
   try {
-    upstreamBase = buildRuntimeUpstreamBaseUrl(target.pod_id, target.port)
+    upstreamBase = target.ingress_url.trim()
+    if (!upstreamBase) {
+      throw new Error("serve is missing a live inference runtime")
+    }
   } catch (error) {
     const detail = trimErrorLine(error instanceof Error ? error.message : "") || "failed to resolve serve runtime"
     throw new InferenceProxyError(statusFromDetail(detail), detail)

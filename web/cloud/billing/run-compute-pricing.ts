@@ -1,8 +1,8 @@
-import { BILLING_CONFIG } from "@/config";
+import { CLOUD_BILLING_CONFIG } from "@/cloud/config";
 import {
   getRunpodGpuFallbackPricePerHourCents,
   getRunpodGpuPricePerHourCents,
-} from "@/lib/runpod-gpu-pricing";
+} from "@/cloud/providers/runpod-gpu-pricing";
 
 export type RunComputePricing = {
   gpuCount: number;
@@ -21,7 +21,7 @@ function safePositiveNumber(value: number | undefined) {
 }
 
 function resolveUnknownGpuFallbackHourlyRateCents() {
-  const configuredPricePerHour = (BILLING_CONFIG as Record<string, unknown>).unknownGpuPricePerHour;
+  const configuredPricePerHour = (CLOUD_BILLING_CONFIG as Record<string, unknown>).unknownGpuPricePerHour;
   if (typeof configuredPricePerHour === "number" && Number.isFinite(configuredPricePerHour) && configuredPricePerHour > 0) {
     return Math.round(configuredPricePerHour * 100);
   }
@@ -42,7 +42,7 @@ export function resolveRunComputePricing(args: {
       : (lookupGpuUnitHourlyRateCents ?? 0);
   const gpuUnitHourlyRateCents = gpuCount > 0 ? resolvedGpuUnitHourlyRateCents : 0;
   const gpuHourlyRateCents = gpuCount * gpuUnitHourlyRateCents;
-  const volumeHourlyRateCents = volumeGb * BILLING_CONFIG.computeVolumeGbHourlyRateCents;
+  const volumeHourlyRateCents = volumeGb * CLOUD_BILLING_CONFIG.computeVolumeGbHourlyRateCents;
   return {
     gpuCount,
     volumeGb,
@@ -62,7 +62,7 @@ export function estimateRunReservationCents(args: {
   if (pricing.hourlyRateCents <= 0) {
     return 0;
   }
-  return BILLING_CONFIG.minimumChargeCents;
+  return CLOUD_BILLING_CONFIG.minimumChargeCents;
 }
 
 export function estimateRunUsageCents(args: {
@@ -77,5 +77,5 @@ export function estimateRunUsageCents(args: {
     return 0;
   }
   const usageCents = Math.ceil((pricing.hourlyRateCents * durationMs) / (60 * 60 * 1000));
-  return Math.max(BILLING_CONFIG.minimumChargeCents, usageCents);
+  return Math.max(CLOUD_BILLING_CONFIG.minimumChargeCents, usageCents);
 }

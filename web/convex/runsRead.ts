@@ -1,7 +1,7 @@
 import type { Doc, Id } from "@convex/_generated/dataModel";
 import type { QueryCtx } from "@convex/_generated/server";
 import { RUN_CONFIG } from "@convex/appConfig";
-import { resolveRunUptimeMs, toUnixMillis } from "@convex/runBilling";
+import { resolveRunUptimeMs, toUnixMillis } from "@convex/core/runTiming";
 import { TERMINAL_STATUSES } from "@convex/runsConstants";
 import { getRunName } from "@convex/runsNaming";
 
@@ -27,7 +27,7 @@ export function toRunResponse(row: Doc<"runs">) {
     logs: row.logs,
     status: row.status,
     error: row.error || "",
-    pod_id: row.podId || "",
+    provider_machine_id: row.providerMachineId || "",
     effective_gpu_type: row.effectiveGpuType || "",
     effective_gpu_count: row.effectiveGpuCount || 0,
     effective_volume_gb: row.effectiveVolumeGb || 0,
@@ -171,7 +171,7 @@ export async function toRunLogsResponse(ctx: QueryCtx, row: Doc<"runs">) {
     status: row.status,
     logs_path: row.logs,
     log_file: `${row.logs}/run.log`,
-    note: "Runtime logs/metrics are streamed by the pod and persisted in Convex.",
+    note: "Runtime logs/metrics are streamed by the machine and persisted in Convex.",
     logs_window: recentLogs.window,
     metrics_window: recentMetrics.window,
     recent_logs: recentLogs.logs,
@@ -189,7 +189,7 @@ export async function toRunLogsOnlyResponse(ctx: QueryCtx, row: Doc<"runs">) {
     status: row.status,
     logs_path: row.logs,
     log_file: `${row.logs}/run.log`,
-    note: "Runtime logs are streamed by the pod and persisted in Convex.",
+    note: "Runtime logs are streamed by the machine and persisted in Convex.",
     logs_window: recentLogs.window,
     recent_logs: recentLogs.logs,
   };

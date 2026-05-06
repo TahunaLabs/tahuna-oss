@@ -1,24 +1,60 @@
-import { Workpool } from "@convex-dev/workpool";
 import { ConvexError } from "convex/values";
-import { components, internal } from "@convex/_generated/api";
-import type { Id } from "@convex/_generated/dataModel";
+import type { Doc, Id } from "@convex/_generated/dataModel";
 import type { MutationCtx } from "@convex/_generated/server";
 import { resolveConfiguredDependencyGroup } from "@/lib/dependency-selection";
-import { resolveRunComputePricing } from "@/lib/run-compute-pricing";
-import { buildRuntimeCompatibilityKey, resolveRunpodCloudType } from "@/lib/runtime-incompatibility";
+import { buildRuntimeCompatibilityKey } from "@/lib/runtime-incompatibility";
 import { PYTHON_CONFIG, RUN_CONFIG } from "@convex/appConfig";
-import { getLatestActiveRunpodCredentialForUserId } from "@convex/runpodCredentialsStore";
-import { resolveTerminalRunTiming, settleRunComputeCharge } from "@convex/runBilling";
-import { ACTIVE_STATUSES, RUN_DELETE_BATCH_SIZE, RUN_STATUS, TERMINAL_STATUSES } from "@convex/runsConstants";
+import {
+  resolveActiveComputeCredentialForUserId,
+  resolveComputeCompatibilityCloudType,
+} from "@convex/computeProvider";
+import { ACTIVE_STATUSES, RUN_DELETE_BATCH_SIZE, TERMINAL_STATUSES } from "@convex/runsConstants";
 import { getAccessibleEnvironment, getAccessibleRun, listRunsForUser } from "@convex/runsAccess";
 import { hasRunNameConflict, pickUniqueGeneratedRunName, validateRunName, getRunName, normalizeRunName } from "@convex/runsNaming";
 import { toRunResponse } from "@convex/runsRead";
 import { resolveImageName } from "@convex/runtimeProvisioning";
+import {
+  mergeRunEventMetadata,
+  planForcedMachineTermination,
+  planRunCancellation,
+  planRunCreation,
+  planRunDeletion,
+  planRunProvisioningJobs,
+  planRunRenameEvent,
+  type RunLifecycleEvent,
+  type RunLifecyclePlan,
+  type RunLifecycleRunState,
+  type RunLifecycleStorageOperation,
+} from "@convex/core/runLifecyclePlan";
+import {
+  enqueueRunDataDeletionBatch,
+  enqueueRunLifecycleJobs,
+} from "@convex/convexJobQueue";
 
-const provisionPool = new Workpool(components.workpool, {
-  maxParallelism: RUN_CONFIG.workpoolMaxParallelism,
-  retryActionsByDefault: true,
-});
+type RunDbPatch = Partial<Omit<Doc<"runs">, "_id" | "_creationTime">>;
+
+export type RunLifecycleSettlement = {
+  patch?: RunDbPatch;
+  eventMetadata?: Record<string, unknown>;
+};
+
+export type RunCreationComposition = {
+  runFields?: RunDbPatch;
+  eventMetadata?: Record<string, unknown>;
+};
+
+export type RunLifecycleComposition = {
+  createRun?: (args: {
+    userId: string;
+    gpuType: string;
+    gpuCount: number;
+    volumeGb: number;
+  }) => RunCreationComposition;
+  settleTerminalRunUsage?: (
+    ctx: MutationCtx,
+    row: Doc<"runs">,
+  ) => Promise<RunLifecycleSettlement | undefined>;
+};
 
 async function deleteIndexedStorageKeys(ctx: MutationCtx, userId: string, keys: string[]) {
   const seen = new Set<string>();
@@ -38,6 +74,75 @@ async function deleteIndexedStorageKeys(ctx: MutationCtx, userId: string, keys: 
   }
 }
 
+export function toRunLifecycleState(row: Doc<"runs">): RunLifecycleRunState {
+  return {
+    runId: String(row._id),
+    status: row.status,
+    cancellationRequested: row.cancellationRequested,
+    providerMachineId: row.providerMachineId,
+    providerCredentialId: row.providerCredentialId ? String(row.providerCredentialId) : undefined,
+    computeStartedAt: row.computeStartedAt,
+    computeEndedAt: row.computeEndedAt,
+    runtimeTokenHash: row.runtimeTokenHash,
+    artifactKeys: row.artifactKeys,
+    output: row.output,
+  };
+}
+
+async function applyRunLifecycleStorageOperations(
+  ctx: MutationCtx,
+  userId: string,
+  operations: RunLifecycleStorageOperation[],
+) {
+  for (const operation of operations) {
+    if (operation.type === "delete_indexed_storage_keys") {
+      await deleteIndexedStorageKeys(ctx, userId, operation.keys);
+    }
+  }
+}
+
+async function insertRunLifecycleEvents(
+  ctx: MutationCtx,
+  runId: Id<"runs">,
+  events: RunLifecycleEvent[],
+  settlement: RunLifecycleSettlement | undefined,
+) {
+  for (const event of events) {
+    await ctx.db.insert("runEvents", {
+      runId,
+      status: event.status,
+      message: event.message,
+      metadata: mergeRunEventMetadata(
+        event,
+        event.includeTerminalTiming ? settlement?.eventMetadata : undefined,
+      ),
+    });
+  }
+}
+
+export async function applyRunLifecyclePlan(
+  ctx: MutationCtx,
+  runId: Id<"runs">,
+  row: Doc<"runs">,
+  plan: RunLifecyclePlan,
+  composition?: RunLifecycleComposition,
+) {
+  const shouldSettleTerminalUsage = (plan.events ?? []).some((event) => event.includeTerminalTiming);
+  const settlement = shouldSettleTerminalUsage
+    ? await composition?.settleTerminalRunUsage?.(ctx, row)
+    : undefined;
+  const patch = {
+    ...(plan.patch || {}),
+    ...(settlement?.patch || {}),
+  } satisfies RunDbPatch;
+  if (Object.keys(patch).length > 0) {
+    await ctx.db.patch("runs", runId, patch);
+  }
+  await insertRunLifecycleEvents(ctx, runId, plan.events ?? [], settlement);
+  await enqueueRunLifecycleJobs(ctx, plan.jobs ?? []);
+  await applyRunLifecycleStorageOperations(ctx, row.userId, plan.storageOperations ?? []);
+}
+
 export async function createRunForUserId(
   ctx: MutationCtx,
   args: {
@@ -49,6 +154,7 @@ export async function createRunForUserId(
     volume_gb?: number;
     enqueue_provisioning?: boolean;
   },
+  composition?: RunLifecycleComposition,
 ) {
   const env = await getAccessibleEnvironment(ctx, args.userId, args.environmentId);
   const command = env.command;
@@ -65,11 +171,6 @@ export async function createRunForUserId(
   const effectiveGpuType = args.gpu_type ?? env.gpuType;
   const effectiveGpuCount = args.gpu_count ?? env.gpuCount;
   const effectiveVolumeGb = args.volume_gb ?? env.volumeGb;
-  const computePricing = resolveRunComputePricing({
-    gpuType: effectiveGpuType,
-    gpuCount: effectiveGpuCount,
-    volumeGb: effectiveVolumeGb,
-  });
   const codeManifestHash = env.latestCodeManifestHash;
   const dataManifestHash = env.latestDataManifestHash;
   const dataId = env.dataId || String(env._id);
@@ -91,7 +192,7 @@ export async function createRunForUserId(
   const pythonVersion = env.pythonVersion || PYTHON_CONFIG.defaultVersion;
   const imageName = resolveImageName(env.framework, env.version, pythonVersion);
   const compatibilityKey = buildRuntimeCompatibilityKey({
-    cloudType: resolveRunpodCloudType(),
+    cloudType: resolveComputeCompatibilityCloudType(),
     framework: env.framework,
     version: env.version,
     pythonVersion,
@@ -111,59 +212,67 @@ export async function createRunForUserId(
       `runtime launch blocked for this gpu/image combination (${incompatibility.errorCode}); try another gpu or image`,
     );
   }
-  const runpodCredential = await getLatestActiveRunpodCredentialForUserId(ctx, args.userId);
-  if (!runpodCredential) {
-    throw new ConvexError("No compute provider configured. Add one in Settings → Providers.");
-  }
-
-  const now = Date.now();
-  const runId = await ctx.db.insert("runs", {
+  const computeCredential = await resolveActiveComputeCredentialForUserId(ctx, args.userId);
+  const creationComposition = composition?.createRun?.({
     userId: args.userId,
-    environmentId: args.environmentId,
+    gpuType: effectiveGpuType,
+    gpuCount: effectiveGpuCount,
+    volumeGb: effectiveVolumeGb,
+  });
+
+  const creation = planRunCreation({
+    userId: args.userId,
+    environmentId: String(args.environmentId),
     name: runName,
     command,
     dataId,
     outputDir,
-    input: `runs/${args.environmentId}/${now}/input`,
-    output: `runs/${args.environmentId}/${now}/output`,
-    logs: `runs/${args.environmentId}/${now}/logs`,
-    status: RUN_STATUS.QUEUED,
-    cancellationRequested: false,
-    runpodCredentialId: runpodCredential.credentialId,
+    providerCredentialId: String(computeCredential.providerCredentialId),
     effectiveGpuType,
     effectiveGpuCount,
     effectiveVolumeGb,
-    codeManifestHash: codeManifestHash,
+    codeManifestHash,
     dataManifestHash: dataManifestHash || undefined,
     dependencyGroup,
-    computeHourlyRateCents: computePricing.hourlyRateCents,
-    creditsReservedCents: 0,
-    computeChargeCents: 0,
-    computeCollectedCents: 0,
-    computeOutstandingCents: 0,
-    computeChargeStatus: "pending",
+    nowMs: Date.now(),
+    enqueueProvisioning: args.enqueue_provisioning ?? true,
+  });
+
+  const runId = await ctx.db.insert("runs", {
+    userId: creation.run.userId,
+    environmentId: args.environmentId,
+    name: creation.run.name,
+    command: creation.run.command,
+    dataId: creation.run.dataId,
+    outputDir: creation.run.outputDir,
+    input: creation.run.input,
+    output: creation.run.output,
+    logs: creation.run.logs,
+    status: creation.run.status,
+    cancellationRequested: creation.run.cancellationRequested,
+    providerCredentialId: creation.run.providerCredentialId,
+    effectiveGpuType: creation.run.effectiveGpuType,
+    effectiveGpuCount: creation.run.effectiveGpuCount,
+    effectiveVolumeGb: creation.run.effectiveVolumeGb,
+    codeManifestHash: creation.run.codeManifestHash,
+    dataManifestHash: creation.run.dataManifestHash,
+    dependencyGroup: creation.run.dependencyGroup,
+    ...(creationComposition?.runFields || {}),
   });
 
   await ctx.db.insert("runEvents", {
     runId,
-    status: RUN_STATUS.QUEUED,
-    message: "run queued for provisioning",
+    status: creation.event.status,
+    message: creation.event.message,
     metadata: {
-      name: runName,
-      command,
-      gpu_type: effectiveGpuType,
-      gpu_count: effectiveGpuCount,
-      volume_gb: effectiveVolumeGb,
-      code_manifest_hash: codeManifestHash || null,
-      data_manifest_hash: dataManifestHash || null,
-      dependency_group: dependencyGroup,
-      hourly_rate_cents: computePricing.hourlyRateCents,
+      ...creation.event.metadata,
+      ...(creationComposition?.eventMetadata || {}),
     },
   });
-
-  if (args.enqueue_provisioning ?? true) {
-    await provisionPool.enqueueAction(ctx, internal.runs.provisionRun, { runId });
-  }
+  await enqueueRunLifecycleJobs(ctx, planRunProvisioningJobs({
+    runId: String(runId),
+    enqueueProvisioning: creation.enqueueProvisioning,
+  }));
   const row = await ctx.db.get("runs", runId);
   if (!row) {
     throw new ConvexError("failed to create run");
@@ -177,6 +286,7 @@ export async function cancelRunForUserId(
   userId: string,
   runId: Id<"runs">,
   force: boolean,
+  composition?: RunLifecycleComposition,
 ) {
   const row = await getAccessibleRun(ctx, userId, runId);
 
@@ -184,73 +294,48 @@ export async function cancelRunForUserId(
     throw new ConvexError(`run is already ${row.status}`);
   }
 
-  if (!row.podId) {
-    const terminalTiming = resolveTerminalRunTiming(row);
-    const settlement = await settleRunComputeCharge(ctx, row, terminalTiming);
-    await ctx.db.patch("runs", runId, {
-      status: RUN_STATUS.CANCELLED,
-      cancellationRequested: true,
-      computeEndedAt: terminalTiming.computeEndedAt,
-      computeChargeCents: settlement.chargeCents,
-      computeCollectedCents: settlement.collectedCents,
-      computeOutstandingCents: settlement.outstandingCents,
-      computeChargeStatus: settlement.chargeStatus,
-      computeChargeError: settlement.chargeError,
-    });
-    await ctx.db.insert("runEvents", {
-      runId,
-      status: RUN_STATUS.CANCELLED,
-      message: force ? "force cancellation requested before provisioning" : "run cancelled before provisioning",
-      metadata: {
-        duration_ms: terminalTiming.durationMs,
-        compute_charge_cents: settlement.chargeCents,
-        compute_charge_delta_cents: settlement.chargeDeltaCents,
-        compute_charge_status: settlement.chargeStatus,
-        compute_charge_error: settlement.chargeError,
-        balance_after_cents: settlement.balanceAfterCents,
-      },
-    });
-    return { cancel_requested: true, forced: force, run_id: String(runId) };
-  }
-
-  const terminationDelayMs = force ? 0 : RUN_CONFIG.cancellationGraceSeconds * 1000;
-  await ctx.scheduler.runAfter(terminationDelayMs, internal.runs.internalTerminatePod, {
-    runId,
-    podId: row.podId,
-    runpodCredentialId: row.runpodCredentialId,
+  const plan = planRunCancellation({
+    run: toRunLifecycleState(row),
     force,
+    terminationGraceMs: RUN_CONFIG.cancellationGraceSeconds * 1000,
   });
-
-  await ctx.db.patch("runs", runId, {
-    status: RUN_STATUS.CANCELLING,
-    cancellationRequested: true,
-  });
-  await ctx.db.insert("runEvents", {
-    runId,
-    status: RUN_STATUS.CANCELLING,
-    message: force
-      ? "force cancellation requested"
-      : `cancellation requested (grace period ${RUN_CONFIG.cancellationGraceSeconds}s before termination)`,
-  });
+  if (plan.error) {
+    throw new ConvexError(plan.error);
+  }
+  await applyRunLifecyclePlan(ctx, runId, row, plan, composition);
   return { cancel_requested: true, forced: force, run_id: String(runId) };
 }
 
-export async function scheduleForcedPodTermination(
+export async function scheduleForcedMachineTermination(
   ctx: MutationCtx,
   runId: Id<"runs">,
-  podId: string | undefined,
-  runpodCredentialId: Id<"runpodCredentials"> | undefined,
+  providerMachineId: string | undefined,
+  providerCredentialId: string | undefined,
 ) {
-  const podIdValue = podId?.trim() || "";
-  if (!podIdValue) {
+  await enqueueRunLifecycleJobs(ctx, planForcedMachineTermination({
+    runId: String(runId),
+    providerMachineId,
+    providerCredentialId,
+  }));
+}
+
+async function applyRunDeletionPlan(
+  ctx: MutationCtx,
+  runId: Id<"runs">,
+  row: Doc<"runs">,
+  plan: RunLifecyclePlan & { deleteRunData: boolean },
+) {
+  await enqueueRunLifecycleJobs(ctx, plan.jobs ?? []);
+  await applyRunLifecycleStorageOperations(ctx, row.userId, plan.storageOperations ?? []);
+  if (!plan.deleteRunData) {
     return;
   }
-  await ctx.scheduler.runAfter(0, internal.runs.internalTerminatePod, {
-    runId,
-    podId: podIdValue,
-    runpodCredentialId,
-    force: true,
-  });
+  const hasMore = await deleteRunDataBatch(ctx, runId);
+  if (hasMore) {
+    await enqueueRunDataDeletionBatch(ctx, runId);
+    return;
+  }
+  await ctx.db.delete("runs", runId);
 }
 
 export async function deleteRunDataBatch(ctx: MutationCtx, runId: Id<"runs">): Promise<boolean> {
@@ -281,42 +366,34 @@ export async function deleteRunForUserId(
   userId: string,
   runId: Id<"runs">,
   options?: { cancelActive?: boolean; force?: boolean },
+  composition?: RunLifecycleComposition,
 ) {
   let row = await getAccessibleRun(ctx, userId, runId);
   const shouldCancelActive = options?.cancelActive === true || options?.force === true;
   const shouldForceDelete = options?.force === true;
-  let forcedTerminationQueued = false;
 
-  if (ACTIVE_STATUSES.has(row.status)) {
-    if (!shouldCancelActive) {
-      throw new ConvexError("run is active; cancel it before deleting");
+  let plan = planRunDeletion({
+    run: toRunLifecycleState(row),
+    cancelActive: shouldCancelActive,
+    force: shouldForceDelete,
+  });
+  if (plan.error) {
+    throw new ConvexError(plan.error);
+  }
+  if (plan.cancelBeforeDelete) {
+    await cancelRunForUserId(ctx, userId, runId, false, composition);
+    row = await getAccessibleRun(ctx, userId, runId);
+    if (ACTIVE_STATUSES.has(row.status)) {
+      throw new ConvexError("cancellation requested; run is still shutting down");
     }
-
-    if (shouldForceDelete) {
-      if (row.podId) {
-        await scheduleForcedPodTermination(ctx, runId, row.podId, row.runpodCredentialId);
-        forcedTerminationQueued = true;
-      }
-    } else {
-      await cancelRunForUserId(ctx, userId, runId, false);
-      row = await getAccessibleRun(ctx, userId, runId);
-      if (ACTIVE_STATUSES.has(row.status)) {
-        throw new ConvexError("cancellation requested; run is still shutting down");
-      }
-    }
+    plan = planRunDeletion({
+      run: toRunLifecycleState(row),
+      cancelActive: false,
+      force: false,
+    });
   }
 
-  if (row.podId && !forcedTerminationQueued) {
-    await scheduleForcedPodTermination(ctx, runId, row.podId, row.runpodCredentialId);
-  }
-  await deleteIndexedStorageKeys(ctx, userId, row.artifactKeys || []);
-
-  const hasMore = await deleteRunDataBatch(ctx, runId);
-  if (hasMore) {
-    await ctx.scheduler.runAfter(0, internal.runs.internalDeleteRunData, { runId });
-    return { deleted: true, run_id: String(runId) };
-  }
-  await ctx.db.delete("runs", runId);
+  await applyRunDeletionPlan(ctx, runId, row, plan);
   return { deleted: true, run_id: String(runId) };
 }
 
@@ -339,14 +416,16 @@ export async function renameRunForUserId(
   }
 
   await ctx.db.patch("runs", runId, { name: nextName });
+  const event = planRunRenameEvent({
+    status: row.status,
+    oldName: currentName,
+    newName: nextName,
+  });
   await ctx.db.insert("runEvents", {
     runId,
-    status: row.status,
-    message: "run renamed",
-    metadata: {
-      old_name: currentName,
-      new_name: nextName,
-    },
+    status: event.status,
+    message: event.message,
+    metadata: event.metadata,
   });
   const updated = await ctx.db.get("runs", runId);
   if (!updated) {

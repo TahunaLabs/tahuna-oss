@@ -6,7 +6,7 @@ const crons = cronJobs();
 crons.interval(
   "bill running compute each minute",
   { minutes: 1 },
-  internal.runs.billRunningComputeMinute,
+  internal.cloud.billing.billRunningComputeMinute,
   {},
 );
 

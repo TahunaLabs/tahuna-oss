@@ -1,9 +1,6 @@
-import { components } from "@convex/_generated/api"
 import type { ActionCtx } from "@convex/_generated/server"
-import { R2 } from "@convex-dev/r2"
-import { HeadObjectCommand } from "@aws-sdk/client-s3"
-import { SYNC_CONFIG } from "@convex/appConfig"
-import { sleepMs } from "@convex/sleep"
+import { storageKeys } from "@convex/core/storage"
+import { objectStore } from "@convex/objectStore"
 import {
   parseManifest,
   sha256Hex,
@@ -11,8 +8,6 @@ import {
   type SyncKind,
   type SyncManifestPayload,
 } from "@convex/syncManifest"
-
-const r2 = new R2(components.r2)
 
 const SERVE_SNAPSHOT_MANIFEST_VERSION = "serve-model-snapshot.v1"
 const defaultServeSnapshotFileMode = 0o644
@@ -35,25 +30,13 @@ export type ServeSnapshotManifest = {
   entries: ServeSnapshotManifestEntry[];
 }
 
-async function fetchObjectBytes(_ctx: ActionCtx, key: string): Promise<ArrayBuffer> {
-  const downloadUrl = await r2.getUrl(key)
-  const response = await fetch(downloadUrl)
-  if (response.status === 404) {
-    throw new Error(`object not found: ${key}`)
-  }
-  if (!response.ok) {
-    throw new Error(`failed to fetch object ${key}: http ${response.status}`)
-  }
-  return await response.arrayBuffer()
-}
-
 export async function fetchSyncManifest(
   ctx: ActionCtx,
   kind: SyncKind,
   key: string,
   expectedHash: string,
 ) {
-  const rawBytes = await fetchObjectBytes(ctx, key)
+  const rawBytes = await objectStore.readBytes(ctx, key)
   const rawText = new TextDecoder().decode(rawBytes)
   const actualHash = await sha256Hex(rawText)
   if (actualHash !== expectedHash) {
@@ -72,84 +55,24 @@ export async function fetchSyncManifest(
   return manifest
 }
 
-function isS3NotFoundError(error: unknown) {
-  if (!error || typeof error !== "object") {
-    return false
-  }
-  const row = error as { name?: string; Code?: string; $metadata?: { httpStatusCode?: number } }
-  return row.name === "NotFound" || row.Code === "NotFound" || row.$metadata?.httpStatusCode === 404
-}
-
-async function getSignedDownloadUrlByHead(key: string): Promise<string | null> {
-  try {
-    await r2.client.send(
-      new HeadObjectCommand({
-        Bucket: r2.config.bucket,
-        Key: key,
-      }),
-    )
-    return r2.getUrl(key)
-  } catch (error) {
-    if (isS3NotFoundError(error)) {
-      return null
-    }
-    throw error
-  }
-}
-
-async function getDownloadUrlWithMetadataSync(ctx: ActionCtx, key: string): Promise<string | null> {
-  const immediate = await r2.getMetadata(ctx, key)
-  if (immediate?.url) {
-    return immediate.url
-  }
-  const direct = await getSignedDownloadUrlByHead(key)
-  if (direct) {
-    return direct
-  }
-  let delay = SYNC_CONFIG.objectMetadataPollInitialBackoffMs
-  for (let attempt = 0; attempt < SYNC_CONFIG.objectMetadataPollAttempts; attempt += 1) {
-    const metadata = await r2.getMetadata(ctx, key)
-    if (metadata?.url) {
-      return metadata.url
-    }
-    const signedUrl = await getSignedDownloadUrlByHead(key)
-    if (signedUrl) {
-      return signedUrl
-    }
-    if (attempt < SYNC_CONFIG.objectMetadataPollAttempts - 1) {
-      await sleepMs(delay)
-      if (delay < SYNC_CONFIG.objectMetadataPollMaxBackoffMs) {
-        delay *= 2
-      }
-    }
-  }
-  return null
-}
-
 async function resolveDownloadURL(ctx: ActionCtx, key: string, keyURLCache: Map<string, string | null>) {
   if (keyURLCache.has(key)) {
     return keyURLCache.get(key) || null
   }
 
-  const quickMetadata = await r2.getMetadata(ctx, key)
-  let downloadURL: string | null = null
-  if (quickMetadata?.url) {
-    downloadURL = quickMetadata.url
-  } else {
-    downloadURL = await getSignedDownloadUrlByHead(key)
-  }
+  let downloadURL = (await objectStore.getSignedDownload(ctx, key))?.url || null
   keyURLCache.set(key, downloadURL)
   if (downloadURL) {
     return downloadURL
   }
 
-  downloadURL = await getDownloadUrlWithMetadataSync(ctx, key)
+  downloadURL = (await objectStore.getSignedDownloadWithMetadataSync(ctx, key))?.url || null
   keyURLCache.set(key, downloadURL)
   return downloadURL
 }
 
 function blobKeys(_kind: SyncKind, sha256: string) {
-  return [`blobs/${sha256}`]
+  return [storageKeys.blobObjectKey(sha256)]
 }
 
 export async function resolveSyncManifestDownloadEntries(
@@ -251,7 +174,7 @@ export async function fetchServeSnapshotManifest(
   key: string,
   expectedHash: string,
 ): Promise<ServeSnapshotManifest> {
-  const rawBytes = await fetchObjectBytes(ctx, key)
+  const rawBytes = await objectStore.readBytes(ctx, key)
   const rawText = new TextDecoder().decode(rawBytes)
   const actualHash = await sha256Hex(rawText)
   if (actualHash !== expectedHash) {

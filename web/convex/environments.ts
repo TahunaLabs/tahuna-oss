@@ -1,6 +1,6 @@
 import { ConvexError, v } from "convex/values";
 import type { Doc, Id } from "@convex/_generated/dataModel";
-import { components, internal } from "@convex/_generated/api";
+import { internal } from "@convex/_generated/api";
 import {
   internalAction,
   internalMutation,
@@ -14,9 +14,11 @@ import {
 import { requireUser } from "@convex/auth";
 import { images } from "@convex/catalog";
 import { shortId } from "@convex/ids";
-import { R2 } from "@convex-dev/r2";
 import { PYTHON_CONFIG } from "@convex/appConfig";
-import { deleteRunDataBatch } from "@convex/runsLifecycle";
+import { storageKeys, storagePrefixUpperBound } from "@convex/core/storage";
+import { objectStore } from "@convex/objectStore";
+import { deleteRunDataBatch, scheduleForcedMachineTermination } from "@convex/runsLifecycle";
+import { scheduleForcedServeMachineTermination } from "@convex/servesLifecycle";
 import { ENVIRONMENT_CONFIG_FILE_NAME, parseEnvironmentConfig, renderEnvironmentConfig } from "@/lib/environment-config";
 import { resolveConfiguredDependencyGroup } from "@/lib/dependency-selection";
 
@@ -76,28 +78,23 @@ const commitSyncResponseValidator = v.object({
 });
 const SHA256_HEX_RE = /^[a-f0-9]{64}$/i;
 
-const r2 = new R2(components.r2);
 const ENVIRONMENT_DELETE_BATCH_SIZE = 200;
 const ENVIRONMENT_STORAGE_DELETE_BATCH_SIZE = 200;
 
 function environmentPath(environmentId: string) {
-  return `environments/${environmentId}`;
+  return storageKeys.environmentObjectPrefix(environmentId);
 }
 
 function environmentManifestPrefix(environmentId: string) {
-  return `${environmentPath(environmentId)}/manifests/code/`;
+  return storageKeys.environmentManifestPrefix(environmentId);
 }
 
 function dataManifestPrefix(dataId: string) {
-  return `data/${dataId}/manifests/`;
+  return storageKeys.dataManifestPrefix(dataId);
 }
 
 function dataManifestObjectKey(dataId: string, manifestHash: string) {
-  return `${dataManifestPrefix(dataId)}${manifestHash}.json`;
-}
-
-function storagePrefixUpperBound(prefix: string) {
-  return `${prefix}\uffff`;
+  return `${storageKeys.dataManifestPrefix(dataId)}${manifestHash}.json`;
 }
 
 function normalizeManifestHash(value: string | undefined | null): string | null {
@@ -226,7 +223,7 @@ async function collectManifestBlobHashesForPrefix(ctx: ActionCtx, prefix: string
   let cursor: string | null = null;
   let pages = 0;
   while (pages < 100) {
-    const result = await r2.listMetadata(ctx, 100, cursor);
+    const result = await objectStore.listMetadata(ctx, 100, cursor);
     for (const item of result.page) {
       if (!item.key.startsWith(prefix) || !item.key.endsWith(".json")) {
         continue;
@@ -266,13 +263,13 @@ async function deleteObjectsByPrefix(ctx: MutationCtx | ActionCtx, prefix: strin
   let cursor: string | null = null;
   let pages = 0;
   while (pages < 100) {
-    const result = await r2.listMetadata(ctx, 100, cursor);
+    const result = await objectStore.listMetadata(ctx, 100, cursor);
     for (const item of result.page) {
       if (!item.key.startsWith(prefix)) {
         continue;
       }
       try {
-        await r2.deleteObject(ctx, item.key);
+        await objectStore.deleteObject(ctx, item.key);
       } catch {
         // best-effort cleanup
       }
@@ -863,13 +860,13 @@ export const internalDeleteEnvironmentBatch = internalMutation({
       .withIndex("by_user_and_environment", (q) => q.eq("userId", args.userId).eq("environmentId", args.environmentId))
       .first();
     if (nextRun) {
-      if (nextRun.podId) {
-        await ctx.scheduler.runAfter(0, internal.runs.internalTerminatePod, {
-          runId: nextRun._id,
-          podId: nextRun.podId,
-          runpodCredentialId: nextRun.runpodCredentialId,
-          force: true,
-        });
+      if (nextRun.providerMachineId) {
+        await scheduleForcedMachineTermination(
+          ctx,
+          nextRun._id,
+          nextRun.providerMachineId,
+          nextRun.providerCredentialId,
+        );
       }
       const hasMore = await deleteRunDataBatch(ctx, nextRun._id);
       if (!hasMore) {
@@ -884,13 +881,13 @@ export const internalDeleteEnvironmentBatch = internalMutation({
       .withIndex("by_user_and_environment", (q) => q.eq("userId", args.userId).eq("environmentId", args.environmentId))
       .first();
     if (nextServe) {
-      if (nextServe.podId) {
-        await ctx.scheduler.runAfter(0, internal.serves.internalTerminatePod, {
-          serveId: nextServe._id,
-          podId: nextServe.podId,
-          runpodCredentialId: nextServe.runpodCredentialId,
-          force: true,
-        });
+      if (nextServe.providerMachineId) {
+        await scheduleForcedServeMachineTermination(
+          ctx,
+          nextServe._id,
+          nextServe.providerMachineId,
+          nextServe.providerCredentialId,
+        );
       }
       const hasMore = await deleteServeDataBatch(ctx, nextServe._id);
       if (!hasMore) {
@@ -988,7 +985,7 @@ export const internalCleanupDedupBlobs = internalAction({
         continue;
       }
       try {
-        await r2.deleteObject(ctx, `blobs/${hash}`);
+        await objectStore.deleteObject(ctx, storageKeys.blobObjectKey(hash));
       } catch {
         // best-effort cleanup
       }

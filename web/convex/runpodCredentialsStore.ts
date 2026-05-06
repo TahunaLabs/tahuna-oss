@@ -1,11 +1,13 @@
 import { v } from "convex/values";
-import type { Id } from "@convex/_generated/dataModel";
+import type { Doc } from "@convex/_generated/dataModel";
 import {
   internalMutation,
   internalQuery,
   type MutationCtx,
   type QueryCtx,
 } from "@convex/_generated/server";
+
+type RunpodCredentialId = Doc<"runpodCredentials">["_id"];
 
 export const runpodCredentialStatusValidator = v.object({
   configured: v.boolean(),
@@ -31,7 +33,7 @@ export const runpodCredentialEnvelopeValidator = v.union(
 );
 
 export function toRunpodCredentialStatus(row: {
-  credentialId: Id<"runpodCredentials">;
+  credentialId: RunpodCredentialId;
   keyPrefix: string;
   validatedAt: number;
   updatedAt: number;
@@ -75,8 +77,12 @@ export async function getLatestActiveRunpodCredentialForUserId(ctx: QueryCtx | M
   };
 }
 
-async function getRunpodCredentialById(ctx: QueryCtx | MutationCtx, credentialId: Id<"runpodCredentials">) {
-  const row = await ctx.db.get(credentialId);
+async function getRunpodCredentialById(ctx: QueryCtx | MutationCtx, credentialId: string) {
+  const normalizedCredentialId = ctx.db.normalizeId("runpodCredentials", credentialId);
+  if (!normalizedCredentialId) {
+    return null;
+  }
+  const row = await ctx.db.get(normalizedCredentialId);
   if (!row) {
     return null;
   }
@@ -105,7 +111,7 @@ export const internalGetLatestActiveRunpodCredentialForUser = internalQuery({
 
 export const internalGetRunpodCredentialById = internalQuery({
   args: {
-    credentialId: v.id("runpodCredentials"),
+    credentialId: v.string(),
   },
   returns: runpodCredentialEnvelopeValidator,
   handler: async (ctx, args) => {

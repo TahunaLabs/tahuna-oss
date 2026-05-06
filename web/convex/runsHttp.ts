@@ -1,7 +1,8 @@
 import { internal } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import type { ActionCtx } from "@convex/_generated/server";
-import { corsHeaders, extractBearerToken, r2, readJsonBody, toClientErrorDetail } from "@convex/cli/shared";
+import { corsHeaders, extractBearerToken, readJsonBody, toClientErrorDetail } from "@convex/cli/shared";
+import { objectStore } from "@convex/objectStore";
 import { sha256Hex } from "@convex/syncManifest";
 
 const RUNTIME_STATUS_VALUES = ["provisioning", "running", "completed", "failed", "cancelled"] as const;
@@ -204,7 +205,7 @@ export async function handleRuntimePost(ctx: ActionCtx, request: Request, route:
       const safeName = artifact.name.replace(/\\/g, "/").replace(/^\/+/, "").replace(/\.\./g, "_");
       const key = `${outputPath}/${safeName}`;
       try {
-        const upload = await r2.generateUploadUrl(key);
+        const upload = await objectStore.createSignedUpload(key);
         uploads.push({ name: artifact.name, key: upload.key, url: upload.url });
       } catch (err) {
         const detail = toClientErrorDetail(err, "failed to generate upload URL");

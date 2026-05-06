@@ -14,6 +14,68 @@ const noRelativeAppImportsRule = [
     ],
   },
 ];
+const convexRelativeImportPattern = {
+  group: ["./*", "../*"],
+  message: "Use absolute aliases (@convex/* or @/*) in Convex modules.",
+};
+const noCloudOrHostedConvexImportsRule = [
+  "error",
+  {
+    paths: [
+      {
+        name: "convex/react",
+        message: "Core Convex modules must not import Convex React bindings.",
+      },
+      {
+        name: "resend",
+        message: "Hosted email belongs in cloud composition, not core Convex modules.",
+      },
+      {
+        name: "better-auth",
+        message: "Hosted auth provider composition belongs outside core Convex modules.",
+      },
+      {
+        name: "@aws-sdk/client-s3",
+        message: "Object-store implementation details belong in the R2 adapter.",
+      },
+    ],
+    patterns: [
+      convexRelativeImportPattern,
+      {
+        group: ["@/cloud/*", "@convex/cloud/*"],
+        message: "Cloud policy must compose core Convex modules from outside the core boundary.",
+      },
+      {
+        group: ["@convex/_generated/*"],
+        message: "Core Convex modules must not depend on Convex-generated APIs.",
+      },
+      {
+        group: ["@convex-dev/*"],
+        message: "Hosted Convex components and adapters must stay outside the core boundary.",
+      },
+      {
+        group: ["@better-auth/*"],
+        message: "Hosted auth provider composition belongs outside core Convex modules.",
+      },
+      {
+        group: ["@vercel/*"],
+        message: "Vercel instrumentation belongs in cloud composition, not core Convex modules.",
+      },
+    ],
+  },
+];
+const noCloudConvexImplementationImportsRule = [
+  "error",
+  {
+    patterns: [
+      convexRelativeImportPattern,
+      {
+        group: ["@/cloud/*", "@convex/cloud/*"],
+        message: "Use an explicit cloud composition module instead of importing cloud policy here.",
+      },
+    ],
+  },
+];
 
 export default [
   {
@@ -71,14 +133,29 @@ export default [
               message: 'Import config via "@convex/appConfig" to keep Convex imports consistent.',
             },
           ],
-          patterns: [
-            {
-              group: ["./*", "../*"],
-              message: 'Use absolute aliases (@convex/* or @/*) in Convex modules.',
-            },
-          ],
+          patterns: [convexRelativeImportPattern],
         },
       ],
+    },
+  },
+  {
+    files: ["convex/core/**/*.ts"],
+    rules: {
+      "no-console": "error",
+      "no-debugger": "error",
+      "no-restricted-imports": noCloudOrHostedConvexImportsRule,
+    },
+  },
+  {
+    files: [
+      "convex/runsLifecycle.ts",
+      "convex/servesLifecycle.ts",
+      "convex/runpodComputeProvider.ts",
+    ],
+    rules: {
+      "no-console": "error",
+      "no-debugger": "error",
+      "no-restricted-imports": noCloudConvexImplementationImportsRule,
     },
   },
   {
@@ -89,12 +166,7 @@ export default [
       "no-restricted-imports": [
         "error",
         {
-          patterns: [
-            {
-              group: ["./*", "../*"],
-              message: 'Use absolute aliases (@convex/* or @/*) in Convex modules.',
-            },
-          ],
+          patterns: [convexRelativeImportPattern],
         },
       ],
     },

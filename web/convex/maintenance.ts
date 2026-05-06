@@ -1,11 +1,9 @@
 import { ConvexError, v } from "convex/values";
-import { ListObjectsV2Command, DeleteObjectsCommand, type ListObjectsV2CommandOutput, type _Object } from "@aws-sdk/client-s3";
-import { R2 } from "@convex-dev/r2";
 import type { Id } from "@convex/_generated/dataModel";
-import { components, internal } from "@convex/_generated/api";
+import { internal } from "@convex/_generated/api";
 import { internalAction, internalMutation, type ActionCtx, type MutationCtx } from "@convex/_generated/server";
+import { objectStore } from "@convex/objectStore";
 
-const r2 = new R2(components.r2);
 const CONFIRMATION_PHRASE = "DELETE_ALL_CONVEX_DATA";
 const DEFAULT_BATCH_SIZE = 200;
 const MAX_BATCH_SIZE = 1000;
@@ -98,38 +96,8 @@ function normalizeBatchSize(raw: number | undefined) {
   return normalized;
 }
 
-async function cleanupR2(_ctx: ActionCtx, dryRun: boolean) {
-  let deletedCount = 0;
-  let continuationToken: string | undefined = undefined;
-
-  while (true) {
-    const listResponse: ListObjectsV2CommandOutput = await r2.client.send(
-      new ListObjectsV2Command({
-        Bucket: r2.config.bucket,
-        ContinuationToken: continuationToken,
-      }),
-    );
-
-    const objects: _Object[] = listResponse.Contents || [];
-    if (objects.length === 0) break;
-
-    if (!dryRun) {
-      await r2.client.send(
-        new DeleteObjectsCommand({
-          Bucket: r2.config.bucket,
-          Delete: {
-            Objects: objects.map((obj: _Object) => ({ Key: obj.Key })),
-          },
-        }),
-      );
-    }
-
-    deletedCount += objects.length;
-    if (!listResponse.IsTruncated) break;
-    continuationToken = listResponse.NextContinuationToken;
-  }
-
-  return deletedCount;
+async function cleanupObjectStore(ctx: ActionCtx, dryRun: boolean) {
+  return await objectStore.deleteAllObjects(ctx, dryRun);
 }
 
 async function loadTableBatchIds(ctx: MutationCtx, table: CleanupTable, batchSize: number): Promise<CleanupDocId[]> {
@@ -419,7 +387,7 @@ export const cleanupDatabase = internalAction({
     dry_run: v.boolean(),
     table_results: v.array(tableResultValidator),
     total_deleted: v.number(),
-    r2_deleted: v.number(),
+    object_store_deleted: v.number(),
   }),
   handler: async (ctx, args) => {
     const confirmValue = args.confirm.trim();
@@ -465,13 +433,13 @@ export const cleanupDatabase = internalAction({
       totalDeleted += tableDeleted;
     }
 
-    const r2Deleted = await cleanupR2(ctx, dryRun);
+    const objectStoreDeleted = await cleanupObjectStore(ctx, dryRun);
 
     return {
       dry_run: dryRun,
       table_results: tableResults,
       total_deleted: totalDeleted,
-      r2_deleted: r2Deleted,
+      object_store_deleted: objectStoreDeleted,
     };
   },
 });

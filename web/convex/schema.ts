@@ -1,5 +1,6 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
+import { cloudRunBillingFields, cloudSchemaTables } from "@convex/cloud/schema";
 
 export default defineSchema({
 
@@ -67,8 +68,8 @@ export default defineSchema({
     logs: v.string(),
     status: v.string(),
     error: v.optional(v.string()),
-    podId: v.optional(v.string()),
-    runpodCredentialId: v.optional(v.id("runpodCredentials")),
+    providerMachineId: v.optional(v.string()),
+    providerCredentialId: v.optional(v.string()),
     effectiveGpuType: v.optional(v.string()),
     effectiveGpuCount: v.optional(v.number()),
     effectiveVolumeGb: v.optional(v.number()),
@@ -81,20 +82,43 @@ export default defineSchema({
     cancellationRequested: v.boolean(),
     computeStartedAt: v.optional(v.number()),
     computeEndedAt: v.optional(v.number()),
-    computeHourlyRateCents: v.optional(v.number()),
-    creditsReservedCents: v.optional(v.number()),
-    computeChargeCents: v.optional(v.number()),
-    computeCollectedCents: v.optional(v.number()),
-    computeOutstandingCents: v.optional(v.number()),
-    computeChargeStatus: v.optional(
-      v.union(v.literal("pending"), v.literal("charged"), v.literal("owed")),
-    ),
-    computeChargeError: v.optional(v.string()),
+    ...cloudRunBillingFields,
   })
     .index("by_user", ["userId"])
     .index("by_user_and_environment", ["userId", "environmentId"])
     .index("by_status", ["status"])
     .index("by_runtime_token_hash", ["runtimeTokenHash"]),
+
+  jobs: defineTable({
+    type: v.union(
+      v.literal("provision_run"),
+      v.literal("check_startup_timeout"),
+      v.literal("terminate_machine"),
+      v.literal("finalize_artifact"),
+      v.literal("cleanup_failed_upload"),
+      v.literal("provision_serve"),
+      v.literal("check_serve_startup_timeout"),
+      v.literal("terminate_serve_machine"),
+      v.literal("delete_serve_data"),
+    ),
+    idempotencyKey: v.string(),
+    status: v.union(
+      v.literal("scheduled"),
+      v.literal("running"),
+      v.literal("completed"),
+      v.literal("failed"),
+    ),
+    payload: v.any(),
+    delayMs: v.number(),
+    availableAt: v.number(),
+    attempts: v.number(),
+    lastError: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    completedAt: v.optional(v.number()),
+  })
+    .index("by_idempotency_key", ["idempotencyKey"])
+    .index("by_status_and_available_at", ["status", "availableAt"]),
 
   serves: defineTable({
     userId: v.string(),
@@ -104,8 +128,8 @@ export default defineSchema({
     logs: v.string(),
     status: v.string(),
     error: v.optional(v.string()),
-    podId: v.optional(v.string()),
-    runpodCredentialId: v.optional(v.id("runpodCredentials")),
+    providerMachineId: v.optional(v.string()),
+    providerCredentialId: v.optional(v.string()),
     runtimeTokenHash: v.optional(v.string()),
     codeManifestHash: v.optional(v.string()),
     dataManifestHash: v.optional(v.string()),
@@ -140,18 +164,6 @@ export default defineSchema({
     .index("by_status", ["status"])
     .index("by_runtime_token_hash", ["runtimeTokenHash"]),
 
-  runpodCredentials: defineTable({
-    userId: v.string(),
-    keyCiphertext: v.string(),
-    keyIv: v.string(),
-    keyVersion: v.number(),
-    keyPrefix: v.string(),
-    fingerprint: v.string(),
-    validatedAt: v.number(),
-    revokedAt: v.optional(v.number()),
-    updatedAt: v.number(),
-  }).index("by_user", ["userId"]),
-
   envVars: defineTable({
     environmentId: v.id("environments"),
     name: v.string(),
@@ -178,7 +190,7 @@ export default defineSchema({
     failureCount: v.number(),
     cooldownUntil: v.number(),
     lastRunId: v.optional(v.id("runs")),
-    lastPodId: v.optional(v.string()),
+    lastProviderMachineId: v.optional(v.string()),
   })
     .index("by_key", ["compatibilityKey"])
     .index("by_cooldown_until", ["cooldownUntil"]),
@@ -200,28 +212,7 @@ export default defineSchema({
     .index("by_user_and_source", ["userId", "source"])
     .index("by_user_and_key", ["userId", "key"]),
 
-  userCredits: defineTable({
-    userId: v.string(),
-    balanceCents: v.number(),
-    currency: v.string(),
-    createdAt: v.number(),
-    updatedAt: v.number(),
-  }).index("by_user", ["userId"]),
-
-  usageEvents: defineTable({
-    userId: v.string(),
-    eventType: v.string(),
-    creditsDeltaCents: v.number(),
-    balanceAfterCents: v.number(),
-    idempotencyKey: v.optional(v.string()),
-    referenceType: v.optional(v.string()),
-    referenceId: v.optional(v.string()),
-    metadata: v.optional(v.any()),
-    createdAt: v.number(),
-  })
-    .index("by_user", ["userId"])
-    .index("by_user_and_created_at", ["userId", "createdAt"])
-    .index("by_user_and_idempotency_key", ["userId", "idempotencyKey"]),
+  ...cloudSchemaTables,
 
   wandbRuns: defineTable({
     runId: v.id("runs"),

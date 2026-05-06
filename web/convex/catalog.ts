@@ -1,8 +1,7 @@
 import { internalAction, query } from "@convex/_generated/server";
 import { v } from "convex/values";
 import runtimeImageBases from "@/convex/runtime-images.json";
-import { getRunpodGpuPricePerHour } from "@/lib/runpod-gpu-pricing";
-import { fetchRunpodGpuTypes, resolveActiveRunpodApiKeyForUserId } from "@convex/runpodCredentials";
+import { computeProvider } from "@convex/computeProvider";
 
 
 type RuntimeVersionEntry = { base: string; python: string[] };
@@ -47,26 +46,6 @@ export const getDynamicGpus = internalAction({
     }),
   ),
   handler: async (ctx, args) => {
-    const { apiKey } = await resolveActiveRunpodApiKeyForUserId(ctx, args.userId);
-    const gpuTypes = await fetchRunpodGpuTypes(apiKey);
-    const remoteGpus = gpuTypes
-      .filter((g) => g.id && g.id !== "unknown" && (g.secureCloud || g.communityCloud))
-      .map((g) => ({
-        id: g.id || "",
-        displayName: g.displayName || g.id || "",
-        memoryInGb: Number.isFinite(g.memoryInGb) ? g.memoryInGb || 0 : 0,
-        maxGpuCount: g.maxGpuCount || 1,
-        pricePerHour: getRunpodGpuPricePerHour(g.displayName || "") ?? getRunpodGpuPricePerHour(g.id || ""),
-      }));
-
-    // Sort by memory size descending, then alphabetically by name to present nice options.
-    remoteGpus.sort((a, b) => {
-      if (b.memoryInGb !== a.memoryInGb) {
-        return b.memoryInGb - a.memoryInGb;
-      }
-      return a.displayName.localeCompare(b.displayName);
-    });
-
-    return remoteGpus;
+    return computeProvider.listOffers(ctx, { userId: args.userId });
   },
 });

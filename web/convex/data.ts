@@ -1,22 +1,17 @@
-import { R2, type R2Callbacks } from "@convex-dev/r2";
 import { ConvexError, v } from "convex/values";
-import { components } from "@convex/_generated/api";
 import type { DataModel } from "@convex/_generated/dataModel";
 import { internalQuery, mutation, query, type MutationCtx, type QueryCtx } from "@convex/_generated/server";
 import { requireUser } from "@convex/auth";
-import { applyStorageDeltaCredits } from "@convex/credits";
+import { applyStorageDeltaCredits } from "@convex/cloud/storageUsage";
 import { shortId } from "@convex/ids";
 import { UPLOAD_LIMITS_BYTES } from "@convex/appConfig";
+import { storageKeys } from "@convex/core/storage";
+import { createObjectStoreClientApi, objectStore } from "@convex/objectStore";
 
-const r2 = new R2(components.r2);
 const DEFAULT_LIST_LIMIT = 1000;
 const MAX_LIST_LIMIT = 1000;
 const CURSOR_PREFIX = "offset:";
 const DATA_KEY_PREFIX = "data/";
-
-function encodeFilename(filename: string) {
-  return encodeURIComponent(filename.trim() || "file");
-}
 
 function decodeFilename(encoded: string) {
   try {
@@ -27,7 +22,7 @@ function decodeFilename(encoded: string) {
 }
 
 function buildDataPath(blobId: string, filename: string) {
-  return `${DATA_KEY_PREFIX}${blobId}__${encodeFilename(filename)}`;
+  return storageKeys.dataUploadObjectKey(blobId, filename);
 }
 
 function parseKey(key: string) {
@@ -82,7 +77,7 @@ function toMillis(value: string | undefined, fallback: number) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
-const callbacks: R2Callbacks = {};
+const callbacks = {};
 
 const dataBlobValidator = v.object({
   blob_id: v.string(),
@@ -162,7 +157,7 @@ async function upsertDataUploadIndexRow(
 
 async function resolveDownloadUrl(ctx: QueryCtx | MutationCtx, key: string) {
   try {
-    const metadata = await r2.getMetadata(ctx, key);
+    const metadata = await objectStore.getMetadata(ctx, key);
     if (metadata?.url) {
       return metadata.url;
     }
@@ -170,7 +165,7 @@ async function resolveDownloadUrl(ctx: QueryCtx | MutationCtx, key: string) {
     // Fall through to signed URL lookup.
   }
   try {
-    return await r2.getUrl(key);
+    return (await objectStore.createSignedDownload(key)).url;
   } catch {
     return "";
   }
@@ -228,7 +223,7 @@ async function listBlobsForUserId(
   };
 }
 
-export const { syncMetadata } = r2.clientApi<DataModel>({
+export const { syncMetadata } = createObjectStoreClientApi<DataModel>({
   callbacks,
   checkUpload: async (ctx) => {
     await requireUser(ctx);
@@ -239,11 +234,11 @@ export const { syncMetadata } = r2.clientApi<DataModel>({
     if (!isTopLevelDataUploadKey(key)) {
       throw new ConvexError("invalid upload key");
     }
-    const metadata = await r2.getMetadata(ctx, key);
+    const metadata = await objectStore.getMetadata(ctx, key);
     const objectSize = typeof metadata?.size === "number" && Number.isFinite(metadata.size) ? metadata.size : 0;
     if (objectSize > UPLOAD_LIMITS_BYTES.dataBlob) {
       try {
-        await r2.deleteObject(ctx, key);
+        await objectStore.deleteObject(ctx, key);
       } catch {
         // Ignore cleanup errors and return the original size violation.
       }
@@ -264,7 +259,7 @@ export const { syncMetadata } = r2.clientApi<DataModel>({
       });
     } catch (error) {
       try {
-        await r2.deleteObject(ctx, key);
+        await objectStore.deleteObject(ctx, key);
       } catch {
         // best-effort cleanup when post-upload validation fails
       }
@@ -294,7 +289,7 @@ export const generateUploadUrl = mutation({
     }
     const blobId = shortId("blob");
     const key = buildDataPath(blobId, args.filename);
-    const upload = await r2.generateUploadUrl(key);
+    const upload = await objectStore.createSignedUpload(key);
 
     return {
       blob_id: blobId,

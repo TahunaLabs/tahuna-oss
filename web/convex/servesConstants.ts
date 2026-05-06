@@ -1,22 +1,9 @@
-export const SERVE_STATUS = {
-  QUEUED: "queued",
-  PROVISIONING: "provisioning",
-  STARTING: "starting",
-  SERVING: "serving",
-  STOPPING: "stopping",
-  STOPPED: "stopped",
-  FAILED: "failed",
-} as const
+import {
+  ACTIVE_SERVE_LIFECYCLE_STATUSES,
+  SERVE_LIFECYCLE_STATUS,
+  TERMINAL_SERVE_LIFECYCLE_STATUSES,
+} from "@convex/core/serveLifecyclePlan"
 
-export const ACTIVE_SERVE_STATUSES: ReadonlySet<string> = new Set([
-  SERVE_STATUS.QUEUED,
-  SERVE_STATUS.PROVISIONING,
-  SERVE_STATUS.STARTING,
-  SERVE_STATUS.SERVING,
-  SERVE_STATUS.STOPPING,
-])
-
-export const TERMINAL_SERVE_STATUSES: ReadonlySet<string> = new Set([
-  SERVE_STATUS.STOPPED,
-  SERVE_STATUS.FAILED,
-])
+export const SERVE_STATUS = SERVE_LIFECYCLE_STATUS
+export const ACTIVE_SERVE_STATUSES = ACTIVE_SERVE_LIFECYCLE_STATUSES
+export const TERMINAL_SERVE_STATUSES = TERMINAL_SERVE_LIFECYCLE_STATUSES
