@@ -94,7 +94,7 @@ function dataManifestPrefix(dataId: string) {
 }
 
 function dataManifestObjectKey(dataId: string, manifestHash: string) {
-  return `${storageKeys.dataManifestPrefix(dataId)}${manifestHash}.json`;
+  return storageKeys.dataManifestObjectKey(dataId, manifestHash);
 }
 
 function normalizeManifestHash(value: string | undefined | null): string | null {
@@ -691,10 +691,10 @@ async function deleteEnvironmentStorageIndexesBatch(
   deleteDataPrefix: boolean,
 ) {
   const prefixes = [
-    `${environmentPath(environmentId)}/`,
-    `runs/${environmentId}/`,
-    `serves/${environmentId}/`,
-    ...(deleteDataPrefix ? [`data/${dataId}/`] : []),
+    storageKeys.environmentObjectChildrenPrefix(environmentId),
+    storageKeys.runObjectPrefix(environmentId),
+    storageKeys.serveObjectPrefix(environmentId),
+    ...(deleteDataPrefix ? [storageKeys.dataObjectPrefix(dataId)] : []),
   ];
   for (const prefix of prefixes) {
     const hasMore = await deleteIndexedStoragePrefixBatch(ctx, userId, prefix);
@@ -988,12 +988,12 @@ export const internalCleanupDedupBlobs = internalAction({
         // best-effort cleanup
       }
     }
-    await deleteObjectsByPrefix(ctx, `${environmentPath(args.environmentId)}/`);
+    await deleteObjectsByPrefix(ctx, storageKeys.environmentObjectChildrenPrefix(args.environmentId));
     if (deleteDataPrefix) {
-      await deleteObjectsByPrefix(ctx, `data/${args.dataId}/`);
+      await deleteObjectsByPrefix(ctx, storageKeys.dataObjectPrefix(args.dataId));
     }
-    await deleteObjectsByPrefix(ctx, `runs/${args.environmentId}/`);
-    await deleteObjectsByPrefix(ctx, `serves/${args.environmentId}/`);
+    await deleteObjectsByPrefix(ctx, storageKeys.runObjectPrefix(args.environmentId));
+    await deleteObjectsByPrefix(ctx, storageKeys.serveObjectPrefix(args.environmentId));
     return null;
   },
 });

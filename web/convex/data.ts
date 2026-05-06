@@ -11,7 +11,6 @@ import { createObjectStoreClientApi, objectStore } from "@convex/objectStore";
 const DEFAULT_LIST_LIMIT = 1000;
 const MAX_LIST_LIMIT = 1000;
 const CURSOR_PREFIX = "offset:";
-const DATA_KEY_PREFIX = "data/";
 
 function decodeFilename(encoded: string) {
   try {
@@ -26,7 +25,8 @@ function buildDataPath(blobId: string, filename: string) {
 }
 
 function parseKey(key: string) {
-  const relative = key.startsWith(DATA_KEY_PREFIX) ? key.slice(DATA_KEY_PREFIX.length) : key;
+  const prefix = storageKeys.dataUploadRootPrefix();
+  const relative = key.startsWith(prefix) ? key.slice(prefix.length) : key;
   const leaf = relative.split("/").pop() ?? relative;
   const [blobId, ...filenameParts] = leaf.split("__");
   const encodedFilename = filenameParts.join("__");
@@ -38,10 +38,11 @@ function parseKey(key: string) {
 }
 
 function isTopLevelDataUploadKey(key: string) {
-  if (!key.startsWith(DATA_KEY_PREFIX)) {
+  const prefix = storageKeys.dataUploadRootPrefix();
+  if (!key.startsWith(prefix)) {
     return false;
   }
-  const relative = key.slice(DATA_KEY_PREFIX.length);
+  const relative = key.slice(prefix.length);
   return relative.includes("__") && !relative.includes("/");
 }
 

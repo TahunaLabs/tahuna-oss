@@ -58,20 +58,6 @@ export type ObjectStore = {
   deleteAllObjects(ctx: ObjectStoreContext, dryRun: boolean): Promise<number>;
 };
 
-export type StorageKeyBuilder = {
-  blobObjectKey(sha256: string): string;
-  dataObjectPrefix(dataId: string): string;
-  dataUploadObjectKey(blobId: string, filename: string): string;
-  environmentObjectPrefix(environmentId: string): string;
-  environmentManifestPrefix(environmentId: string): string;
-  dataManifestPrefix(dataId: string): string;
-  manifestPrefix(environmentId: string, dataId: string, kind: SyncKind): string;
-  manifestObjectKey(environmentId: string, dataId: string, kind: SyncKind, manifestHash: string): string;
-  runObjectPrefix(environmentId: string): string;
-  serveObjectPrefix(environmentId: string): string;
-  serveSnapshotBasePrefix(environmentId: string, now?: number, suffix?: string): string;
-};
-
 function encodeObjectPathSegment(value: string) {
   return encodeURIComponent(value.trim() || "file");
 }
@@ -84,12 +70,24 @@ function dataObjectPrefix(dataId: string) {
   return `data/${dataId}/`;
 }
 
+function dataUploadRootPrefix() {
+  return "data/";
+}
+
 function environmentObjectPrefix(environmentId: string) {
   return `environments/${environmentId}`;
 }
 
+function environmentObjectChildrenPrefix(environmentId: string) {
+  return `${environmentObjectPrefix(environmentId)}/`;
+}
+
 function dataManifestPrefix(dataId: string) {
   return `${dataObjectPrefix(dataId)}manifests/`;
+}
+
+function dataManifestObjectKey(dataId: string, manifestHash: string) {
+  return `${dataManifestPrefix(dataId)}${manifestHash}.json`;
 }
 
 function manifestPrefix(environmentId: string, dataId: string, kind: SyncKind) {
@@ -99,30 +97,53 @@ function manifestPrefix(environmentId: string, dataId: string, kind: SyncKind) {
   return `${environmentObjectPrefix(environmentId)}/manifests/${kind}/`;
 }
 
-export const storageKeys: StorageKeyBuilder = {
+function runObjectPrefix(environmentId: string) {
+  return `runs/${environmentId}/`;
+}
+
+function runExecutionPrefix(environmentId: string, now: number) {
+  return `${runObjectPrefix(environmentId)}${now}`;
+}
+
+function serveObjectPrefix(environmentId: string) {
+  return `serves/${environmentId}/`;
+}
+
+function serveExecutionPrefix(environmentId: string, now: number) {
+  return `${serveObjectPrefix(environmentId)}${now}`;
+}
+
+export const storageKeys = {
   blobObjectKey,
+  dataUploadRootPrefix,
   dataObjectPrefix,
   dataUploadObjectKey(blobId: string, filename: string) {
-    return `data/${blobId}__${encodeObjectPathSegment(filename)}`;
+    return `${dataUploadRootPrefix()}${blobId}__${encodeObjectPathSegment(filename)}`;
   },
   environmentObjectPrefix,
+  environmentObjectChildrenPrefix,
   environmentManifestPrefix(environmentId: string) {
     return `${environmentObjectPrefix(environmentId)}/manifests/code/`;
   },
   dataManifestPrefix,
+  dataManifestObjectKey,
   manifestPrefix,
   manifestObjectKey(environmentId: string, dataId: string, kind: SyncKind, manifestHash: string) {
     return `${manifestPrefix(environmentId, dataId, kind)}${manifestHash}.json`;
   },
-  runObjectPrefix(environmentId: string) {
-    return `runs/${environmentId}/`;
-  },
-  serveObjectPrefix(environmentId: string) {
-    return `serves/${environmentId}/`;
-  },
+  runObjectPrefix,
+  runExecutionPrefix,
+  serveObjectPrefix,
+  serveExecutionPrefix,
   serveSnapshotBasePrefix(environmentId: string, now: number = Date.now(), suffix?: string) {
     const resolvedSuffix = suffix || Math.random().toString(36).slice(2, 8);
-    return `serves/${environmentId}/${now}-${resolvedSuffix}`;
+    return `${serveObjectPrefix(environmentId)}${now}-${resolvedSuffix}`;
+  },
+  serveSnapshotModelPrefix(snapshotBasePrefix: string) {
+    return `${snapshotBasePrefix}/model`;
+  },
+  serveSnapshotManifestKey(snapshotBasePrefix: string) {
+    return `${snapshotBasePrefix}/model-manifest.json`;
   },
 };
 

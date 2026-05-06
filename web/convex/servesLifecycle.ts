@@ -14,6 +14,7 @@ import {
   type ServeLifecyclePlan,
   type ServeLifecycleServeState,
 } from "@convex/core/serveLifecyclePlan"
+import { storageKeys } from "@convex/core/storage"
 import { getAccessibleServe } from "@convex/servesAccess"
 import { SERVE_STATUS } from "@convex/servesConstants"
 import { toServeResponse } from "@convex/servesRead"
@@ -97,12 +98,13 @@ export async function createServeForUserId(
   const computeCredential = await resolveActiveComputeCredentialForUserId(ctx, args.userId)
 
   const now = Date.now()
+  const servePrefix = storageKeys.serveExecutionPrefix(String(args.environmentId), now)
   const serveId = await ctx.db.insert("serves", {
     userId: args.userId,
     environmentId: args.environmentId,
     ...args.serveConfig,
     dataManifestHash: args.serveConfig.dataManifestHash || undefined,
-    logs: `serves/${args.environmentId}/${now}/logs`,
+    logs: `${servePrefix}/logs`,
     status: SERVE_STATUS.QUEUED,
     providerCredentialId: String(computeCredential.providerCredentialId),
     modelSnapshot: args.modelSnapshot,

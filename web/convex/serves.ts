@@ -24,7 +24,7 @@ import {
 } from "@convex/core/serveLifecyclePlan"
 import { buildProvisionedRuntimeEnv, resolveEnvironmentEnvVarsForEnvironmentId } from "@convex/envVars"
 import { RUN_STATUS } from "@convex/runsConstants"
-import { storageKeys } from "@convex/core/storage"
+import { storageKeys, storagePrefixUpperBound } from "@convex/core/storage"
 import { objectStore } from "@convex/objectStore"
 import { resolveConfiguredDependencyGroup } from "@/lib/dependency-selection"
 import {
@@ -605,14 +605,6 @@ function matchesObjectPrefix(key: string, prefix: string) {
   return key === prefix || key.startsWith(`${prefix}/`)
 }
 
-function storagePrefixUpperBound(prefix: string) {
-  return `${prefix}\uffff`
-}
-
-function createSnapshotBasePrefix(environmentId: string) {
-  return storageKeys.serveSnapshotBasePrefix(environmentId)
-}
-
 async function deleteObjectsByPrefix(ctx: ActionCtx, prefix: string) {
   let cursor: string | null = null
   let pages = 0
@@ -1005,9 +997,9 @@ export const internalCreate = internalAction({
       gpuCount: args.gpuCount,
       volumeGb: args.volumeGb,
     })
-    const snapshotBasePrefix = createSnapshotBasePrefix(preparation.environment_id)
-    const objectPrefix = `${snapshotBasePrefix}/model`
-    const manifestKey = `${snapshotBasePrefix}/model-manifest.json`
+    const snapshotBasePrefix = storageKeys.serveSnapshotBasePrefix(preparation.environment_id)
+    const objectPrefix = storageKeys.serveSnapshotModelPrefix(snapshotBasePrefix)
+    const manifestKey = storageKeys.serveSnapshotManifestKey(snapshotBasePrefix)
     const copiedKeys: string[] = []
     const manifestEntries: SnapshotManifestEntry[] = []
     let totalBytes = 0

@@ -5,6 +5,7 @@ import {
   type RunLifecycleJob,
   type StartupTimeoutFingerprint,
 } from "@convex/core/jobQueue";
+import { storageKeys } from "@convex/core/storage";
 
 export type { RunLifecycleJob } from "@convex/core/jobQueue";
 
@@ -142,7 +143,7 @@ export function planRunCreation(args: {
   enqueueProvisioning: boolean;
 }) {
   const outputDir = args.outputDir ?? "outputs";
-  const runPrefix = `runs/${args.environmentId}/${args.nowMs}`;
+  const runPrefix = storageKeys.runExecutionPrefix(args.environmentId, args.nowMs);
   return {
     run: {
       userId: args.userId,
