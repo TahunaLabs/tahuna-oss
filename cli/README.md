@@ -22,7 +22,7 @@ See the docs installation guide for manual tarball install and pinned versions:
 Nightly (tracks `main`):
 
 1. Push commits to `main`.
-2. `Release CLI Nightly` runs on each `main` push and updates the `nightly` release in `Pazuzzu/tahuna-cli`.
+2. `Release CLI Nightly` runs on each `main` push and updates the `nightly` release in `TahunaLabs/tahuna-cli`.
 
 Stable:
 
@@ -36,7 +36,7 @@ git tag -a v0.1.1 -m "Release v0.1.1"
 git push origin v0.1.1
 ```
 
-3. `Release CLI` publishes release assets to `Pazuzzu/tahuna-cli`.
+3. `Release CLI` publishes release assets to `TahunaLabs/tahuna-cli`.
 4. Promote stable by updating `releases/channels.conf` (`stable=vX.Y.Z`) and pushing `main`.
 
 ## Dev binary (tahuna-dev)
