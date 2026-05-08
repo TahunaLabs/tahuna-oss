@@ -1,0 +1,73 @@
+---
+title: Agent Skills
+description: Install Tahuna workflow skills for coding agents.
+---
+
+Tahuna Agent Skills help coding agents operate Tahuna projects from a user's local workspace. They package the common setup, training, and serving workflows so an agent can choose the right Tahuna commands, check project state, and avoid common compute-lifecycle mistakes.
+
+The skills live in the [`TahunaLabs/agent-skills`](https://github.com/TahunaLabs/agent-skills) repository.
+
+## Install
+
+Install all Tahuna skills:
+
+```bash
+npx skills add TahunaLabs/agent-skills
+```
+
+Or install one skill:
+
+```bash
+npx skills add TahunaLabs/agent-skills --skill tahuna-train-project
+```
+
+Restart your agent environment after installation so the new skills are available.
+
+## Available Skills
+
+### `tahuna-setup-hardware`
+
+Install and log in to Tahuna, initialize a project, inspect the local ML workspace, and choose GPU, GPU count, and volume settings.
+
+Use this when an agent is helping with:
+
+- `tahuna login`
+- `tahuna init .`
+- RunPod provider readiness
+- GPU and volume selection
+- no-capacity fallback choices
+
+### `tahuna-train-project`
+
+Sync code and data, launch Tahuna training, monitor runs, inspect logs, and find output artifacts.
+
+Use this when an agent is helping with:
+
+- `tahuna sync`
+- `tahuna train`
+- runtime environment variables
+- run logs and status
+- training artifact paths
+- first-pass training troubleshooting
+
+### `tahuna-serve-model`
+
+Deploy a trained model as a Tahuna serve, call inference through Tahuna, monitor logs, and stop long-running serves.
+
+Use this when an agent is helping with:
+
+- `tahuna serve create`
+- `inference.py` and serve config
+- run artifact or storage-prefix selection
+- authenticated inference URLs
+- serve logs, status, and cleanup
+
+## Typical Agent Workflow
+
+Use the skills in this order for a new project:
+
+```text
+tahuna-setup-hardware -> tahuna-train-project -> tahuna-serve-model
+```
+
+For an existing initialized project, start with `tahuna-train-project`. For an already-trained model, start with `tahuna-serve-model`.
