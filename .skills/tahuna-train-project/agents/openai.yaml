@@ -1,0 +1,4 @@
+interface:
+  display_name: "Tahuna Train Project"
+  short_description: "Sync and launch Tahuna training runs"
+  default_prompt: "Use $tahuna-train-project to prepare and run my Tahuna training job."
