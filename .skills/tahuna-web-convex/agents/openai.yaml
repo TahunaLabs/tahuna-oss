@@ -1,0 +1,4 @@
+interface:
+  display_name: "Tahuna Web Convex"
+  short_description: "Tahuna Next.js and Convex patterns"
+  default_prompt: "Use $tahuna-web-convex to change Tahuna web or Convex code."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Tahuna Runtime Warden"
+  short_description: "Warden runtime and image guardrails"
+  default_prompt: "Use $tahuna-runtime-warden to change Tahuna runtime or image code."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Tahuna User Workflows"
+  short_description: "Operate Tahuna projects from CLI to serve"
+  default_prompt: "Use $tahuna-user-workflows to run a Tahuna project workflow."
