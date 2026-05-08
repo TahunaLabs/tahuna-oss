@@ -3,7 +3,7 @@ title: Agent Skills
 description: Install Tahuna workflow skills for coding agents.
 ---
 
-Tahuna Agent Skills help coding agents operate Tahuna projects from a user's local workspace. They package the common setup, training, and serving workflows so an agent can choose the right Tahuna commands, check project state, and avoid common compute-lifecycle mistakes.
+Tahuna Agent Skills help coding agents operate Tahuna projects from a user's local workspace. They package the common setup, training, serving, and autoresearch workflows so an agent can choose the right Tahuna commands, check project state, and avoid common compute-lifecycle mistakes.
 
 The skills live in the [`TahunaLabs/agent-skills`](https://github.com/TahunaLabs/agent-skills) repository.
 
@@ -19,6 +19,7 @@ Or install one skill:
 
 ```bash
 npx skills add TahunaLabs/agent-skills --skill tahuna-train-project
+npx skills add TahunaLabs/agent-skills --skill tahuna-autoresearch-project
 ```
 
 Restart your agent environment after installation so the new skills are available.
@@ -62,6 +63,19 @@ Use this when an agent is helping with:
 - authenticated inference URLs
 - serve logs, status, and cleanup
 
+### `tahuna-autoresearch-project`
+
+Run a bounded autonomous research loop for a Tahuna project while using Tahuna only for orchestration.
+
+Use this when an agent is helping with:
+
+- `tahuna.research.toml` or `program.md`
+- research branches and candidate commits
+- baseline and trial runs through `tahuna run create --detached`
+- Tahuna metric scoring
+- accepting or reverting candidate changes
+- local experiment ledgers
+
 ## Typical Agent Workflow
 
 Use the skills in this order for a new project:
@@ -70,4 +84,4 @@ Use the skills in this order for a new project:
 tahuna-setup-hardware -> tahuna-train-project -> tahuna-serve-model
 ```
 
-For an existing initialized project, start with `tahuna-train-project`. For an already-trained model, start with `tahuna-serve-model`.
+For an existing initialized project, start with `tahuna-train-project`. For an already-trained model, start with `tahuna-serve-model`. For autonomous experiment loops, start with `tahuna-autoresearch-project` after the project is initialized and can launch normal training runs.
