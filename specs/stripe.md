@@ -4,7 +4,7 @@
 
 Tahuna uses Stripe Checkout for prepaid credit top-ups.
 
-This is a hosted Tahuna billing path. It is separate from compute-provider BYOK credentials.
+This is the hosted managed-billing path. In this mode, users pay Tahuna and Tahuna manages provider credentials, provider usage, and provider payment.
 
 ## MVP Behavior
 
@@ -13,8 +13,58 @@ This is a hosted Tahuna billing path. It is separate from compute-provider BYOK 
 - Custom top-up amounts are supported within configured bounds.
 - `$1 paid = $1 Tahuna credit`.
 - Run launch requires estimated Tahuna funds before provisioning.
+- Managed billing and BYOK cannot both fund the same run.
 - No Stripe Billing Portal for MVP.
 - No refund, dispute, or chargeback automation for MVP.
+
+## Billing Modes
+
+Tahuna should model compute funding as an explicit billing mode:
+
+```ts
+type BillingMode = "managed" | "byok";
+```
+
+### Managed Billing
+
+Managed billing is the Stripe credits path.
+
+- User pays Tahuna through Stripe.
+- Tahuna credits fund hosted compute.
+- Tahuna owns and uses the provider credentials.
+- Tahuna pays the compute provider.
+- Tahuna records user-facing payment history from Stripe payment records.
+- Tahuna records compute debits and settlements in the credit ledger.
+
+Managed billing is the default cloud product direction.
+
+### BYOK
+
+BYOK means bring your own provider account/key.
+
+- User provides the compute-provider credential, such as a RunPod API key.
+- User pays the provider directly.
+- Tahuna orchestrates provisioning, but does not fund provider compute with Tahuna credits.
+- Tahuna must not debit Tahuna credits for provider compute usage in this mode.
+- Provider-side balance, quota, and credential failures remain provider errors.
+
+BYOK can exist as an advanced, legacy, or self-managed mode, but it must be explicit.
+
+### Non-Mixing Rule
+
+One run must have exactly one compute billing mode.
+
+Valid:
+
+- `managed`: require estimated Tahuna funds, provision with Tahuna-owned provider credentials, debit Tahuna credits.
+- `byok`: require user provider credentials, provision against the user's provider account, do not debit Tahuna credits for provider compute.
+
+Invalid:
+
+- Requiring user provider credentials while also charging Tahuna credits for provider compute.
+- Showing Stripe credits as if they fund the user's external provider account.
+- Falling back from managed billing to BYOK implicitly.
+- Falling back from BYOK to managed billing implicitly.
 
 ## Configuration
 
@@ -108,17 +158,18 @@ Open or pending checkout sessions are not payments and must not appear as paymen
 
 ## BYOK Compute Provider Boundary
 
-Tahuna currently provisions compute through user-provided provider credentials, such as a RunPod API key.
+Current code still has BYOK-oriented provider credential flows. Stripe credits do not make those flows equivalent to managed billing.
 
-There is no direct technical conflict between Stripe prepaid credits and BYOK provider credentials, but the product boundary must stay explicit:
+The product boundary must stay explicit:
 
 - Stripe credits are Tahuna account credits.
-- BYOK credentials authorize provisioning against the user's compute-provider account.
+- In managed billing, Tahuna-owned provider credentials authorize provisioning.
+- In BYOK, user-owned provider credentials authorize provisioning against the user's compute-provider account.
 - Paying Tahuna does not add funds to the user's RunPod/provider account.
-- Tahuna credits do not replace the provider API key.
-- If a provider rejects provisioning because of provider-side balance, quota, or credential issues, Stripe credit alone does not fix that failure.
+- Tahuna credits do not replace a provider API key in BYOK mode.
+- If BYOK provisioning fails because of provider-side balance, quota, or credential issues, Stripe credit alone does not fix that failure.
 
-For hosted runs, Tahuna should still enforce its own estimated-funds check before launch. Provider-side failures remain a separate provisioning error path.
+For hosted managed runs, Tahuna should enforce its own estimated-funds check before launch and should use Tahuna-owned provider credentials. Provider-side failures are then Tahuna operational failures, not user BYOK balance failures.
 
 ## Not In MVP
 
