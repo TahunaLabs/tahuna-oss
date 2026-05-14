@@ -31,7 +31,6 @@ type AuditRow = {
   action: Exclude<AuditActionFilter, "all">
   title: string
   detail: string
-  resource: string
   amount: string
   timestamp: number
   tone: "success" | "danger" | "active" | "billing"
@@ -98,12 +97,12 @@ function runAuditRows(runs: RunRow[], environmentNameById: ReadonlyMap<string, s
     const action = toAuditAction(run.status)
     const environmentName = environmentNameById.get(run.environment_id) || "Unknown environment"
     const title = `${run.name} ${action === "active" ? "updated" : action} run`
+    const gpuLabel = run.effective_gpu_type || "Unknown GPU"
     return {
       id: `run:${run.run_id}`,
       action,
       title,
-      detail: `env ${environmentName}`,
-      resource: run.effective_gpu_type || "—",
+      detail: `env ${environmentName} · ${gpuLabel}`,
       amount: formatRunUptime(run.uptime_ms),
       timestamp: run.created_at,
       tone: action === "completed" ? "success" : action === "failed" || action === "cancelled" ? "danger" : "active",
@@ -117,7 +116,6 @@ function billingAuditRows(usageEvents: UsageEventRow[]): AuditRow[] {
     action: "billing",
     title: eventLabel(event.event_type),
     detail: `Balance after ${formatMoney(event.balance_after_cents)}`,
-    resource: event.reference_type && event.reference_id ? `${event.reference_type}:${event.reference_id}` : "billing",
     amount: `${event.credits_delta_cents < 0 ? "-" : "+"}${formatMoney(event.credits_delta_cents)}`,
     timestamp: event.created_at,
     tone: "billing",
@@ -146,7 +144,7 @@ export function AuditLogsView({ runs, usageEvents, environmentNameById }: AuditL
     if (actionFilter !== "all" && actionFilter !== row.action) return false
     if (dateFilter && toLocalDateInputValue(row.timestamp) !== dateFilter) return false
     if (!searchTerm) return true
-    return [row.title, row.detail, row.resource, row.amount, row.action]
+    return [row.title, row.detail, row.amount, row.action]
       .join(" ")
       .toLowerCase()
       .includes(searchTerm)
@@ -198,7 +196,6 @@ export function AuditLogsView({ runs, usageEvents, environmentNameById }: AuditL
               <TableHeader>
                 <TableRow variant="head">
                   <TableHead>Event</TableHead>
-                  <TableHead>Resource</TableHead>
                   <TableHead className="text-right">Amount</TableHead>
                   <TableHead>Timestamp</TableHead>
                 </TableRow>
@@ -215,7 +212,6 @@ export function AuditLogsView({ runs, usageEvents, environmentNameById }: AuditL
                         </div>
                       </div>
                     </TableCell>
-                    <TableCell className="font-mono text-xs">{row.resource}</TableCell>
                     <TableCell className="text-right text-sm">{row.amount}</TableCell>
                     <TableCell className="text-xs text-muted-foreground">
                       {formatAuditTimestamp(row.timestamp)}
