@@ -42,9 +42,9 @@ import { useEffect, useState } from "react"
 import { ClipboardList, Cloud, Monitor, Settings, Wallet } from "lucide-react"
 
 const CLOUD_NAV_ADMIN: DashboardNavItem[] = [
-  { icon: Wallet, label: "Billing", view: "billing" },
   { icon: Cloud, label: "Providers", view: "providers" },
   { icon: Monitor, label: "Machines", view: "machines" },
+  { icon: Wallet, label: "Billing", view: "billing" },
   { icon: ClipboardList, label: "Audit logs", view: "audit_logs" },
   { icon: Settings, label: "Settings", view: "settings" },
 ]

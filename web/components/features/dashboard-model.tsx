@@ -59,7 +59,7 @@ export type {
 export const ENVIRONMENT_ACCESS_FILTER_VALUES = ["all", "private", "shared"] as const
 export type EnvironmentAccessFilter = (typeof ENVIRONMENT_ACCESS_FILTER_VALUES)[number]
 
-export const AUDIT_ACTION_FILTER_VALUES = ["all", "active", "completed", "failed", "cancelled"] as const
+export const AUDIT_ACTION_FILTER_VALUES = ["all", "active", "completed", "failed", "cancelled", "billing"] as const
 export type AuditActionFilter = (typeof AUDIT_ACTION_FILTER_VALUES)[number]
 
 export const RUN_TAB_VALUES = ["all", "active", "completed"] as const
