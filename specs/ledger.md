@@ -55,7 +55,7 @@ Stripe payment records:
 From `web/cloud/config.ts`:
 
 - `currency = "USD"`
-- `initialCreditCents = 1000` (USD 10.00)
+- `initialCreditCents = 500` (USD 5.00)
 - `computeVolumeGbHourlyRateCents = 2`
 - `storageGiBDeltaRateCents = 3`
 - `minimumChargeCents = 1`

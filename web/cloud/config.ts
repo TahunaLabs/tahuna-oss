@@ -7,7 +7,7 @@ export const CLOUD_EMAIL_CONFIG = {
 
 export const CLOUD_BILLING_CONFIG = {
   currency: "USD",
-  initialCreditCents: 1000,
+  initialCreditCents: 500,
   computeVolumeGbHourlyRateCents: 2,
   storageGiBDeltaRateCents: 3,
   minimumChargeCents: 1,
