@@ -5,10 +5,9 @@ import { resolveConfiguredDependencyGroup } from "@/lib/dependency-selection";
 import { buildRuntimeCompatibilityKey } from "@/lib/runtime-incompatibility";
 import { PYTHON_CONFIG, RUN_CONFIG } from "@convex/appConfig";
 import {
-  resolveComputeCredentialForBillingMode,
+  resolveManagedComputeCredential,
   resolveComputeCompatibilityCloudType,
 } from "@convex/computeProvider";
-import { normalizeBillingMode, type BillingMode } from "@convex/core/billingMode";
 import { ACTIVE_STATUSES, RUN_DELETE_BATCH_SIZE, TERMINAL_STATUSES } from "@convex/runsConstants";
 import { getAccessibleEnvironment, getAccessibleRun, listRunsForUser } from "@convex/runsAccess";
 import { hasRunNameConflict, pickUniqueGeneratedRunName, validateRunName, getRunName, normalizeRunName } from "@convex/runsNaming";
@@ -52,7 +51,6 @@ export type RunLifecycleComposition = {
       gpuType: string;
       gpuCount: number;
       volumeGb: number;
-      billingMode: BillingMode;
     },
   ) => Promise<void>;
   createRun?: (args: {
@@ -60,7 +58,6 @@ export type RunLifecycleComposition = {
     gpuType: string;
     gpuCount: number;
     volumeGb: number;
-    billingMode: BillingMode;
   }) => RunCreationComposition;
   settleTerminalRunUsage?: (
     ctx: MutationCtx,
@@ -164,7 +161,6 @@ export async function createRunForUserId(
     gpu_type?: string;
     gpu_count?: number;
     volume_gb?: number;
-    billing_mode?: BillingMode;
     enqueue_provisioning?: boolean;
   },
   composition?: RunLifecycleComposition,
@@ -183,7 +179,6 @@ export async function createRunForUserId(
   const effectiveGpuType = args.gpu_type ?? env.gpuType;
   const effectiveGpuCount = args.gpu_count ?? env.gpuCount;
   const effectiveVolumeGb = args.volume_gb ?? env.volumeGb;
-  const billingMode = normalizeBillingMode(args.billing_mode);
   const codeManifestHash = env.latestCodeManifestHash;
   const dataManifestHash = env.latestDataManifestHash;
   const dataId = env.dataId;
@@ -225,20 +220,18 @@ export async function createRunForUserId(
       `runtime launch blocked for this gpu/image combination (${incompatibility.errorCode}); try another gpu or image`,
     );
   }
-  const computeCredential = await resolveComputeCredentialForBillingMode(ctx, args.userId, billingMode);
+  const computeCredential = resolveManagedComputeCredential();
   await composition?.validateCreateRun?.(ctx, {
     userId: args.userId,
     gpuType: effectiveGpuType,
     gpuCount: effectiveGpuCount,
     volumeGb: effectiveVolumeGb,
-    billingMode,
   });
   const creationComposition = composition?.createRun?.({
     userId: args.userId,
     gpuType: effectiveGpuType,
     gpuCount: effectiveGpuCount,
     volumeGb: effectiveVolumeGb,
-    billingMode,
   });
 
   const creation = planRunCreation({
@@ -249,7 +242,6 @@ export async function createRunForUserId(
     dataId,
     outputDir,
     providerCredentialId: String(computeCredential.providerCredentialId),
-    billingMode,
     effectiveGpuType,
     effectiveGpuCount,
     effectiveVolumeGb,
@@ -273,7 +265,6 @@ export async function createRunForUserId(
     status: creation.run.status,
     cancellationRequested: creation.run.cancellationRequested,
     providerCredentialId: creation.run.providerCredentialId,
-    billingMode: creation.run.billingMode,
     effectiveGpuType: creation.run.effectiveGpuType,
     effectiveGpuCount: creation.run.effectiveGpuCount,
     effectiveVolumeGb: creation.run.effectiveVolumeGb,

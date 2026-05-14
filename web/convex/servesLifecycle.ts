@@ -1,7 +1,7 @@
 import { ConvexError } from "convex/values"
 import type { Doc, Id } from "@convex/_generated/dataModel"
 import type { MutationCtx } from "@convex/_generated/server"
-import { resolveActiveComputeCredentialForUserId } from "@convex/computeProvider"
+import { resolveManagedComputeCredential } from "@convex/computeProvider"
 import {
   enqueueServeLifecycleJobs,
 } from "@convex/convexJobQueue"
@@ -95,7 +95,7 @@ export async function createServeForUserId(
     enqueueProvisioning?: boolean;
   },
 ) {
-  const computeCredential = await resolveActiveComputeCredentialForUserId(ctx, args.userId)
+  const computeCredential = resolveManagedComputeCredential()
 
   const now = Date.now()
   const servePrefix = storageKeys.serveExecutionPrefix(String(args.environmentId), now)

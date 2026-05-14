@@ -18,7 +18,6 @@ import {
 } from "@/lib/runtime-incompatibility";
 import { PYTHON_CONFIG, RUN_CONFIG } from "@convex/appConfig";
 import { applyStorageDeltaCredits } from "@convex/cloud/storageUsage";
-import { billingModeValidator, normalizeBillingMode } from "@convex/core/billingMode";
 import { resolveConfiguredDependencyGroup } from "@/lib/dependency-selection";
 import {
   buildProvisionedRuntimeEnv,
@@ -95,7 +94,6 @@ const runResponseValidator = v.object({
   output: v.string(),
   logs: v.string(),
   status: v.string(),
-  billing_mode: billingModeValidator,
   error: v.string(),
   provider_machine_id: v.string(),
   effective_gpu_type: v.string(),
@@ -256,7 +254,6 @@ const provisioningPayloadValidator = v.object({
 const runProvisionSpecValidator = v.object({
   run_id: v.string(),
   provider_credential_id: v.string(),
-  billing_mode: billingModeValidator,
   effective_gpu_type: v.string(),
   effective_gpu_count: v.number(),
   effective_volume_gb: v.number(),
@@ -576,7 +573,6 @@ export const create = mutation({
     gpu_type: v.optional(v.string()),
     gpu_count: v.optional(v.number()),
     volume_gb: v.optional(v.number()),
-    billing_mode: v.optional(billingModeValidator),
   },
   returns: runResponseValidator,
   handler: async (ctx, args) => {
@@ -588,7 +584,6 @@ export const create = mutation({
       gpu_type: args.gpu_type,
       gpu_count: args.gpu_count,
       volume_gb: args.volume_gb,
-      billing_mode: args.billing_mode,
     });
   },
 });
@@ -669,7 +664,6 @@ export const internalCreate = internalMutation({
     gpu_type: v.optional(v.string()),
     gpu_count: v.optional(v.number()),
     volume_gb: v.optional(v.number()),
-    billing_mode: v.optional(billingModeValidator),
     enqueue_provisioning: v.optional(v.boolean()),
   },
   returns: runResponseValidator,
@@ -895,7 +889,6 @@ export const internalGetRunProvisionSpec = internalQuery({
     return {
       run_id: String(row._id),
       provider_credential_id: row.providerCredentialId,
-      billing_mode: normalizeBillingMode(row.billingMode),
       effective_gpu_type: row.effectiveGpuType || env.gpuType,
       effective_gpu_count: row.effectiveGpuCount || env.gpuCount,
       effective_volume_gb: row.effectiveVolumeGb || env.volumeGb,
@@ -1214,7 +1207,7 @@ export const provisionRun = internalAction({
       });
     } catch (error) {
       const raw = error instanceof Error ? error.message : "runtime bootstrap failed";
-      const detail = normalizeProvisioningError(raw, { billingMode: runSpec.billing_mode });
+      const detail = normalizeProvisioningError(raw);
       const incompatibility = classifyRuntimeIncompatibility(detail);
       if (incompatibility) {
         await ctx.runMutation(internal.runs.upsertRuntimeIncompatibility, {

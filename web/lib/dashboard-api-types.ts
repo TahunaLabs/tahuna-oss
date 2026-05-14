@@ -152,7 +152,6 @@ export type RunRow = {
   uptime_ms: number
   environment_id: string
   status: string
-  billing_mode: "managed" | "byok"
   effective_gpu_type: string
   effective_gpu_count: number
   effective_volume_gb: number
@@ -168,7 +167,6 @@ export type RunDetail = {
   output: string
   logs: string
   status: string
-  billing_mode: "managed" | "byok"
   error: string
   provider_machine_id: string
   effective_gpu_type: string

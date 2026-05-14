@@ -13,7 +13,6 @@ Dashboard views:
 - Serving
 - Runs
 - Billing
-- Providers
 - Machines
 - Audit logs
 - Settings
@@ -26,7 +25,6 @@ The dashboard renders an app shell with a sidebar, top bar, credits gauge, and v
 - Environments: list, show/edit synced config, bind/unbind data, create runs, delete.
 - Runs: list, filter active/completed, show details, logs, metrics, cancel, delete, share.
 - Serving: list serves, show details/logs, stop serves, expose inference path.
-- Providers: remove from the hosted cloud path; provider credentials are deployment-owned managed billing configuration.
 - Billing: initialize user ledger, show balance and usage events.
 - Machines: list/revoke API keys used as CLI machine sessions.
 - Settings: account/profile display and API-key related controls.

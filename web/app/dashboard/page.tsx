@@ -13,7 +13,6 @@ import {
 } from "@/components/cloud/dashboard/dashboard-model"
 import { CreditsGauge, CreditsGaugeSkeleton } from "@/components/cloud/dashboard/credits-gauge"
 import { CloudDashboardTopBar } from "@/components/cloud/dashboard/dashboard-top-bar"
-import { ProvidersContainer } from "@/components/cloud/dashboard/providers/providers-container"
 import { CLOUD_DASHBOARD_DOCS_NAV } from "@/components/cloud/dashboard/sidebar-links"
 import { EnvironmentsContainer } from "@/components/features/dashboard/environments-container"
 import { MachinesContainer } from "@/components/features/dashboard/machines-container"
@@ -38,10 +37,9 @@ import { useRouter } from "next/navigation"
 import { parseAsStringLiteral, useQueryState } from "nuqs"
 import { toast } from "sonner"
 import { useEffect, useState } from "react"
-import { ClipboardList, Cloud, Monitor, Settings, Wallet } from "lucide-react"
+import { ClipboardList, Monitor, Settings, Wallet } from "lucide-react"
 
 const CLOUD_NAV_ADMIN: DashboardNavItem[] = [
-  { icon: Cloud, label: "Providers", view: "providers" },
   { icon: Monitor, label: "Machines", view: "machines" },
   { icon: Wallet, label: "Billing", view: "billing" },
   { icon: ClipboardList, label: "Audit logs", view: "audit_logs" },
@@ -160,8 +158,6 @@ export default function DashboardPage() {
         return <MachinesContainer shouldLoadQueries={shouldLoadQueries} />
       case "audit_logs":
         return <AuditLogsContainer shouldLoadQueries={shouldLoadQueries} />
-      case "providers":
-        return <ProvidersContainer shouldLoadQueries={shouldLoadQueries} />
       case "settings":
         return (
           <SettingsContainer

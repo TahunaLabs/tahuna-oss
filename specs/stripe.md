@@ -27,21 +27,7 @@ Managed billing is the only Tahuna Cloud path.
 - Tahuna pays the compute provider.
 - Tahuna records user-facing payment history from Stripe payment records.
 - Tahuna records compute debits and settlements in the credit ledger.
-- Provider-side balance, quota, credential, and capacity failures are Tahuna operational failures, not user BYOK errors.
-
-## BYOK Policy
-
-BYOK is not part of the main hosted cloud path.
-
-Remove BYOK from user-facing Tahuna Cloud:
-
-- no dashboard billing-mode selector,
-- no public `billing_mode` run-create option,
-- no Providers page for user RunPod keys in cloud,
-- no implicit fallback from managed billing to user-owned credentials,
-- no credit-debit bypass for user-owned provider credentials.
-
-If BYOK is needed later, it must be a separate self-hosted or legacy deployment mode, not a per-run or per-user hosted cloud choice.
+- Provider-side balance, quota, credential, and capacity failures are Tahuna operational failures.
 
 ## Configuration
 
@@ -53,7 +39,7 @@ STRIPE_WEBHOOK_SECRET=whsec_...
 TAHUNA_MANAGED_RUNPOD_API_KEY=...
 ```
 
-During development, `TAHUNA_MANAGED_RUNPOD_API_KEY` may point at the developer's own provider key. In production, it must be a Tahuna-owned provider key with operational monitoring, spend controls, and quota management.
+During development, the managed provider key may point at the developer's provider account. In production, it must be a Tahuna-owned provider key with operational monitoring, spend controls, and quota management.
 
 Stripe mode pairing is mandatory:
 

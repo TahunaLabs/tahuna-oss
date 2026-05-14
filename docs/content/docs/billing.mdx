@@ -5,7 +5,7 @@ description: How Tahuna credits and managed compute billing work.
 
 Tahuna Cloud uses managed billing. You add Tahuna credits with Stripe Checkout, launch runs, and Tahuna debits credits for hosted compute and storage usage.
 
-You do not need a RunPod account or RunPod API key for the normal cloud path. Tahuna owns the provider credentials, pays the compute provider, and treats provider-side failures as Tahuna operational failures.
+You do not need a separate provider account or provider API key. Tahuna owns the provider credentials, pays for hosted compute, and treats provider-side failures as Tahuna operational issues.
 
 ## Credits
 
@@ -25,12 +25,6 @@ While a run is active, Tahuna accrues compute charges from the run's GPU type, G
 ## Storage charges
 
 Tahuna charges storage when stored data grows. Zero or negative size deltas are not charged.
-
-## Provider credentials
-
-Provider credentials are deployment configuration, not user configuration. In development, the managed provider key can be your own provider API key set as `TAHUNA_MANAGED_RUNPOD_API_KEY`. In production, this should be a Tahuna-owned key with appropriate balance, quota, and operational monitoring.
-
-BYOK is not part of the main Tahuna Cloud billing model. Any self-hosted or legacy provider-key workflow should be kept separate from the hosted product path.
 
 ## Not Included Yet
 

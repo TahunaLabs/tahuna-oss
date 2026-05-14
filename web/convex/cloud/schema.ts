@@ -14,18 +14,6 @@ export const cloudRunBillingFields = {
 } as const;
 
 export const cloudSchemaTables = {
-  runpodCredentials: defineTable({
-    userId: v.string(),
-    keyCiphertext: v.string(),
-    keyIv: v.string(),
-    keyVersion: v.number(),
-    keyPrefix: v.string(),
-    fingerprint: v.string(),
-    validatedAt: v.number(),
-    revokedAt: v.optional(v.number()),
-    updatedAt: v.number(),
-  }).index("by_user", ["userId"]),
-
   userCredits: defineTable({
     userId: v.string(),
     balanceCents: v.number(),

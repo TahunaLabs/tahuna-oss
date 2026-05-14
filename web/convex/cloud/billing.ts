@@ -13,7 +13,6 @@ import {
   upsertLedgerDebitTotal,
   USAGE_EVENT_TYPE,
 } from "@convex/cloud/credits";
-import { BILLING_MODE, runBillingMode } from "@convex/core/billingMode";
 import {
   estimateRunUsageFromHourlyRateCents,
   resolveRunHourlyRateCents,
@@ -593,10 +592,6 @@ export const billRunningComputeMinute = internalMutation({
     let skippedRuns = 0;
 
     for (const row of runningRuns) {
-      if (runBillingMode(row) !== BILLING_MODE.MANAGED) {
-        skippedRuns += 1;
-        continue;
-      }
       const startedAt = typeof row.computeStartedAt === "number" ? toUnixMillis(row.computeStartedAt) : 0;
       if (startedAt <= 0) {
         skippedRuns += 1;

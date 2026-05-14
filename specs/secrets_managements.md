@@ -35,7 +35,7 @@ Tahuna reserves runtime/bootstrap variables required for correctness:
 
 ## Provider Credentials
 
-Managed provider API keys are deployment secrets and are not runtime env vars. Legacy BYOK Runpod credentials may still exist in `runpodCredentials`, but hosted cloud should not depend on user-owned provider keys.
+Managed provider API keys are deployment secrets and are not runtime env vars. Hosted cloud does not depend on user-owned provider keys.
 
 ## Invariants
 

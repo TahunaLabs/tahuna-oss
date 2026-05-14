@@ -1,5 +1,4 @@
 import { ConvexError } from "convex/values";
-import type { ActionCtx } from "@convex/_generated/server";
 import type {
   ComputeEndpointArgs,
   ComputeMachine,
@@ -11,8 +10,7 @@ import type {
   TerminateMachineArgs,
 } from "@convex/core/compute";
 import {
-  resolveActiveRunpodApiKeyForUserId,
-  resolveRunpodApiKeyByCredentialId,
+  requireManagedRunpodApiKey,
   trimRunpodApiKeyOrThrow,
 } from "@convex/runpodCredentialSecrets";
 
@@ -40,10 +38,6 @@ type RunpodGraphqlResponse = {
   };
   errors?: Array<{ message?: string }> | unknown;
 };
-
-function asActionCtx(ctx: ComputeProviderContext) {
-  return ctx as ActionCtx;
-}
 
 function runtimeEntrypoint() {
   return "/usr/local/bin/warden";
@@ -129,22 +123,8 @@ async function fetchRunpodGpuTypesByApiKey(apiKey: string) {
   return Array.isArray(parsed?.data?.gpuTypes) ? parsed!.data!.gpuTypes! : [];
 }
 
-async function resolveRunpodApiKey(
-  ctx: ComputeProviderContext,
-  args: { userId?: string; providerCredentialId?: string },
-) {
-  if (args.providerCredentialId) {
-    return (
-      await resolveRunpodApiKeyByCredentialId(
-        asActionCtx(ctx),
-        args.providerCredentialId,
-      )
-    ).apiKey;
-  }
-  if (args.userId) {
-    return (await resolveActiveRunpodApiKeyForUserId(asActionCtx(ctx), args.userId)).apiKey;
-  }
-  throw new Error("compute provider credential is required");
+function resolveRunpodApiKey() {
+  return requireManagedRunpodApiKey();
 }
 
 function toComputeOffers(
@@ -202,11 +182,11 @@ async function resolveRunpodGpuTypeId(apiKey: string, requestedGpu: string) {
 }
 
 async function createRunpodMachine(
-  ctx: ComputeProviderContext,
+  _ctx: ComputeProviderContext,
   args: CreateMachineArgs,
   options: RunpodComputeProviderOptions,
 ) {
-  const apiKey = await resolveRunpodApiKey(ctx, { providerCredentialId: args.providerCredentialId });
+  const apiKey = resolveRunpodApiKey();
   const allowedCloudType = resolveRunpodCloudType(options);
   const gpuTypeId = await resolveRunpodGpuTypeId(apiKey, args.gpuType);
 
@@ -242,12 +222,12 @@ async function createRunpodMachine(
   };
 }
 
-async function getRunpodMachine(ctx: ComputeProviderContext, args: GetMachineArgs): Promise<ComputeMachine | null> {
+async function getRunpodMachine(_ctx: ComputeProviderContext, args: GetMachineArgs): Promise<ComputeMachine | null> {
   const providerMachineId = args.providerMachineId.trim();
   if (!providerMachineId) {
     return null;
   }
-  const apiKey = await resolveRunpodApiKey(ctx, { providerCredentialId: args.providerCredentialId });
+  const apiKey = resolveRunpodApiKey();
   const response = await fetch(`https://rest.runpod.io/v1/pods/${providerMachineId}`, {
     method: "GET",
     headers: {
@@ -269,12 +249,12 @@ async function getRunpodMachine(ctx: ComputeProviderContext, args: GetMachineArg
   };
 }
 
-async function terminateRunpodMachine(ctx: ComputeProviderContext, args: TerminateMachineArgs) {
+async function terminateRunpodMachine(_ctx: ComputeProviderContext, args: TerminateMachineArgs) {
   const providerMachineId = args.providerMachineId.trim();
   if (!providerMachineId) {
     return;
   }
-  const apiKey = await resolveRunpodApiKey(ctx, { providerCredentialId: args.providerCredentialId });
+  const apiKey = resolveRunpodApiKey();
   const response = await fetch(`https://rest.runpod.io/v1/pods/${providerMachineId}`, {
     method: "DELETE",
     headers: {
@@ -302,18 +282,14 @@ function buildRunpodProxyUrl(args: ComputeEndpointArgs) {
   return `https://${providerMachineId}-${port}.proxy.runpod.net`;
 }
 
-export async function validateRunpodApiKey(apiKey: string) {
-  await fetchRunpodGpuTypesByApiKey(apiKey);
-}
-
 export function resolveRunpodCompatibilityCloudType(options: RunpodComputeProviderOptions = {}) {
   return resolveRunpodCloudType(options);
 }
 
 export function createRunpodComputeProvider(options: RunpodComputeProviderOptions = {}): ComputeProvider {
   return {
-    async listOffers(ctx, args) {
-      const apiKey = await resolveRunpodApiKey(ctx, args);
+    async listOffers() {
+      const apiKey = resolveRunpodApiKey();
       return toComputeOffers(await fetchRunpodGpuTypesByApiKey(apiKey), options);
     },
 

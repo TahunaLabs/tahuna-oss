@@ -8,7 +8,6 @@ import type {
   CloudDashboardCredits,
   CloudDashboardPaymentTransaction,
   CloudDashboardUsageEvent,
-  CloudRunpodCredentialStatus,
 } from "@/cloud/dashboard-api-types"
 
 export function useCloudDashboardCredits(shouldLoad: boolean) {
@@ -35,21 +34,4 @@ export function useCreateCloudDashboardTopUpCheckoutSession() {
   return useAction(api.cloud.billing.createTopUpCheckoutSession) as (args: {
     amount_cents: number
   }) => Promise<CloudDashboardCheckoutSession>
-}
-
-export function useCloudDashboardRunpodCredentialStatus(shouldLoad: boolean) {
-  return useQuery(
-    api.cloud.runpodCredentials.getMyRunpodCredentialStatus,
-    shouldLoad ? {} : "skip",
-  ) as CloudRunpodCredentialStatus | undefined
-}
-
-export function useSaveCloudDashboardRunpodCredential() {
-  return useAction(api.cloud.runpodCredentials.saveMyRunpodCredential) as (args: { api_key: string }) => Promise<unknown>
-}
-
-export function useRevokeCloudDashboardRunpodCredential() {
-  return useMutation(api.cloud.runpodCredentials.revokeMyRunpodCredential) as (
-    args: Record<string, never>
-  ) => Promise<unknown>
 }
