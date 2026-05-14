@@ -31,6 +31,7 @@ import type * as cloud_runpodCredentials from "../cloud/runpodCredentials.js";
 import type * as cloud_storageUsage from "../cloud/storageUsage.js";
 import type * as computeProvider from "../computeProvider.js";
 import type * as convexJobQueue from "../convexJobQueue.js";
+import type * as core_billingMode from "../core/billingMode.js";
 import type * as core_compute from "../core/compute.js";
 import type * as core_jobQueue from "../core/jobQueue.js";
 import type * as core_runLifecyclePlan from "../core/runLifecyclePlan.js";
@@ -107,6 +108,7 @@ declare const fullApi: ApiFromModules<{
   "cloud/storageUsage": typeof cloud_storageUsage;
   computeProvider: typeof computeProvider;
   convexJobQueue: typeof convexJobQueue;
+  "core/billingMode": typeof core_billingMode;
   "core/compute": typeof core_compute;
   "core/jobQueue": typeof core_jobQueue;
   "core/runLifecyclePlan": typeof core_runLifecyclePlan;

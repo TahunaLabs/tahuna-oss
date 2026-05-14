@@ -16,6 +16,7 @@ type CreateRunStrictArgs = {
   gpu_type?: string;
   gpu_count?: number;
   volume_gb?: number;
+  billing_mode?: "managed" | "byok";
 };
 
 type CreateServeStrictArgs = {

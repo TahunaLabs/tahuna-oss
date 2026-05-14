@@ -2,6 +2,7 @@ import { ConvexError } from "convex/values";
 import type { Doc, Id } from "@convex/_generated/dataModel";
 import type { MutationCtx } from "@convex/_generated/server";
 import { estimateRunLaunchCents, resolveRunComputePricing } from "@/cloud/billing/run-compute-pricing";
+import { BILLING_MODE, runBillingMode } from "@convex/core/billingMode";
 import {
   initialHostedRunBillingFields,
   settleHostedRunUsage,
@@ -22,6 +23,9 @@ function formatUsdCents(cents: number) {
 
 export const hostedRunLifecycleComposition: RunLifecycleComposition = {
   async validateCreateRun(ctx, args) {
+    if (args.billingMode !== BILLING_MODE.MANAGED) {
+      return;
+    }
     const estimateCents = estimateRunLaunchCents({
       gpuType: args.gpuType,
       gpuCount: args.gpuCount,
@@ -41,6 +45,9 @@ export const hostedRunLifecycleComposition: RunLifecycleComposition = {
     }
   },
   createRun(args) {
+    if (args.billingMode !== BILLING_MODE.MANAGED) {
+      return {};
+    }
     const pricing = resolveRunComputePricing({
       gpuType: args.gpuType,
       gpuCount: args.gpuCount,
@@ -53,8 +60,11 @@ export const hostedRunLifecycleComposition: RunLifecycleComposition = {
       },
     };
   },
-  settleTerminalRunUsage(ctx, row) {
-    return settleHostedRunUsage(ctx, row);
+  async settleTerminalRunUsage(ctx, row) {
+    if (runBillingMode(row) !== BILLING_MODE.MANAGED) {
+      return undefined;
+    }
+    return await settleHostedRunUsage(ctx, row);
   },
 };
 

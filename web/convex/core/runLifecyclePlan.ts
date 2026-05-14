@@ -5,6 +5,7 @@ import {
   type RunLifecycleJob,
   type StartupTimeoutFingerprint,
 } from "@convex/core/jobQueue";
+import type { BillingMode } from "@convex/core/billingMode";
 import { storageKeys } from "@convex/core/storage";
 
 export type { RunLifecycleJob } from "@convex/core/jobQueue";
@@ -133,6 +134,7 @@ export function planRunCreation(args: {
   dataId: string;
   outputDir?: string;
   providerCredentialId?: string;
+  billingMode: BillingMode;
   effectiveGpuType: string;
   effectiveGpuCount: number;
   effectiveVolumeGb: number;
@@ -158,6 +160,7 @@ export function planRunCreation(args: {
       status: RUN_LIFECYCLE_STATUS.QUEUED,
       cancellationRequested: false,
       providerCredentialId: args.providerCredentialId,
+      billingMode: args.billingMode,
       effectiveGpuType: args.effectiveGpuType,
       effectiveGpuCount: args.effectiveGpuCount,
       effectiveVolumeGb: args.effectiveVolumeGb,
@@ -174,6 +177,7 @@ export function planRunCreation(args: {
         gpu_type: args.effectiveGpuType,
         gpu_count: args.effectiveGpuCount,
         volume_gb: args.effectiveVolumeGb,
+        billing_mode: args.billingMode,
         code_manifest_hash: args.codeManifestHash || null,
         data_manifest_hash: args.dataManifestHash || null,
         dependency_group: args.dependencyGroup,

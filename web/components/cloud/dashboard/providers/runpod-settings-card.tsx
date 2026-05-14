@@ -54,14 +54,14 @@ export function RunpodSettingsCard({
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
-        Add your Runpod API key to enable Runpod GPU launches. Changes apply to new launches only.
+        BYOK is for advanced, self-managed Runpod launches. Managed Tahuna billing does not require a personal Runpod key.
       </p>
 
       {status?.configured ? (
         <div className="rounded border border-border p-3">
           <div className="flex items-center gap-2 text-foreground">
             <ShieldCheck className="h-4 w-4 text-success" />
-            <p className="text-sm">Active Runpod key is available.</p>
+            <p className="text-sm">Active BYOK Runpod key is available.</p>
           </div>
           <div className="mt-2 grid grid-cols-1 gap-2 text-sm text-muted-foreground md:grid-cols-3">
             <p>prefix: {status.key_prefix || "—"}</p>

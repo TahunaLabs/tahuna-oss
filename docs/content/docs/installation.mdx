@@ -64,15 +64,11 @@ tahuna login
 
 This opens a browser window for authentication. Once complete, your credentials are stored locally and all subsequent commands are authenticated.
 
-## Configure your RunPod key
+## Billing
 
-Tahuna now launches compute using your own RunPod account. Before you start your first run, add a RunPod API key in the Tahuna dashboard:
+Tahuna Cloud launches runs with managed billing by default. Add credits in the [Tahuna dashboard](/dashboard) before starting a paid run; Tahuna manages provider credentials and provider payment.
 
-1. Open the [Tahuna dashboard](/dashboard)
-2. Go to Settings / Providers
-3. Save your RunPod API key
-
-Tahuna stores the credential encrypted at rest and uses it only for new RunPod launches.
+BYOK RunPod keys are still available under Settings / Providers for advanced, self-managed, or legacy launches. They are not required for the normal managed cloud path.
 
 ## Update
 
@@ -96,4 +92,4 @@ curl -fsSL https://tahuna.app/install.sh | bash -s -- --channel nightly
 
 ## Next Steps
 
-Once installed, head to the [Quickstart](/quickstart) guide to create your first environment and launch a run with your configured RunPod key.
+Once installed, head to the [Quickstart](/quickstart) guide to create your first environment and launch a managed run.

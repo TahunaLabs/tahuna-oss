@@ -59,17 +59,29 @@ export function buildRuntimeCompatibilityKey(fingerprint: RuntimeCompatibilityFi
   ].join("|");
 }
 
-const NORMALIZED_ERRORS: { regex: RegExp; message: string }[] = [
+type BillingMode = "managed" | "byok";
+
+const NORMALIZED_ERRORS: {
+  regex: RegExp;
+  message: Record<BillingMode, string>;
+}[] = [
   {
     regex: /balance.*too low|insufficient.*balance|add funds|not enough.*credit|low.*balance/i,
-    message: "compute provider account balance is insufficient; please add funds to your account",
+    message: {
+      managed: "managed compute provider funding is unavailable; contact support",
+      byok: "compute provider account balance is insufficient; please add funds to your account",
+    },
   },
 ];
 
-export function normalizeProvisioningError(detail: string): string {
+export function normalizeProvisioningError(
+  detail: string,
+  options?: { billingMode?: BillingMode },
+): string {
+  const billingMode = options?.billingMode ?? "byok";
   for (const { regex, message } of NORMALIZED_ERRORS) {
     if (regex.test(detail)) {
-      return message;
+      return message[billingMode];
     }
   }
   return detail;

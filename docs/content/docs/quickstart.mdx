@@ -3,7 +3,7 @@ title: Quickstart
 description: Initialize your project and start your first training run.
 ---
 
-This guide walks you through the normal Tahuna flow: initialize the project, complete the interactive setup, configure your RunPod key, and start a training run.
+This guide walks you through the normal Tahuna flow: initialize the project, complete the interactive setup, add Tahuna credits, and start a managed training run.
 
 ## 1. Initialize your project
 
@@ -34,15 +34,15 @@ python_version = "3.11"
 
 You can also review the scaffolded project files directly, especially `train.py` for your entrypoint and `pyproject.toml` for your runtime dependencies.
 
-## 3. Add your RunPod API key
+## 3. Add Tahuna credits
 
-Tahuna now provisions compute through your own RunPod account. Before your first launch:
+Tahuna Cloud uses managed billing by default. Before your first paid launch:
 
 1. Open the [Tahuna dashboard](/dashboard)
-2. Go to Settings / Providers
-3. Save your RunPod API key
+2. Go to Billing
+3. Add credits with Stripe Checkout
 
-Tahuna uses this credential for new launches only.
+BYOK RunPod keys are only for advanced, self-managed, or legacy launches under Settings / Providers.
 
 ## 4. Start training
 
@@ -54,13 +54,13 @@ tahuna train
 
 Tahuna will:
 
-1. Provision a RunPod GPU pod matching your environment spec
+1. Provision a GPU pod matching your environment spec
 2. Sync your code to the pod
 3. Execute your training script
 4. Stream logs and metrics in real-time
 5. Collect output artifacts when the run completes
 
-If no RunPod API key is configured, the launch will fail until you add one in the dashboard.
+If the estimated run cost exceeds your Tahuna balance, the launch will ask you to add credits first.
 
 ## 5. Monitor from the dashboard
 

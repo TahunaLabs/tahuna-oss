@@ -3,6 +3,20 @@ import { internal } from "@convex/_generated/api";
 import type { ActionCtx } from "@convex/_generated/server";
 import { decryptSecretValue } from "@convex/credentialsCrypto";
 
+export const MANAGED_RUNPOD_PROVIDER_CREDENTIAL_ID = "managed:runpod";
+
+export function requireManagedRunpodApiKey() {
+  const apiKey = (
+    process.env.TAHUNA_MANAGED_RUNPOD_API_KEY?.trim() ||
+    process.env.RUNPOD_API_KEY?.trim() ||
+    ""
+  );
+  if (!apiKey) {
+    throw new ConvexError("managed Runpod API key is not configured");
+  }
+  return apiKey;
+}
+
 export function trimRunpodApiKeyOrThrow(value: string) {
   const apiKey = value.trim();
   if (!apiKey) {
@@ -37,6 +51,13 @@ export async function resolveActiveRunpodApiKeyForUserId(ctx: ActionCtx, userId:
 }
 
 export async function resolveRunpodApiKeyByCredentialId(ctx: ActionCtx, credentialId: string) {
+  if (credentialId === MANAGED_RUNPOD_PROVIDER_CREDENTIAL_ID) {
+    return {
+      credentialId,
+      apiKey: requireManagedRunpodApiKey(),
+      revokedAt: undefined,
+    };
+  }
   const row = await ctx.runQuery(internal.runpodCredentialsStore.internalGetRunpodCredentialById, {
     credentialId,
   });

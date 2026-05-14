@@ -20,16 +20,12 @@ import {
 type Props = {
   shouldLoadQueries: boolean
   onOpenShareDialog: (resourceType: "environment", resourceId: string) => void
-  providerCredentialConfigured?: boolean
-  providerCredentialMissingMessage?: string
   quickstartHref?: string
 }
 
 export function EnvironmentsContainer({
   shouldLoadQueries,
   onOpenShareDialog,
-  providerCredentialConfigured,
-  providerCredentialMissingMessage = "No compute provider configured.",
   quickstartHref,
 }: Props) {
   const [busy, setBusy] = useState(false)
@@ -87,10 +83,6 @@ export function EnvironmentsContainer({
   }
 
   async function launchRun(environmentId: EnvironmentRow["environment_id"]) {
-    if (providerCredentialConfigured === false) {
-      toast.error(providerCredentialMissingMessage)
-      return
-    }
     await withBusy(async () => {
       await createRunMutation(environmentId)
       toast.success("Run launched.")

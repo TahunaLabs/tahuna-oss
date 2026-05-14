@@ -1,6 +1,7 @@
 import type { Doc, Id } from "@convex/_generated/dataModel";
 import type { QueryCtx } from "@convex/_generated/server";
 import { RUN_CONFIG } from "@convex/appConfig";
+import { runBillingMode } from "@convex/core/billingMode";
 import { resolveRunUptimeMs, toUnixMillis } from "@convex/core/runTiming";
 import { TERMINAL_STATUSES } from "@convex/runsConstants";
 import { getRunName } from "@convex/runsNaming";
@@ -26,6 +27,7 @@ export function toRunResponse(row: Doc<"runs">) {
     output: row.output,
     logs: row.logs,
     status: row.status,
+    billing_mode: runBillingMode(row),
     error: row.error || "",
     provider_machine_id: row.providerMachineId || "",
     effective_gpu_type: row.effectiveGpuType || "",

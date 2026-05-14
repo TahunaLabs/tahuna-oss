@@ -3,7 +3,6 @@
 import { AuditLogsContainer } from "@/components/features/dashboard/audit-logs-container"
 import {
   useCloudDashboardCredits,
-  useCloudDashboardRunpodCredentialStatus,
   useEnsureCloudDashboardBillingAccount,
 } from "@/cloud/dashboard-api"
 import { CLOUD_LINKS_CONFIG } from "@/cloud/links"
@@ -67,7 +66,6 @@ export default function DashboardPage() {
   const currentUser = useDashboardCurrentUser(shouldLoadQueries)
   const userMenuLoading = authLoading || loggingOut || (shouldLoadQueries && currentUser === undefined)
   const myCredits = useCloudDashboardCredits(shouldLoadQueries)
-  const runpodCredentialStatus = useCloudDashboardRunpodCredentialStatus(shouldLoadQueries)
 
   const ensureMyBillingAccountMutation = useEnsureCloudDashboardBillingAccount()
   const createShareLinkMutation = useCreateDashboardShareLink()
@@ -149,8 +147,6 @@ export default function DashboardPage() {
           <EnvironmentsContainer
             shouldLoadQueries={shouldLoadQueries}
             onOpenShareDialog={openShareDialog}
-            providerCredentialConfigured={runpodCredentialStatus?.configured}
-            providerCredentialMissingMessage="No compute provider configured. Add one in Settings → Providers."
             quickstartHref={CLOUD_LINKS_CONFIG.quickstartUrl}
           />
         )

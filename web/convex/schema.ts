@@ -1,5 +1,6 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
+import { billingModeValidator } from "@convex/core/billingMode";
 import { cloudRunBillingFields, cloudSchemaTables } from "@convex/cloud/schema";
 
 export default defineSchema({
@@ -68,6 +69,7 @@ export default defineSchema({
     error: v.optional(v.string()),
     providerMachineId: v.optional(v.string()),
     providerCredentialId: v.optional(v.string()),
+    billingMode: v.optional(billingModeValidator),
     effectiveGpuType: v.optional(v.string()),
     effectiveGpuCount: v.optional(v.number()),
     effectiveVolumeGb: v.optional(v.number()),

@@ -81,6 +81,7 @@ export const createRun = httpAction(async (ctx, request) => {
       gpu_type: body?.gpu_type,
       gpu_count: body?.gpu_count,
       volume_gb: body?.volume_gb,
+      billing_mode: body?.billing_mode,
     });
     return new Response(JSON.stringify(data), {
       status: 200,
