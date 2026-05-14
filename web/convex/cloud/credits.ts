@@ -12,6 +12,7 @@ export const USAGE_EVENT_TYPE = {
   RUN_COMPUTE_SETTLEMENT_REFUND: "run_compute_settlement_refund",
   RUN_COMPUTE_SETTLEMENT_OWED: "run_compute_settlement_owed",
   STORAGE_CHARGE: "storage_charge",
+  STRIPE_TOP_UP: "stripe_top_up",
 } as const;
 
 type EnsureUserLedgerArgs = {

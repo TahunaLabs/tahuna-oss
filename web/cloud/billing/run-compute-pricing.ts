@@ -57,6 +57,21 @@ export function estimateRunReservationCents(args: {
   return CLOUD_BILLING_CONFIG.minimumChargeCents;
 }
 
+export function estimateRunLaunchCents(args: {
+  gpuType: string | undefined;
+  gpuCount: number | undefined;
+  volumeGb: number | undefined;
+}) {
+  const pricing = resolveRunComputePricing(args);
+  if (pricing.hourlyRateCents <= 0) {
+    return 0;
+  }
+  return Math.max(
+    CLOUD_BILLING_CONFIG.minimumChargeCents,
+    Math.ceil(pricing.hourlyRateCents * CLOUD_BILLING_CONFIG.runLaunchEstimateHours),
+  );
+}
+
 export function estimateRunUsageCents(args: {
   gpuType: string | undefined;
   gpuCount: number | undefined;

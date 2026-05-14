@@ -10,12 +10,13 @@
 
 ## Current Scope
 
-This is internal credits accounting (not external payments yet):
+This is prepaid credits accounting with Stripe funding:
 
 - One ledger balance per Better Auth user (`userCredits`).
 - Ledger events in `usageEvents`.
 - Real-time compute debits while a run is active.
 - Storage growth debits.
+- Prepaid Stripe Checkout top-ups.
 - Billing UI reads balance + ledger history from Convex.
 
 ## Identity Source of Truth
@@ -43,6 +44,10 @@ This is internal credits accounting (not external payments yet):
 - `referenceType`, `referenceId` (optional)
 - `metadata` (optional)
 - `createdAt`
+
+Stripe payment records:
+
+- `stripeCheckoutSessions`: local checkout/top-up records, Stripe session IDs, paid/fulfilled state.
 
 ## Config Used Today
 
@@ -116,6 +121,30 @@ On positive storage size delta:
 
 No charge on zero/negative size delta.
 
+## Stripe Top-Ups (Implemented Now)
+
+Tahuna uses prepaid credit purchase through Stripe Checkout:
+
+1. Dashboard billing creates a Checkout Session for a fixed top-up (`$10`, `$25`, `$100`) or custom amount.
+2. `stripeCheckoutSessions` stores the local pending checkout record.
+3. Stripe redirects back to `/dashboard?view=billing` after checkout.
+4. `/stripe/webhook` verifies the Stripe signature and processes:
+   - `checkout.session.completed`
+   - `checkout.session.async_payment_succeeded`
+   - failure/expiry events for status only
+5. Successful fulfillment grants user credits through the normal ledger helper:
+   - `eventType = stripe_top_up`
+   - `creditsDeltaCents = paid amount cents`
+   - `idempotencyKey = stripe:checkout:<sessionId>`
+
+MVP policy:
+
+- `$1 paid = $1 credit`.
+- No Billing Portal.
+- No automatic refund or dispute reversal handling.
+- Custom top-ups are bounded by `minimumTopUpAmountCents` and `maximumTopUpAmountCents`.
+- Run launch requires at least the configured launch estimate, currently one hour of estimated compute cost.
+
 ## What Users See Today
 
 Billing page shows:
@@ -133,26 +162,26 @@ Billing page shows:
 
 ## Not Handled Yet
 
-1. External payment rails:
-- No Stripe/Lemon checkout, no card charging, no real top-up flow.
-
-2. Immutable compute audit trail while run is active:
+1. Immutable compute audit trail while run is active:
 - Live compute debit row is updated in place (same idempotency key), so minute-by-minute snapshots are not preserved as separate immutable rows.
 
-3. Pricing catalog governance:
+2. Pricing catalog governance:
 - GPU pricing is code-defined static mapping, not a versioned catalog with effective dates.
 
-4. Pre-run cost quote UX:
-- No explicit pre-launch quote/estimate acceptance flow with locked pricing version.
+3. Pre-run cost quote UX:
+- Backend launch gating uses the configured estimate, but there is no explicit pre-launch quote/acceptance flow with locked pricing version.
 
-5. Debt/arrears policy:
+4. Debt/arrears policy:
 - Owed status exists, but product policy for debt recovery, hard-stop thresholds, and enforcement is still partial.
+
+5. Stripe refund/dispute handling:
+- No automated credit reversal or debt handling for refunds, chargebacks, or disputes.
 
 6. Reconciliation tooling:
 - No dedicated periodic reconciliation job/report that verifies `userCredits` against ledger totals and run charges.
 
 7. Billing artifacts:
-- No invoices/receipts exports for accounting workflows.
+- Stripe receipts may exist externally, but Tahuna has no in-app invoices/receipts exports for accounting workflows.
 
 8. Ledger UX v2:
 - No filters by reference/event type, no export, no long-history pagination UX.

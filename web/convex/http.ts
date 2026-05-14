@@ -19,6 +19,7 @@ import {
 import { getEnvVar, listEnvVars, removeEnvVar, setEnvVars } from "@convex/cli/envVars";
 import { createRun, getRunOrLogs, listRuns, postRunRuntime, removeRun, renameRun } from "@convex/cli/runs";
 import { createServe, getServeOrLogs, listServes, postServeAction } from "@convex/cli/serves";
+import { stripeWebhook } from "@convex/cloud/billing";
 import { fileStream as wandbFileStream, graphql as wandbGraphql, upload as wandbUpload } from "@convex/monitoring/wandb";
 
 const http = httpRouter();
@@ -74,6 +75,9 @@ http.route({ pathPrefix: "/api/serves/", method: "GET", handler: getServeOrLogs 
 http.route({ path: "/api/monitoring/wandb/graphql", method: "POST", handler: wandbGraphql });
 http.route({ pathPrefix: "/api/monitoring/wandb/files/", method: "POST", handler: wandbFileStream });
 http.route({ pathPrefix: "/api/monitoring/wandb/upload/", method: "PUT", handler: wandbUpload });
+
+// Billing webhooks
+http.route({ path: "/stripe/webhook", method: "POST", handler: stripeWebhook });
 
 // Let's just mount getRunLogs explicitly using a custom handler that delegates if we could, or just let getRun dispatch.
 // No, the user provided exact matches for CLI endpoints in nextjs. We can register BetterAuth routes below.

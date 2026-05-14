@@ -69,6 +69,7 @@
     "runpod-sdk": "^1.1.2",
     "simple-icons": "^16.14.0",
     "sonner": "^1.7.4",
+    "stripe": "^22.1.1",
     "tailwind-merge": "^2.5.5",
     "tailwindcss-animate": "^1.0.7",
     "vaul": "^1.1.2",

@@ -9,7 +9,7 @@ const FRAMEWORKS = [
     { name: 'HuggingFace', logo: frameworkIcon('hugging-face_logo.png') },
     { name: 'Unsloth', logo: frameworkIcon('unsloth_logo.png') },
     { name: 'TRL', logo: frameworkIcon('trl_logo.png') },
-    { name: 'Prime Intellect', logo: frameworkIcon('prime-intellect_logo.png') },
+    { name: 'Verifiers', logo: frameworkIcon('prime-intellect_logo.png') },
 ] as const
 
 function frameworkIcon(filename: string) {

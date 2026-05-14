@@ -11,4 +11,8 @@ export const CLOUD_BILLING_CONFIG = {
   computeVolumeGbHourlyRateCents: 2,
   storageGiBDeltaRateCents: 3,
   minimumChargeCents: 1,
+  fixedTopUpAmountCents: [1000, 2500, 10000],
+  minimumTopUpAmountCents: 100,
+  maximumTopUpAmountCents: 100000,
+  runLaunchEstimateHours: 1,
 } as const;

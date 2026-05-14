@@ -44,6 +44,15 @@ export type RunCreationComposition = {
 };
 
 export type RunLifecycleComposition = {
+  validateCreateRun?: (
+    ctx: MutationCtx,
+    args: {
+      userId: string;
+      gpuType: string;
+      gpuCount: number;
+      volumeGb: number;
+    },
+  ) => Promise<void>;
   createRun?: (args: {
     userId: string;
     gpuType: string;
@@ -212,6 +221,12 @@ export async function createRunForUserId(
     );
   }
   const computeCredential = await resolveActiveComputeCredentialForUserId(ctx, args.userId);
+  await composition?.validateCreateRun?.(ctx, {
+    userId: args.userId,
+    gpuType: effectiveGpuType,
+    gpuCount: effectiveGpuCount,
+    volumeGb: effectiveVolumeGb,
+  });
   const creationComposition = composition?.createRun?.({
     userId: args.userId,
     gpuType: effectiveGpuType,

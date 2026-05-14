@@ -1,10 +1,11 @@
 "use client"
 
-import { Wallet } from "lucide-react"
+import { CreditCard, Wallet } from "lucide-react"
 
 import { DashboardViewLayout } from "@/components/app-shell/dashboard-view-layout"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
 import {
   Table,
   TableBody,
@@ -29,8 +30,15 @@ type UsageEventRow = {
 type BillingViewProps = {
   balanceCents: number
   bootstrapCreditCents: number
+  checkoutAmountCents: number | null
+  customTopUpAmount: string
   currency: string
+  fixedTopUpAmountCents: number[]
   initialized: boolean
+  maximumTopUpAmountCents: number
+  minimumTopUpAmountCents: number
+  onCustomTopUpAmountChange: (value: string) => void
+  onStartTopUp: (amountCents: number) => void
   usageEvents: UsageEventRow[]
 }
 
@@ -51,6 +59,18 @@ function formatMoney(cents: number, currency: string) {
 function formatSignedMoney(cents: number, currency: string) {
   const sign = cents < 0 ? "-" : "+"
   return `${sign}${formatMoney(Math.abs(cents), currency)}`
+}
+
+function parseDollarAmountCents(value: string) {
+  const normalized = value.trim()
+  if (!normalized) {
+    return null
+  }
+  const amount = Number(normalized)
+  if (!Number.isFinite(amount)) {
+    return null
+  }
+  return Math.round(amount * 100)
 }
 
 function formatShortDuration(durationMs: number) {
@@ -111,7 +131,27 @@ function formatComputeEventDetails(event: UsageEventRow, currency: string) {
   return parts.length > 0 ? parts.join(" · ") : null
 }
 
-export function BillingView({ balanceCents, bootstrapCreditCents, currency, initialized, usageEvents }: BillingViewProps) {
+export function BillingView({
+  balanceCents,
+  bootstrapCreditCents,
+  checkoutAmountCents,
+  customTopUpAmount,
+  currency,
+  fixedTopUpAmountCents,
+  initialized,
+  maximumTopUpAmountCents,
+  minimumTopUpAmountCents,
+  onCustomTopUpAmountChange,
+  onStartTopUp,
+  usageEvents,
+}: BillingViewProps) {
+  const customAmountCents = parseDollarAmountCents(customTopUpAmount)
+  const customAmountValid =
+    customAmountCents !== null &&
+    customAmountCents >= minimumTopUpAmountCents &&
+    customAmountCents <= maximumTopUpAmountCents
+  const checkoutBusy = checkoutAmountCents !== null
+
   return (
     <DashboardViewLayout
       sectionLabel="Billing"
@@ -131,18 +171,55 @@ export function BillingView({ balanceCents, bootstrapCreditCents, currency, init
               <p className="mt-1 text-sm text-foreground">{formatMoney(bootstrapCreditCents, currency)}</p>
             </div>
             <div className="rounded border border-border p-3">
-              <p className="text-xs text-muted-foreground">Manual top-up</p>
-              <p className="mt-1 text-sm text-foreground">Disabled</p>
+              <p className="text-xs text-muted-foreground">Top-up rate</p>
+              <p className="mt-1 text-sm text-foreground">$1 paid = $1 credit</p>
             </div>
             <div className="rounded border border-border p-3">
-              <p className="text-xs text-muted-foreground">Payment checkout</p>
-              <p className="mt-1 text-sm text-foreground">Coming soon</p>
+              <p className="text-xs text-muted-foreground">Run launch policy</p>
+              <p className="mt-1 text-sm text-foreground">Estimated funds required</p>
             </div>
           </div>
-          <div className="mt-4 flex justify-end">
-            <Button type="button" variant="outline" size="control" disabled>
-              Add payment method (soon)
-            </Button>
+          <div className="mt-4 flex flex-col gap-3">
+            <div className="flex flex-wrap gap-2">
+              {fixedTopUpAmountCents.map((amountCents) => (
+                <Button
+                  key={amountCents}
+                  type="button"
+                  variant="outline"
+                  size="control"
+                  disabled={checkoutBusy}
+                  onClick={() => onStartTopUp(amountCents)}
+                >
+                  <CreditCard size={14} />
+                  Add {formatMoney(amountCents, currency)}
+                </Button>
+              ))}
+            </div>
+            <form
+              className="flex flex-col gap-2 sm:flex-row"
+              onSubmit={(event) => {
+                event.preventDefault()
+                if (customAmountValid && customAmountCents !== null) {
+                  onStartTopUp(customAmountCents)
+                }
+              }}
+            >
+              <Input
+                aria-label="Custom top-up amount"
+                inputMode="decimal"
+                min={minimumTopUpAmountCents / 100}
+                max={maximumTopUpAmountCents / 100}
+                step="1"
+                type="number"
+                value={customTopUpAmount}
+                placeholder="Custom amount"
+                onChange={(event) => onCustomTopUpAmountChange(event.target.value)}
+              />
+              <Button type="submit" variant="default" size="control" disabled={checkoutBusy || !customAmountValid}>
+                <CreditCard size={14} />
+                Add custom credit
+              </Button>
+            </form>
           </div>
         </Card>
 

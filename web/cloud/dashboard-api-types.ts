@@ -4,6 +4,11 @@ export type CloudDashboardCredits = {
   initialized: boolean
 }
 
+export type CloudDashboardCheckoutSession = {
+  checkout_session_id: string
+  url: string
+}
+
 export type CloudDashboardUsageEvent = {
   event_type: string
   credits_delta_cents: number

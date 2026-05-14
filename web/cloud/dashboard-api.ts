@@ -4,6 +4,7 @@ import { useAction, useMutation, useQuery } from "convex/react"
 
 import { api } from "@convex/_generated/api"
 import type {
+  CloudDashboardCheckoutSession,
   CloudDashboardCredits,
   CloudDashboardUsageEvent,
   CloudRunpodCredentialStatus,
@@ -21,6 +22,12 @@ export function useCloudDashboardUsageEvents(shouldLoad: boolean, limit: number)
 
 export function useEnsureCloudDashboardBillingAccount() {
   return useMutation(api.cloud.billing.ensureMyBillingAccount) as (args: Record<string, never>) => Promise<unknown>
+}
+
+export function useCreateCloudDashboardTopUpCheckoutSession() {
+  return useAction(api.cloud.billing.createTopUpCheckoutSession) as (args: {
+    amount_cents: number
+  }) => Promise<CloudDashboardCheckoutSession>
 }
 
 export function useCloudDashboardRunpodCredentialStatus(shouldLoad: boolean) {

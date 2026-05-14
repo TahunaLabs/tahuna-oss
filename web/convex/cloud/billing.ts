@@ -1,11 +1,15 @@
 import { ConvexError, v } from "convex/values";
 import type { Doc } from "@convex/_generated/dataModel";
-import type { MutationCtx } from "@convex/_generated/server";
-import { internalMutation, mutation, query } from "@convex/_generated/server";
+import { internal } from "@convex/_generated/api";
+import type { ActionCtx, MutationCtx } from "@convex/_generated/server";
+import { action, httpAction, internalMutation, mutation, query } from "@convex/_generated/server";
+import Stripe from "stripe";
 import { CLOUD_BILLING_CONFIG } from "@/cloud/config";
+import { NETWORK_CONFIG } from "@convex/appConfig";
 import { authComponent, requireUser } from "@convex/auth";
 import {
   ensureUserLedger,
+  grantUserCredits,
   upsertLedgerDebitTotal,
   USAGE_EVENT_TYPE,
 } from "@convex/cloud/credits";
@@ -20,6 +24,8 @@ import {
 } from "@convex/cloud/runBilling";
 import { RUN_STATUS } from "@convex/runsConstants";
 
+const STRIPE_CHECKOUT_PAYMENT_STATUSES = new Set(["paid", "no_payment_required"]);
+
 const HOSTED_BILLING_CLIENT_ERROR_PATTERNS: RegExp[] = [
   /\binsufficient credits\b/i,
   /\bcompute provider account balance is insufficient\b/i,
@@ -31,6 +37,65 @@ export function isHostedBillingClientError(value: string) {
 
 export function hostedBillingHttpStatus(value: string, fallbackStatus: number) {
   return isHostedBillingClientError(value) ? 402 : fallbackStatus;
+}
+
+function stripeClient() {
+  const secretKey = process.env.STRIPE_SECRET_KEY?.trim();
+  if (!secretKey) {
+    throw new ConvexError("stripe is not configured");
+  }
+  return new Stripe(secretKey);
+}
+
+function requireStripeWebhookSecret() {
+  const secret = process.env.STRIPE_WEBHOOK_SECRET?.trim();
+  if (!secret) {
+    throw new ConvexError("stripe webhook secret is not configured");
+  }
+  return secret;
+}
+
+function normalizeSiteUrl() {
+  const raw = process.env.SITE_URL?.trim() || process.env.NEXT_PUBLIC_SITE_URL?.trim() || NETWORK_CONFIG.defaultApiUrl;
+  return raw.replace(/\/+$/, "");
+}
+
+function normalizeTopUpAmountCents(value: number) {
+  if (!Number.isFinite(value)) {
+    throw new ConvexError("amount must be a finite number");
+  }
+  const amountCents = Math.floor(value);
+  if (amountCents < CLOUD_BILLING_CONFIG.minimumTopUpAmountCents) {
+    throw new ConvexError(`amount must be at least ${CLOUD_BILLING_CONFIG.minimumTopUpAmountCents} cents`);
+  }
+  if (amountCents > CLOUD_BILLING_CONFIG.maximumTopUpAmountCents) {
+    throw new ConvexError(`amount must be at most ${CLOUD_BILLING_CONFIG.maximumTopUpAmountCents} cents`);
+  }
+  return amountCents;
+}
+
+function readUserEmail(user: unknown) {
+  const email = typeof (user as { email?: unknown }).email === "string"
+    ? (user as { email: string }).email.trim()
+    : "";
+  return email || undefined;
+}
+
+function stripeObjectId(value: unknown) {
+  if (!value) {
+    return undefined;
+  }
+  if (typeof value === "string") {
+    return value;
+  }
+  if (typeof value === "object" && "id" in value && typeof (value as { id?: unknown }).id === "string") {
+    return (value as { id: string }).id;
+  }
+  return undefined;
+}
+
+function checkoutSessionPaymentIntentId(session: Stripe.Checkout.Session) {
+  return stripeObjectId(session.payment_intent as string | Stripe.PaymentIntent | null);
 }
 
 export type HostedRunBillingPatch = {
@@ -177,6 +242,294 @@ export const ensureMyBillingAccount = mutation({
       currency: row.currency,
     };
   },
+});
+
+export const internalCreateStripeCheckoutSessionRecord = internalMutation({
+  args: {
+    userId: v.string(),
+    amountCents: v.number(),
+    creditsCents: v.number(),
+    currency: v.string(),
+  },
+  returns: v.id("stripeCheckoutSessions"),
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    return await ctx.db.insert("stripeCheckoutSessions", {
+      userId: args.userId,
+      amountCents: args.amountCents,
+      creditsCents: args.creditsCents,
+      currency: args.currency,
+      status: "pending",
+      createdAt: now,
+      updatedAt: now,
+    });
+  },
+});
+
+export const internalMarkStripeCheckoutSessionOpen = internalMutation({
+  args: {
+    checkoutRecordId: v.id("stripeCheckoutSessions"),
+    stripeCheckoutSessionId: v.string(),
+    checkoutUrl: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.checkoutRecordId, {
+      status: "open",
+      stripeCheckoutSessionId: args.stripeCheckoutSessionId,
+      checkoutUrl: args.checkoutUrl,
+      updatedAt: Date.now(),
+    });
+    return null;
+  },
+});
+
+export const internalFailStripeCheckoutSessionRecord = internalMutation({
+  args: {
+    checkoutRecordId: v.id("stripeCheckoutSessions"),
+    error: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.checkoutRecordId, {
+      status: "failed",
+      error: args.error,
+      updatedAt: Date.now(),
+    });
+    return null;
+  },
+});
+
+export const internalMarkStripeCheckoutSessionFailed = internalMutation({
+  args: {
+    stripeCheckoutSessionId: v.string(),
+    error: v.optional(v.string()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const row = await ctx.db
+      .query("stripeCheckoutSessions")
+      .withIndex("by_stripe_checkout_session_id", (q) =>
+        q.eq("stripeCheckoutSessionId", args.stripeCheckoutSessionId),
+      )
+      .first();
+    if (!row || row.status === "fulfilled") {
+      return null;
+    }
+    await ctx.db.patch(row._id, {
+      status: "failed",
+      error: args.error,
+      updatedAt: Date.now(),
+    });
+    return null;
+  },
+});
+
+export const internalFulfillStripeCheckoutSession = internalMutation({
+  args: {
+    stripeCheckoutSessionId: v.string(),
+    stripePaymentIntentId: v.optional(v.string()),
+    stripeCustomerId: v.optional(v.string()),
+    amountTotalCents: v.number(),
+    currency: v.string(),
+    paymentStatus: v.string(),
+  },
+  returns: v.object({
+    fulfilled: v.boolean(),
+    balance_cents: v.optional(v.number()),
+  }),
+  handler: async (ctx, args) => {
+    if (!STRIPE_CHECKOUT_PAYMENT_STATUSES.has(args.paymentStatus)) {
+      return { fulfilled: false };
+    }
+    const row = await ctx.db
+      .query("stripeCheckoutSessions")
+      .withIndex("by_stripe_checkout_session_id", (q) =>
+        q.eq("stripeCheckoutSessionId", args.stripeCheckoutSessionId),
+      )
+      .first();
+    if (!row) {
+      throw new ConvexError("stripe checkout session not found");
+    }
+    if (row.fulfilledAt) {
+      return { fulfilled: false };
+    }
+    const amountTotalCents = Math.floor(args.amountTotalCents);
+    if (amountTotalCents !== row.amountCents) {
+      throw new ConvexError("stripe checkout amount mismatch");
+    }
+    if (args.currency.toUpperCase() !== row.currency.toUpperCase()) {
+      throw new ConvexError("stripe checkout currency mismatch");
+    }
+    const credited = await grantUserCredits(ctx, {
+      userId: row.userId,
+      amountCents: row.creditsCents,
+      eventType: USAGE_EVENT_TYPE.STRIPE_TOP_UP,
+      idempotencyKey: `stripe:checkout:${args.stripeCheckoutSessionId}`,
+      referenceType: "stripe_checkout_session",
+      referenceId: args.stripeCheckoutSessionId,
+      metadata: {
+        stripe_payment_intent_id: args.stripePaymentIntentId,
+        stripe_customer_id: args.stripeCustomerId,
+        amount_cents: row.amountCents,
+        credits_cents: row.creditsCents,
+        currency: row.currency,
+      },
+    });
+    if (!credited) {
+      throw new ConvexError("stripe credit grant failed");
+    }
+    await ctx.db.patch(row._id, {
+      status: "fulfilled",
+      stripePaymentIntentId: args.stripePaymentIntentId,
+      stripeCustomerId: args.stripeCustomerId || row.stripeCustomerId,
+      fulfilledAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+    return {
+      fulfilled: credited.applied,
+      balance_cents: credited.balanceCents,
+    };
+  },
+});
+
+export const createTopUpCheckoutSession = action({
+  args: {
+    amount_cents: v.number(),
+  },
+  returns: v.object({
+    checkout_session_id: v.string(),
+    url: v.string(),
+  }),
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    const userId = String(user._id);
+    const email = readUserEmail(user);
+    const amountCents = normalizeTopUpAmountCents(args.amount_cents);
+    const currency = CLOUD_BILLING_CONFIG.currency;
+    const stripe = stripeClient();
+
+    const checkoutRecordId = await ctx.runMutation(internal.cloud.billing.internalCreateStripeCheckoutSessionRecord, {
+      userId,
+      amountCents,
+      creditsCents: amountCents,
+      currency,
+    });
+
+    const metadata = {
+      user_id: userId,
+      checkout_record_id: String(checkoutRecordId),
+      credits_cents: String(amountCents),
+    };
+    const siteUrl = normalizeSiteUrl();
+    try {
+      const session = await stripe.checkout.sessions.create(
+        {
+          client_reference_id: String(checkoutRecordId),
+          mode: "payment",
+          ...(email ? { customer_email: email } : {}),
+          success_url: `${siteUrl}/dashboard?view=billing&checkout=success&session_id={CHECKOUT_SESSION_ID}`,
+          cancel_url: `${siteUrl}/dashboard?view=billing&checkout=cancelled`,
+          line_items: [
+            {
+              price_data: {
+                currency: currency.toLowerCase(),
+                product_data: {
+                  name: "Tahuna credits",
+                },
+                unit_amount: amountCents,
+              },
+              quantity: 1,
+            },
+          ],
+          metadata,
+          payment_intent_data: {
+            metadata,
+          },
+        },
+        { idempotencyKey: `tahuna:checkout:${checkoutRecordId}` },
+      );
+      if (!session.url) {
+        throw new ConvexError("stripe checkout url is missing");
+      }
+      await ctx.runMutation(internal.cloud.billing.internalMarkStripeCheckoutSessionOpen, {
+        checkoutRecordId,
+        stripeCheckoutSessionId: session.id,
+        checkoutUrl: session.url,
+      });
+      return {
+        checkout_session_id: session.id,
+        url: session.url,
+      };
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : "failed to create stripe checkout session";
+      await ctx.runMutation(internal.cloud.billing.internalFailStripeCheckoutSessionRecord, {
+        checkoutRecordId,
+        error: detail,
+      });
+      throw error;
+    }
+  },
+});
+
+async function fulfillStripeCheckout(stripe: Stripe, ctx: ActionCtx, sessionId: string) {
+  const session = await stripe.checkout.sessions.retrieve(sessionId, {
+    expand: ["payment_intent"],
+  });
+  return await ctx.runMutation(internal.cloud.billing.internalFulfillStripeCheckoutSession, {
+    stripeCheckoutSessionId: session.id,
+    stripePaymentIntentId: checkoutSessionPaymentIntentId(session),
+    stripeCustomerId: stripeObjectId(session.customer),
+    amountTotalCents: session.amount_total ?? 0,
+    currency: session.currency || CLOUD_BILLING_CONFIG.currency,
+    paymentStatus: session.payment_status,
+  });
+}
+
+export const stripeWebhook = httpAction(async (ctx, request) => {
+  const stripe = stripeClient();
+  const body = await request.text();
+  const signature = request.headers.get("stripe-signature");
+  if (!signature) {
+    return new Response(JSON.stringify({ detail: "stripe signature is required" }), {
+      status: 400,
+      headers: new Headers({ "Content-Type": "application/json" }),
+    });
+  }
+
+  let event: Stripe.Event;
+  try {
+    event = stripe.webhooks.constructEvent(body, signature, requireStripeWebhookSecret());
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : "stripe webhook signature verification failed";
+    return new Response(JSON.stringify({ detail }), {
+      status: 400,
+      headers: new Headers({ "Content-Type": "application/json" }),
+    });
+  }
+
+  try {
+    if (event.type === "checkout.session.completed" || event.type === "checkout.session.async_payment_succeeded") {
+      const session = event.data.object as Stripe.Checkout.Session;
+      await fulfillStripeCheckout(stripe, ctx, session.id);
+    } else if (event.type === "checkout.session.async_payment_failed" || event.type === "checkout.session.expired") {
+      const session = event.data.object as Stripe.Checkout.Session;
+      await ctx.runMutation(internal.cloud.billing.internalMarkStripeCheckoutSessionFailed, {
+        stripeCheckoutSessionId: session.id,
+        error: event.type,
+      });
+    }
+    return new Response(JSON.stringify({ received: true }), {
+      status: 200,
+      headers: new Headers({ "Content-Type": "application/json" }),
+    });
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : "failed to process stripe webhook";
+    return new Response(JSON.stringify({ detail }), {
+      status: 500,
+      headers: new Headers({ "Content-Type": "application/json" }),
+    });
+  }
 });
 
 export const billRunningComputeMinute = internalMutation({
