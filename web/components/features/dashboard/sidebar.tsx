@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import type { ElementType, ReactNode } from "react"
+import type { ElementType } from "react"
 import { HardDrive, Server, Play, LogOut, Settings, ChevronsUpDown, ChevronRight, Rocket } from "lucide-react"
 import {
   SidebarContent,
@@ -52,9 +52,6 @@ interface SidebarProps {
   navPlatform?: DashboardNavItem[]
   navAdmin?: DashboardNavItem[]
   navDocs?: DashboardNavDocItem[]
-  footerMeter?: ReactNode
-  footerMeterIcon?: ElementType
-  footerMeterTooltip?: string
 }
 
 const DEFAULT_NAV_PLATFORM: DashboardNavItem[] = [
@@ -80,9 +77,6 @@ export function Sidebar({
   navPlatform = DEFAULT_NAV_PLATFORM,
   navAdmin = DEFAULT_NAV_ADMIN,
   navDocs = DEFAULT_NAV_DOCS,
-  footerMeter,
-  footerMeterIcon: FooterMeterIcon,
-  footerMeterTooltip = "Usage",
 }: SidebarProps) {
   return (
     <>
@@ -142,22 +136,6 @@ export function Sidebar({
       </SidebarContent>
 
       <SidebarFooter>
-        {footerMeter ? (
-          <>
-            <div className="rounded border border-sidebar-border bg-sidebar-accent/30 p-2.5 group-data-[collapsible=icon]:hidden">
-              {footerMeter}
-            </div>
-            {FooterMeterIcon ? (
-              <SidebarMenu className="hidden group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:flex-col group-data-[collapsible=icon]:items-center">
-                <SidebarMenuItem>
-                  <SidebarMenuButton tooltip={footerMeterTooltip}>
-                    <FooterMeterIcon />
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              </SidebarMenu>
-            ) : null}
-          </>
-        ) : null}
         {navDocs.length > 0 ? (
           <SidebarGroup>
             <SidebarGroupLabel>Help</SidebarGroupLabel>

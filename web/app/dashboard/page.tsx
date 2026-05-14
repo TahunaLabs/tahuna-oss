@@ -11,7 +11,6 @@ import {
   CLOUD_DASHBOARD_VIEW_VALUES,
   type CloudDashboardView,
 } from "@/components/cloud/dashboard/dashboard-model"
-import { CreditsGauge, CreditsGaugeSkeleton } from "@/components/cloud/dashboard/credits-gauge"
 import { CloudDashboardTopBar } from "@/components/cloud/dashboard/dashboard-top-bar"
 import { CLOUD_DASHBOARD_DOCS_NAV } from "@/components/cloud/dashboard/sidebar-links"
 import { EnvironmentsContainer } from "@/components/features/dashboard/environments-container"
@@ -186,13 +185,6 @@ export default function DashboardPage() {
             onLogout={logout}
             navAdmin={CLOUD_NAV_ADMIN}
             navDocs={CLOUD_DASHBOARD_DOCS_NAV}
-            footerMeter={userMenuLoading ? (
-              <CreditsGaugeSkeleton />
-            ) : myCredits ? (
-              <CreditsGauge balanceCents={myCredits.balance_cents} maxCents={100 * 100} />
-            ) : null}
-            footerMeterIcon={Wallet}
-            footerMeterTooltip="Credits"
           />
         )}
       >
