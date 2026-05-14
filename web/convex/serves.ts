@@ -44,9 +44,11 @@ import {
   terminateRuntimeMachineWithRetry,
 } from "@convex/runtimeProvisioning"
 import {
-  applyServeLifecyclePlan,
-  createServeForUserId,
-  stopServeForUserId,
+  applyHostedServeLifecyclePlan as applyServeLifecyclePlan,
+  createHostedServeForUserId as createServeForUserId,
+  stopHostedServeForUserId as stopServeForUserId,
+} from "@convex/cloud/serveLifecycleComposition"
+import {
   toServeLifecycleState,
 } from "@convex/servesLifecycle"
 import {
@@ -175,7 +177,6 @@ type ServeProvisioningPayload = {
 
 type ServeProvisionSpec = {
   serve_id: string
-  provider_credential_id: string
   effective_gpu_type: string
   effective_gpu_count: number
   effective_volume_gb: number
@@ -476,7 +477,6 @@ const serveProvisioningPayloadValidator = v.object({
 
 const serveProvisionSpecValidator = v.object({
   serve_id: v.string(),
-  provider_credential_id: v.string(),
   effective_gpu_type: v.string(),
   effective_gpu_count: v.number(),
   effective_volume_gb: v.number(),
@@ -1187,12 +1187,8 @@ export const internalGetServeProvisionSpec = internalQuery({
     if (!environment) {
       throw new ConvexError("environment not found")
     }
-    if (!row.providerCredentialId) {
-      throw new ConvexError("serve is missing its compute provider credential")
-    }
     return {
       serve_id: String(row._id),
-      provider_credential_id: row.providerCredentialId,
       effective_gpu_type: row.gpuType,
       effective_gpu_count: row.gpuCount,
       effective_volume_gb: row.volumeGb,
@@ -1202,15 +1198,6 @@ export const internalGetServeProvisionSpec = internalQuery({
       port: row.port,
       startup_timeout_seconds: row.startupTimeoutSeconds,
     }
-  },
-})
-
-export const internalGetProviderCredentialId = internalQuery({
-  args: { serveId: v.id("serves") },
-  returns: v.union(v.string(), v.null()),
-  handler: async (ctx, args) => {
-    const row = await ctx.db.get("serves", args.serveId)
-    return row?.providerCredentialId ?? null
   },
 })
 
@@ -1395,7 +1382,6 @@ export const enforceProvisioningStartupTimeout = internalAction({
   args: {
     serveId: v.id("serves"),
     providerMachineId: v.string(),
-    providerCredentialId: v.string(),
     startupTimeoutSeconds: v.number(),
   },
   returns: v.null(),
@@ -1485,7 +1471,6 @@ export const provisionServe = internalAction({
         },
         createMachine: {
           name: `tahuna-${provisioningPayload.serve_id}`,
-          providerCredentialId: serveSpec.provider_credential_id,
           imageName: resolveImageName(serveSpec.framework, serveSpec.version, serveSpec.python_version),
           gpuType: serveSpec.effective_gpu_type,
           gpuCount: serveSpec.effective_gpu_count,
@@ -1519,7 +1504,6 @@ export const provisionServe = internalAction({
       await ctx.runMutation(internal.serves.markMachineProvisioned, {
         serveId: args.serveId,
         providerMachineId: provisionResult.providerMachineId,
-        providerCredentialId: serveSpec.provider_credential_id,
         startupTimeoutSeconds: serveSpec.startup_timeout_seconds,
         providerMetadata: provisionResult.providerMetadata,
       })
@@ -1527,7 +1511,6 @@ export const provisionServe = internalAction({
         await enqueueTerminateServeMachineJob(ctx, createTerminateServeMachineJob({
           serveId: args.serveId,
           providerMachineId: provisionResult.providerMachineId,
-          providerCredentialId: serveSpec.provider_credential_id,
           force: true,
         }))
         return null
@@ -1543,7 +1526,6 @@ export const provisionServe = internalAction({
         await enqueueTerminateServeMachineJob(ctx, createTerminateServeMachineJob({
           serveId: args.serveId,
           providerMachineId: provisionedProviderMachineId,
-          providerCredentialId: serveSpec.provider_credential_id,
           force: true,
         }))
       }
@@ -1583,7 +1565,6 @@ export const markMachineProvisioned = internalMutation({
   args: {
     serveId: v.id("serves"),
     providerMachineId: v.string(),
-    providerCredentialId: v.string(),
     startupTimeoutSeconds: v.number(),
     providerMetadata: v.optional(v.any()),
   },
@@ -1593,13 +1574,12 @@ export const markMachineProvisioned = internalMutation({
     if (!row || row.status === SERVE_STATUS.STOPPING || TERMINAL_SERVE_STATUSES.has(row.status)) {
       return null
     }
-    await applyServeLifecyclePlan(ctx, args.serveId, planServeMachineProvisioned({
+    await applyServeLifecyclePlan(ctx, args.serveId, row, planServeMachineProvisioned({
       serve: toServeLifecycleState(row),
       providerMachineId: args.providerMachineId,
       providerMetadata: args.providerMetadata,
       startupTimeout: {
         delayMs: args.startupTimeoutSeconds * 1000,
-        providerCredentialId: args.providerCredentialId,
         startupTimeoutSeconds: args.startupTimeoutSeconds,
       },
     }))
@@ -1619,7 +1599,7 @@ export const markFailed = internalMutation({
     if (!row) {
       return null
     }
-    await applyServeLifecyclePlan(ctx, args.serveId, planServeFailure({
+    await applyServeLifecyclePlan(ctx, args.serveId, row, planServeFailure({
       serve: toServeLifecycleState(row),
       error: args.error,
       provisioningPayload: args.provisioningPayload,
@@ -1639,7 +1619,7 @@ export const markStoppedAfterTermination = internalMutation({
     if (!row) {
       return null
     }
-    await applyServeLifecyclePlan(ctx, args.serveId, planServeStoppedAfterTermination({
+    await applyServeLifecyclePlan(ctx, args.serveId, row, planServeStoppedAfterTermination({
       serve: toServeLifecycleState(row),
       force: args.force === true,
     }))
@@ -1658,7 +1638,7 @@ export const markStopTerminationFailed = internalMutation({
     if (!row) {
       return null
     }
-    await applyServeLifecyclePlan(ctx, args.serveId, planServeStopTerminationFailed({
+    await applyServeLifecyclePlan(ctx, args.serveId, row, planServeStopTerminationFailed({
       serve: toServeLifecycleState(row),
       error: args.error,
     }))
@@ -1694,7 +1674,6 @@ export const scheduleTerminationRetry = internalMutation({
   args: {
     serveId: v.id("serves"),
     providerMachineId: v.string(),
-    providerCredentialId: v.optional(v.string()),
     force: v.optional(v.boolean()),
     attempt: v.number(),
     error: v.string(),
@@ -1705,10 +1684,9 @@ export const scheduleTerminationRetry = internalMutation({
     if (!row) {
       return null
     }
-    await applyServeLifecyclePlan(ctx, args.serveId, planServeTerminationRetry({
+    await applyServeLifecyclePlan(ctx, args.serveId, row, planServeTerminationRetry({
       serve: toServeLifecycleState(row),
       providerMachineId: args.providerMachineId,
-      providerCredentialId: args.providerCredentialId,
       force: args.force === true,
       attempt: args.attempt,
       maxAttempts: RUN_CONFIG.terminationRetryMaxAttempts,
@@ -1723,7 +1701,6 @@ export const internalTerminateMachine = internalAction({
   args: {
     serveId: v.id("serves"),
     providerMachineId: v.string(),
-    providerCredentialId: v.optional(v.string()),
     force: v.optional(v.boolean()),
     attempt: v.optional(v.number()),
   },
@@ -1732,7 +1709,6 @@ export const internalTerminateMachine = internalAction({
     await terminateRuntimeMachineWithRetry({
       ctx,
       providerMachineId: args.providerMachineId,
-      providerCredentialId: args.providerCredentialId ?? null,
       attempt: args.attempt ?? 0,
       shouldTerminate: async () => {
         if (args.force === true) {
@@ -1743,20 +1719,17 @@ export const internalTerminateMachine = internalAction({
         })
         return !!state && state.status === SERVE_STATUS.STOPPING
       },
-      resolveProviderCredentialId: async () =>
-        await ctx.runQuery(internal.serves.internalGetProviderCredentialId, { serveId: args.serveId }),
       onTerminated: async () => {
         await ctx.runMutation(internal.serves.markStoppedAfterTermination, {
           serveId: args.serveId,
           force: args.force === true,
         })
       },
-      onRetry: async ({ nextAttempt, providerCredentialId, error }) => {
+      onRetry: async ({ nextAttempt, error }) => {
         if (nextAttempt < RUN_CONFIG.terminationRetryMaxAttempts) {
           await ctx.runMutation(internal.serves.scheduleTerminationRetry, {
             serveId: args.serveId,
             providerMachineId: args.providerMachineId,
-            providerCredentialId,
             force: args.force === true,
             attempt: nextAttempt,
             error,
@@ -1832,11 +1805,12 @@ export const ingestRuntimeStatus = internalMutation({
       status: args.status as ServeLifecycleStatus,
       message: args.message,
       error: args.error,
+      nowMs: Date.now(),
     })
     if (plan.error) {
       throw new ConvexError(plan.error)
     }
-    await applyServeLifecyclePlan(ctx, args.serveId, plan)
+    await applyServeLifecyclePlan(ctx, args.serveId, row, plan)
 
     return { status: plan.resultStatus }
   },

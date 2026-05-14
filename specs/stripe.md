@@ -12,8 +12,8 @@ This is the hosted managed-billing path. Users pay Tahuna, Tahuna credits fund h
 - Supported fixed top-ups: `$10`, `$25`, `$100`.
 - Custom top-up amounts are supported within configured bounds.
 - `$1 paid = $1 Tahuna credit`.
-- Run launch requires estimated Tahuna funds before provisioning.
-- Hosted cloud runs are managed by Tahuna only; users do not choose a compute billing mode.
+- Run and serve launch require estimated Tahuna funds before provisioning.
+- Hosted cloud runs and serves are managed by Tahuna only; users do not choose a compute billing mode.
 - No Stripe Billing Portal for MVP.
 - No refund, dispute, or chargeback automation for MVP.
 
@@ -26,7 +26,7 @@ Managed billing is the only Tahuna Cloud path.
 - Tahuna owns and uses the provider credentials.
 - Tahuna pays the compute provider.
 - Tahuna records user-facing payment history from Stripe payment records.
-- Tahuna records compute debits and settlements in the credit ledger.
+- Tahuna records run and serve compute debits and settlements in the credit ledger.
 - Provider-side balance, quota, credential, and capacity failures are Tahuna operational failures.
 
 ## Configuration
@@ -126,7 +126,7 @@ Open or pending checkout sessions are not payments and must not appear as paymen
 
 Stripe credits are Tahuna account credits. They do not add funds to a user's external provider account.
 
-For hosted managed runs, Tahuna must enforce its own estimated-funds check before launch and must use Tahuna-owned provider credentials. Provider-side failures should surface as managed compute operational failures.
+For hosted managed runs and serves, Tahuna must enforce its own estimated-funds check before launch and must use Tahuna-owned provider credentials. Provider-side failures should surface as managed compute operational failures.
 
 ## Not In MVP
 

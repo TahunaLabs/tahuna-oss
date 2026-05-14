@@ -15,14 +15,16 @@ import {
 } from "@convex/cloud/credits";
 import {
   estimateRunUsageFromHourlyRateCents,
-  resolveRunHourlyRateCents,
+  computeLiveDebitIdempotencyKey,
+  resolveComputeSubjectHourlyRateCents,
   resolveTerminalRunTiming,
-  runLiveDebitIdempotencyKey,
   settleRunComputeCharge,
   toUnixMillis,
+  type ComputeBillingSubject,
   type ComputeSettlementResult,
 } from "@convex/cloud/runBilling";
 import { RUN_STATUS } from "@convex/runsConstants";
+import { SERVE_STATUS } from "@convex/servesConstants";
 
 const STRIPE_CHECKOUT_PAYMENT_STATUSES = new Set(["paid", "no_payment_required"]);
 
@@ -149,6 +151,124 @@ export async function settleHostedRunUsage(
     },
     terminalTiming,
     settlement,
+  };
+}
+
+type LiveComputeBillingPatch = {
+  computeChargeCents: number;
+  computeCollectedCents: number;
+  computeOutstandingCents: number;
+  computeChargeStatus: "pending" | "charged" | "owed";
+  computeChargeError?: string;
+};
+
+async function billLiveComputeSubject(
+  ctx: MutationCtx,
+  args: {
+    subject: ComputeBillingSubject;
+    startedAt: number;
+    previous: {
+      computeChargeCents?: number;
+      computeCollectedCents?: number;
+      computeOutstandingCents?: number;
+      computeChargeStatus?: "pending" | "charged" | "owed";
+      computeChargeError?: string;
+    };
+  },
+): Promise<
+  | { kind: "patched"; patch: LiveComputeBillingPatch; charged: boolean; owed: boolean }
+  | { kind: "skipped" }
+  | { kind: "owed"; patch: Pick<LiveComputeBillingPatch, "computeChargeStatus" | "computeChargeError"> }
+> {
+  const startedAt = toUnixMillis(args.startedAt);
+  if (startedAt <= 0) {
+    return { kind: "skipped" };
+  }
+
+  const durationMs = Math.max(0, Date.now() - startedAt);
+  let hourlyRateCents = 0;
+  try {
+    hourlyRateCents = resolveComputeSubjectHourlyRateCents(args.subject);
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : `${args.subject.referenceType} hourly rate is invalid`;
+    return {
+      kind: "owed",
+      patch: {
+        computeChargeStatus: "owed",
+        computeChargeError: detail,
+      },
+    };
+  }
+
+  const targetChargeCents = estimateRunUsageFromHourlyRateCents({
+    hourlyRateCents,
+    durationMs,
+  });
+  const currentCollectedCents = Math.max(0, Math.floor(args.previous.computeCollectedCents || 0));
+  const debitDeltaCents = targetChargeCents - currentCollectedCents;
+  let nextCollectedCents = currentCollectedCents;
+  let nextOutstandingCents = Math.max(0, targetChargeCents - nextCollectedCents);
+  let nextChargeStatus: "pending" | "charged" | "owed" =
+    targetChargeCents > 0 ? (nextOutstandingCents > 0 ? "owed" : "charged") : "pending";
+  let nextChargeError: string | undefined = undefined;
+
+  if (debitDeltaCents > 0) {
+    const appliedDebit = await upsertLedgerDebitTotal(ctx, {
+      userId: args.subject.userId,
+      targetDebitCents: targetChargeCents,
+      eventType: USAGE_EVENT_TYPE.RUN_COMPUTE_SETTLEMENT_DEBIT,
+      idempotencyKey: computeLiveDebitIdempotencyKey(args.subject.referenceType, args.subject.referenceId),
+      referenceType: args.subject.referenceType,
+      referenceId: args.subject.referenceId,
+      metadata: {
+        settlement: "live_tick",
+        charge_cents: targetChargeCents,
+        duration_ms: durationMs,
+        gpu_type: args.subject.gpuType,
+        gpu_count: args.subject.gpuCount,
+        volume_gb: args.subject.volumeGb,
+        hourly_rate_cents: hourlyRateCents,
+      },
+    });
+    nextCollectedCents = Math.min(targetChargeCents, appliedDebit.debitedCents);
+  }
+
+  nextOutstandingCents = Math.max(0, targetChargeCents - nextCollectedCents);
+  if (nextOutstandingCents > 0) {
+    nextChargeStatus = "owed";
+    nextChargeError = "outstanding compute settlement";
+  } else if (targetChargeCents > 0) {
+    nextChargeStatus = "charged";
+  } else {
+    nextChargeStatus = "pending";
+  }
+
+  const previousChargeCents = Math.max(0, Math.floor(args.previous.computeChargeCents || 0));
+  const previousCollectedCents = Math.max(0, Math.floor(args.previous.computeCollectedCents || 0));
+  const previousOutstandingCents = Math.max(0, Math.floor(args.previous.computeOutstandingCents || 0));
+  const previousChargeStatus = args.previous.computeChargeStatus || "pending";
+  const previousChargeError = args.previous.computeChargeError;
+  if (
+    previousChargeCents === targetChargeCents &&
+    previousCollectedCents === nextCollectedCents &&
+    previousOutstandingCents === nextOutstandingCents &&
+    previousChargeStatus === nextChargeStatus &&
+    previousChargeError === nextChargeError
+  ) {
+    return { kind: "skipped" };
+  }
+
+  return {
+    kind: "patched",
+    charged: nextCollectedCents > currentCollectedCents,
+    owed: nextOutstandingCents > 0,
+    patch: {
+      computeChargeCents: targetChargeCents,
+      computeCollectedCents: nextCollectedCents,
+      computeOutstandingCents: nextOutstandingCents,
+      computeChargeStatus: nextChargeStatus,
+      computeChargeError: nextChargeError,
+    },
   };
 }
 
@@ -580,7 +700,6 @@ export const billRunningComputeMinute = internalMutation({
     skipped_runs: v.number(),
   }),
   handler: async (ctx) => {
-    const nowMs = Date.now();
     const runningRuns = await ctx.db
       .query("runs")
       .withIndex("by_status", (q) => q.eq("status", RUN_STATUS.RUNNING))
@@ -592,96 +711,45 @@ export const billRunningComputeMinute = internalMutation({
     let skippedRuns = 0;
 
     for (const row of runningRuns) {
-      const startedAt = typeof row.computeStartedAt === "number" ? toUnixMillis(row.computeStartedAt) : 0;
-      if (startedAt <= 0) {
-        skippedRuns += 1;
-        continue;
-      }
-
-      const durationMs = Math.max(0, nowMs - startedAt);
-      let hourlyRateCents = 0;
-      try {
-        hourlyRateCents = resolveRunHourlyRateCents(row);
-      } catch (error) {
-        const detail = error instanceof Error ? error.message : "run hourly rate is invalid";
-        await ctx.db.patch("runs", row._id, {
-          computeChargeStatus: "owed",
-          computeChargeError: detail,
-        });
-        owedRuns += 1;
-        continue;
-      }
-
-      const targetChargeCents = estimateRunUsageFromHourlyRateCents({
-        hourlyRateCents,
-        durationMs,
-      });
-      const runId = String(row._id);
-      const currentCollectedCents = Math.max(0, Math.floor(row.computeCollectedCents || 0));
-      const debitDeltaCents = targetChargeCents - currentCollectedCents;
-      let nextCollectedCents = currentCollectedCents;
-      let nextOutstandingCents = Math.max(0, targetChargeCents - nextCollectedCents);
-      let nextChargeStatus: "pending" | "charged" | "owed" =
-        targetChargeCents > 0 ? (nextOutstandingCents > 0 ? "owed" : "charged") : "pending";
-      let nextChargeError: string | undefined = undefined;
-
-      if (debitDeltaCents > 0) {
-        const appliedDebit = await upsertLedgerDebitTotal(ctx, {
+      const result = await billLiveComputeSubject(ctx, {
+        subject: {
           userId: row.userId,
-          targetDebitCents: targetChargeCents,
-          eventType: USAGE_EVENT_TYPE.RUN_COMPUTE_SETTLEMENT_DEBIT,
-          idempotencyKey: runLiveDebitIdempotencyKey(runId),
           referenceType: "run",
-          referenceId: runId,
-          metadata: {
-            settlement: "live_tick",
-            charge_cents: targetChargeCents,
-            duration_ms: durationMs,
-            gpu_type: row.effectiveGpuType,
-            gpu_count: row.effectiveGpuCount,
-            volume_gb: row.effectiveVolumeGb,
-            hourly_rate_cents: hourlyRateCents,
-          },
-        });
-        nextCollectedCents = Math.min(targetChargeCents, appliedDebit.debitedCents);
-        if (nextCollectedCents > currentCollectedCents) {
-          chargedRuns += 1;
-        }
-      }
-
-      nextOutstandingCents = Math.max(0, targetChargeCents - nextCollectedCents);
-      if (nextOutstandingCents > 0) {
-        nextChargeStatus = "owed";
-        nextChargeError = "outstanding compute settlement";
-        owedRuns += 1;
-      } else if (targetChargeCents > 0) {
-        nextChargeStatus = "charged";
-      } else {
-        nextChargeStatus = "pending";
-      }
-
-      const previousChargeCents = Math.max(0, Math.floor(row.computeChargeCents || 0));
-      const previousCollectedCents = Math.max(0, Math.floor(row.computeCollectedCents || 0));
-      const previousOutstandingCents = Math.max(0, Math.floor(row.computeOutstandingCents || 0));
-      const previousChargeStatus = row.computeChargeStatus || "pending";
-      const previousChargeError = row.computeChargeError;
-      if (
-        previousChargeCents !== targetChargeCents ||
-        previousCollectedCents !== nextCollectedCents ||
-        previousOutstandingCents !== nextOutstandingCents ||
-        previousChargeStatus !== nextChargeStatus ||
-        previousChargeError !== nextChargeError
-      ) {
-        await ctx.db.patch("runs", row._id, {
-          computeChargeCents: targetChargeCents,
-          computeCollectedCents: nextCollectedCents,
-          computeOutstandingCents: nextOutstandingCents,
-          computeChargeStatus: nextChargeStatus,
-          computeChargeError: nextChargeError,
-        });
-        processedRuns += 1;
-      } else {
+          referenceId: String(row._id),
+          gpuType: row.effectiveGpuType,
+          gpuCount: row.effectiveGpuCount,
+          volumeGb: row.effectiveVolumeGb,
+          computeHourlyRateCents: row.computeHourlyRateCents,
+          computeCollectedCents: row.computeCollectedCents,
+        },
+        startedAt: row.computeStartedAt ?? 0,
+        previous: {
+          computeChargeCents: row.computeChargeCents,
+          computeCollectedCents: row.computeCollectedCents,
+          computeOutstandingCents: row.computeOutstandingCents,
+          computeChargeStatus: row.computeChargeStatus,
+          computeChargeError: row.computeChargeError,
+        },
+      });
+      if (result.kind === "skipped") {
         skippedRuns += 1;
+        continue;
+      }
+      if (result.kind === "owed") {
+        await ctx.db.patch("runs", row._id, {
+          computeChargeStatus: result.patch.computeChargeStatus,
+          computeChargeError: result.patch.computeChargeError,
+        });
+        owedRuns += 1;
+        continue;
+      }
+      await ctx.db.patch("runs", row._id, result.patch);
+      processedRuns += 1;
+      if (result.charged) {
+        chargedRuns += 1;
+      }
+      if (result.owed) {
+        owedRuns += 1;
       }
     }
 
@@ -690,6 +758,77 @@ export const billRunningComputeMinute = internalMutation({
       charged_runs: chargedRuns,
       owed_runs: owedRuns,
       skipped_runs: skippedRuns,
+    };
+  },
+});
+
+export const billServingComputeMinute = internalMutation({
+  args: {},
+  returns: v.object({
+    processed_serves: v.number(),
+    charged_serves: v.number(),
+    owed_serves: v.number(),
+    skipped_serves: v.number(),
+  }),
+  handler: async (ctx) => {
+    const servingRows = await ctx.db
+      .query("serves")
+      .withIndex("by_status", (q) => q.eq("status", SERVE_STATUS.SERVING))
+      .collect();
+
+    let processedServes = 0;
+    let chargedServes = 0;
+    let owedServes = 0;
+    let skippedServes = 0;
+
+    for (const row of servingRows) {
+      const result = await billLiveComputeSubject(ctx, {
+        subject: {
+          userId: row.userId,
+          referenceType: "serve",
+          referenceId: String(row._id),
+          gpuType: row.gpuType,
+          gpuCount: row.gpuCount,
+          volumeGb: row.volumeGb,
+          computeHourlyRateCents: row.computeHourlyRateCents,
+          computeCollectedCents: row.computeCollectedCents,
+        },
+        startedAt: row.computeStartedAt ?? 0,
+        previous: {
+          computeChargeCents: row.computeChargeCents,
+          computeCollectedCents: row.computeCollectedCents,
+          computeOutstandingCents: row.computeOutstandingCents,
+          computeChargeStatus: row.computeChargeStatus,
+          computeChargeError: row.computeChargeError,
+        },
+      });
+      if (result.kind === "skipped") {
+        skippedServes += 1;
+        continue;
+      }
+      if (result.kind === "owed") {
+        await ctx.db.patch("serves", row._id, {
+          computeChargeStatus: result.patch.computeChargeStatus,
+          computeChargeError: result.patch.computeChargeError,
+        });
+        owedServes += 1;
+        continue;
+      }
+      await ctx.db.patch("serves", row._id, result.patch);
+      processedServes += 1;
+      if (result.charged) {
+        chargedServes += 1;
+      }
+      if (result.owed) {
+        owedServes += 1;
+      }
+    }
+
+    return {
+      processed_serves: processedServes,
+      charged_serves: chargedServes,
+      owed_serves: owedServes,
+      skipped_serves: skippedServes,
     };
   },
 });

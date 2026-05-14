@@ -5,7 +5,7 @@ import { resolveConfiguredDependencyGroup } from "@/lib/dependency-selection";
 import { buildRuntimeCompatibilityKey } from "@/lib/runtime-incompatibility";
 import { PYTHON_CONFIG, RUN_CONFIG } from "@convex/appConfig";
 import {
-  resolveManagedComputeCredential,
+  requireManagedComputeProvider,
   resolveComputeCompatibilityCloudType,
 } from "@convex/computeProvider";
 import { ACTIVE_STATUSES, RUN_DELETE_BATCH_SIZE, TERMINAL_STATUSES } from "@convex/runsConstants";
@@ -89,7 +89,6 @@ export function toRunLifecycleState(row: Doc<"runs">): RunLifecycleRunState {
     status: row.status,
     cancellationRequested: row.cancellationRequested,
     providerMachineId: row.providerMachineId,
-    providerCredentialId: row.providerCredentialId ? String(row.providerCredentialId) : undefined,
     computeStartedAt: row.computeStartedAt,
     computeEndedAt: row.computeEndedAt,
     runtimeTokenHash: row.runtimeTokenHash,
@@ -220,7 +219,7 @@ export async function createRunForUserId(
       `runtime launch blocked for this gpu/image combination (${incompatibility.errorCode}); try another gpu or image`,
     );
   }
-  const computeCredential = resolveManagedComputeCredential();
+  requireManagedComputeProvider();
   await composition?.validateCreateRun?.(ctx, {
     userId: args.userId,
     gpuType: effectiveGpuType,
@@ -241,7 +240,6 @@ export async function createRunForUserId(
     command,
     dataId,
     outputDir,
-    providerCredentialId: String(computeCredential.providerCredentialId),
     effectiveGpuType,
     effectiveGpuCount,
     effectiveVolumeGb,
@@ -264,7 +262,6 @@ export async function createRunForUserId(
     logs: creation.run.logs,
     status: creation.run.status,
     cancellationRequested: creation.run.cancellationRequested,
-    providerCredentialId: creation.run.providerCredentialId,
     effectiveGpuType: creation.run.effectiveGpuType,
     effectiveGpuCount: creation.run.effectiveGpuCount,
     effectiveVolumeGb: creation.run.effectiveVolumeGb,
@@ -324,12 +321,10 @@ export async function scheduleForcedMachineTermination(
   ctx: MutationCtx,
   runId: Id<"runs">,
   providerMachineId: string | undefined,
-  providerCredentialId: string | undefined,
 ) {
   await enqueueRunLifecycleJobs(ctx, planForcedMachineTermination({
     runId: String(runId),
     providerMachineId,
-    providerCredentialId,
   }));
 }
 

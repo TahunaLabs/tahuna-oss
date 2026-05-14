@@ -14,7 +14,7 @@ This is prepaid credits accounting with Stripe funding:
 
 - One ledger balance per Better Auth user (`userCredits`).
 - Ledger events in `usageEvents`.
-- Real-time compute debits while a run is active.
+- Real-time compute debits while a run or serve is active.
 - Storage growth debits.
 - Prepaid Stripe Checkout top-ups.
 - Billing UI reads balance + ledger history from Convex.
@@ -74,26 +74,26 @@ On first authenticated usage:
 
 ## Compute Billing (Implemented Now)
 
-Compute billing applies to hosted managed runs. Tahuna-owned provider credentials authorize provisioning, and Tahuna credits are debited for compute usage.
+Compute billing applies to hosted managed runs and serves. Tahuna-owned provider credentials authorize provisioning, and Tahuna credits are debited for compute usage.
 
 ### Pricing Formula
 
-For each run:
+For each run or serve:
 
 - `hourlyRateCents = gpuCount * gpuTypeHourlyRateCents + volumeGb * computeVolumeGbHourlyRateCents`
 - `targetChargeCents = max(minimumChargeCents, ceil(hourlyRateCents * uptimeMs / 3600000))` once uptime > 0
 
 ### Real-Time Debit Path
 
-Cron: `bill running compute each minute` (`web/convex/crons.ts`) calls `internal.runs.billRunningComputeMinute`.
+Crons in `web/convex/crons.ts` call hosted billing mutations once per minute for active runs and serves.
 
-Per running run:
+Per active compute resource:
 
 1. Compute `targetChargeCents` from uptime.
 2. Upsert one live debit ledger entry using idempotency key:
-   - `run:<runId>:live_debit`
+   - `run:<runId>:live_debit` or `serve:<serveId>:live_debit`
 3. Ledger upsert function (`upsertLedgerDebitTotal`):
-   - reads existing live debit total for that run,
+   - reads the existing live debit total for that resource,
    - computes incremental delta to reach target,
    - deducts only that incremental delta from `userCredits.balanceCents`,
    - updates the same `usageEvents` row (no minute-by-minute row fanout).
@@ -106,7 +106,7 @@ Per running run:
 
 ### Terminal Reconciliation
 
-On terminal transitions, settlement runs through `settleRunComputeCharge`:
+On terminal transitions, settlement runs through the shared compute settlement helper:
 
 - If remaining debit exists, apply settlement debit.
 - If over-collected, apply settlement refund.
@@ -146,7 +146,7 @@ MVP policy:
 - No Billing Portal.
 - No automatic refund or dispute reversal handling.
 - Custom top-ups are bounded by `minimumTopUpAmountCents` and `maximumTopUpAmountCents`.
-- Run launch requires at least the configured launch estimate, currently one hour of estimated compute cost.
+- Run and serve launch require at least the configured launch estimate, currently one hour of estimated compute cost.
 
 ## What Users See Today
 
@@ -154,15 +154,15 @@ Billing page shows:
 
 - current account balance (`getMyCredits`),
 - ledger history (`listMyUsageEvents`),
-- event details including run metadata.
+- event details including run or serve metadata.
 
-Users should not choose a compute billing mode in Tahuna Cloud. Billing UX should present one path: add credits, launch managed runs, and inspect credit/payment history.
+Users should not choose a compute billing mode in Tahuna Cloud. Billing UX should present one path: add credits, launch managed runs or serves, and inspect credit/payment history.
 
 ## Current Invariants
 
 - Balance is integer cents.
 - Real-time balance is ledger-backed (`userCredits.balanceCents`).
-- Compute live debit uses one mutable ledger row per active run (keyed by run id), not one row per minute.
+- Compute live debit uses one mutable ledger row per active run or serve, not one row per minute.
 - Settlement/refund/owed logic still exists for terminal reconciliation.
 
 ## Not Handled Yet

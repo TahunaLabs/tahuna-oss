@@ -30,7 +30,6 @@ export type RunLifecycleRunState = {
   status: string;
   cancellationRequested?: boolean;
   providerMachineId?: string;
-  providerCredentialId?: string;
   computeStartedAt?: number;
   computeEndedAt?: number;
   runtimeTokenHash?: string;
@@ -132,7 +131,6 @@ export function planRunCreation(args: {
   command: string[];
   dataId: string;
   outputDir?: string;
-  providerCredentialId?: string;
   effectiveGpuType: string;
   effectiveGpuCount: number;
   effectiveVolumeGb: number;
@@ -157,7 +155,6 @@ export function planRunCreation(args: {
       logs: `${runPrefix}/logs`,
       status: RUN_LIFECYCLE_STATUS.QUEUED,
       cancellationRequested: false,
-      providerCredentialId: args.providerCredentialId,
       effectiveGpuType: args.effectiveGpuType,
       effectiveGpuCount: args.effectiveGpuCount,
       effectiveVolumeGb: args.effectiveVolumeGb,
@@ -237,7 +234,6 @@ export function planRunCancellation(args: {
         runId: args.run.runId,
         delayMs: args.force ? 0 : args.terminationGraceMs,
         providerMachineId,
-        providerCredentialId: args.run.providerCredentialId,
         force: args.force,
       }),
     ],
@@ -247,7 +243,6 @@ export function planRunCancellation(args: {
 export function planForcedMachineTermination(args: {
   runId: string;
   providerMachineId?: string;
-  providerCredentialId?: string;
 }): RunLifecycleJob[] {
   const providerMachineId = normalizeMachineId(args.providerMachineId);
   if (!providerMachineId) {
@@ -257,7 +252,6 @@ export function planForcedMachineTermination(args: {
     createTerminateMachineJob({
       runId: args.runId,
       providerMachineId,
-      providerCredentialId: args.providerCredentialId,
       force: true,
     }),
   ];
@@ -287,7 +281,6 @@ export function planRunDeletion(args: {
     jobs: planForcedMachineTermination({
       runId: args.run.runId,
       providerMachineId: args.run.providerMachineId,
-      providerCredentialId: args.run.providerCredentialId,
     }),
     storageOperations: [
       {
@@ -336,7 +329,6 @@ export function planMachineProvisioned(args: {
   providerMetadata?: unknown;
   startupTimeout?: {
     delayMs: number;
-    providerCredentialId: string;
     fingerprint: StartupTimeoutFingerprint;
   };
 }): RunLifecyclePlan {
@@ -359,7 +351,6 @@ export function planMachineProvisioned(args: {
             runId: args.run.runId,
             delayMs: args.startupTimeout.delayMs,
             providerMachineId: args.providerMachineId,
-            providerCredentialId: args.startupTimeout.providerCredentialId,
             fingerprint: args.startupTimeout.fingerprint,
           }),
         ]
@@ -460,7 +451,6 @@ export function planRunFailure(args: {
     jobs: planForcedMachineTermination({
       runId: args.run.runId,
       providerMachineId: args.run.providerMachineId,
-      providerCredentialId: args.run.providerCredentialId,
     }),
   };
 }
@@ -516,7 +506,6 @@ export function planCancellationTerminationFailed(args: {
 export function planTerminationRetry(args: {
   run: RunLifecycleRunState;
   providerMachineId: string;
-  providerCredentialId?: string;
   force: boolean;
   attempt: number;
   maxAttempts: number;
@@ -541,7 +530,6 @@ export function planTerminationRetry(args: {
         runId: args.run.runId,
         delayMs: args.delayMs,
         providerMachineId: args.providerMachineId,
-        providerCredentialId: args.providerCredentialId,
         force: args.force,
         attempt: args.attempt,
       }),
@@ -615,7 +603,6 @@ export function planRuntimeStatusIngestion(args: {
       jobs: planForcedMachineTermination({
         runId: args.run.runId,
         providerMachineId: args.run.providerMachineId,
-        providerCredentialId: args.run.providerCredentialId,
       }),
       resultStatus: RUN_LIFECYCLE_STATUS.FAILED,
     };
@@ -646,7 +633,6 @@ export function planRuntimeStatusIngestion(args: {
       ? planForcedMachineTermination({
           runId: args.run.runId,
           providerMachineId: args.run.providerMachineId,
-          providerCredentialId: args.run.providerCredentialId,
         })
       : [],
   };

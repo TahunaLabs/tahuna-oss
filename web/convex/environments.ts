@@ -863,7 +863,6 @@ export const internalDeleteEnvironmentBatch = internalMutation({
           ctx,
           nextRun._id,
           nextRun.providerMachineId,
-          nextRun.providerCredentialId,
         );
       }
       const hasMore = await deleteRunDataBatch(ctx, nextRun._id);
@@ -884,7 +883,6 @@ export const internalDeleteEnvironmentBatch = internalMutation({
           ctx,
           nextServe._id,
           nextServe.providerMachineId,
-          nextServe.providerCredentialId,
         );
       }
       const hasMore = await deleteServeDataBatch(ctx, nextServe._id);

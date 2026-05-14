@@ -128,7 +128,6 @@ export async function enqueueTerminateMachineJob(ctx: ActionCtx, job: TerminateM
   await ctx.scheduler.runAfter(job.delayMs, internal.runs.internalTerminateMachine, {
     runId: toRunId(job.runId),
     providerMachineId: job.providerMachineId,
-    providerCredentialId: job.providerCredentialId,
     force: job.force,
     attempt: job.attempt,
   });
@@ -139,7 +138,6 @@ export async function enqueueServeStartupTimeoutJob(ctx: ActionCtx, job: CheckSe
   await ctx.scheduler.runAfter(job.delayMs, internal.serves.enforceProvisioningStartupTimeout, {
     serveId: toServeId(job.serveId),
     providerMachineId: job.providerMachineId,
-    providerCredentialId: job.providerCredentialId,
     startupTimeoutSeconds: job.startupTimeoutSeconds,
   });
 }
@@ -149,7 +147,6 @@ export async function enqueueTerminateServeMachineJob(ctx: ActionCtx, job: Termi
   await ctx.scheduler.runAfter(job.delayMs, internal.serves.internalTerminateMachine, {
     serveId: toServeId(job.serveId),
     providerMachineId: job.providerMachineId,
-    providerCredentialId: job.providerCredentialId,
     force: job.force,
     attempt: job.attempt,
   });
@@ -182,7 +179,6 @@ async function enqueueRunLifecycleJob(ctx: MutationCtx, job: RunLifecycleJob) {
     await ctx.scheduler.runAfter(job.delayMs, internal.runs.enforceProvisioningStartupTimeout, {
       runId: toRunId(job.runId),
       providerMachineId: job.providerMachineId,
-      providerCredentialId: job.providerCredentialId,
       fingerprint: job.fingerprint,
     });
     return;
@@ -191,7 +187,6 @@ async function enqueueRunLifecycleJob(ctx: MutationCtx, job: RunLifecycleJob) {
   await ctx.scheduler.runAfter(job.delayMs, internal.runs.internalTerminateMachine, {
     runId: toRunId(job.runId),
     providerMachineId: job.providerMachineId,
-    providerCredentialId: job.providerCredentialId,
     force: job.force,
     attempt: job.attempt,
   });
@@ -220,7 +215,6 @@ async function enqueueServeLifecycleJob(ctx: MutationCtx, job: ServeLifecycleJob
     await ctx.scheduler.runAfter(job.delayMs, internal.serves.enforceProvisioningStartupTimeout, {
       serveId: toServeId(job.serveId),
       providerMachineId: job.providerMachineId,
-      providerCredentialId: job.providerCredentialId,
       startupTimeoutSeconds: job.startupTimeoutSeconds,
     });
     return;
@@ -229,7 +223,6 @@ async function enqueueServeLifecycleJob(ctx: MutationCtx, job: ServeLifecycleJob
   await ctx.scheduler.runAfter(job.delayMs, internal.serves.internalTerminateMachine, {
     serveId: toServeId(job.serveId),
     providerMachineId: job.providerMachineId,
-    providerCredentialId: job.providerCredentialId,
     force: job.force,
     attempt: job.attempt,
   });

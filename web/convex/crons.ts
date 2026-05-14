@@ -10,4 +10,11 @@ crons.interval(
   {},
 );
 
+crons.interval(
+  "bill serving compute each minute",
+  { minutes: 1 },
+  internal.cloud.billing.billServingComputeMinute,
+  {},
+);
+
 export default crons;

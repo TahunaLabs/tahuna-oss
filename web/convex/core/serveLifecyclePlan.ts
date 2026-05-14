@@ -36,8 +36,9 @@ export type ServeLifecycleServeState = {
   serveId: string;
   status: string;
   providerMachineId?: string;
-  providerCredentialId?: string;
   runtimeTokenHash?: string;
+  computeStartedAt?: number;
+  computeEndedAt?: number;
   error?: string;
 };
 
@@ -46,12 +47,15 @@ export type ServeLifecyclePatch = {
   error?: string;
   providerMachineId?: string;
   runtimeTokenHash?: string;
+  computeStartedAt?: number;
+  computeEndedAt?: number;
 };
 
 export type ServeLifecycleEvent = {
   status: string;
   message: string;
   metadata?: Record<string, unknown>;
+  includeTerminalTiming?: boolean;
 };
 
 export type ServeLifecyclePlan = {
@@ -66,6 +70,17 @@ function serveEvent(
   metadata?: Record<string, unknown>,
 ): ServeLifecycleEvent {
   return { status, message, ...(metadata ? { metadata } : {}) };
+}
+
+function terminalServeEvent(
+  status: string,
+  message: string,
+  metadata?: Record<string, unknown>,
+): ServeLifecycleEvent {
+  return {
+    ...serveEvent(status, message, metadata),
+    includeTerminalTiming: true,
+  };
 }
 
 function compactMetadata(metadata: Record<string, unknown>) {
@@ -135,7 +150,6 @@ export function planServeProvisioningJobs(args: {
 export function planForcedServeMachineTermination(args: {
   serveId: string;
   providerMachineId?: string;
-  providerCredentialId?: string;
 }): ServeLifecycleJob[] {
   const providerMachineId = normalizeMachineId(args.providerMachineId);
   if (!providerMachineId) {
@@ -145,7 +159,6 @@ export function planForcedServeMachineTermination(args: {
     createTerminateServeMachineJob({
       serveId: args.serveId,
       providerMachineId,
-      providerCredentialId: args.providerCredentialId,
       force: true,
     }),
   ];
@@ -174,7 +187,7 @@ export function planServeStop(args: {
       runtimeTokenHash: nextStatus === SERVE_LIFECYCLE_STATUS.STOPPED ? "revoked" : args.serve.runtimeTokenHash,
     },
     events: [
-      serveEvent(
+      (nextStatus === SERVE_LIFECYCLE_STATUS.STOPPED ? terminalServeEvent : serveEvent)(
         nextStatus,
         nextStatus === SERVE_LIFECYCLE_STATUS.STOPPING
           ? args.force
@@ -192,7 +205,6 @@ export function planServeStop(args: {
           createTerminateServeMachineJob({
             serveId: args.serve.serveId,
             providerMachineId,
-            providerCredentialId: args.serve.providerCredentialId,
             force: true,
           }),
         ]
@@ -206,7 +218,6 @@ export function planServeMachineProvisioned(args: {
   providerMetadata?: unknown;
   startupTimeout?: {
     delayMs: number;
-    providerCredentialId: string;
     startupTimeoutSeconds: number;
   };
 }): ServeLifecyclePlan {
@@ -232,7 +243,6 @@ export function planServeMachineProvisioned(args: {
             serveId: args.serve.serveId,
             delayMs: args.startupTimeout.delayMs,
             providerMachineId: args.providerMachineId,
-            providerCredentialId: args.startupTimeout.providerCredentialId,
             startupTimeoutSeconds: args.startupTimeout.startupTimeoutSeconds,
           }),
         ]
@@ -278,7 +288,7 @@ export function planServeFailure(args: {
       runtimeTokenHash: "revoked",
     },
     events: [
-      serveEvent(
+      terminalServeEvent(
         SERVE_LIFECYCLE_STATUS.FAILED,
         errorText,
         args.provisioningPayload === undefined
@@ -291,7 +301,6 @@ export function planServeFailure(args: {
     jobs: planForcedServeMachineTermination({
       serveId: args.serve.serveId,
       providerMachineId: args.serve.providerMachineId,
-      providerCredentialId: args.serve.providerCredentialId,
     }),
   };
 }
@@ -309,7 +318,7 @@ export function planServeStoppedAfterTermination(args: {
       runtimeTokenHash: "revoked",
     },
     events: [
-      serveEvent(
+      terminalServeEvent(
         SERVE_LIFECYCLE_STATUS.STOPPED,
         args.force ? "force stop completed" : "stop completed",
         {
@@ -338,7 +347,7 @@ export function planServeStopTerminationFailed(args: {
       runtimeTokenHash: "revoked",
     },
     events: [
-      serveEvent(SERVE_LIFECYCLE_STATUS.FAILED, "serve machine termination failed", {
+      terminalServeEvent(SERVE_LIFECYCLE_STATUS.FAILED, "serve machine termination failed", {
         error: errorText,
         source: "control-plane",
       }),
@@ -349,7 +358,6 @@ export function planServeStopTerminationFailed(args: {
 export function planServeTerminationRetry(args: {
   serve: ServeLifecycleServeState;
   providerMachineId: string;
-  providerCredentialId?: string;
   force: boolean;
   attempt: number;
   maxAttempts: number;
@@ -372,7 +380,6 @@ export function planServeTerminationRetry(args: {
         serveId: args.serve.serveId,
         delayMs: args.delayMs,
         providerMachineId: args.providerMachineId,
-        providerCredentialId: args.providerCredentialId,
         force: args.force,
         attempt: args.attempt,
       }),
@@ -385,6 +392,7 @@ export function planServeRuntimeStatusIngestion(args: {
   status: ServeLifecycleStatus;
   message?: string;
   error?: string;
+  nowMs: number;
 }): ServeLifecyclePlan & { resultStatus: string; error?: string } {
   if (TERMINAL_SERVE_LIFECYCLE_STATUSES.has(args.serve.status)) {
     return { resultStatus: args.serve.status };
@@ -417,6 +425,9 @@ export function planServeRuntimeStatusIngestion(args: {
     patch.error = sanitizeServeRuntimeMessage(args.error || args.message || "serve failed") || "serve failed";
     patch.runtimeTokenHash = "revoked";
   }
+  if (nextStatus === SERVE_LIFECYCLE_STATUS.SERVING) {
+    patch.computeStartedAt = args.serve.computeStartedAt ?? args.nowMs;
+  }
   if (nextStatus === SERVE_LIFECYCLE_STATUS.STOPPED) {
     patch.runtimeTokenHash = "revoked";
   }
@@ -428,7 +439,9 @@ export function planServeRuntimeStatusIngestion(args: {
     resultStatus: nextStatus,
     patch,
     events: [
-      serveEvent(
+      (nextStatus === SERVE_LIFECYCLE_STATUS.FAILED || nextStatus === SERVE_LIFECYCLE_STATUS.STOPPED
+          ? terminalServeEvent
+          : serveEvent)(
         nextStatus,
         sanitizeServeRuntimeMessage(
           nextStatus === SERVE_LIFECYCLE_STATUS.FAILED
@@ -445,7 +458,6 @@ export function planServeRuntimeStatusIngestion(args: {
         ? planForcedServeMachineTermination({
             serveId: args.serve.serveId,
             providerMachineId: args.serve.providerMachineId,
-            providerCredentialId: args.serve.providerCredentialId,
           })
         : [],
   };

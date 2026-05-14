@@ -34,12 +34,31 @@ export type ComputeSettlementResult = {
   hourlyRateCents: number;
 };
 
-function runSettlementIdempotencyKey(runId: string, kind: "debit" | "refund" | "owed") {
-  return `run:${runId}:settlement:${kind}`;
+export type ComputeBillingSubject = {
+  userId: string;
+  referenceType: "run" | "serve";
+  referenceId: string;
+  gpuType?: string;
+  gpuCount?: number;
+  volumeGb?: number;
+  computeHourlyRateCents?: number;
+  computeCollectedCents?: number;
+};
+
+function computeSettlementIdempotencyKey(referenceType: string, referenceId: string, kind: "debit" | "refund" | "owed") {
+  return `${referenceType}:${referenceId}:settlement:${kind}`;
+}
+
+export function computeLiveDebitIdempotencyKey(referenceType: string, referenceId: string) {
+  return `${referenceType}:${referenceId}:live_debit`;
 }
 
 export function runLiveDebitIdempotencyKey(runId: string) {
-  return `run:${runId}:live_debit`;
+  return computeLiveDebitIdempotencyKey("run", runId);
+}
+
+export function serveLiveDebitIdempotencyKey(serveId: string) {
+  return computeLiveDebitIdempotencyKey("serve", serveId);
 }
 
 export function toMinuteBucketUnixMs(value: number) {
@@ -80,35 +99,50 @@ export function resolveRunHourlyRateCents(run: {
   return Math.floor(computed.hourlyRateCents);
 }
 
-export async function settleRunComputeCharge(
+export function resolveComputeSubjectHourlyRateCents(subject: ComputeBillingSubject) {
+  const storedHourlyRateCents = toOptionalUnixMillis(subject.computeHourlyRateCents);
+  if (storedHourlyRateCents !== undefined && storedHourlyRateCents > 0) {
+    return storedHourlyRateCents;
+  }
+  const computed = resolveRunComputePricing({
+    gpuType: subject.gpuType,
+    gpuCount: subject.gpuCount,
+    volumeGb: subject.volumeGb,
+  });
+  if (computed.hourlyRateCents <= 0) {
+    throw new Error(`${subject.referenceType} hourly rate is invalid`);
+  }
+  return Math.floor(computed.hourlyRateCents);
+}
+
+export async function settleComputeCharge(
   ctx: MutationCtx,
-  run: Doc<"runs">,
+  subject: ComputeBillingSubject,
   timing: { durationMs: number },
 ): Promise<ComputeSettlementResult> {
-  const runId = String(run._id);
-  const hourlyRateCents = resolveRunHourlyRateCents(run);
+  const hourlyRateCents = resolveComputeSubjectHourlyRateCents(subject);
   const chargeCents = estimateRunUsageFromHourlyRateCents({
     hourlyRateCents,
     durationMs: timing.durationMs,
   });
-  const collectedCents = Math.max(0, Math.floor(run.computeCollectedCents || 0));
+  const collectedCents = Math.max(0, Math.floor(subject.computeCollectedCents || 0));
   const chargeDeltaCents = chargeCents - collectedCents;
 
   if (chargeDeltaCents > 0) {
     const debited = await upsertLedgerDebitTotal(ctx, {
-      userId: run.userId,
+      userId: subject.userId,
       targetDebitCents: chargeCents,
       eventType: USAGE_EVENT_TYPE.RUN_COMPUTE_SETTLEMENT_DEBIT,
-      idempotencyKey: runLiveDebitIdempotencyKey(runId),
-      referenceType: "run",
-      referenceId: runId,
+      idempotencyKey: computeLiveDebitIdempotencyKey(subject.referenceType, subject.referenceId),
+      referenceType: subject.referenceType,
+      referenceId: subject.referenceId,
       metadata: {
         settlement: "runtime_terminal",
         charge_cents: chargeCents,
         duration_ms: timing.durationMs,
-        gpu_type: run.effectiveGpuType,
-        gpu_count: run.effectiveGpuCount,
-        volume_gb: run.effectiveVolumeGb,
+        gpu_type: subject.gpuType,
+        gpu_count: subject.gpuCount,
+        volume_gb: subject.volumeGb,
         hourly_rate_cents: hourlyRateCents,
       },
     });
@@ -116,20 +150,20 @@ export async function settleRunComputeCharge(
     const outstandingCents = Math.max(0, chargeCents - nextCollectedCents);
     if (outstandingCents > 0) {
       await recordLedgerEvent(ctx, {
-        userId: run.userId,
+        userId: subject.userId,
         eventType: USAGE_EVENT_TYPE.RUN_COMPUTE_SETTLEMENT_OWED,
-        idempotencyKey: runSettlementIdempotencyKey(runId, "owed"),
-        referenceType: "run",
-        referenceId: runId,
+        idempotencyKey: computeSettlementIdempotencyKey(subject.referenceType, subject.referenceId, "owed"),
+        referenceType: subject.referenceType,
+        referenceId: subject.referenceId,
         metadata: {
           settlement: "runtime_terminal",
           charge_cents: chargeCents,
           collected_cents: nextCollectedCents,
           outstanding_cents: outstandingCents,
           duration_ms: timing.durationMs,
-          gpu_type: run.effectiveGpuType,
-          gpu_count: run.effectiveGpuCount,
-          volume_gb: run.effectiveVolumeGb,
+          gpu_type: subject.gpuType,
+          gpu_count: subject.gpuCount,
+          volume_gb: subject.volumeGb,
           hourly_rate_cents: hourlyRateCents,
         },
       });
@@ -159,19 +193,19 @@ export async function settleRunComputeCharge(
   if (chargeDeltaCents < 0) {
     const refundCents = Math.abs(chargeDeltaCents);
     const refunded = await grantUserCredits(ctx, {
-      userId: run.userId,
+      userId: subject.userId,
       amountCents: refundCents,
       eventType: USAGE_EVENT_TYPE.RUN_COMPUTE_SETTLEMENT_REFUND,
-      idempotencyKey: runSettlementIdempotencyKey(runId, "refund"),
-      referenceType: "run",
-      referenceId: runId,
+      idempotencyKey: computeSettlementIdempotencyKey(subject.referenceType, subject.referenceId, "refund"),
+      referenceType: subject.referenceType,
+      referenceId: subject.referenceId,
       metadata: {
         settlement: "runtime_terminal",
         charge_cents: chargeCents,
         duration_ms: timing.durationMs,
-        gpu_type: run.effectiveGpuType,
-        gpu_count: run.effectiveGpuCount,
-        volume_gb: run.effectiveVolumeGb,
+        gpu_type: subject.gpuType,
+        gpu_count: subject.gpuCount,
+        volume_gb: subject.volumeGb,
         hourly_rate_cents: hourlyRateCents,
       },
     });
@@ -199,4 +233,38 @@ export async function settleRunComputeCharge(
     collectedCents: chargeCents,
     outstandingCents: 0,
   };
+}
+
+export async function settleRunComputeCharge(
+  ctx: MutationCtx,
+  run: Doc<"runs">,
+  timing: { durationMs: number },
+): Promise<ComputeSettlementResult> {
+  return settleComputeCharge(ctx, {
+    userId: run.userId,
+    referenceType: "run",
+    referenceId: String(run._id),
+    gpuType: run.effectiveGpuType,
+    gpuCount: run.effectiveGpuCount,
+    volumeGb: run.effectiveVolumeGb,
+    computeHourlyRateCents: run.computeHourlyRateCents,
+    computeCollectedCents: run.computeCollectedCents,
+  }, timing);
+}
+
+export async function settleServeComputeCharge(
+  ctx: MutationCtx,
+  serve: Doc<"serves">,
+  timing: { durationMs: number },
+): Promise<ComputeSettlementResult> {
+  return settleComputeCharge(ctx, {
+    userId: serve.userId,
+    referenceType: "serve",
+    referenceId: String(serve._id),
+    gpuType: serve.gpuType,
+    gpuCount: serve.gpuCount,
+    volumeGb: serve.volumeGb,
+    computeHourlyRateCents: serve.computeHourlyRateCents,
+    computeCollectedCents: serve.computeCollectedCents,
+  }, timing);
 }

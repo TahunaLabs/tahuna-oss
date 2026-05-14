@@ -1,7 +1,7 @@
 import { ConvexError } from "convex/values"
 import type { Doc, Id } from "@convex/_generated/dataModel"
 import type { MutationCtx } from "@convex/_generated/server"
-import { resolveManagedComputeCredential } from "@convex/computeProvider"
+import { requireManagedComputeProvider } from "@convex/computeProvider"
 import {
   enqueueServeLifecycleJobs,
 } from "@convex/convexJobQueue"
@@ -19,13 +19,48 @@ import { getAccessibleServe } from "@convex/servesAccess"
 import { SERVE_STATUS } from "@convex/servesConstants"
 import { toServeResponse } from "@convex/servesRead"
 
+type ServeDbPatch = Partial<Omit<Doc<"serves">, "_id" | "_creationTime">>
+
+export type ServeLifecycleSettlement = {
+  patch?: ServeDbPatch
+  eventMetadata?: Record<string, unknown>
+}
+
+export type ServeCreationComposition = {
+  serveFields?: ServeDbPatch
+  eventMetadata?: Record<string, unknown>
+}
+
+export type ServeLifecycleComposition = {
+  validateCreateServe?: (
+    ctx: MutationCtx,
+    args: {
+      userId: string;
+      gpuType: string;
+      gpuCount: number;
+      volumeGb: number;
+    },
+  ) => Promise<void>;
+  createServe?: (args: {
+    userId: string;
+    gpuType: string;
+    gpuCount: number;
+    volumeGb: number;
+  }) => ServeCreationComposition;
+  settleTerminalServeUsage?: (
+    ctx: MutationCtx,
+    row: Doc<"serves">,
+  ) => Promise<ServeLifecycleSettlement | undefined>;
+}
+
 export function toServeLifecycleState(row: Doc<"serves">): ServeLifecycleServeState {
   return {
     serveId: String(row._id),
     status: row.status,
     providerMachineId: row.providerMachineId,
-    providerCredentialId: row.providerCredentialId,
     runtimeTokenHash: row.runtimeTokenHash,
+    computeStartedAt: row.computeStartedAt,
+    computeEndedAt: row.computeEndedAt,
     error: row.error,
   }
 }
@@ -34,13 +69,18 @@ async function insertServeLifecycleEvents(
   ctx: MutationCtx,
   serveId: Id<"serves">,
   events: ServeLifecycleEvent[],
+  settlement: ServeLifecycleSettlement | undefined,
 ) {
   for (const event of events) {
     await ctx.db.insert("serveEvents", {
       serveId,
       status: event.status,
       message: event.message,
-      metadata: mergeServeEventMetadata(event),
+      metadata: mergeServeEventMetadata(
+        event.includeTerminalTiming && settlement
+          ? { ...event, metadata: { ...(event.metadata || {}), ...settlement.eventMetadata } }
+          : event,
+      ),
     })
   }
 }
@@ -48,12 +88,22 @@ async function insertServeLifecycleEvents(
 export async function applyServeLifecyclePlan(
   ctx: MutationCtx,
   serveId: Id<"serves">,
+  row: Doc<"serves">,
   plan: ServeLifecyclePlan,
+  composition?: ServeLifecycleComposition,
 ) {
-  if (plan.patch && Object.keys(plan.patch).length > 0) {
-    await ctx.db.patch("serves", serveId, plan.patch)
+  const shouldSettleTerminalUsage = (plan.events ?? []).some((event) => event.includeTerminalTiming)
+  const settlement = shouldSettleTerminalUsage
+    ? await composition?.settleTerminalServeUsage?.(ctx, row)
+    : undefined
+  const patch = {
+    ...(plan.patch || {}),
+    ...(settlement?.patch || {}),
   }
-  await insertServeLifecycleEvents(ctx, serveId, plan.events ?? [])
+  if (Object.keys(patch).length > 0) {
+    await ctx.db.patch("serves", serveId, patch)
+  }
+  await insertServeLifecycleEvents(ctx, serveId, plan.events ?? [], settlement)
   await enqueueServeLifecycleJobs(ctx, plan.jobs ?? [])
 }
 
@@ -94,8 +144,21 @@ export async function createServeForUserId(
     };
     enqueueProvisioning?: boolean;
   },
+  composition?: ServeLifecycleComposition,
 ) {
-  const computeCredential = resolveManagedComputeCredential()
+  requireManagedComputeProvider()
+  await composition?.validateCreateServe?.(ctx, {
+    userId: args.userId,
+    gpuType: args.serveConfig.gpuType,
+    gpuCount: args.serveConfig.gpuCount,
+    volumeGb: args.serveConfig.volumeGb,
+  })
+  const creationComposition = composition?.createServe?.({
+    userId: args.userId,
+    gpuType: args.serveConfig.gpuType,
+    gpuCount: args.serveConfig.gpuCount,
+    volumeGb: args.serveConfig.volumeGb,
+  })
 
   const now = Date.now()
   const servePrefix = storageKeys.serveExecutionPrefix(String(args.environmentId), now)
@@ -106,8 +169,8 @@ export async function createServeForUserId(
     dataManifestHash: args.serveConfig.dataManifestHash || undefined,
     logs: `${servePrefix}/logs`,
     status: SERVE_STATUS.QUEUED,
-    providerCredentialId: String(computeCredential.providerCredentialId),
     modelSnapshot: args.modelSnapshot,
+    ...(creationComposition?.serveFields || {}),
   })
 
   await ctx.db.insert("serveEvents", {
@@ -135,6 +198,7 @@ export async function createServeForUserId(
       volume_gb: args.serveConfig.volumeGb,
       port: args.serveConfig.port,
       health_path: args.serveConfig.healthPath,
+      ...(creationComposition?.eventMetadata || {}),
     },
   })
 
@@ -155,13 +219,14 @@ export async function stopServeForUserId(
   userId: string,
   serveId: Id<"serves">,
   force: boolean,
+  composition?: ServeLifecycleComposition,
 ) {
   const row = await getAccessibleServe(ctx, userId, serveId)
   const plan = planServeStop({
     serve: toServeLifecycleState(row),
     force,
   })
-  await applyServeLifecyclePlan(ctx, serveId, plan)
+  await applyServeLifecyclePlan(ctx, serveId, row, plan, composition)
 
   return { serve_id: String(serveId), stop_requested: true, forced: force, status: plan.resultStatus }
 }
@@ -170,11 +235,9 @@ export async function scheduleForcedServeMachineTermination(
   ctx: MutationCtx,
   serveId: Id<"serves">,
   providerMachineId: string | undefined,
-  providerCredentialId: string | undefined,
 ) {
   await enqueueServeLifecycleJobs(ctx, planForcedServeMachineTermination({
     serveId: String(serveId),
     providerMachineId,
-    providerCredentialId,
   }))
 }

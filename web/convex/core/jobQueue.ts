@@ -41,13 +41,11 @@ export type ProvisionRunJob = BaseRunJob<typeof CORE_JOB_TYPES.PROVISION_RUN>;
 
 export type CheckStartupTimeoutJob = BaseRunJob<typeof CORE_JOB_TYPES.CHECK_STARTUP_TIMEOUT> & {
   providerMachineId: string;
-  providerCredentialId: string;
   fingerprint: StartupTimeoutFingerprint;
 };
 
 export type TerminateMachineJob = BaseRunJob<typeof CORE_JOB_TYPES.TERMINATE_MACHINE> & {
   providerMachineId: string;
-  providerCredentialId?: string;
   force: boolean;
   attempt?: number;
 };
@@ -65,13 +63,11 @@ export type ProvisionServeJob = BaseServeJob<typeof CORE_JOB_TYPES.PROVISION_SER
 
 export type CheckServeStartupTimeoutJob = BaseServeJob<typeof CORE_JOB_TYPES.CHECK_SERVE_STARTUP_TIMEOUT> & {
   providerMachineId: string;
-  providerCredentialId: string;
   startupTimeoutSeconds: number;
 };
 
 export type TerminateServeMachineJob = BaseServeJob<typeof CORE_JOB_TYPES.TERMINATE_SERVE_MACHINE> & {
   providerMachineId: string;
-  providerCredentialId?: string;
   force: boolean;
   attempt?: number;
 };
@@ -139,7 +135,6 @@ export function createCheckStartupTimeoutJob(args: {
   runId: string;
   delayMs: number;
   providerMachineId: string;
-  providerCredentialId: string;
   fingerprint: StartupTimeoutFingerprint;
 }): CheckStartupTimeoutJob {
   return {
@@ -147,7 +142,6 @@ export function createCheckStartupTimeoutJob(args: {
     runId: args.runId,
     delayMs: normalizeDelayMs(args.delayMs),
     providerMachineId: args.providerMachineId,
-    providerCredentialId: args.providerCredentialId,
     fingerprint: args.fingerprint,
     idempotencyKey: runJobIdempotencyKey(
       args.runId,
@@ -161,7 +155,6 @@ export function createTerminateMachineJob(args: {
   runId: string;
   delayMs?: number;
   providerMachineId: string;
-  providerCredentialId?: string;
   force: boolean;
   attempt?: number;
 }): TerminateMachineJob {
@@ -171,7 +164,6 @@ export function createTerminateMachineJob(args: {
     runId: args.runId,
     delayMs: normalizeDelayMs(args.delayMs),
     providerMachineId: args.providerMachineId,
-    providerCredentialId: args.providerCredentialId,
     force: args.force,
     attempt,
     idempotencyKey: runJobIdempotencyKey(
@@ -239,7 +231,6 @@ export function createCheckServeStartupTimeoutJob(args: {
   serveId: string;
   delayMs: number;
   providerMachineId: string;
-  providerCredentialId: string;
   startupTimeoutSeconds: number;
 }): CheckServeStartupTimeoutJob {
   return {
@@ -247,7 +238,6 @@ export function createCheckServeStartupTimeoutJob(args: {
     serveId: args.serveId,
     delayMs: normalizeDelayMs(args.delayMs),
     providerMachineId: args.providerMachineId,
-    providerCredentialId: args.providerCredentialId,
     startupTimeoutSeconds: Math.max(0, Math.floor(args.startupTimeoutSeconds)),
     idempotencyKey: serveJobIdempotencyKey(
       args.serveId,
@@ -261,7 +251,6 @@ export function createTerminateServeMachineJob(args: {
   serveId: string;
   delayMs?: number;
   providerMachineId: string;
-  providerCredentialId?: string;
   force: boolean;
   attempt?: number;
 }): TerminateServeMachineJob {
@@ -271,7 +260,6 @@ export function createTerminateServeMachineJob(args: {
     serveId: args.serveId,
     delayMs: normalizeDelayMs(args.delayMs),
     providerMachineId: args.providerMachineId,
-    providerCredentialId: args.providerCredentialId,
     force: args.force,
     attempt,
     idempotencyKey: serveJobIdempotencyKey(
@@ -315,7 +303,6 @@ export function toCoreJobRecord(job: CoreJob): CoreJobRecordInput {
       payload: {
         runId: job.runId,
         providerMachineId: job.providerMachineId,
-        providerCredentialId: job.providerCredentialId,
         fingerprint: job.fingerprint,
       },
     };
@@ -328,7 +315,6 @@ export function toCoreJobRecord(job: CoreJob): CoreJobRecordInput {
       payload: {
         runId: job.runId,
         providerMachineId: job.providerMachineId,
-        providerCredentialId: job.providerCredentialId,
         force: job.force,
         attempt: job.attempt,
       },
@@ -363,7 +349,6 @@ export function toCoreJobRecord(job: CoreJob): CoreJobRecordInput {
       payload: {
         serveId: job.serveId,
         providerMachineId: job.providerMachineId,
-        providerCredentialId: job.providerCredentialId,
         startupTimeoutSeconds: job.startupTimeoutSeconds,
       },
     };
@@ -376,7 +361,6 @@ export function toCoreJobRecord(job: CoreJob): CoreJobRecordInput {
       payload: {
         serveId: job.serveId,
         providerMachineId: job.providerMachineId,
-        providerCredentialId: job.providerCredentialId,
         force: job.force,
         attempt: job.attempt,
       },

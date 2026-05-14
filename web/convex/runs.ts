@@ -253,7 +253,6 @@ const provisioningPayloadValidator = v.object({
 });
 const runProvisionSpecValidator = v.object({
   run_id: v.string(),
-  provider_credential_id: v.string(),
   effective_gpu_type: v.string(),
   effective_gpu_count: v.number(),
   effective_volume_gb: v.number(),
@@ -776,7 +775,6 @@ export const scheduleTerminationRetry = internalMutation({
   args: {
     runId: v.id("runs"),
     providerMachineId: v.string(),
-    providerCredentialId: v.optional(v.string()),
     force: v.optional(v.boolean()),
     attempt: v.number(),
     error: v.string(),
@@ -790,7 +788,6 @@ export const scheduleTerminationRetry = internalMutation({
     await applyRunLifecyclePlan(ctx, args.runId, row, planTerminationRetry({
       run: toRunLifecycleState(row),
       providerMachineId: args.providerMachineId,
-      providerCredentialId: args.providerCredentialId ? String(args.providerCredentialId) : undefined,
       force: args.force === true,
       attempt: args.attempt,
       maxAttempts: RUN_CONFIG.terminationRetryMaxAttempts,
@@ -813,7 +810,6 @@ export const internalTerminateMachine = internalAction({
   args: {
     runId: v.id("runs"),
     providerMachineId: v.string(),
-    providerCredentialId: v.optional(v.string()),
     force: v.optional(v.boolean()),
     attempt: v.optional(v.number()),
   },
@@ -821,27 +817,23 @@ export const internalTerminateMachine = internalAction({
     await terminateRuntimeMachineWithRetry({
       ctx,
       providerMachineId: args.providerMachineId,
-      providerCredentialId: args.providerCredentialId ?? null,
       attempt: args.attempt ?? 0,
       shouldTerminate: async () =>
         await ctx.runQuery(internal.runs.internalShouldTerminateMachine, {
           runId: args.runId,
           force: args.force === true,
         }),
-      resolveProviderCredentialId: async () =>
-        await ctx.runQuery(internal.runs.internalGetProviderCredentialId, { runId: args.runId }),
       onTerminated: async () => {
         await ctx.runMutation(internal.runs.markCancelledAfterTermination, {
           runId: args.runId,
           force: args.force === true,
         });
       },
-      onRetry: async ({ nextAttempt, providerCredentialId, error }) => {
+      onRetry: async ({ nextAttempt, error }) => {
         if (nextAttempt < RUN_CONFIG.terminationRetryMaxAttempts) {
           await ctx.runMutation(internal.runs.scheduleTerminationRetry, {
             runId: args.runId,
             providerMachineId: args.providerMachineId,
-            providerCredentialId,
             force: args.force === true,
             attempt: nextAttempt,
             error,
@@ -883,12 +875,8 @@ export const internalGetRunProvisionSpec = internalQuery({
     if (!env) {
       throw new ConvexError("environment not found");
     }
-    if (!row.providerCredentialId) {
-      throw new ConvexError("run is missing its compute provider credential");
-    }
     return {
       run_id: String(row._id),
-      provider_credential_id: row.providerCredentialId,
       effective_gpu_type: row.effectiveGpuType || env.gpuType,
       effective_gpu_count: row.effectiveGpuCount || env.gpuCount,
       effective_volume_gb: row.effectiveVolumeGb || env.volumeGb,
@@ -896,15 +884,6 @@ export const internalGetRunProvisionSpec = internalQuery({
       version: env.version,
       python_version: env.pythonVersion || PYTHON_CONFIG.defaultVersion,
     };
-  },
-});
-
-export const internalGetProviderCredentialId = internalQuery({
-  args: { runId: v.id("runs") },
-  returns: v.union(v.string(), v.null()),
-  handler: async (ctx, args) => {
-    const row = await ctx.db.get("runs", args.runId);
-    return row?.providerCredentialId ?? null;
   },
 });
 
@@ -1075,7 +1054,6 @@ export const enforceProvisioningStartupTimeout = internalAction({
   args: {
     runId: v.id("runs"),
     providerMachineId: v.string(),
-    providerCredentialId: v.string(),
     fingerprint: runtimeCompatibilityFingerprintValidator,
   },
   returns: v.null(),
@@ -1161,7 +1139,6 @@ export const provisionRun = internalAction({
         },
         createMachine: {
           name: `tahuna-${String(args.runId)}`,
-          providerCredentialId: runSpec.provider_credential_id,
           imageName: compatibilityFingerprint.imageName,
           gpuType: runSpec.effective_gpu_type,
           gpuCount: runSpec.effective_gpu_count,
@@ -1201,7 +1178,6 @@ export const provisionRun = internalAction({
       await ctx.runMutation(internal.runs.markMachineProvisioned, {
         runId: args.runId,
         providerMachineId: provisionResult.providerMachineId,
-        providerCredentialId: runSpec.provider_credential_id,
         fingerprint: compatibilityFingerprint,
         providerMetadata: provisionResult.providerMetadata,
       });
@@ -1228,7 +1204,6 @@ export const provisionRun = internalAction({
         await enqueueTerminateMachineJob(ctx, createTerminateMachineJob({
           runId: String(args.runId),
           providerMachineId: provisionedProviderMachineId,
-          providerCredentialId: runSpec.provider_credential_id,
           force: true,
         }));
       }
@@ -1241,7 +1216,6 @@ export const markMachineProvisioned = internalMutation({
   args: {
     runId: v.id("runs"),
     providerMachineId: v.string(),
-    providerCredentialId: v.string(),
     fingerprint: runtimeCompatibilityFingerprintValidator,
     providerMetadata: v.optional(v.any()),
   },
@@ -1257,7 +1231,6 @@ export const markMachineProvisioned = internalMutation({
       providerMetadata: args.providerMetadata,
       startupTimeout: {
         delayMs: RUN_CONFIG.startupTimeoutSeconds * 1000,
-        providerCredentialId: String(args.providerCredentialId),
         fingerprint: normalizeCompatibilityFingerprint(args.fingerprint as RuntimeCompatibilityFingerprint),
       },
     }));

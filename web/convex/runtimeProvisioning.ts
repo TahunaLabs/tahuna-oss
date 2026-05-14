@@ -42,7 +42,6 @@ export function generateRuntimeToken() {
 export type CreateRuntimeMachineArgs = {
   ctx: ActionCtx;
   name: string;
-  providerCredentialId: string;
   imageName: string;
   gpuType: string;
   gpuCount: number;
@@ -66,21 +65,17 @@ type ProvisionRuntimeMachineArgs = {
 type TerminateRuntimeMachineWithRetryArgs = {
   ctx: ActionCtx;
   providerMachineId: string;
-  providerCredentialId?: string | null;
   attempt: number;
   shouldTerminate: () => Promise<boolean>;
-  resolveProviderCredentialId: () => Promise<string | null>;
   onTerminated: () => Promise<void>;
   onRetry: (args: {
     nextAttempt: number;
-    providerCredentialId?: string;
     error: string;
   }) => Promise<void>;
 };
 
 export async function createRuntimeMachine(args: CreateRuntimeMachineArgs) {
   return await computeProvider.createMachine(args.ctx, {
-    providerCredentialId: args.providerCredentialId,
     name: args.name,
     imageName: args.imageName,
     gpuType: args.gpuType,
@@ -116,7 +111,6 @@ export async function terminateRuntimeMachine(
   ctx: ActionCtx,
   args: {
     providerMachineId: string;
-    providerCredentialId: string;
   },
 ) {
   if (!args.providerMachineId) {
@@ -124,7 +118,6 @@ export async function terminateRuntimeMachine(
   }
   await computeProvider.terminateMachine(ctx, {
     providerMachineId: args.providerMachineId,
-    providerCredentialId: args.providerCredentialId,
   });
 }
 
@@ -134,15 +127,9 @@ export async function terminateRuntimeMachineWithRetry(args: TerminateRuntimeMac
     return;
   }
 
-  let providerCredentialId: string | null = args.providerCredentialId ?? null;
   try {
-    providerCredentialId = providerCredentialId ?? await args.resolveProviderCredentialId();
-    if (!providerCredentialId) {
-      throw new Error("compute provider credential is missing for machine termination");
-    }
     await terminateRuntimeMachine(args.ctx, {
       providerMachineId: args.providerMachineId,
-      providerCredentialId,
     });
     await args.onTerminated();
   } catch (error) {
@@ -150,7 +137,6 @@ export async function terminateRuntimeMachineWithRetry(args: TerminateRuntimeMac
     const nextAttempt = args.attempt + 1;
     await args.onRetry({
       nextAttempt,
-      providerCredentialId: providerCredentialId ?? undefined,
       error: detail,
     });
   }

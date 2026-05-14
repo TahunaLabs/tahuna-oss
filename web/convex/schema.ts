@@ -67,7 +67,6 @@ export default defineSchema({
     status: v.string(),
     error: v.optional(v.string()),
     providerMachineId: v.optional(v.string()),
-    providerCredentialId: v.optional(v.string()),
     effectiveGpuType: v.optional(v.string()),
     effectiveGpuCount: v.optional(v.number()),
     effectiveVolumeGb: v.optional(v.number()),
@@ -126,8 +125,9 @@ export default defineSchema({
     status: v.string(),
     error: v.optional(v.string()),
     providerMachineId: v.optional(v.string()),
-    providerCredentialId: v.optional(v.string()),
     runtimeTokenHash: v.optional(v.string()),
+    computeStartedAt: v.optional(v.number()),
+    computeEndedAt: v.optional(v.number()),
     codeManifestHash: v.optional(v.string()),
     dataManifestHash: v.optional(v.string()),
     dependencyGroup: v.optional(v.string()),
@@ -154,6 +154,7 @@ export default defineSchema({
       objectCount: v.number(),
       totalBytes: v.number(),
     }),
+    ...cloudRunBillingFields,
   })
     .index("by_user", ["userId"])
     .index("by_user_and_environment", ["userId", "environmentId"])

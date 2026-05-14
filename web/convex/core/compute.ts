@@ -9,7 +9,6 @@ export type ComputeOffer = {
 };
 
 export type CreateMachineArgs = {
-  providerCredentialId: string;
   name: string;
   imageName: string;
   gpuType: string;
@@ -25,7 +24,6 @@ export type CreateMachineResult = {
 };
 
 export type GetMachineArgs = {
-  providerCredentialId: string;
   providerMachineId: string;
 };
 
@@ -36,7 +34,6 @@ export type ComputeMachine = {
 };
 
 export type TerminateMachineArgs = {
-  providerCredentialId: string;
   providerMachineId: string;
 };
 
@@ -48,7 +45,7 @@ export type ComputeEndpointArgs = {
 export type ComputeProvider = {
   listOffers(
     ctx: ComputeProviderContext,
-    args: { userId?: string; providerCredentialId?: string },
+    args: { userId?: string },
   ): Promise<ComputeOffer[]>;
   createMachine(ctx: ComputeProviderContext, args: CreateMachineArgs): Promise<CreateMachineResult>;
   getMachine(ctx: ComputeProviderContext, args: GetMachineArgs): Promise<ComputeMachine | null>;
