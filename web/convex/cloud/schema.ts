@@ -72,5 +72,6 @@ export const cloudSchemaTables = {
   })
     .index("by_user", ["userId"])
     .index("by_user_and_created_at", ["userId", "createdAt"])
+    .index("by_user_status_and_created_at", ["userId", "status", "createdAt"])
     .index("by_stripe_checkout_session_id", ["stripeCheckoutSessionId"]),
 } as const;

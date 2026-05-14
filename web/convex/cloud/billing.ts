@@ -225,6 +225,46 @@ export const listMyUsageEvents = query({
   },
 });
 
+export const listMyPaymentTransactions = query({
+  args: {
+    limit: v.optional(v.number()),
+  },
+  returns: v.array(
+    v.object({
+      amount_cents: v.number(),
+      credits_cents: v.number(),
+      currency: v.string(),
+      stripe_checkout_session_id: v.union(v.string(), v.null()),
+      stripe_payment_intent_id: v.union(v.string(), v.null()),
+      created_at: v.number(),
+      fulfilled_at: v.union(v.number(), v.null()),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    const user = await authComponent.getAuthUser(ctx);
+    if (!user) {
+      throw new ConvexError("Not authenticated");
+    }
+    const userId = String(user._id);
+    const rawLimit = typeof args.limit === "number" && Number.isFinite(args.limit) ? Math.floor(args.limit) : 20;
+    const limit = Math.max(1, Math.min(100, rawLimit));
+    const rows = await ctx.db
+      .query("stripeCheckoutSessions")
+      .withIndex("by_user_status_and_created_at", (q) => q.eq("userId", userId).eq("status", "fulfilled"))
+      .order("desc")
+      .take(limit);
+    return rows.map((row) => ({
+      amount_cents: row.amountCents,
+      credits_cents: row.creditsCents,
+      currency: row.currency,
+      stripe_checkout_session_id: row.stripeCheckoutSessionId ?? null,
+      stripe_payment_intent_id: row.stripePaymentIntentId ?? null,
+      created_at: row.createdAt,
+      fulfilled_at: row.fulfilledAt ?? null,
+    }));
+  },
+});
+
 export const ensureMyBillingAccount = mutation({
   args: {},
   returns: v.object({

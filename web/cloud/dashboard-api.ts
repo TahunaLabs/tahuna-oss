@@ -6,6 +6,7 @@ import { api } from "@convex/_generated/api"
 import type {
   CloudDashboardCheckoutSession,
   CloudDashboardCredits,
+  CloudDashboardPaymentTransaction,
   CloudDashboardUsageEvent,
   CloudRunpodCredentialStatus,
 } from "@/cloud/dashboard-api-types"
@@ -17,6 +18,12 @@ export function useCloudDashboardCredits(shouldLoad: boolean) {
 export function useCloudDashboardUsageEvents(shouldLoad: boolean, limit: number) {
   return useQuery(api.cloud.billing.listMyUsageEvents, shouldLoad ? { limit } : "skip") as
     | CloudDashboardUsageEvent[]
+    | undefined
+}
+
+export function useCloudDashboardPaymentTransactions(shouldLoad: boolean, limit: number) {
+  return useQuery(api.cloud.billing.listMyPaymentTransactions, shouldLoad ? { limit } : "skip") as
+    | CloudDashboardPaymentTransaction[]
     | undefined
 }
 

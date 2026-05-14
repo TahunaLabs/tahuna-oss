@@ -8,6 +8,7 @@ import { BillingView } from "@/components/cloud/dashboard/billing/billing-view"
 import {
   useCreateCloudDashboardTopUpCheckoutSession,
   useCloudDashboardCredits,
+  useCloudDashboardPaymentTransactions,
 } from "@/cloud/dashboard-api"
 
 type Props = { shouldLoadQueries: boolean }
@@ -16,6 +17,7 @@ export function BillingContainer({ shouldLoadQueries }: Props) {
   const [customTopUpAmount, setCustomTopUpAmount] = useState("")
   const [checkoutAmountCents, setCheckoutAmountCents] = useState<number | null>(null)
   const myCredits = useCloudDashboardCredits(shouldLoadQueries)
+  const paymentTransactions = useCloudDashboardPaymentTransactions(shouldLoadQueries, 8)
   const createTopUpCheckoutSession = useCreateCloudDashboardTopUpCheckoutSession()
 
   async function startTopUp(amountCents: number) {
@@ -44,6 +46,7 @@ export function BillingContainer({ shouldLoadQueries }: Props) {
       minimumTopUpAmountCents={CLOUD_BILLING_CONFIG.minimumTopUpAmountCents}
       onCustomTopUpAmountChange={setCustomTopUpAmount}
       onStartTopUp={(amountCents) => { void startTopUp(amountCents) }}
+      paymentTransactions={paymentTransactions ?? []}
     />
   )
 }

@@ -7,6 +7,8 @@ import { DashboardViewLayout } from "@/components/app-shell/dashboard-view-layou
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import type { CloudDashboardPaymentTransaction } from "@/cloud/dashboard-api-types"
 
 type BillingViewProps = {
   balanceCents: number
@@ -19,6 +21,7 @@ type BillingViewProps = {
   minimumTopUpAmountCents: number
   onCustomTopUpAmountChange: (value: string) => void
   onStartTopUp: (amountCents: number) => void
+  paymentTransactions: CloudDashboardPaymentTransaction[]
 }
 
 function formatMoney(cents: number, currency: string) {
@@ -51,6 +54,15 @@ function formatPlainMoney(cents: number) {
   return `$${(Math.max(0, cents) / 100).toFixed(0)}`
 }
 
+function formatTransactionTimestamp(timestamp: number) {
+  return new Intl.DateTimeFormat(undefined, {
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(timestamp))
+}
+
 export function BillingView({
   balanceCents,
   checkoutAmountCents,
@@ -62,6 +74,7 @@ export function BillingView({
   minimumTopUpAmountCents,
   onCustomTopUpAmountChange,
   onStartTopUp,
+  paymentTransactions,
 }: BillingViewProps) {
   const [selectedFixedAmountCents, setSelectedFixedAmountCents] = useState(fixedTopUpAmountCents[0] ?? null)
   const customAmountCents = parseDollarAmountCents(customTopUpAmount)
@@ -173,6 +186,48 @@ export function BillingView({
             </Button>
           </form>
           ) : null}
+        </div>
+
+        <div className="mt-6 border-t border-border pt-6">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-base font-medium text-foreground">Payment history</p>
+              <p className="mt-1 text-sm text-muted-foreground">Card payments made to Tahuna.</p>
+            </div>
+          </div>
+
+          {paymentTransactions.length === 0 ? (
+            <div className="mt-4 rounded border border-border px-4 py-5 text-sm text-muted-foreground">
+              No payments yet.
+            </div>
+          ) : (
+            <div className="mt-4 overflow-x-auto rounded border border-border">
+              <Table className="table-fixed">
+                <TableHeader>
+                  <TableRow variant="head">
+                    <TableHead>Time</TableHead>
+                    <TableHead className="text-right">Amount</TableHead>
+                    <TableHead className="text-right">Credit</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {paymentTransactions.map((transaction) => (
+                    <TableRow key={`${transaction.created_at}:${transaction.stripe_checkout_session_id}`}>
+                      <TableCell className="text-xs text-muted-foreground">
+                        {formatTransactionTimestamp(transaction.fulfilled_at ?? transaction.created_at)}
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-sm">
+                        {formatMoney(transaction.amount_cents, transaction.currency || currency)}
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-sm text-muted-foreground">
+                        {formatMoney(transaction.credits_cents, currency)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
         </div>
       </Card>
     </DashboardViewLayout>
