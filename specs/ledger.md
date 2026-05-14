@@ -18,6 +18,7 @@ This is prepaid credits accounting with Stripe funding:
 - Storage growth debits.
 - Prepaid Stripe Checkout top-ups.
 - Billing UI reads balance + ledger history from Convex.
+- Hosted compute is managed by Tahuna; BYOK is not part of the main cloud billing path.
 
 ## Identity Source of Truth
 
@@ -72,6 +73,8 @@ On first authenticated usage:
    - `creditsDeltaCents = +initialCreditCents`
 
 ## Compute Billing (Implemented Now)
+
+Compute billing applies to hosted managed runs. Tahuna-owned provider credentials authorize provisioning, and Tahuna credits are debited for compute usage.
 
 ### Pricing Formula
 
@@ -152,6 +155,8 @@ Billing page shows:
 - current account balance (`getMyCredits`),
 - ledger history (`listMyUsageEvents`),
 - event details including run metadata.
+
+Users should not choose between managed billing and BYOK in Tahuna Cloud. Billing UX should present one path: add credits, launch managed runs, and inspect credit/payment history.
 
 ## Current Invariants
 

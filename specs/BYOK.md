@@ -1,32 +1,42 @@
 # BYOK
 
-Last reviewed: 2026-05-07
+Last reviewed: 2026-05-14
 
-## Current Behavior
+## Product Status
 
-Tahuna supports bring-your-own-key for Runpod only.
+BYOK is not part of the main hosted Tahuna Cloud path.
 
-Users manage the Runpod key from the dashboard Providers view. Saving a key trims and validates it against Runpod, encrypts it, stores a prefix and fingerprint, and revokes any previously active Runpod credential for that user. Revocation marks active rows with `revokedAt`.
+Tahuna Cloud should use managed billing only:
 
-Runs and serves resolve the latest active Runpod credential when provisioning compute. The selected credential id is stored on the run or serve record as `providerCredentialId`.
+- users buy Tahuna credits,
+- Tahuna launches compute with deployment-owned provider credentials,
+- Tahuna pays the compute provider,
+- Tahuna debits Tahuna credits for compute and storage usage.
 
-## Data Model
+## Legacy State
 
-Runpod credentials live in `runpodCredentials`:
+Older code may still contain user-owned RunPod credential storage and provider-resolution paths:
 
-- `userId`
-- encrypted key fields: `keyCiphertext`, `keyIv`, `keyVersion`
-- display and identity fields: `keyPrefix`, `fingerprint`
-- lifecycle fields: `validatedAt`, `updatedAt`, optional `revokedAt`
+- `runpodCredentials`
+- dashboard Providers UI
+- `billing_mode: "byok"`
+- user credential resolution for runs or serves
 
-## Security
+These are legacy implementation details to remove from the hosted cloud product. Do not build new cloud UX or API behavior on top of them.
 
-- Plaintext Runpod keys are never stored.
-- The dashboard only displays whether a key is configured plus its prefix and timestamps.
-- Runtime env vars are separate from provider credentials.
-- A revoked provider key is not selected for new runs or serves.
+## Removal Target
 
-## Limits
+Fully managed billing means:
 
-- There is no provider choice beyond Runpod in the current codebase.
-- There is no multi-key selection UI; the latest active credential is used.
+- no public billing-mode selector,
+- no public `billing_mode` argument,
+- no dashboard Providers page for RunPod API keys,
+- no user-owned provider credential requirement before launching,
+- no code path that skips Tahuna credit debits for hosted runs,
+- no managed-to-BYOK or BYOK-to-managed fallback.
+
+If a self-hosted BYOK mode is needed later, it should be implemented as a separate deployment/configuration mode with a different product surface, not as a hosted per-user or per-run choice.
+
+## Data Retention
+
+Do not casually delete historical credential rows or fields until active runs, serves, and termination jobs no longer depend on them. Existing records can remain inert legacy data while the hosted product path stops reading or writing them.

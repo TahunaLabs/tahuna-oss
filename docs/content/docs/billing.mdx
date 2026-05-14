@@ -1,0 +1,42 @@
+---
+title: Billing
+description: How Tahuna credits and managed compute billing work.
+---
+
+Tahuna Cloud uses managed billing. You add Tahuna credits with Stripe Checkout, launch runs, and Tahuna debits credits for hosted compute and storage usage.
+
+You do not need a RunPod account or RunPod API key for the normal cloud path. Tahuna owns the provider credentials, pays the compute provider, and treats provider-side failures as Tahuna operational failures.
+
+## Credits
+
+- `$1 paid = $1 Tahuna credit`
+- Fixed top-ups: `$10`, `$25`, `$100`
+- Custom top-ups are available within configured bounds
+- Open or cancelled Checkout sessions are not payments and do not appear in payment history
+
+Payment history shows fulfilled Stripe Checkout payments. Ledger history shows balance-affecting events such as credit grants, compute charges, settlement refunds, and storage charges.
+
+## Run charges
+
+Before a run launches, Tahuna checks that your balance can cover the configured launch estimate. If your balance is too low, the launch fails before provisioning and asks you to add credits.
+
+While a run is active, Tahuna accrues compute charges from the run's GPU type, GPU count, volume size, and runtime duration. When the run reaches a terminal state, Tahuna reconciles the final compute charge against the actual runtime duration.
+
+## Storage charges
+
+Tahuna charges storage when stored data grows. Zero or negative size deltas are not charged.
+
+## Provider credentials
+
+Provider credentials are deployment configuration, not user configuration. In development, the managed provider key can be your own provider API key set as `TAHUNA_MANAGED_RUNPOD_API_KEY`. In production, this should be a Tahuna-owned key with appropriate balance, quota, and operational monitoring.
+
+BYOK is not part of the main Tahuna Cloud billing model. Any self-hosted or legacy provider-key workflow should be kept separate from the hosted product path.
+
+## Not Included Yet
+
+- Stripe Billing Portal
+- Saved payment method management
+- Auto top-up
+- Refund, dispute, or chargeback automation
+- In-app invoice or receipt export
+- Payment reconciliation reports
