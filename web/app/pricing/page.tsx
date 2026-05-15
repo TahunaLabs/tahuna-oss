@@ -6,7 +6,7 @@ import { LandingPricingSection } from "@/components/landing/landing-pricing-sect
 
 export const metadata: Metadata = {
   title: "Pricing | Tahuna",
-  description: "Tahuna pricing for managed GPU compute, attached volume, and storage growth.",
+  description: "Tahuna pricing for managed GPU compute and attached volume.",
   alternates: { canonical: "/pricing" },
 }
 

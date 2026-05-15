@@ -22,6 +22,13 @@ function toOptionalUnixMillis(value: number | undefined) {
   return Math.max(0, Math.floor(value));
 }
 
+function toOptionalPositiveNumber(value: number | undefined) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return undefined;
+  }
+  return Math.max(0, value);
+}
+
 export type ComputeSettlementResult = {
   chargeCents: number;
   chargeStatus: "charged" | "owed";
@@ -69,7 +76,7 @@ export function estimateRunUsageFromHourlyRateCents(args: {
   hourlyRateCents: number;
   durationMs: number | undefined;
 }) {
-  const hourlyRateCents = Math.max(0, Math.floor(args.hourlyRateCents));
+  const hourlyRateCents = Math.max(0, args.hourlyRateCents);
   const durationMs = toOptionalUnixMillis(args.durationMs);
   if (hourlyRateCents <= 0 || durationMs === undefined || durationMs <= 0) {
     return 0;
@@ -84,7 +91,7 @@ export function resolveRunHourlyRateCents(run: {
   effectiveGpuCount?: number;
   effectiveVolumeGb?: number;
 }) {
-  const storedHourlyRateCents = toOptionalUnixMillis(run.computeHourlyRateCents);
+  const storedHourlyRateCents = toOptionalPositiveNumber(run.computeHourlyRateCents);
   if (storedHourlyRateCents !== undefined && storedHourlyRateCents > 0) {
     return storedHourlyRateCents;
   }
@@ -96,11 +103,11 @@ export function resolveRunHourlyRateCents(run: {
   if (computed.hourlyRateCents <= 0) {
     throw new Error("run hourly rate is invalid");
   }
-  return Math.floor(computed.hourlyRateCents);
+  return computed.hourlyRateCents;
 }
 
 export function resolveComputeSubjectHourlyRateCents(subject: ComputeBillingSubject) {
-  const storedHourlyRateCents = toOptionalUnixMillis(subject.computeHourlyRateCents);
+  const storedHourlyRateCents = toOptionalPositiveNumber(subject.computeHourlyRateCents);
   if (storedHourlyRateCents !== undefined && storedHourlyRateCents > 0) {
     return storedHourlyRateCents;
   }
@@ -112,7 +119,7 @@ export function resolveComputeSubjectHourlyRateCents(subject: ComputeBillingSubj
   if (computed.hourlyRateCents <= 0) {
     throw new Error(`${subject.referenceType} hourly rate is invalid`);
   }
-  return Math.floor(computed.hourlyRateCents);
+  return computed.hourlyRateCents;
 }
 
 export async function settleComputeCharge(

@@ -29,14 +29,14 @@ export function LandingPricingSection() {
           <div>
             <p className="mb-3 text-xs font-mono uppercase tracking-ui-eyebrow text-muted-foreground">Pricing</p>
             <h2 className="font-serif text-3xl leading-tight tracking-tight text-foreground md:text-4xl">
-              Pay for the compute
+              Pay for compute
               <br />
-              <span className="italic">and storage</span> you use
+              <span className="italic">and attached volume</span>
             </h2>
           </div>
 
           <p className="max-w-lg text-lg font-serif font-medium text-foreground md:text-xl">
-            Runs and serves draw down credits for active GPU time, attached volume, and storage growth.
+            Runs and serves draw down credits for active GPU time and attached volume.
           </p>
         </div>
 
@@ -86,26 +86,14 @@ export function LandingPricingSection() {
             <Card variant="default" className="bg-card/95">
               <CardContent>
                 <div className="mb-4 flex items-center justify-between gap-3">
-                  <h3 className="font-serif text-2xl text-foreground">Storage</h3>
-                  <Badge variant="ghost">Growth</Badge>
+                  <h3 className="font-serif text-2xl text-foreground">Volume</h3>
+                  <Badge variant="ghost">RunPod</Badge>
                 </div>
                 <div className="space-y-3 text-sm">
                   <div className="flex items-center justify-between gap-4">
                     <span className="text-muted-foreground">Attached volume</span>
                     <span className="font-mono text-foreground">
-                      {formatCents(CLOUD_BILLING_CONFIG.computeVolumeGbHourlyRateCents)} / GB / hr
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between gap-4">
-                    <span className="text-muted-foreground">Stored data growth</span>
-                    <span className="font-mono text-foreground">
-                      {formatCents(CLOUD_BILLING_CONFIG.storageGiBDeltaRateCents)} / GiB
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between gap-4">
-                    <span className="text-muted-foreground">Minimum charge</span>
-                    <span className="font-mono text-foreground">
-                      {formatCents(CLOUD_BILLING_CONFIG.minimumChargeCents)}
+                      {formatCents(CLOUD_BILLING_CONFIG.computeVolumeGbMonthlyRateCents)} / GB / mo
                     </span>
                   </div>
                 </div>

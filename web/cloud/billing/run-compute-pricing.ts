@@ -1,6 +1,8 @@
 import { CLOUD_BILLING_CONFIG } from "@/cloud/config";
 import { getRunpodGpuPricePerHourCents } from "@/cloud/providers/runpod-gpu-pricing";
 
+const HOURS_PER_MONTH = 730;
+
 export type RunComputePricing = {
   gpuCount: number;
   volumeGb: number;
@@ -34,7 +36,8 @@ export function resolveRunComputePricing(args: {
     gpuUnitHourlyRateCents = lookupGpuUnitHourlyRateCents;
   }
   const gpuHourlyRateCents = gpuCount * gpuUnitHourlyRateCents;
-  const volumeHourlyRateCents = volumeGb * CLOUD_BILLING_CONFIG.computeVolumeGbHourlyRateCents;
+  const volumeHourlyRateCents =
+    (volumeGb * CLOUD_BILLING_CONFIG.computeVolumeGbMonthlyRateCents) / HOURS_PER_MONTH;
   return {
     gpuCount,
     volumeGb,

@@ -3,15 +3,12 @@ import type { Doc } from "@convex/_generated/dataModel";
 import { internalMutation, type MutationCtx } from "@convex/_generated/server";
 import { CLOUD_BILLING_CONFIG } from "@/cloud/config";
 
-const BYTES_PER_GIB = 1024 * 1024 * 1024;
-
 export const USAGE_EVENT_TYPE = {
   INITIAL_GRANT: "initial_grant",
   RUN_COMPUTE_RESERVED: "run_compute_reserved",
   RUN_COMPUTE_SETTLEMENT_DEBIT: "run_compute_settlement_debit",
   RUN_COMPUTE_SETTLEMENT_REFUND: "run_compute_settlement_refund",
   RUN_COMPUTE_SETTLEMENT_OWED: "run_compute_settlement_owed",
-  STORAGE_CHARGE: "storage_charge",
   STRIPE_TOP_UP: "stripe_top_up",
 } as const;
 
@@ -199,20 +196,6 @@ export async function ensureUserLedger(ctx: MutationCtx, args: EnsureUserLedgerA
   });
 }
 
-export async function consumeUserCredits(ctx: MutationCtx, args: CreditEventArgs) {
-  const userId = normalizeUserId(args.userId);
-  const amountCents = normalizeCents(args.amountCents);
-  return postLedgerEntry(ctx, {
-    userId,
-    deltaCents: -amountCents,
-    eventType: args.eventType,
-    idempotencyKey: args.idempotencyKey,
-    referenceType: args.referenceType,
-    referenceId: args.referenceId,
-    metadata: args.metadata,
-  });
-}
-
 export async function grantUserCredits(ctx: MutationCtx, args: CreditEventArgs) {
   const userId = normalizeUserId(args.userId);
   const amountCents = normalizeCents(args.amountCents);
@@ -313,48 +296,6 @@ export async function upsertLedgerDebitTotal(
     debitedCents: nextDebitedCents,
     appliedCents,
   };
-}
-
-export function estimateStorageDeltaCents(sizeDeltaBytes: number | undefined) {
-  if (typeof sizeDeltaBytes !== "number" || !Number.isFinite(sizeDeltaBytes) || sizeDeltaBytes === 0) {
-    return 0;
-  }
-  const gibDelta = Math.abs(sizeDeltaBytes) / BYTES_PER_GIB;
-  const cents = Math.max(
-    CLOUD_BILLING_CONFIG.minimumChargeCents,
-    Math.ceil(gibDelta * CLOUD_BILLING_CONFIG.storageGiBDeltaRateCents),
-  );
-  return sizeDeltaBytes > 0 ? cents : -cents;
-}
-
-export async function applyStorageDeltaCredits(
-  ctx: MutationCtx,
-  args: {
-    userId: string;
-    sizeDeltaBytes: number;
-    idempotencyKey?: string;
-    referenceType: string;
-    referenceId: string;
-    metadata?: Record<string, unknown>;
-  },
-) {
-  const deltaCents = estimateStorageDeltaCents(args.sizeDeltaBytes);
-  if (deltaCents <= 0) {
-    return 0;
-  }
-  const consumed = await consumeUserCredits(ctx, {
-    userId: args.userId,
-    amountCents: deltaCents,
-    eventType: USAGE_EVENT_TYPE.STORAGE_CHARGE,
-    idempotencyKey: args.idempotencyKey,
-    referenceType: args.referenceType,
-    referenceId: args.referenceId,
-    metadata: args.metadata,
-  });
-  if (!consumed) {
-    throw new ConvexError("insufficient credits");
-  }
-  return deltaCents;
 }
 
 export const internalEnsureUserLedger = internalMutation({

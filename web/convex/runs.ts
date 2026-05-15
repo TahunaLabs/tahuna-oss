@@ -17,7 +17,6 @@ import {
   type RuntimeCompatibilityFingerprint,
 } from "@/lib/runtime-incompatibility";
 import { PYTHON_CONFIG, RUN_CONFIG } from "@convex/appConfig";
-import { applyStorageDeltaCredits } from "@convex/cloud/storageUsage";
 import { resolveConfiguredDependencyGroup } from "@/lib/dependency-selection";
 import {
   buildProvisionedRuntimeEnv,
@@ -402,18 +401,6 @@ async function upsertRunArtifactIndexRow(
     .query("storageObjects")
     .withIndex("by_user_and_key", (q) => q.eq("userId", args.userId).eq("key", args.key))
     .first();
-  const previousSize = existing ? Math.max(0, Math.floor(existing.size || 0)) : 0;
-  await applyStorageDeltaCredits(ctx, {
-    userId: args.userId,
-    sizeDeltaBytes: normalizedSize - previousSize,
-    idempotencyKey: `storage:artifact:${args.key}:${normalizedSize}`,
-    referenceType: "run_artifact",
-    referenceId: args.key,
-    metadata: {
-      run_id: String(args.runId),
-      key: args.key,
-    },
-  });
   const patch = {
     source: "run_artifact" as const,
     objectKind: "run_artifact" as const,

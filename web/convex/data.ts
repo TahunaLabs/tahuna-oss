@@ -2,7 +2,6 @@ import { ConvexError, v } from "convex/values";
 import type { DataModel } from "@convex/_generated/dataModel";
 import { internalQuery, mutation, query, type MutationCtx, type QueryCtx } from "@convex/_generated/server";
 import { requireUser } from "@convex/auth";
-import { applyStorageDeltaCredits } from "@convex/cloud/storageUsage";
 import { shortId } from "@convex/ids";
 import { UPLOAD_LIMITS_BYTES } from "@convex/appConfig";
 import { storageKeys } from "@convex/core/storage";
@@ -122,19 +121,6 @@ async function upsertDataUploadIndexRow(
     .query("storageObjects")
     .withIndex("by_user_and_key", (q) => q.eq("userId", args.userId).eq("key", args.key))
     .first();
-  const previousSize = existing ? Math.max(0, Math.floor(existing.size || 0)) : 0;
-  await applyStorageDeltaCredits(ctx, {
-    userId: args.userId,
-    sizeDeltaBytes: normalizedSize - previousSize,
-    idempotencyKey: `storage:data:${args.key}:${normalizedSize}`,
-    referenceType: "storage_object",
-    referenceId: args.key,
-    metadata: {
-      source: "data",
-      object_kind: "data_upload",
-      key: args.key,
-    },
-  });
   const patch = {
     source: "data" as const,
     objectKind: "data_upload" as const,
