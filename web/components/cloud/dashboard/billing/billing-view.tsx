@@ -97,7 +97,7 @@ export function BillingView({
         <div>
           <p className="text-lg font-medium text-foreground">Account balance</p>
           <p className="mt-2 text-4xl font-medium text-foreground">
-            {initialized ? formatMoney(balanceCents, currency) : "Initializing..."}
+            {initialized ? formatMoney(balanceCents, currency) : "Computing..."}
           </p>
         </div>
 
@@ -160,31 +160,31 @@ export function BillingView({
           </div>
 
           {customTopUpAmount.trim() ? (
-          <form
-            className="mt-4 flex flex-col gap-3 sm:flex-row"
-            onSubmit={(event) => {
-              event.preventDefault()
-              if (customAmountValid && customAmountCents !== null) {
-                onStartTopUp(customAmountCents)
-              }
-            }}
-          >
-            <Input
-              className="h-9"
-              aria-label="Custom credit amount"
-              inputMode="decimal"
-              min={minimumTopUpAmountCents / 100}
-              max={maximumTopUpAmountCents / 100}
-              step="1"
-              type="number"
-              value={customTopUpAmount}
-              placeholder="Custom amount"
-              onChange={(event) => onCustomTopUpAmountChange(event.target.value)}
-            />
-            <Button type="submit" variant="outline" size="default" disabled={checkoutBusy || !customAmountValid}>
-              Use custom amount
-            </Button>
-          </form>
+            <form
+              className="mt-4 flex flex-col gap-3 sm:flex-row"
+              onSubmit={(event) => {
+                event.preventDefault()
+                if (customAmountValid && customAmountCents !== null) {
+                  onStartTopUp(customAmountCents)
+                }
+              }}
+            >
+              <Input
+                className="h-9"
+                aria-label="Custom credit amount"
+                inputMode="decimal"
+                min={minimumTopUpAmountCents / 100}
+                max={maximumTopUpAmountCents / 100}
+                step="1"
+                type="number"
+                value={customTopUpAmount}
+                placeholder="Custom amount"
+                onChange={(event) => onCustomTopUpAmountChange(event.target.value)}
+              />
+              <Button type="submit" variant="outline" size="default" disabled={checkoutBusy || !customAmountValid}>
+                Use custom amount
+              </Button>
+            </form>
           ) : null}
         </div>
 
