@@ -58,11 +58,6 @@ Stripe sends Checkout events to the Convex HTTP endpoint:
 https://<convex-deployment>.convex.site/stripe/webhook
 ```
 
-Current dev endpoint:
-
-```text
-https://healthy-monitor-735.convex.site/stripe/webhook
-```
 
 Subscribed events:
 
