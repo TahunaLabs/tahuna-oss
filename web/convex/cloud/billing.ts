@@ -658,7 +658,7 @@ export const stripeWebhook = httpAction(async (ctx, request) => {
 
   let event: Stripe.Event;
   try {
-    event = stripe.webhooks.constructEvent(body, signature, requireStripeWebhookSecret());
+    event = await stripe.webhooks.constructEventAsync(body, signature, requireStripeWebhookSecret());
   } catch (error) {
     const detail = error instanceof Error ? error.message : "stripe webhook signature verification failed";
     return new Response(JSON.stringify({ detail }), {
