@@ -1,3 +1,5 @@
+import { CLOUD_BILLING_CONFIG } from "@/cloud/config";
+
 export type RunpodGpuPricingRow = {
   gpuType: string;
   vramGb: number;
@@ -27,10 +29,8 @@ const RUNPOD_GPU_PRICING_ROWS: RunpodGpuPricingRow[] = [
   { gpuType: "RTX A5000", vramGb: 24, ramGb: 25, vcpus: 9, pricePerHour: 0.27 },
 ];
 
-const RUNPOD_COMPUTE_PRICE_MARKUP_MULTIPLIER = 1.2;
-
 function applyRunpodComputePriceMarkup(pricePerHour: number) {
-  return Math.round(pricePerHour * RUNPOD_COMPUTE_PRICE_MARKUP_MULTIPLIER * 100) / 100;
+  return Math.round(pricePerHour * CLOUD_BILLING_CONFIG.computePriceMarkupMultiplier * 100) / 100;
 }
 
 function normalizeGpuKey(value: string) {
