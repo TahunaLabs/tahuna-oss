@@ -93,8 +93,8 @@ export function LandingPricingSection() {
             <Card variant="default" className="bg-card/95">
               <CardContent>
                 <div className="mb-4 flex items-center justify-between gap-3">
-                  <h3 className="font-serif text-2xl text-foreground">Volume</h3>
-                  <Badge variant="ghost">RunPod</Badge>
+                  <h3 className="font-serif text-2xl text-foreground">Volumes</h3>
+                  <Badge variant="ghost">Flexible and persisitent storage</Badge>
                 </div>
                 <div className="space-y-3 text-sm">
                   <div className="flex items-center justify-between gap-4">
