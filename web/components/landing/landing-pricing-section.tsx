@@ -52,6 +52,13 @@ export function LandingPricingSection() {
               </div>
 
               <div className="divide-y divide-border">
+                <div className="hidden border-b border-border px-5 py-2 font-mono text-xs uppercase tracking-ui-eyebrow text-muted-foreground md:grid md:grid-cols-5">
+                  <span>GPU</span>
+                  <span>VRAM</span>
+                  <span>RAM</span>
+                  <span>vCPUs</span>
+                  <span className="text-right">Price</span>
+                </div>
                 {vramGroups.map((group) => (
                   <details key={group.label} open={group.defaultOpen} className="group">
                     <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-3">
