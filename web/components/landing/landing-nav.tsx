@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { useTheme } from "@/components/theme-provider"
 
 const NAV_LINKS = [
+  { label: "Pricing", href: "/pricing", external: false },
   { label: "Dashboard", href: "/dashboard", external: false },
   { label: "Docs", href: CLOUD_LINKS_CONFIG.docsUrl, external: true },
   // { label: "Blog", href: "#" },
