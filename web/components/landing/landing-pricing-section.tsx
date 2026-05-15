@@ -31,7 +31,7 @@ export function LandingPricingSection() {
             <h2 className="font-serif text-3xl leading-tight tracking-tight text-foreground md:text-4xl">
               Pay for compute
               <br />
-              <span className="italic">and attached volume</span>
+              <span className="italic">and Storage you use</span>
             </h2>
           </div>
 
