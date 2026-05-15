@@ -293,7 +293,7 @@ export const getMyCredits = query({
       return {
         balance_cents: 0,
         currency: CLOUD_BILLING_CONFIG.currency,
-        initialized: false,
+        initialized: true,
       };
     }
     return {

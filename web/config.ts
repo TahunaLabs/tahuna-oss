@@ -20,7 +20,7 @@ export const AUTH_CONFIG = {
 
 export const BILLING_CONFIG = {
   currency: "USD",
-  initialCreditCents: 1000,
+  initialCreditCents: 0,
   computeVolumeGbMonthlyRateCents: 12,
   minimumChargeCents: 1,
 } as const;

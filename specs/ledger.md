@@ -55,7 +55,7 @@ Stripe payment records:
 From `web/cloud/config.ts`:
 
 - `currency = "USD"`
-- `initialCreditCents = 500` (USD 5.00)
+- `initialCreditCents = 0` (USD 0.00)
 - `computeVolumeGbHourlyRateCents = 2`
 - `storageGiBDeltaRateCents = 3`
 - `minimumChargeCents = 1`
@@ -68,7 +68,7 @@ On first authenticated usage:
 
 1. Create `userCredits` row if missing.
 2. Set `balanceCents = initialCreditCents`.
-3. Insert `usageEvents` row:
+3. If `initialCreditCents > 0`, insert `usageEvents` row:
    - `eventType = initial_grant`
    - `creditsDeltaCents = +initialCreditCents`
 

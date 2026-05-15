@@ -12,15 +12,19 @@ const CLEANUP_TABLES = [
   "apiKeys",
   "dataBlobs",
   "environments",
+  "envVars",
+  "jobs",
   "runEvents",
   "runRuntimeLogs",
   "runRuntimeMetrics",
   "runs",
+  "runtimeIncompatibilities",
   "serveEvents",
   "serveRuntimeLogs",
   "serves",
   "shareLinks",
   "storageObjects",
+  "stripeCheckoutSessions",
   "usageEvents",
   "userCredits",
   "wandbMetrics",
@@ -33,15 +37,19 @@ type CleanupDocId =
   | Id<"apiKeys">
   | Id<"dataBlobs">
   | Id<"environments">
+  | Id<"envVars">
+  | Id<"jobs">
   | Id<"runEvents">
   | Id<"runRuntimeLogs">
   | Id<"runRuntimeMetrics">
   | Id<"runs">
+  | Id<"runtimeIncompatibilities">
   | Id<"serveEvents">
   | Id<"serveRuntimeLogs">
   | Id<"serves">
   | Id<"shareLinks">
   | Id<"storageObjects">
+  | Id<"stripeCheckoutSessions">
   | Id<"usageEvents">
   | Id<"userCredits">
   | Id<"wandbMetrics">
@@ -62,15 +70,19 @@ const cleanupTableValidator = v.union(
   v.literal("apiKeys"),
   v.literal("dataBlobs"),
   v.literal("environments"),
+  v.literal("envVars"),
+  v.literal("jobs"),
   v.literal("runEvents"),
   v.literal("runRuntimeLogs"),
   v.literal("runRuntimeMetrics"),
   v.literal("runs"),
+  v.literal("runtimeIncompatibilities"),
   v.literal("serveEvents"),
   v.literal("serveRuntimeLogs"),
   v.literal("serves"),
   v.literal("shareLinks"),
   v.literal("storageObjects"),
+  v.literal("stripeCheckoutSessions"),
   v.literal("usageEvents"),
   v.literal("userCredits"),
   v.literal("wandbMetrics"),
@@ -110,6 +122,12 @@ async function loadTableBatchIds(ctx: MutationCtx, table: CleanupTable, batchSiz
   if (table === "environments") {
     return (await ctx.db.query("environments").take(batchSize)).map((row) => row._id);
   }
+  if (table === "envVars") {
+    return (await ctx.db.query("envVars").take(batchSize)).map((row) => row._id);
+  }
+  if (table === "jobs") {
+    return (await ctx.db.query("jobs").take(batchSize)).map((row) => row._id);
+  }
   if (table === "runEvents") {
     return (await ctx.db.query("runEvents").take(batchSize)).map((row) => row._id);
   }
@@ -121,6 +139,9 @@ async function loadTableBatchIds(ctx: MutationCtx, table: CleanupTable, batchSiz
   }
   if (table === "runs") {
     return (await ctx.db.query("runs").take(batchSize)).map((row) => row._id);
+  }
+  if (table === "runtimeIncompatibilities") {
+    return (await ctx.db.query("runtimeIncompatibilities").take(batchSize)).map((row) => row._id);
   }
   if (table === "serveEvents") {
     return (await ctx.db.query("serveEvents").take(batchSize)).map((row) => row._id);
@@ -136,6 +157,9 @@ async function loadTableBatchIds(ctx: MutationCtx, table: CleanupTable, batchSiz
   }
   if (table === "storageObjects") {
     return (await ctx.db.query("storageObjects").take(batchSize)).map((row) => row._id);
+  }
+  if (table === "stripeCheckoutSessions") {
+    return (await ctx.db.query("stripeCheckoutSessions").take(batchSize)).map((row) => row._id);
   }
   if (table === "usageEvents") {
     return (await ctx.db.query("usageEvents").take(batchSize)).map((row) => row._id);
@@ -162,6 +186,14 @@ async function deleteTableIds(ctx: MutationCtx, table: CleanupTable, ids: Cleanu
     await Promise.all(ids.map((id) => ctx.db.delete("environments", id as Id<"environments">)));
     return;
   }
+  if (table === "envVars") {
+    await Promise.all(ids.map((id) => ctx.db.delete("envVars", id as Id<"envVars">)));
+    return;
+  }
+  if (table === "jobs") {
+    await Promise.all(ids.map((id) => ctx.db.delete("jobs", id as Id<"jobs">)));
+    return;
+  }
   if (table === "runEvents") {
     await Promise.all(ids.map((id) => ctx.db.delete("runEvents", id as Id<"runEvents">)));
     return;
@@ -176,6 +208,10 @@ async function deleteTableIds(ctx: MutationCtx, table: CleanupTable, ids: Cleanu
   }
   if (table === "runs") {
     await Promise.all(ids.map((id) => ctx.db.delete("runs", id as Id<"runs">)));
+    return;
+  }
+  if (table === "runtimeIncompatibilities") {
+    await Promise.all(ids.map((id) => ctx.db.delete("runtimeIncompatibilities", id as Id<"runtimeIncompatibilities">)));
     return;
   }
   if (table === "serveEvents") {
@@ -196,6 +232,10 @@ async function deleteTableIds(ctx: MutationCtx, table: CleanupTable, ids: Cleanu
   }
   if (table === "storageObjects") {
     await Promise.all(ids.map((id) => ctx.db.delete("storageObjects", id as Id<"storageObjects">)));
+    return;
+  }
+  if (table === "stripeCheckoutSessions") {
+    await Promise.all(ids.map((id) => ctx.db.delete("stripeCheckoutSessions", id as Id<"stripeCheckoutSessions">)));
     return;
   }
   if (table === "usageEvents") {
@@ -272,6 +312,22 @@ export const internalCountTable = internalMutation({
         next_cursor: result.isDone ? null : result.continueCursor,
       };
     }
+    if (args.table === "envVars") {
+      const result = await ctx.db.query("envVars").paginate({ cursor: args.cursor, numItems: batchSize });
+      return {
+        count: result.page.length,
+        has_more: !result.isDone,
+        next_cursor: result.isDone ? null : result.continueCursor,
+      };
+    }
+    if (args.table === "jobs") {
+      const result = await ctx.db.query("jobs").paginate({ cursor: args.cursor, numItems: batchSize });
+      return {
+        count: result.page.length,
+        has_more: !result.isDone,
+        next_cursor: result.isDone ? null : result.continueCursor,
+      };
+    }
     if (args.table === "runEvents") {
       const result = await ctx.db.query("runEvents").paginate({ cursor: args.cursor, numItems: batchSize });
       return {
@@ -298,6 +354,14 @@ export const internalCountTable = internalMutation({
     }
     if (args.table === "runs") {
       const result = await ctx.db.query("runs").paginate({ cursor: args.cursor, numItems: batchSize });
+      return {
+        count: result.page.length,
+        has_more: !result.isDone,
+        next_cursor: result.isDone ? null : result.continueCursor,
+      };
+    }
+    if (args.table === "runtimeIncompatibilities") {
+      const result = await ctx.db.query("runtimeIncompatibilities").paginate({ cursor: args.cursor, numItems: batchSize });
       return {
         count: result.page.length,
         has_more: !result.isDone,
@@ -338,6 +402,14 @@ export const internalCountTable = internalMutation({
     }
     if (args.table === "storageObjects") {
       const result = await ctx.db.query("storageObjects").paginate({ cursor: args.cursor, numItems: batchSize });
+      return {
+        count: result.page.length,
+        has_more: !result.isDone,
+        next_cursor: result.isDone ? null : result.continueCursor,
+      };
+    }
+    if (args.table === "stripeCheckoutSessions") {
+      const result = await ctx.db.query("stripeCheckoutSessions").paginate({ cursor: args.cursor, numItems: batchSize });
       return {
         count: result.page.length,
         has_more: !result.isDone,

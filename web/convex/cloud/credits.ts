@@ -101,19 +101,21 @@ async function ensureCreditsRow(
     createdAt: now,
     updatedAt: now,
   });
-  await ctx.db.insert("usageEvents", {
-    userId: args.userId,
-    eventType: USAGE_EVENT_TYPE.INITIAL_GRANT,
-    creditsDeltaCents: initialBalance,
-    balanceAfterCents: initialBalance,
-    referenceType: "user_credit",
-    referenceId: String(creditsId),
-    metadata: {
-      source: args.source,
-      currency: CLOUD_BILLING_CONFIG.currency,
-    },
-    createdAt: now,
-  });
+  if (initialBalance > 0) {
+    await ctx.db.insert("usageEvents", {
+      userId: args.userId,
+      eventType: USAGE_EVENT_TYPE.INITIAL_GRANT,
+      creditsDeltaCents: initialBalance,
+      balanceAfterCents: initialBalance,
+      referenceType: "user_credit",
+      referenceId: String(creditsId),
+      metadata: {
+        source: args.source,
+        currency: CLOUD_BILLING_CONFIG.currency,
+      },
+      createdAt: now,
+    });
+  }
   const created = await ctx.db.get("userCredits", creditsId);
   if (!created) {
     throw new ConvexError("failed to initialize user credits");
