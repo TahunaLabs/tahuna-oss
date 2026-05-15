@@ -2,8 +2,16 @@ import { CLOUD_BILLING_CONFIG } from "@/cloud/config"
 import { listRunpodGpuPricingRows } from "@/cloud/providers/runpod-gpu-pricing"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
+import { ChevronDown } from "lucide-react"
 
-const displayedGpuRows = listRunpodGpuPricingRows().sort((a, b) => b.pricePerHour - a.pricePerHour)
+const displayedGpuRows = listRunpodGpuPricingRows()
+const vramGroups = [
+  { label: ">80GB VRAM", rows: displayedGpuRows.filter((row) => row.vramGb > 80), defaultOpen: true },
+  { label: "80GB VRAM", rows: displayedGpuRows.filter((row) => row.vramGb === 80), defaultOpen: true },
+  { label: "48GB VRAM", rows: displayedGpuRows.filter((row) => row.vramGb === 48), defaultOpen: false },
+  { label: "32GB VRAM", rows: displayedGpuRows.filter((row) => row.vramGb === 32), defaultOpen: false },
+  { label: "24GB VRAM", rows: displayedGpuRows.filter((row) => row.vramGb === 24), defaultOpen: false },
+].filter((group) => group.rows.length > 0)
 
 function formatDollars(value: number) {
   return `$${value.toFixed(2)}`
@@ -44,13 +52,31 @@ export function LandingPricingSection() {
               </div>
 
               <div className="divide-y divide-border">
-                {displayedGpuRows.map((row) => (
-                  <div key={row.gpuType} className="flex items-center justify-between gap-4 px-5 py-3">
-                    <span className="text-sm text-muted-foreground">{row.gpuType}</span>
-                    <span className="shrink-0 font-mono text-sm text-foreground">
-                      {formatDollars(row.pricePerHour)} / hr
-                    </span>
-                  </div>
+                {vramGroups.map((group) => (
+                  <details key={group.label} open={group.defaultOpen} className="group">
+                    <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-3">
+                      <span className="font-mono text-xs uppercase tracking-ui-eyebrow text-muted-foreground">
+                        {group.label}
+                      </span>
+                      <ChevronDown className="size-4 text-muted-foreground transition-transform group-open:rotate-180" />
+                    </summary>
+                    <div className="divide-y divide-border border-t border-border">
+                      {group.rows.map((row) => (
+                        <div
+                          key={row.gpuType}
+                          className="grid grid-cols-2 gap-x-4 gap-y-2 px-5 py-3 md:grid-cols-5 md:items-center"
+                        >
+                          <span className="text-sm text-foreground md:col-span-1">{row.gpuType}</span>
+                          <span className="font-mono text-xs text-muted-foreground">{row.vramGb} GB VRAM</span>
+                          <span className="font-mono text-xs text-muted-foreground">{row.ramGb} GB RAM</span>
+                          <span className="font-mono text-xs text-muted-foreground">{row.vcpus} vCPUs</span>
+                          <span className="font-mono text-sm text-foreground md:text-right">
+                            {formatDollars(row.pricePerHour)} / hr
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </details>
                 ))}
               </div>
             </CardContent>
