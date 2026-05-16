@@ -57,8 +57,8 @@ interface SidebarProps {
 const DEFAULT_NAV_PLATFORM: DashboardNavItem[] = [
   { icon: HardDrive, label: "Storage", view: "storage" },
   { icon: Server, label: "Environments", view: "environments" },
-  { icon: Rocket, label: "Serving", view: "serving", badge: "beta" },
   { icon: Play, label: "Runs", view: "runs" },
+  { icon: Rocket, label: "Serving", view: "serving", badge: "beta" },
 ]
 
 const DEFAULT_NAV_ADMIN: DashboardNavItem[] = [
