@@ -149,14 +149,14 @@ export default function RunDetailPage() {
             </Button>
             <StatusDot variant={toStatusDotVariant(run.status)} size="md" />
             <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <h1 className="truncate text-xl font-semibold text-foreground">{run.name || "Untitled run"}</h1>
-              <Badge variant={statusVariant(run.status)} className="capitalize">
-                {run.status}
-              </Badge>
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="truncate text-xl font-semibold text-foreground">{run.name || "Untitled run"}</h1>
+                <Badge variant={statusVariant(run.status)} className="capitalize">
+                  {run.status}
+                </Badge>
+              </div>
             </div>
           </div>
-        </div>
           <div className="flex items-center gap-2">
             <Button type="button" variant="outline" size="control" onClick={() => window.location.reload()}>
               <RotateCw className="h-4 w-4" />
@@ -296,14 +296,7 @@ export default function RunDetailPage() {
 
           <TabsContent value="system" className="space-y-4">
             <MetricsWindow metrics={metrics} />
-            <Card variant="surface" className="p-4">
-              <MetricSection
-                title="System metrics"
-                description="Bootstrap, artifact, and runtime system activity."
-                metrics={[...systemSeries, ...runtimeSeries]}
-                emptyMessage="No system metrics yet."
-              />
-            </Card>
+            <SystemActivityTable metrics={[...systemSeries, ...runtimeSeries]} />
           </TabsContent>
         </Tabs>
       </div>
@@ -340,4 +333,85 @@ function MetricsWindow({ metrics }: { metrics: RunMetricsOnlyDetail | undefined 
       </div>
     </Card>
   )
+}
+
+function SystemActivityTable({ metrics }: { metrics: ReturnType<typeof metricSeries> }) {
+  return (
+    <Card variant="surface" className="p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">System activity</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Latest bootstrap, artifact, and runtime facts from the run.
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-4">
+        <Table>
+          <TableHeader>
+            <TableRow variant="head">
+              <TableHead>Metric</TableHead>
+              <TableHead>Source</TableHead>
+              <TableHead>Latest</TableHead>
+              <TableHead>Updated</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {metrics.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={4} className="text-muted-foreground">No system activity yet.</TableCell>
+              </TableRow>
+            ) : (
+              metrics.map((metric) => (
+                <TableRow key={`${metric.source}:${metric.name}`}>
+                  <TableCell className="font-medium text-foreground">{systemMetricLabel(metric.name)}</TableCell>
+                  <TableCell className="text-muted-foreground">
+                    <Badge variant={metric.category === "runtime" ? "status-info" : "status-warning"}>
+                      {metric.source}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="font-mono text-foreground">{formatSystemMetricValue(metric.name, metric.latestValue)}</TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {metric.points.length > 0 ? metric.points[metric.points.length - 1]?.label : "—"}
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </div>
+    </Card>
+  )
+}
+
+function systemMetricLabel(name: string) {
+  return name
+    .replace(/^bootstrap_/, "")
+    .replace(/^artifacts_/, "artifacts_")
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ")
+}
+
+function formatSystemMetricValue(name: string, value: number) {
+  if (!Number.isFinite(value)) return "—"
+  if (name.endsWith("_bytes")) return formatBytes(value)
+  if (name.endsWith("_seconds")) return `${formatCompactNumber(value)}s`
+  if (name.endsWith("_files_per_sec")) return `${formatCompactNumber(value)}/s`
+  if (name.endsWith("_files") || name.endsWith("_uploaded")) {
+    return value.toLocaleString(undefined, { maximumFractionDigits: 0 })
+  }
+  return formatCompactNumber(value)
+}
+
+function formatCompactNumber(value: number) {
+  const absolute = Math.abs(value)
+  if (absolute >= 1000 || absolute === 0) {
+    return value.toLocaleString(undefined, { maximumFractionDigits: 2 })
+  }
+  if (absolute >= 1) {
+    return value.toLocaleString(undefined, { maximumFractionDigits: 3 })
+  }
+  return value.toPrecision(3)
 }
