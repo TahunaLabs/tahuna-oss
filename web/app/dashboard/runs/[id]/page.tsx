@@ -149,15 +149,14 @@ export default function RunDetailPage() {
             </Button>
             <StatusDot variant={toStatusDotVariant(run.status)} size="md" />
             <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <h1 className="truncate text-xl font-semibold text-foreground">{run.name || "Untitled run"}</h1>
-                <Badge variant={statusVariant(run.status)} className="capitalize">
-                  {run.status}
-                </Badge>
-              </div>
-              <p className="mt-1 truncate text-sm text-muted-foreground">ID: {run.run_id}</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="truncate text-xl font-semibold text-foreground">{run.name || "Untitled run"}</h1>
+              <Badge variant={statusVariant(run.status)} className="capitalize">
+                {run.status}
+              </Badge>
             </div>
           </div>
+        </div>
           <div className="flex items-center gap-2">
             <Button type="button" variant="outline" size="control" onClick={() => window.location.reload()}>
               <RotateCw className="h-4 w-4" />
@@ -182,10 +181,9 @@ export default function RunDetailPage() {
           </TabsList>
 
           <TabsContent value="overview" className="space-y-4">
-            <section className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
+            <section className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
               <SummaryCard label="Status" value={run.status} detail="Current lifecycle state" />
               <SummaryCard label="Duration" value={formatRunUptime(run.uptime_ms)} detail="Compute duration" />
-              <SummaryCard label="Created" value={new Date(run.created_at).toLocaleString()} detail="Run creation time" />
               <SummaryCard label="Environment" value={environmentLabel ?? "Loading…"} detail="Training environment" />
               <SummaryCard
                 label="Compute"
@@ -317,7 +315,7 @@ function SummaryCard({ label, value, detail }: { label: string; value: string; d
   return (
     <Card variant="surface" className="p-4">
       <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{label}</p>
-      <p className="mt-2 truncate text-xl font-semibold text-foreground">{value}</p>
+      <p className="mt-2 break-words text-xl font-semibold text-foreground">{value}</p>
       <p className="mt-1 text-xs text-muted-foreground">{detail}</p>
     </Card>
   )
