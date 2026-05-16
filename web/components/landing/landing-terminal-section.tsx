@@ -61,7 +61,7 @@ export function LandingTerminalSection() {
           </p>
         </div>
 
-        <div className="lg:w-2/3">
+        <div className="min-w-0 lg:w-2/3">
           <Card variant="default" className="mb-8 rounded-lg bg-card/95">
             <div className="flex items-center gap-2 border-b border-border px-4 py-3">
               <div className="flex gap-1.5">
@@ -125,7 +125,7 @@ export function LandingTerminalSection() {
                 Nightly
               </Button>
             </div>
-            <div className="flex min-w-0 flex-1 items-center gap-2 rounded-full border border-border bg-card px-5 py-2.5">
+            <div className="flex w-full min-w-0 flex-1 items-center gap-2 rounded-full border border-border bg-card px-5 py-2.5">
               <TruncatedTooltip className="min-w-0 flex-1 font-mono text-sm text-foreground/85">
                 {commands[activeCommand]}
               </TruncatedTooltip>
