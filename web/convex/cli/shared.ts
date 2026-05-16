@@ -105,7 +105,7 @@ async function loadGpuMaxCounts(ctx: ActionCtx, userId: string) {
   const dynamicGpus = await loadDynamicGpuRows(ctx, userId);
   const out = new Map<string, number>();
   for (const gpu of dynamicGpus) {
-    const id = normalizeGpuType(gpu.id || "");
+    const id = normalizeGpuType(gpu.display_name || "");
     if (!id) continue;
     const max = Number.isFinite(gpu.max_gpu_count) && gpu.max_gpu_count > 0 ? Math.floor(gpu.max_gpu_count) : 1;
     out.set(id, max);

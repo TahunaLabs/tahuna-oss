@@ -19,6 +19,7 @@ export type RunpodCloudType = "COMMUNITY" | "SECURE";
 export type RunpodComputeProviderOptions = {
   resolveCloudType?: () => RunpodCloudType;
   resolveGpuPricePerHour?: (gpuType: string) => number | undefined;
+  resolveCanonicalGpuName?: (runpodDisplayName: string) => string | undefined;
 };
 
 const DEFAULT_RUNPOD_CLOUD_TYPE: RunpodCloudType = "SECURE";
@@ -135,7 +136,7 @@ function toComputeOffers(
     .filter((gpu) => gpu.id && gpu.id !== "unknown" && (gpu.secureCloud || gpu.communityCloud))
     .map((gpu) => ({
       id: gpu.id || "",
-      displayName: gpu.displayName || gpu.id || "",
+      displayName: (gpu.displayName ? options.resolveCanonicalGpuName?.(gpu.displayName) : undefined) ?? gpu.displayName ?? gpu.id ?? "",
       memoryInGb: Number.isFinite(gpu.memoryInGb) ? gpu.memoryInGb || 0 : 0,
       maxGpuCount: gpu.maxGpuCount || 1,
       pricePerHour: resolveRunpodGpuOfferPrice(options, gpu),
@@ -151,7 +152,7 @@ function toComputeOffers(
   return offers;
 }
 
-async function resolveRunpodGpuTypeId(apiKey: string, requestedGpu: string) {
+async function resolveRunpodGpuTypeId(apiKey: string, requestedGpu: string, options: RunpodComputeProviderOptions = {}) {
   const trimmed = requestedGpu.trim();
   if (!trimmed) {
     throw new Error("GPU type is empty");
@@ -173,6 +174,17 @@ async function resolveRunpodGpuTypeId(apiKey: string, requestedGpu: string) {
     return displayMatch.id;
   }
 
+  // Try matching user's canonical name against RunPod display names via the adapter
+  if (options.resolveCanonicalGpuName) {
+    const canonicalMatch = gpuTypes.find((gpu) => {
+      const canonical = options.resolveCanonicalGpuName!(gpu.displayName || "");
+      return canonical && normalizeGpuLabel(canonical) === requestedNorm;
+    });
+    if (canonicalMatch?.id) {
+      return canonicalMatch.id;
+    }
+  }
+
   const sample = gpuTypes
     .slice(0, 10)
     .map((gpu) => gpu.displayName || gpu.id || "")
@@ -188,7 +200,7 @@ async function createRunpodMachine(
 ) {
   const apiKey = resolveRunpodApiKey();
   const allowedCloudType = resolveRunpodCloudType(options);
-  const gpuTypeId = await resolveRunpodGpuTypeId(apiKey, args.gpuType);
+  const gpuTypeId = await resolveRunpodGpuTypeId(apiKey, args.gpuType, options);
 
   const response = await fetch("https://rest.runpod.io/v1/pods", {
     method: "POST",

@@ -381,7 +381,7 @@ func fetchGpusAndImages() ([]string, map[string][]string, map[string]map[string]
 	}
 	gpus := make([]string, 0, len(parsedGpus))
 	for _, gpu := range parsedGpus {
-		gpus = append(gpus, gpu.ID)
+		gpus = append(gpus, gpu.DisplayName)
 	}
 
 	if resp.Images == nil {
