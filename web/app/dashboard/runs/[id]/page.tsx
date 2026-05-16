@@ -1,46 +1,74 @@
 "use client"
 
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { Card } from "@/components/ui/card"
-import { Notice } from "@/components/ui/notice"
-import { PageLoader } from "@/components/loader"
+import {
+  Activity,
+  ArrowLeft,
+  Database,
+  Download,
+  ExternalLink,
+  FileText,
+  HardDriveDownload,
+  ListChecks,
+  RotateCw,
+  Terminal,
+} from "lucide-react"
 import Link from "next/link"
 import { useParams } from "next/navigation"
 import { useEffect, useState } from "react"
+
 import {
+  formatBytes,
   metricSeries,
+  relativeTime,
   TERMINAL_STATUSES,
   type RunDetail,
   type RunLogsOnlyDetail,
   type RunMetricsOnlyDetail,
+  type StorageItem,
 } from "@/components/features/dashboard-model"
+import { MetricSection } from "@/components/features/dashboard/runs/metric-section"
+import { formatRunUptime } from "@/components/features/dashboard/runs/run-table-row"
+import { PageLoader } from "@/components/loader"
+import { Badge, statusVariant } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Card } from "@/components/ui/card"
+import { Notice } from "@/components/ui/notice"
+import { StatusDot, toStatusDotVariant } from "@/components/ui/status-dot"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   useDashboardAuthState,
   useDashboardRunDetail,
   useDashboardRunLogs,
   useDashboardRunMetrics,
+  useListDashboardStorage,
 } from "@/lib/dashboard-api"
-import {
-  CartesianGrid,
-  Line,
-  LineChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts"
+
+type RunDetailTab = "overview" | "wandb" | "logs" | "checkpoints" | "system"
+
+const RUN_DETAIL_TABS: Array<{ value: RunDetailTab; label: string; icon: typeof Activity }> = [
+  { value: "overview", label: "Overview", icon: Activity },
+  { value: "wandb", label: "W&B Metrics", icon: Database },
+  { value: "logs", label: "Logs", icon: Terminal },
+  { value: "checkpoints", label: "Checkpoints", icon: HardDriveDownload },
+  { value: "system", label: "System", icon: ListChecks },
+]
 
 export default function RunDetailPage() {
   const params = useParams<{ id: string }>()
   const runId = typeof params?.id === "string" ? params.id : ""
   const { isAuthenticated, isLoading } = useDashboardAuthState()
   const shouldLoadQueries = !isLoading && isAuthenticated && runId !== ""
+  const listStorage = useListDashboardStorage()
+
+  const [activeTab, setActiveTab] = useState<RunDetailTab>("overview")
+  const [logsCache, setLogsCache] = useState<RunLogsOnlyDetail | undefined>(undefined)
+  const [metricsCache, setMetricsCache] = useState<RunMetricsOnlyDetail | undefined>(undefined)
+  const [artifacts, setArtifacts] = useState<StorageItem[] | undefined>(undefined)
+  const [artifactsError, setArtifactsError] = useState("")
 
   const run = useDashboardRunDetail(runId, shouldLoadQueries) as RunDetail | undefined
   const isTerminal = run !== undefined && TERMINAL_STATUSES.has(run.status)
-  const [logsCache, setLogsCache] = useState<RunLogsOnlyDetail | undefined>(undefined)
-  const [metricsCache, setMetricsCache] = useState<RunMetricsOnlyDetail | undefined>(undefined)
   const logsLive = useDashboardRunLogs(
     runId,
     shouldLoadQueries && !(isTerminal && logsCache !== undefined),
@@ -58,9 +86,38 @@ export default function RunDetailPage() {
     if (isTerminal && metricsLive) setMetricsCache(metricsLive)
   }, [isTerminal, metricsLive])
 
+  useEffect(() => {
+    if (!shouldLoadQueries) return
+    let cancelled = false
+    setArtifacts(undefined)
+    setArtifactsError("")
+    void listStorage({
+      visibility: "all",
+      sort: "created_desc",
+      search: runId,
+      offset: 0,
+      limit: 100,
+    })
+      .then((result) => {
+        if (cancelled) return
+        setArtifacts(result.items.filter((item) => item.source === "run_artifact" && item.run?.id === runId))
+      })
+      .catch((error) => {
+        if (cancelled) return
+        setArtifacts([])
+        setArtifactsError(error instanceof Error ? error.message : "failed to load checkpoints")
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [listStorage, runId, shouldLoadQueries])
+
   const logs = logsLive ?? logsCache
   const metrics = metricsLive ?? metricsCache
   const series = metricSeries(metrics)
+  const wandbSeries = series.filter((metric) => metric.source.toLowerCase() === "wandb")
+  const systemSeries = series.filter((metric) => metric.category === "system")
+  const runtimeSeries = series.filter((metric) => metric.category === "runtime")
 
   if (isLoading || !isAuthenticated) {
     return <PageLoader message="Loading run details…" />
@@ -68,143 +125,283 @@ export default function RunDetailPage() {
 
   if (!runId) {
     return (
-      <main className="mx-auto w-full max-w-6xl px-4 py-6">
-        <Notice variant="error">Invalid run ID.</Notice>
+      <main className="h-full overflow-y-auto bg-background">
+        <div className="mx-auto w-full max-w-7xl px-4 py-6">
+          <Notice variant="error">Invalid run ID.</Notice>
+        </div>
       </main>
     )
   }
 
-  if (!run || !logs || !metrics) {
+  if (!run) {
     return <PageLoader message="Loading run details…" />
   }
 
   return (
-    <main className="mx-auto w-full max-w-6xl space-y-4 px-4 py-6">
-      <div className="flex items-center justify-between gap-3">
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <h1 className="text-xl font-semibold">Run {run.run_id}</h1>
-            <Badge variant="run-status">{run.status}</Badge>
-            <Badge variant="run-status">Live</Badge>
+    <main className="h-full overflow-y-auto bg-background">
+      <div className="mx-auto w-full max-w-7xl space-y-5 px-4 py-5">
+      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-5">
+        <div className="flex min-w-0 items-center gap-3">
+          <Button asChild type="button" variant="ghost" size="icon-control">
+            <Link href="/dashboard?view=runs" aria-label="Back to runs">
+              <ArrowLeft className="h-4 w-4" />
+            </Link>
+          </Button>
+          <StatusDot variant={toStatusDotVariant(run.status)} size="md" />
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="truncate text-xl font-semibold text-foreground">{run.name || "Untitled run"}</h1>
+              <Badge variant={statusVariant(run.status)} className="capitalize">
+                {run.status}
+              </Badge>
+            </div>
+            <p className="mt-1 truncate text-sm text-muted-foreground">ID: {run.run_id}</p>
           </div>
-          <p className="text-sm text-muted-foreground">
-            {run.name} · created {new Date(run.created_at).toLocaleString()}
-          </p>
         </div>
-        <Button asChild type="button" variant="outline" size="control">
-          <Link href="/dashboard">Back to dashboard</Link>
-        </Button>
-      </div>
+        <div className="flex items-center gap-2">
+          <Button type="button" variant="outline" size="control" onClick={() => window.location.reload()}>
+            <RotateCw className="h-4 w-4" />
+            Refresh
+          </Button>
+        </div>
+      </header>
 
       {run.error ? <Notice variant="error">{run.error}</Notice> : null}
 
-      <section className="grid gap-3 md:grid-cols-2">
-        <Card className="p-4">
-          <h2 className="text-sm font-semibold">Diagnostics</h2>
-          <dl className="mt-3 space-y-2 text-sm">
-            <div className="flex justify-between gap-3">
-              <dt className="text-muted-foreground">Environment</dt>
-              <dd className="font-mono text-xs">{run.environment_id}</dd>
-            </div>
-            <div className="flex justify-between gap-3">
-              <dt className="text-muted-foreground">Provider machine ID</dt>
-              <dd className="font-mono text-xs">{run.provider_machine_id || "—"}</dd>
-            </div>
-            <div className="flex justify-between gap-3">
-              <dt className="text-muted-foreground">Infra</dt>
-              <dd className="text-right text-xs">
-                {run.effective_gpu_type || "-"} x{run.effective_gpu_count || "-"} · {run.effective_volume_gb || "-"}GB
-              </dd>
-            </div>
-            <div className="flex justify-between gap-3">
-              <dt className="text-muted-foreground">Cancellation requested</dt>
-              <dd>{run.cancellation_requested ? "Yes" : "No"}</dd>
-            </div>
-            <div className="flex justify-between gap-3">
-              <dt className="text-muted-foreground">Artifacts</dt>
-              <dd>{run.artifact_keys.length}</dd>
-            </div>
-          </dl>
-        </Card>
+      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as RunDetailTab)} className="gap-0">
+        <TabsList className="w-full overflow-x-auto rounded-lg border border-border bg-card p-1">
+          {RUN_DETAIL_TABS.map((tab) => {
+            const Icon = tab.icon
+            return (
+              <TabsTrigger key={tab.value} value={tab.value} className="shrink-0">
+                <Icon className="h-4 w-4" />
+                {tab.label}
+              </TabsTrigger>
+            )
+          })}
+        </TabsList>
 
-        <Card className="p-4">
-          <h2 className="text-sm font-semibold">Paths</h2>
-          <dl className="mt-3 space-y-2 text-sm">
-            <div>
-              <dt className="text-muted-foreground">Input</dt>
-              <dd className="font-mono text-xs">{run.input}</dd>
-            </div>
-            <div>
-              <dt className="text-muted-foreground">Output</dt>
-              <dd className="font-mono text-xs">{run.output}</dd>
-            </div>
-            <div>
-              <dt className="text-muted-foreground">Logs</dt>
-              <dd className="font-mono text-xs">{run.logs}</dd>
-            </div>
-          </dl>
-        </Card>
-      </section>
+        <TabsContent value="overview" className="space-y-4">
+          <section className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <SummaryCard label="Status" value={run.status} detail="Current lifecycle state" />
+            <SummaryCard label="Runtime" value={formatRunUptime(run.uptime_ms)} detail="Billable compute duration" />
+            <SummaryCard label="W&B metrics" value={String(wandbSeries.length)} detail={`${wandbPointCount(wandbSeries)} points`} />
+            <SummaryCard label="Checkpoints" value={String(artifacts?.length ?? run.artifact_keys.length)} detail="Downloaded artifacts" />
+          </section>
 
-      <section className="grid gap-3 lg:grid-cols-2">
-        <Card className="min-h-0 p-4">
-          <h2 className="text-sm font-semibold">Live logs</h2>
-          <p className="mt-1 text-xs text-muted-foreground">{logs.note}</p>
-          <p className="mt-1 text-ui-caption text-muted-foreground">
-            Showing {logs.logs_window.returned_logs} logs (tail {logs.logs_window.tail_limit}
-            {logs.logs_window.includes_pinned_bootstrap
-              ? ` + ${logs.logs_window.pinned_bootstrap_count} pinned bootstrap`
-              : ""}).
-          </p>
-          <div className="mt-3 max-h-[420px] space-y-1 overflow-y-auto rounded-lg border border-border bg-card p-2 font-mono text-xs">
-            {logs.recent_logs.length === 0 ? (
-              <p className="text-muted-foreground">No runtime logs yet.</p>
-            ) : (
-              logs.recent_logs.map((line, index) => (
-                <p key={`${line.timestamp}-${index}`} className="break-words">
-                  <span className="text-muted-foreground">[{new Date(line.timestamp).toLocaleTimeString()}]</span>{" "}
-                  <span className="text-muted-foreground">{line.level || "info"}</span>{" "}
-                  <span className="text-muted-foreground">{line.source || "runtime"}</span>{" "}
-                  {line.message}
+          <section className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <Card variant="surface" className="p-4">
+              <h2 className="text-sm font-semibold text-foreground">Run context</h2>
+              <dl className="mt-4 space-y-3 text-sm">
+                <DetailRow label="Created" value={new Date(run.created_at).toLocaleString()} />
+                <DetailRow label="Started" value={relativeTime(run.created_at)} />
+                <DetailRow label="Environment" value={run.environment_id} mono />
+                <DetailRow label="Provider machine" value={run.provider_machine_id || "—"} mono />
+                <DetailRow
+                  label="Infra"
+                  value={`${run.effective_gpu_type || "-"} x${run.effective_gpu_count || "-"} · ${run.effective_volume_gb || "-"}GB`}
+                />
+                <DetailRow label="Cancellation requested" value={run.cancellation_requested ? "Yes" : "No"} />
+              </dl>
+            </Card>
+
+            <Card variant="surface" className="p-4">
+              <h2 className="text-sm font-semibold text-foreground">Paths and manifests</h2>
+              <dl className="mt-4 space-y-3 text-sm">
+                <DetailRow label="Input" value={run.input || "—"} mono breakValue />
+                <DetailRow label="Output" value={run.output || "—"} mono breakValue />
+                <DetailRow label="Logs" value={run.logs || "—"} mono breakValue />
+                <DetailRow label="Code manifest" value={run.code_manifest_hash || "—"} mono breakValue />
+                <DetailRow label="Data manifest" value={run.data_manifest_hash || "—"} mono breakValue />
+              </dl>
+            </Card>
+          </section>
+
+          <Card variant="surface" className="p-4">
+            <MetricSection
+              title="W&B metrics"
+              description="Training and evaluation signals streamed from Weights & Biases."
+              metrics={wandbSeries}
+              emptyMessage="No W&B metrics yet."
+            />
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="wandb" className="space-y-4">
+          <MetricsWindow metrics={metrics} />
+          <Card variant="surface" className="p-4">
+            <MetricSection
+              title="W&B metrics"
+              description="Training and evaluation signals from the run."
+              metrics={wandbSeries}
+              emptyMessage="No W&B metrics yet."
+            />
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="logs">
+          <Card variant="surface" className="p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h2 className="text-sm font-semibold text-foreground">Runtime logs</h2>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {logs?.note ?? "Runtime logs are streamed by the machine and persisted in Convex."}
                 </p>
-              ))
-            )}
-          </div>
-        </Card>
+              </div>
+              {logs ? (
+                <Badge variant="default">
+                  {logs.logs_window.returned_logs} / {logs.logs_window.tail_limit}
+                </Badge>
+              ) : null}
+            </div>
+            <div className="mt-4 max-h-96 space-y-1 overflow-y-auto rounded border border-border bg-background p-3 font-mono text-xs">
+              {!logs ? (
+                <p className="text-muted-foreground">Loading runtime logs…</p>
+              ) : logs.recent_logs.length === 0 ? (
+                <p className="text-muted-foreground">No runtime logs yet.</p>
+              ) : (
+                logs.recent_logs.map((line, index) => (
+                  <p key={`${line.timestamp}-${index}`} className="break-words">
+                    <span className="text-muted-foreground">[{new Date(line.timestamp).toLocaleTimeString()}]</span>{" "}
+                    <span className="text-muted-foreground">{line.level || "info"}</span>{" "}
+                    <span className="text-muted-foreground">{line.source || "runtime"}</span>{" "}
+                    {line.message}
+                  </p>
+                ))
+              )}
+            </div>
+          </Card>
+        </TabsContent>
 
-        <Card className="p-4">
-          <h2 className="text-sm font-semibold">Live metrics</h2>
-          <p className="mt-1 text-ui-caption text-muted-foreground">
-            Showing {metrics.metrics_window.returned_points} points across {metrics.metrics_window.returned_series} series
-            (scan {metrics.metrics_window.scanned_points}/{metrics.metrics_window.scan_limit}).
-            {metrics.metrics_window.dropped_series_count > 0
+        <TabsContent value="checkpoints">
+          <Card variant="surface" className="p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h2 className="text-sm font-semibold text-foreground">Checkpoints</h2>
+                <p className="mt-1 text-xs text-muted-foreground">Artifacts downloaded from this run.</p>
+              </div>
+              <Badge variant="default">{artifacts?.length ?? run.artifact_keys.length} files</Badge>
+            </div>
+            {artifactsError ? <Notice variant="error">{artifactsError}</Notice> : null}
+            <div className="mt-4">
+              <Table>
+                <TableHeader>
+                  <TableRow variant="head">
+                    <TableHead>Name</TableHead>
+                    <TableHead>Size</TableHead>
+                    <TableHead>Created</TableHead>
+                    <TableHead>Path</TableHead>
+                    <TableHead className="px-0" />
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {artifacts === undefined ? (
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-muted-foreground">Loading checkpoints…</TableCell>
+                    </TableRow>
+                  ) : artifacts.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-muted-foreground">No checkpoints downloaded yet.</TableCell>
+                    </TableRow>
+                  ) : (
+                    artifacts.map((item) => (
+                      <TableRow key={item.id}>
+                        <TableCell className="font-medium text-foreground">{item.name}</TableCell>
+                        <TableCell className="text-muted-foreground">{formatBytes(item.size)}</TableCell>
+                        <TableCell className="text-muted-foreground">{new Date(item.created_at).toLocaleString()}</TableCell>
+                        <TableCell className="break-all font-mono text-xs text-muted-foreground">{item.path}</TableCell>
+                        <TableCell>
+                          <div className="flex justify-end gap-1.5">
+                            <Button asChild type="button" variant="ghost" size="icon-sm">
+                              <a href={item.download_url} target="_blank" rel="noreferrer" aria-label={`Open ${item.name}`}>
+                                <ExternalLink className="h-3.5 w-3.5" />
+                              </a>
+                            </Button>
+                            <Button asChild type="button" variant="ghost" size="icon-sm">
+                              <a href={item.download_url} download={item.name} aria-label={`Download ${item.name}`}>
+                                <Download className="h-3.5 w-3.5" />
+                              </a>
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="system" className="space-y-4">
+          <MetricsWindow metrics={metrics} />
+          <Card variant="surface" className="p-4">
+            <MetricSection
+              title="System metrics"
+              description="Bootstrap, artifact, and runtime system activity."
+              metrics={[...systemSeries, ...runtimeSeries]}
+              emptyMessage="No system metrics yet."
+            />
+          </Card>
+        </TabsContent>
+      </Tabs>
+      </div>
+    </main>
+  )
+}
+
+function SummaryCard({ label, value, detail }: { label: string; value: string; detail: string }) {
+  return (
+    <Card variant="surface" className="p-4">
+      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className="mt-2 truncate text-xl font-semibold text-foreground">{value}</p>
+      <p className="mt-1 text-xs text-muted-foreground">{detail}</p>
+    </Card>
+  )
+}
+
+function DetailRow({
+  label,
+  value,
+  mono,
+  breakValue,
+}: {
+  label: string
+  value: string
+  mono?: boolean
+  breakValue?: boolean
+}) {
+  return (
+    <div className="grid grid-cols-3 gap-3">
+      <dt className="text-muted-foreground">{label}</dt>
+      <dd className={`col-span-2 text-right text-foreground ${mono ? "font-mono text-xs" : ""} ${breakValue ? "break-all" : "truncate"}`}>
+        {value}
+      </dd>
+    </div>
+  )
+}
+
+function MetricsWindow({ metrics }: { metrics: RunMetricsOnlyDetail | undefined }) {
+  return (
+    <Card variant="surface" className="p-4">
+      <div className="flex items-start gap-3">
+        <FileText className="mt-0.5 h-4 w-4 text-muted-foreground" />
+        <div>
+          <h2 className="text-sm font-semibold text-foreground">Metrics window</h2>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {metrics
+              ? `Showing ${metrics.metrics_window.returned_points} points across ${metrics.metrics_window.returned_series} series (scan ${metrics.metrics_window.scanned_points}/${metrics.metrics_window.scan_limit}).`
+              : "Loading runtime metrics…"}
+            {metrics && metrics.metrics_window.dropped_series_count > 0
               ? ` ${metrics.metrics_window.dropped_series_count} series omitted by window limits.`
               : ""}
           </p>
-          {series.length === 0 ? (
-            <p className="mt-3 text-sm text-muted-foreground">No runtime metrics yet.</p>
-          ) : (
-            <div className="mt-3 space-y-4">
-              {series.map((metric) => (
-                <div key={metric.name} className="rounded-lg border border-border p-2">
-                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{metric.name}</p>
-                  <div className="h-40 w-full">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={metric.points}>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="label" minTickGap={24} />
-                        <YAxis width={48} />
-                        <Tooltip />
-                        <Line type="monotone" dataKey="value" stroke="currentColor" strokeWidth={2} dot={false} />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </Card>
-      </section>
-    </main>
+        </div>
+      </div>
+    </Card>
   )
+}
+
+function wandbPointCount(metrics: ReturnType<typeof metricSeries>) {
+  return metrics.reduce((sum, metric) => sum + metric.pointCount, 0)
 }

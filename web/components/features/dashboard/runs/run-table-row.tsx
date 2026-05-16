@@ -1,6 +1,7 @@
 "use client"
 
 import { Users } from "lucide-react"
+import { useRouter } from "next/navigation"
 
 import { relativeTime, type RunRow } from "@/components/features/dashboard-model"
 import { RunActionsMenu } from "@/components/features/dashboard/runs/run-actions-menu"
@@ -44,6 +45,7 @@ function RunTableRow({
   onDeleteRuns,
   onShareRun,
 }: RunTableRowProps) {
+  const router = useRouter()
   const runLabel = run.name || "Untitled run"
 
   return (
@@ -52,7 +54,7 @@ function RunTableRow({
         "group cursor-pointer align-middle hover:bg-muted",
         selected ? "bg-secondary-faint" : "",
       )}
-      onClick={() => onSelectRun(selected ? null : run.run_id)}
+      onClick={() => router.push(`/dashboard/runs/${run.run_id}`)}
     >
       <TableCell className="text-foreground">
         <div className="flex min-w-0 items-center gap-2">
