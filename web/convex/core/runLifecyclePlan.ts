@@ -657,7 +657,7 @@ export function isRunArtifactKey(outputPath: string, key: string) {
 export type RuntimeArtifact = {
   key: string;
   size: number;
-  lastModifiedAt: number;
+  providerCreationTime: number;
 };
 
 export function planRuntimeArtifactCommit(args: {

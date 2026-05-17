@@ -424,7 +424,7 @@ export const internalListIndexedObjects = internalQuery({
         key: row.key,
         name: row.name || toObjectName(row.key),
         size: row.size || 0,
-        last_modified_at: row.providerCreationTime || 0,
+        last_modified_at: row.providerCreationTime,
         data_blob_id: row.dataBlobId || undefined,
       })),
     };
@@ -606,7 +606,7 @@ export const internalFinalizeArtifactRename = internalMutation({
     const providerCreationTime =
       typeof args.providerCreationTime === "number" && Number.isFinite(args.providerCreationTime) && args.providerCreationTime > 0
         ? Math.floor(args.providerCreationTime)
-        : (fromRow?.providerCreationTime || Date.now());
+        : (fromRow?.providerCreationTime ?? Date.now());
     const size =
       typeof args.size === "number" && Number.isFinite(args.size) && args.size >= 0
         ? Math.floor(args.size)

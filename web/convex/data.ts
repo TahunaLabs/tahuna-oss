@@ -113,7 +113,7 @@ async function upsertDataUploadIndexRow(
     filename: string;
     blobId: string;
     size: number;
-    lastModifiedAt: number;
+    providerCreationTime: number;
   },
 ) {
   const normalizedSize = Math.max(0, Math.floor(args.size));
@@ -127,7 +127,7 @@ async function upsertDataUploadIndexRow(
     key: args.key,
     name: args.filename,
     size: normalizedSize,
-    lastModifiedAt: Math.max(0, Math.floor(args.lastModifiedAt)),
+    providerCreationTime: Math.max(0, Math.floor(args.providerCreationTime)),
     dataBlobId: args.blobId,
     runId: undefined,
     dataId: args.blobId,
@@ -188,7 +188,7 @@ async function listBlobsForUserId(
       content_type: "",
       size: row.size || 0,
       download_url: "",
-      last_modified_at: row.lastModifiedAt || 0,
+      last_modified_at: row.providerCreationTime || 0,
     });
   }
 
@@ -234,7 +234,7 @@ export const { syncMetadata } = createObjectStoreClientApi<DataModel>({
     const parsed = parseKey(key);
     const filename = parsed.filename.trim() || "file";
     const blobId = parsed.blobId.trim();
-    const lastModifiedAt = toMillis(metadata?.providerCreationTime, Date.now());
+    const providerCreationTime = toMillis(metadata?.providerCreationTime, Date.now());
     try {
       await upsertDataUploadIndexRow(ctx as MutationCtx, {
         userId,
@@ -242,7 +242,7 @@ export const { syncMetadata } = createObjectStoreClientApi<DataModel>({
         filename,
         blobId: blobId || shortId("blob"),
         size: objectSize,
-        lastModifiedAt,
+        providerCreationTime,
       });
     } catch (error) {
       try {

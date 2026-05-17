@@ -127,7 +127,7 @@ async function upsertDataManifestIndexRow(
     key,
     name: `${args.manifestHash}.json`,
     size: 0,
-    lastModifiedAt: Date.now(),
+    providerCreationTime: Date.now(),
     runId: undefined,
     dataBlobId: undefined,
     dataId: args.dataId,
