@@ -1407,7 +1407,7 @@ export const ingestRuntimeArtifacts = internalAction({
         validArtifacts.push({
           key,
           size: typeof metadata?.size === "number" && Number.isFinite(metadata.size) ? metadata.size : 0,
-          lastModifiedAt: toObjectTimestamp(metadata?.lastModified, Date.now()),
+          lastModifiedAt: toObjectTimestamp(metadata?._providerCreationTime, Date.now()),
         });
       }
 
