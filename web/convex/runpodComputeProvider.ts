@@ -57,6 +57,18 @@ function parseJsonObject(rawText: string): Record<string, unknown> {
   }
 }
 
+function extractProviderCreationTime(body: Record<string, unknown>): number | undefined {
+  const raw = body.createdAt;
+  if (typeof raw === "number" && Number.isFinite(raw) && raw > 0) {
+    return raw > 1e12 ? Math.floor(raw) : Math.floor(raw * 1000);
+  }
+  if (typeof raw === "string") {
+    const parsed = Date.parse(raw);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+  }
+  return undefined;
+}
+
 function requireRunpodMachineId(row: Record<string, unknown>, context: string) {
   const podId = typeof row.id === "string" ? row.id : (typeof row.podId === "string" ? row.podId : "");
   if (!podId) {
@@ -231,6 +243,7 @@ async function createRunpodMachine(
   return {
     providerMachineId: requireRunpodMachineId(body, "Runpod machine creation failed"),
     providerMetadata: body,
+    _providerCreationTime: extractProviderCreationTime(body),
   };
 }
 
@@ -258,6 +271,7 @@ async function getRunpodMachine(_ctx: ComputeProviderContext, args: GetMachineAr
     providerMachineId: requireRunpodMachineId(body, "Runpod machine lookup failed"),
     status: typeof body.status === "string" ? body.status : undefined,
     providerMetadata: body,
+    _providerCreationTime: extractProviderCreationTime(body),
   };
 }
 
