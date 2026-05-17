@@ -17,7 +17,7 @@ export type ObjectMetadata = {
   url?: string;
   size?: number;
   sha256?: string;
-  _providerCreationTime?: string;
+  providerCreationTime?: string;
   contentType?: string;
 };
 

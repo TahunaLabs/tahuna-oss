@@ -21,7 +21,7 @@ export type CreateMachineArgs = {
 export type CreateMachineResult = {
   providerMachineId: string;
   providerMetadata?: unknown;
-  _providerCreationTime?: number;
+  providerCreationTime?: number;
 };
 
 export type GetMachineArgs = {
@@ -32,7 +32,7 @@ export type ComputeMachine = {
   providerMachineId: string;
   status?: string;
   providerMetadata?: unknown;
-  _providerCreationTime?: number;
+  providerCreationTime?: number;
 };
 
 export type TerminateMachineArgs = {

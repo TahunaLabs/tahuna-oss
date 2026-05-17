@@ -41,6 +41,7 @@ export type RunLifecyclePatch = {
   status?: string;
   cancellationRequested?: boolean;
   providerMachineId?: string;
+  providerCreationTime?: number;
   computeStartedAt?: number;
   computeEndedAt?: number;
   runtimeTokenHash?: string;
@@ -326,6 +327,7 @@ export function shouldTerminateMachine(args: {
 export function planMachineProvisioned(args: {
   run: RunLifecycleRunState;
   providerMachineId: string;
+  providerCreationTime?: number;
   providerMetadata?: unknown;
   startupTimeout?: {
     delayMs: number;
@@ -338,6 +340,7 @@ export function planMachineProvisioned(args: {
   return {
     patch: {
       providerMachineId: args.providerMachineId,
+      ...(args.providerCreationTime ? { providerCreationTime: args.providerCreationTime } : {}),
     },
     events: [
       runEvent(RUN_LIFECYCLE_STATUS.PROVISIONING, "gpu machine provisioned", {

@@ -35,12 +35,13 @@ export function resolveRunUptimeMs(
 
 export function resolveTerminalRunTiming(
   run: {
+    providerCreationTime?: number;
     computeStartedAt?: number;
     computeEndedAt?: number;
   },
   nowMs = Date.now(),
 ) {
-  const startedAt = toOptionalUnixMillis(run.computeStartedAt);
+  const startedAt = toOptionalUnixMillis(run.providerCreationTime ?? run.computeStartedAt);
   const existingEndedAt = toOptionalUnixMillis(run.computeEndedAt);
   if (startedAt === undefined) {
     return {

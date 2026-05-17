@@ -76,6 +76,7 @@ export default defineSchema({
     runtimeTokenHash: v.optional(v.string()),
     artifactKeys: v.optional(v.array(v.string())),
     cancellationRequested: v.boolean(),
+    providerCreationTime: v.optional(v.number()),
     computeStartedAt: v.optional(v.number()),
     computeEndedAt: v.optional(v.number()),
     ...cloudRunBillingFields,

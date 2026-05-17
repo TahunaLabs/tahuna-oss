@@ -351,7 +351,7 @@ async function hydrateDownloadUrls(ctx: ActionCtx, pageItems: StorageItem[]) {
             };
           }
         }
-        let metadata: null | { size?: number; _providerCreationTime?: string; url?: string } = null;
+        let metadata: null | { size?: number; providerCreationTime?: string; url?: string } = null;
         try {
           metadata = await objectStore.getMetadata(ctx, item.key);
         } catch {
@@ -362,7 +362,7 @@ async function hydrateDownloadUrls(ctx: ActionCtx, pageItems: StorageItem[]) {
           return {
             ...item,
             size: typeof metadata?.size === "number" ? metadata.size : item.size,
-            last_modified_at: toTimestamp(metadata?._providerCreationTime, item.last_modified_at),
+            last_modified_at: toTimestamp(metadata?.providerCreationTime, item.last_modified_at),
             download_url: downloadURL,
           };
         } catch {
@@ -424,7 +424,7 @@ export const internalListIndexedObjects = internalQuery({
         key: row.key,
         name: row.name || toObjectName(row.key),
         size: row.size || 0,
-        last_modified_at: row._providerCreationTimeAt || 0,
+        last_modified_at: row.providerCreationTime || 0,
         data_blob_id: row.dataBlobId || undefined,
       })),
     };
@@ -563,7 +563,7 @@ export const internalFinalizeArtifactRename = internalMutation({
     fromKey: v.string(),
     toKey: v.string(),
     size: v.optional(v.number()),
-    _providerCreationTimeAt: v.optional(v.number()),
+    providerCreationTime: v.optional(v.number()),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -603,10 +603,10 @@ export const internalFinalizeArtifactRename = internalMutation({
       },
     });
 
-    const _providerCreationTimeAt =
-      typeof args._providerCreationTimeAt === "number" && Number.isFinite(args._providerCreationTimeAt) && args._providerCreationTimeAt > 0
-        ? Math.floor(args._providerCreationTimeAt)
-        : (fromRow?._providerCreationTimeAt || Date.now());
+    const providerCreationTime =
+      typeof args.providerCreationTime === "number" && Number.isFinite(args.providerCreationTime) && args.providerCreationTime > 0
+        ? Math.floor(args.providerCreationTime)
+        : (fromRow?.providerCreationTime || Date.now());
     const size =
       typeof args.size === "number" && Number.isFinite(args.size) && args.size >= 0
         ? Math.floor(args.size)
@@ -617,7 +617,7 @@ export const internalFinalizeArtifactRename = internalMutation({
       key: args.toKey,
       name: toObjectName(args.toKey),
       size,
-      _providerCreationTimeAt,
+      providerCreationTime,
       runId: args.runId,
       dataBlobId: undefined,
       dataId: undefined,
@@ -675,7 +675,7 @@ export const renameArtifact = action({
         fromKey: renamePlan.fromKey,
         toKey: renamePlan.toKey,
         size: typeof metadata.size === "number" && Number.isFinite(metadata.size) ? metadata.size : 0,
-        _providerCreationTimeAt: toTimestamp(metadata._providerCreationTime, Date.now()),
+        providerCreationTime: toTimestamp(metadata.providerCreationTime, Date.now()),
       });
     } catch (error) {
       try {

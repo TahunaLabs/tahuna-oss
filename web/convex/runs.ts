@@ -1165,6 +1165,7 @@ export const provisionRun = internalAction({
       await ctx.runMutation(internal.runs.markMachineProvisioned, {
         runId: args.runId,
         providerMachineId: provisionResult.providerMachineId,
+        providerCreationTime: provisionResult.providerCreationTime,
         fingerprint: compatibilityFingerprint,
         providerMetadata: provisionResult.providerMetadata,
       });
@@ -1203,6 +1204,7 @@ export const markMachineProvisioned = internalMutation({
   args: {
     runId: v.id("runs"),
     providerMachineId: v.string(),
+    providerCreationTime: v.optional(v.number()),
     fingerprint: runtimeCompatibilityFingerprintValidator,
     providerMetadata: v.optional(v.any()),
   },
@@ -1215,6 +1217,7 @@ export const markMachineProvisioned = internalMutation({
     await applyRunLifecyclePlan(ctx, args.runId, row, planMachineProvisioned({
       run: toRunLifecycleState(row),
       providerMachineId: args.providerMachineId,
+      providerCreationTime: args.providerCreationTime,
       providerMetadata: args.providerMetadata,
       startupTimeout: {
         delayMs: RUN_CONFIG.startupTimeoutSeconds * 1000,
@@ -1407,7 +1410,7 @@ export const ingestRuntimeArtifacts = internalAction({
         validArtifacts.push({
           key,
           size: typeof metadata?.size === "number" && Number.isFinite(metadata.size) ? metadata.size : 0,
-          lastModifiedAt: toObjectTimestamp(metadata?._providerCreationTime, Date.now()),
+          lastModifiedAt: toObjectTimestamp(metadata?.providerCreationTime, Date.now()),
         });
       }
 

@@ -243,7 +243,7 @@ async function createRunpodMachine(
   return {
     providerMachineId: requireRunpodMachineId(body, "Runpod machine creation failed"),
     providerMetadata: body,
-    _providerCreationTime: extractProviderCreationTime(body),
+    providerCreationTime: extractProviderCreationTime(body),
   };
 }
 
@@ -271,7 +271,7 @@ async function getRunpodMachine(_ctx: ComputeProviderContext, args: GetMachineAr
     providerMachineId: requireRunpodMachineId(body, "Runpod machine lookup failed"),
     status: typeof body.status === "string" ? body.status : undefined,
     providerMetadata: body,
-    _providerCreationTime: extractProviderCreationTime(body),
+    providerCreationTime: extractProviderCreationTime(body),
   };
 }
 

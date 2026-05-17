@@ -77,7 +77,7 @@ function normalizeMetadata(key: string, metadata: unknown): ObjectMetadata | nul
     url?: string;
     size?: number;
     sha256?: string;
-    _providerCreationTime?: string;
+    providerCreationTime?: string;
     contentType?: string;
   };
   return {
@@ -85,7 +85,7 @@ function normalizeMetadata(key: string, metadata: unknown): ObjectMetadata | nul
     url: row.url,
     size: row.size,
     sha256: row.sha256,
-    _providerCreationTime: row._providerCreationTime,
+    providerCreationTime: row.providerCreationTime,
     contentType: row.contentType,
   };
 }

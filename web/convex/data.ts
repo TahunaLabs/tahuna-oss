@@ -234,7 +234,7 @@ export const { syncMetadata } = createObjectStoreClientApi<DataModel>({
     const parsed = parseKey(key);
     const filename = parsed.filename.trim() || "file";
     const blobId = parsed.blobId.trim();
-    const lastModifiedAt = toMillis(metadata?._providerCreationTime, Date.now());
+    const lastModifiedAt = toMillis(metadata?.providerCreationTime, Date.now());
     try {
       await upsertDataUploadIndexRow(ctx as MutationCtx, {
         userId,
