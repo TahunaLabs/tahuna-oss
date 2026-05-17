@@ -402,6 +402,9 @@ export async function deleteRunForUserId(
     });
   }
 
+  if (composition?.settleTerminalRunUsage && ACTIVE_STATUSES.has(row.status)) {
+    await composition.settleTerminalRunUsage(ctx, row);
+  }
   await applyRunDeletionPlan(ctx, runId, row, plan);
   return { deleted: true, run_id: String(runId) };
 }
