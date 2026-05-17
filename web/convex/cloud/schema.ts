@@ -18,7 +18,6 @@ export const cloudSchemaTables = {
     userId: v.string(),
     balanceCents: v.number(),
     currency: v.string(),
-    createdAt: v.number(),
     updatedAt: v.number(),
   }).index("by_user", ["userId"]),
 
@@ -55,11 +54,9 @@ export const cloudSchemaTables = {
     checkoutUrl: v.optional(v.string()),
     error: v.optional(v.string()),
     fulfilledAt: v.optional(v.number()),
-    createdAt: v.number(),
     updatedAt: v.number(),
   })
     .index("by_user", ["userId"])
-    .index("by_user_and_created_at", ["userId", "createdAt"])
-    .index("by_user_status_and_created_at", ["userId", "status", "createdAt"])
+    .index("by_user_and_status", ["userId", "status"])
     .index("by_stripe_checkout_session_id", ["stripeCheckoutSessionId"]),
 } as const;

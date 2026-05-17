@@ -440,7 +440,6 @@ export const upsertRun = internalMutation({
         metadata: args.metadata,
         requirementsTxt: args.requirementsTxt,
         summary: args.summary,
-        createdAt: now,
         updatedAt: now,
       });
       return { created: true };
@@ -487,7 +486,6 @@ export const ingestMetrics = internalMutation({
       return { accepted: 0 };
     }
     const wandbRunId = normalizeWandbRunId(args.wandbRunId);
-    const now = Date.now();
     let accepted = 0;
     for (const point of args.points.slice(0, MAX_METRIC_POINTS_PER_REQUEST)) {
       const key = point.key.trim().slice(0, 120);
@@ -508,7 +506,6 @@ export const ingestMetrics = internalMutation({
         key,
         value: point.value,
         source,
-        createdAt: now,
       });
       await ctx.db.insert("runRuntimeMetrics", {
         runId: args.runId,

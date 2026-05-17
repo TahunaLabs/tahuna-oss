@@ -98,7 +98,6 @@ async function ensureCreditsRow(
     userId: args.userId,
     balanceCents: initialBalance,
     currency: CLOUD_BILLING_CONFIG.currency,
-    createdAt: now,
     updatedAt: now,
   });
   if (initialBalance > 0) {

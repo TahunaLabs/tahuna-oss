@@ -71,7 +71,6 @@ export async function upsertCoreJobRecord(
     delayMs: job.delayMs,
     availableAt: jobAvailableAt(now, job.delayMs),
     attempts: status === "running" ? 1 : 0,
-    createdAt: now,
     updatedAt: now,
   });
   return { jobId, created: true, record: null };

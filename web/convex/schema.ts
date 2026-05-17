@@ -109,7 +109,6 @@ export default defineSchema({
     availableAt: v.number(),
     attempts: v.number(),
     lastError: v.optional(v.string()),
-    createdAt: v.number(),
     updatedAt: v.number(),
     completedAt: v.optional(v.number()),
   })
@@ -223,7 +222,6 @@ export default defineSchema({
     metadata: v.optional(v.any()),
     requirementsTxt: v.optional(v.string()),
     summary: v.optional(v.any()),
-    createdAt: v.number(),
     updatedAt: v.number(),
   })
     .index("by_run", ["runId"])
@@ -237,7 +235,6 @@ export default defineSchema({
     key: v.string(),
     value: v.number(),
     source: v.optional(v.string()),
-    createdAt: v.number(),
   })
     .index("by_run", ["runId"])
     .index("by_run_and_wandb_run", ["runId", "wandbRunId"]),

@@ -369,7 +369,7 @@ export const listMyPaymentTransactions = query({
     const limit = Math.max(1, Math.min(100, rawLimit));
     const rows = await ctx.db
       .query("stripeCheckoutSessions")
-      .withIndex("by_user_status_and_created_at", (q) => q.eq("userId", userId).eq("status", "fulfilled"))
+      .withIndex("by_user_and_status", (q) => q.eq("userId", userId).eq("status", "fulfilled"))
       .order("desc")
       .take(limit);
     return rows.map((row) => ({
@@ -378,7 +378,7 @@ export const listMyPaymentTransactions = query({
       currency: row.currency,
       stripe_checkout_session_id: row.stripeCheckoutSessionId ?? null,
       stripe_payment_intent_id: row.stripePaymentIntentId ?? null,
-      created_at: row.createdAt,
+      created_at: row._creationTime,
       fulfilled_at: row.fulfilledAt ?? null,
     }));
   },
@@ -419,7 +419,6 @@ export const internalCreateStripeCheckoutSessionRecord = internalMutation({
       creditsCents: args.creditsCents,
       currency: args.currency,
       status: "pending",
-      createdAt: now,
       updatedAt: now,
     });
   },
