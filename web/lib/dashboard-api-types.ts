@@ -45,7 +45,7 @@ export type StorageItem = {
   path: string
   size: number
   download_url: string
-  created_at: number
+  last_modified_at: number
   run?: { id: string; name: string }
   environment?: { id: string; name: string }
   data_blob_id?: string
@@ -142,7 +142,7 @@ export type DataBlobRow = {
   content_type: string
   size: number
   download_url: string
-  created_at: number
+  last_modified_at: number
 }
 
 export type RunRow = {

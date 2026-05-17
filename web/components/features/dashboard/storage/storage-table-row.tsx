@@ -118,7 +118,7 @@ function StorageTableRow({
       </TableCell>
 
       <TableCell className="text-muted-foreground">
-        {new Date(item.created_at).toLocaleDateString()}
+        {new Date(item.last_modified_at).toLocaleDateString()}
       </TableCell>
 
       <TableCell className="text-muted-foreground">

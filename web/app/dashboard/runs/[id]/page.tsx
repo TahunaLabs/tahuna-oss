@@ -270,7 +270,7 @@ export default function RunDetailPage() {
                         <TableRow key={item.id}>
                           <TableCell className="font-medium text-foreground">{item.name}</TableCell>
                           <TableCell className="text-muted-foreground">{formatBytes(item.size)}</TableCell>
-                          <TableCell className="text-muted-foreground">{new Date(item.created_at).toLocaleString()}</TableCell>
+                          <TableCell className="text-muted-foreground">{new Date(item.last_modified_at).toLocaleString()}</TableCell>
                           <TableCell>
                             <div className="flex justify-end gap-1.5">
                               <Button asChild type="button" variant="ghost" size="icon-sm">

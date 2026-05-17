@@ -198,7 +198,7 @@ export default defineSchema({
     key: v.string(),
     name: v.string(),
     size: v.number(),
-    createdAt: v.number(),
+    lastModifiedAt: v.number(),
     runId: v.optional(v.id("runs")),
     dataBlobId: v.optional(v.string()),
     dataId: v.optional(v.string()),
@@ -296,7 +296,7 @@ export default defineSchema({
     filename: v.string(),
     key: v.string(),
     size: v.number(),
-    createdAt: v.optional(v.number()),
+    lastModifiedAt: v.optional(v.number()),
     contentType: v.optional(v.string()),
     path: v.optional(v.string()),
   })

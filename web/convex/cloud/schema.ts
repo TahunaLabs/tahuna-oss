@@ -30,10 +30,10 @@ export const cloudSchemaTables = {
     referenceType: v.optional(v.string()),
     referenceId: v.optional(v.string()),
     metadata: v.optional(v.any()),
-    createdAt: v.number(),
+    updatedAt: v.number(),
   })
     .index("by_user", ["userId"])
-    .index("by_user_and_created_at", ["userId", "createdAt"])
+    .index("by_user_and_updated_at", ["userId", "updatedAt"])
     .index("by_user_and_idempotency_key", ["userId", "idempotencyKey"]),
 
   stripeCheckoutSessions: defineTable({

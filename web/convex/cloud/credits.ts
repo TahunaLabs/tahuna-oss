@@ -112,7 +112,7 @@ async function ensureCreditsRow(
         source: args.source,
         currency: CLOUD_BILLING_CONFIG.currency,
       },
-      createdAt: now,
+      updatedAt: now,
     });
   }
   const created = await ctx.db.get("userCredits", creditsId);
@@ -180,7 +180,7 @@ export async function postLedgerEntry(ctx: MutationCtx, args: LedgerEntryArgs): 
     referenceType: normalizeOptionalText(args.referenceType),
     referenceId: normalizeOptionalText(args.referenceId),
     metadata: args.metadata,
-    createdAt: now,
+    updatedAt: now,
   });
   return {
     balanceCents: balanceAfterCents,
@@ -275,7 +275,7 @@ export async function upsertLedgerDebitTotal(
         referenceType: normalizeOptionalText(args.referenceType),
         referenceId: normalizeOptionalText(args.referenceId),
         metadata: args.metadata,
-        createdAt: now,
+        updatedAt: now,
       });
     }
   } else {
@@ -288,7 +288,7 @@ export async function upsertLedgerDebitTotal(
       referenceType: normalizeOptionalText(args.referenceType),
       referenceId: normalizeOptionalText(args.referenceId),
       metadata: args.metadata,
-      createdAt: now,
+      updatedAt: now,
     });
   }
 

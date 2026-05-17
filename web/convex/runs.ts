@@ -277,7 +277,7 @@ const runtimeLogLineValidator = v.object({
 const runtimeArtifactRowValidator = v.object({
   key: v.string(),
   size: v.number(),
-  createdAt: v.number(),
+  lastModifiedAt: v.number(),
 });
 const runtimeMetricSampleValidator = v.object({
   name: v.string(),
@@ -392,11 +392,11 @@ async function upsertRunArtifactIndexRow(
     runId: Id<"runs">;
     key: string;
     size: number;
-    createdAt: number;
+    lastModifiedAt: number;
   },
 ) {
   const normalizedSize = Math.max(0, Math.floor(args.size));
-  const normalizedCreatedAt = Math.max(0, Math.floor(args.createdAt));
+  const normalizedLastModifiedAt = Math.max(0, Math.floor(args.lastModifiedAt));
   const existing = await ctx.db
     .query("storageObjects")
     .withIndex("by_user_and_key", (q) => q.eq("userId", args.userId).eq("key", args.key))
@@ -407,7 +407,7 @@ async function upsertRunArtifactIndexRow(
     key: args.key,
     name: storageObjectNameFromKey(args.key),
     size: normalizedSize,
-    createdAt: normalizedCreatedAt,
+    lastModifiedAt: normalizedLastModifiedAt,
     runId: args.runId,
     dataBlobId: undefined,
     dataId: undefined,
@@ -1378,7 +1378,7 @@ export const ingestRuntimeArtifacts = internalAction({
   handler: async (ctx, args): Promise<{ accepted: number }> => {
     const job = createFinalizeArtifactJob({ runId: String(args.runId), keys: args.keys });
     const jobId = await startActionJob(ctx, job);
-    const validArtifacts: Array<{ key: string; size: number; createdAt: number }> = [];
+    const validArtifacts: Array<{ key: string; size: number; lastModifiedAt: number }> = [];
     try {
       const commitContext = await ctx.runQuery(internal.runs.internalGetRunArtifactCommitContext, {
         runId: args.runId,
@@ -1407,7 +1407,7 @@ export const ingestRuntimeArtifacts = internalAction({
         validArtifacts.push({
           key,
           size: typeof metadata?.size === "number" && Number.isFinite(metadata.size) ? metadata.size : 0,
-          createdAt: toObjectTimestamp(metadata?.lastModified, Date.now()),
+          lastModifiedAt: toObjectTimestamp(metadata?.lastModified, Date.now()),
         });
       }
 
@@ -1487,7 +1487,7 @@ export const commitRuntimeArtifacts = internalMutation({
           runId: args.runId,
           key: artifact.key,
           size: artifact.size,
-          createdAt: artifact.createdAt,
+          lastModifiedAt: artifact.lastModifiedAt,
         });
       } catch (error) {
         throw error;

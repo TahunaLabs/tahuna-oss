@@ -86,7 +86,7 @@ const dataBlobValidator = v.object({
   content_type: v.string(),
   size: v.number(),
   download_url: v.string(),
-  created_at: v.number(),
+  last_modified_at: v.number(),
 });
 const listDataBlobsValidator = v.object({
   blobs: v.array(dataBlobValidator),
@@ -102,7 +102,7 @@ type DataBlobRow = {
   content_type: string;
   size: number;
   download_url: string;
-  created_at: number;
+  last_modified_at: number;
 };
 
 async function upsertDataUploadIndexRow(
@@ -113,7 +113,7 @@ async function upsertDataUploadIndexRow(
     filename: string;
     blobId: string;
     size: number;
-    createdAt: number;
+    lastModifiedAt: number;
   },
 ) {
   const normalizedSize = Math.max(0, Math.floor(args.size));
@@ -127,7 +127,7 @@ async function upsertDataUploadIndexRow(
     key: args.key,
     name: args.filename,
     size: normalizedSize,
-    createdAt: Math.max(0, Math.floor(args.createdAt)),
+    lastModifiedAt: Math.max(0, Math.floor(args.lastModifiedAt)),
     dataBlobId: args.blobId,
     runId: undefined,
     dataId: args.blobId,
@@ -188,11 +188,11 @@ async function listBlobsForUserId(
       content_type: "",
       size: row.size || 0,
       download_url: "",
-      created_at: row.createdAt || 0,
+      last_modified_at: row.lastModifiedAt || 0,
     });
   }
 
-  const ordered = Array.from(byKey.values()).sort((a, b) => b.created_at - a.created_at);
+  const ordered = Array.from(byKey.values()).sort((a, b) => b.last_modified_at - a.last_modified_at);
   const page = ordered.slice(offset, offset + limit);
   const blobs = await Promise.all(
     page.map(async (row) => ({
@@ -234,7 +234,7 @@ export const { syncMetadata } = createObjectStoreClientApi<DataModel>({
     const parsed = parseKey(key);
     const filename = parsed.filename.trim() || "file";
     const blobId = parsed.blobId.trim();
-    const createdAt = toMillis(metadata?.lastModified, Date.now());
+    const lastModifiedAt = toMillis(metadata?.lastModified, Date.now());
     try {
       await upsertDataUploadIndexRow(ctx as MutationCtx, {
         userId,
@@ -242,7 +242,7 @@ export const { syncMetadata } = createObjectStoreClientApi<DataModel>({
         filename,
         blobId: blobId || shortId("blob"),
         size: objectSize,
-        createdAt,
+        lastModifiedAt,
       });
     } catch (error) {
       try {

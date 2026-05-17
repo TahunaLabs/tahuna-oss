@@ -39,7 +39,7 @@ const storageItemValidator = v.object({
   name: v.string(),
   path: v.string(),
   size: v.number(),
-  created_at: v.number(),
+  last_modified_at: v.number(),
   download_url: v.string(),
   run: v.optional(resourceRefValidator),
   environment: v.optional(resourceRefValidator),
@@ -77,7 +77,7 @@ const indexedStorageRowValidator = v.object({
   key: v.string(),
   name: v.string(),
   size: v.number(),
-  created_at: v.number(),
+  last_modified_at: v.number(),
   run: v.optional(resourceRefValidator),
   environment: v.optional(resourceRefValidator),
   data_blob_id: v.optional(v.string()),
@@ -96,7 +96,7 @@ type StorageItem = {
   name: string;
   path: string;
   size: number;
-  created_at: number;
+  last_modified_at: number;
   download_url: string;
   run?: { id: string; name: string };
   environment?: { id: string; name: string };
@@ -111,7 +111,7 @@ type IndexedStorageRow = {
   key: string;
   name: string;
   size: number;
-  created_at: number;
+  last_modified_at: number;
   run?: { id: string; name: string };
   environment?: { id: string; name: string };
   data_blob_id?: string;
@@ -201,11 +201,11 @@ function toTimestamp(value: string | undefined, fallback: number) {
 function sortItems(items: StorageItem[], sort: StorageSort) {
   return items.sort((a, b) => {
     if (sort === "created_asc") {
-      if (a.created_at !== b.created_at) return a.created_at - b.created_at;
+      if (a.last_modified_at !== b.last_modified_at) return a.last_modified_at - b.last_modified_at;
       return a.key.localeCompare(b.key);
     }
     if (sort === "created_desc") {
-      if (a.created_at !== b.created_at) return b.created_at - a.created_at;
+      if (a.last_modified_at !== b.last_modified_at) return b.last_modified_at - a.last_modified_at;
       return a.key.localeCompare(b.key);
     }
     if (sort === "size_asc") {
@@ -262,7 +262,7 @@ function toStorageItem(row: IndexedStorageRow): StorageItem {
     name: row.name,
     path: row.key,
     size: row.size,
-    created_at: row.created_at,
+    last_modified_at: row.last_modified_at,
     download_url: "",
     run: row.run,
     environment: row.environment,
@@ -362,7 +362,7 @@ async function hydrateDownloadUrls(ctx: ActionCtx, pageItems: StorageItem[]) {
           return {
             ...item,
             size: typeof metadata?.size === "number" ? metadata.size : item.size,
-            created_at: toTimestamp(metadata?.lastModified, item.created_at),
+            last_modified_at: toTimestamp(metadata?.lastModified, item.last_modified_at),
             download_url: downloadURL,
           };
         } catch {
@@ -424,7 +424,7 @@ export const internalListIndexedObjects = internalQuery({
         key: row.key,
         name: row.name || toObjectName(row.key),
         size: row.size || 0,
-        created_at: row.createdAt || 0,
+        last_modified_at: row.lastModifiedAt || 0,
         data_blob_id: row.dataBlobId || undefined,
       })),
     };
@@ -563,7 +563,7 @@ export const internalFinalizeArtifactRename = internalMutation({
     fromKey: v.string(),
     toKey: v.string(),
     size: v.optional(v.number()),
-    createdAt: v.optional(v.number()),
+    lastModifiedAt: v.optional(v.number()),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -603,10 +603,10 @@ export const internalFinalizeArtifactRename = internalMutation({
       },
     });
 
-    const createdAt =
-      typeof args.createdAt === "number" && Number.isFinite(args.createdAt) && args.createdAt > 0
-        ? Math.floor(args.createdAt)
-        : (fromRow?.createdAt || Date.now());
+    const lastModifiedAt =
+      typeof args.lastModifiedAt === "number" && Number.isFinite(args.lastModifiedAt) && args.lastModifiedAt > 0
+        ? Math.floor(args.lastModifiedAt)
+        : (fromRow?.lastModifiedAt || Date.now());
     const size =
       typeof args.size === "number" && Number.isFinite(args.size) && args.size >= 0
         ? Math.floor(args.size)
@@ -617,7 +617,7 @@ export const internalFinalizeArtifactRename = internalMutation({
       key: args.toKey,
       name: toObjectName(args.toKey),
       size,
-      createdAt,
+      lastModifiedAt,
       runId: args.runId,
       dataBlobId: undefined,
       dataId: undefined,
@@ -675,7 +675,7 @@ export const renameArtifact = action({
         fromKey: renamePlan.fromKey,
         toKey: renamePlan.toKey,
         size: typeof metadata.size === "number" && Number.isFinite(metadata.size) ? metadata.size : 0,
-        createdAt: toTimestamp(metadata.lastModified, Date.now()),
+        lastModifiedAt: toTimestamp(metadata.lastModified, Date.now()),
       });
     } catch (error) {
       try {

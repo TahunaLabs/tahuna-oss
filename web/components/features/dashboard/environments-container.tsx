@@ -42,9 +42,9 @@ export function EnvironmentsContainer({
     const byId = new Map<string, DataBlobRow>()
     for (const blob of dataBlobs) {
       const existing = byId.get(blob.blob_id)
-      if (!existing || blob.created_at > existing.created_at) byId.set(blob.blob_id, blob)
+      if (!existing || blob.last_modified_at > existing.last_modified_at) byId.set(blob.blob_id, blob)
     }
-    return Array.from(byId.values()).sort((a, b) => b.created_at - a.created_at)
+    return Array.from(byId.values()).sort((a, b) => b.last_modified_at - a.last_modified_at)
   })()
   const dataBlobsById = new Map(uniqueDataBlobs.map((blob) => [blob.blob_id, blob]))
 

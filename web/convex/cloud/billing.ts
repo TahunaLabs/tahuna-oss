@@ -316,7 +316,7 @@ export const listMyUsageEvents = query({
       reference_type: v.union(v.string(), v.null()),
       reference_id: v.union(v.string(), v.null()),
       metadata: v.union(v.any(), v.null()),
-      created_at: v.number(),
+      updated_at: v.number(),
     }),
   ),
   handler: async (ctx, args) => {
@@ -329,7 +329,7 @@ export const listMyUsageEvents = query({
     const limit = Math.max(1, Math.min(200, rawLimit));
     const rows = await ctx.db
       .query("usageEvents")
-      .withIndex("by_user_and_created_at", (q) => q.eq("userId", userId))
+      .withIndex("by_user_and_updated_at", (q) => q.eq("userId", userId))
       .order("desc")
       .take(limit);
     return rows.map((row) => ({
@@ -339,7 +339,7 @@ export const listMyUsageEvents = query({
       reference_type: row.referenceType ?? null,
       reference_id: row.referenceId ?? null,
       metadata: row.metadata ?? null,
-      created_at: row.createdAt,
+      updated_at: row.updatedAt,
     }));
   },
 });
