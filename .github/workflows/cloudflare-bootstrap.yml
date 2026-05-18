@@ -37,7 +37,7 @@ jobs:
       - name: Ensure assets bucket exists
         if: env.ASSETS_BUCKET != ''
         run: |
-          wrangler r2 bucket create "$ASSETS_BUCKET" --location weur --storage-class Standard --jurisdiction default || true
+          wrangler r2 bucket create "$ASSETS_BUCKET" --location weur || true
 
       - name: Sync frontend Pages secrets
         env:
