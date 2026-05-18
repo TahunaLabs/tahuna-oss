@@ -28,28 +28,16 @@ jobs:
 
       - name: Ensure frontend Pages project exists
         run: |
-          if wrangler pages project list --json | jq -e '.[] | select(.name == env.FRONTEND_PROJECT)' >/dev/null; then
-            echo "Frontend Pages project already exists."
-          else
-            wrangler pages project create "$FRONTEND_PROJECT" --production-branch main --compatibility-date 2026-05-18
-          fi
+          wrangler pages project create "$FRONTEND_PROJECT" --production-branch main --compatibility-date 2026-05-18 || true
 
       - name: Ensure docs Pages project exists
         run: |
-          if wrangler pages project list --json | jq -e '.[] | select(.name == env.DOCS_PROJECT)' >/dev/null; then
-            echo "Docs Pages project already exists."
-          else
-            wrangler pages project create "$DOCS_PROJECT" --production-branch main --compatibility-date 2026-05-18
-          fi
+          wrangler pages project create "$DOCS_PROJECT" --production-branch main --compatibility-date 2026-05-18 || true
 
       - name: Ensure assets bucket exists
         if: env.ASSETS_BUCKET != ''
         run: |
-          if wrangler r2 bucket info "$ASSETS_BUCKET" --json >/dev/null 2>&1; then
-            echo "Assets bucket already exists."
-          else
-            wrangler r2 bucket create "$ASSETS_BUCKET" --location weur --storage-class Standard --jurisdiction default
-          fi
+          wrangler r2 bucket create "$ASSETS_BUCKET" --location weur --storage-class Standard --jurisdiction default || true
 
       - name: Sync frontend Pages secrets
         env:
