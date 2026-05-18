@@ -1,0 +1,106 @@
+name: Cloudflare Pages Deploy
+
+on:
+  pull_request:
+    paths:
+      - web/**
+      - docs/**
+      - .github/workflows/cloudflare-pages-deploy.yml
+      - .github/workflows/cloudflare-bootstrap.yml
+  push:
+    branches:
+      - main
+    paths:
+      - web/**
+      - docs/**
+      - .github/workflows/cloudflare-pages-deploy.yml
+      - .github/workflows/cloudflare-bootstrap.yml
+  workflow_dispatch:
+
+concurrency:
+  group: cloudflare-pages-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+  CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+
+jobs:
+  deploy_frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.1.20
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install web dependencies
+        working-directory: web
+        run: bun install --frozen-lockfile
+
+      - name: Build frontend for Cloudflare Pages
+        working-directory: web
+        env:
+          NEXT_PUBLIC_CONVEX_URL: https://unique-clownfish-231.convex.cloud
+          NEXT_PUBLIC_CONVEX_SITE_URL: https://unique-clownfish-231.convex.site
+          NEXT_PUBLIC_DOCS_URL: https://docs.tahuna.app
+          NEXT_PUBLIC_SITE_URL: https://tahuna.app
+        run: bunx @cloudflare/next-on-pages@1
+
+      - name: Resolve Pages branch
+        id: frontend_branch
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "branch=pr-${{ github.event.pull_request.number }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "branch=main" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Deploy frontend
+        run: |
+          bunx wrangler@4.92.0 pages deploy web/.vercel/output/static \
+            --project-name tahuna \
+            --branch "${{ steps.frontend_branch.outputs.branch }}" \
+            --commit-hash "${{ github.sha }}"
+
+  deploy_docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.1.20
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install docs dependencies
+        working-directory: docs
+        run: bun install --frozen-lockfile
+
+      - name: Build docs
+        working-directory: docs
+        run: bun run build
+
+      - name: Resolve Pages branch
+        id: docs_branch
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "branch=pr-${{ github.event.pull_request.number }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "branch=main" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Deploy docs
+        run: |
+          bunx wrangler@4.92.0 pages deploy docs/dist \
+            --project-name tahuna-docs \
+            --branch "${{ steps.docs_branch.outputs.branch }}" \
+            --commit-hash "${{ github.sha }}"

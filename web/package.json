@@ -5,6 +5,8 @@
   "packageManager": "bun@1.1.20",
   "scripts": {
     "build": "bun --bun next build --webpack",
+    "cf:build": "bunx @cloudflare/next-on-pages@1",
+    "cf:dev": "bunx wrangler pages dev .vercel/output/static",
     "convex:dev": "convex dev",
     "dev": "bun next dev",
     "lint:fix": "eslint . --fix && bunx tsc --noEmit --noUnusedLocals --noUnusedParameters",

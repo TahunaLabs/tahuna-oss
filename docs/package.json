@@ -3,6 +3,7 @@
   "version": "0.0.1",
   "private": true,
   "scripts": {
+    "cf:dev": "bunx wrangler pages dev dist",
     "dev": "vite --port 3001",
     "build": "vite build",
     "lint": "eslint . --max-warnings=0",

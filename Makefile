@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help install-web run-web install-docs run-docs build-docs terraform-cloudflare-fmt terraform-cloudflare-validate install-cli install-cli-dev install-cli-tools run-cli lint-cli test-cli validate-cli install-runtime-tools lint-warden test-warden validate-warden
+.PHONY: help install-web run-web install-docs run-docs build-docs install-cli install-cli-dev install-cli-tools run-cli lint-cli test-cli validate-cli install-runtime-tools lint-warden test-warden validate-warden
 
 help:
 	@echo "Available targets:"
@@ -9,8 +9,6 @@ help:
 	@echo "  install-docs Install documentation dependencies"
 	@echo "  run-docs     Run documentation dev server"
 	@echo "  build-docs   Build documentation app"
-	@echo "  terraform-cloudflare-fmt      Run Terraform formatting checks"
-	@echo "  terraform-cloudflare-validate Run Terraform validation checks (backend disabled)"
 	@echo "  install-cli  Install CLI dependencies"
 	@echo "  install-cli-tools  Install pinned Go CLI lint tooling"
 	@echo "  lint-cli     Run Go CLI formatting, vet, and lint checks"
@@ -40,12 +38,6 @@ run-docs:
 
 build-docs:
 	cd docs && bun run build
-
-terraform-cloudflare-fmt:
-	cd infra/cloudflare && terraform fmt -check -recursive
-
-terraform-cloudflare-validate:
-	cd infra/cloudflare && terraform init -backend=false && terraform validate
 
 install-cli:
 	cd cli && go mod download

@@ -60,19 +60,11 @@ web/.next/
 web/node_modules/
 web/.source/
 web/tsconfig.tsbuildinfo
+web/.vercel/
 docs/.next/
 docs/node_modules/
 docs/.source/
 docs/tsconfig.tsbuildinfo
-.terraform/
-*.tfstate
-*.tfstate.*
-*.tfplan
-crash.log
-override.tf
-override.tf.json
-*_override.tf
-*_override.tf.json
 
 
 */.convex/*
