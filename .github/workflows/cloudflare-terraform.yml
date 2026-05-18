@@ -1,0 +1,146 @@
+name: Cloudflare Terraform
+
+on:
+  pull_request:
+    paths:
+      - infra/cloudflare/**
+      - .github/workflows/cloudflare-terraform.yml
+  push:
+    branches:
+      - main
+    paths:
+      - infra/cloudflare/**
+      - .github/workflows/cloudflare-terraform.yml
+  workflow_dispatch:
+
+concurrency:
+  group: cloudflare-terraform-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  TF_IN_AUTOMATION: "true"
+  TF_INPUT: "false"
+  TF_VAR_cloudflare_account_id: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+  TF_VAR_cloudflare_zone_id: ${{ vars.CLOUDFLARE_ZONE_ID }}
+  TF_VAR_assets_bucket_name: ${{ vars.CLOUDFLARE_ASSETS_BUCKET_NAME }}
+  TF_VAR_github_owner_id: ${{ vars.GITHUB_OWNER_ID }}
+  TF_VAR_github_repo_id: ${{ vars.GITHUB_REPO_ID }}
+  CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+
+jobs:
+  fmt_validate:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra/cloudflare
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.8
+
+      - name: Terraform fmt
+        run: terraform fmt -check -recursive
+
+      - name: Terraform init (backend disabled)
+        run: terraform init -backend=false
+
+      - name: Terraform validate
+        run: terraform validate
+
+  plan:
+    if: github.event_name == 'pull_request'
+    needs: fmt_validate
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra/cloudflare
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.8
+
+      - name: Write backend config
+        run: |
+          cat > backend.hcl <<EOF
+          bucket = "${TFSTATE_R2_BUCKET}"
+          key = "${TFSTATE_R2_KEY}"
+          region = "auto"
+          skip_credentials_validation = true
+          skip_metadata_api_check = true
+          skip_region_validation = true
+          skip_requesting_account_id = true
+          skip_s3_checksum = true
+          use_path_style = true
+          access_key = "${TFSTATE_R2_ACCESS_KEY_ID}"
+          secret_key = "${TFSTATE_R2_SECRET_ACCESS_KEY}"
+          endpoints = { s3 = "${TFSTATE_R2_ENDPOINT}" }
+          EOF
+        env:
+          TFSTATE_R2_BUCKET: ${{ vars.TFSTATE_R2_BUCKET }}
+          TFSTATE_R2_KEY: ${{ vars.TFSTATE_R2_KEY }}
+          TFSTATE_R2_ENDPOINT: ${{ vars.TFSTATE_R2_ENDPOINT }}
+          TFSTATE_R2_ACCESS_KEY_ID: ${{ secrets.TFSTATE_R2_ACCESS_KEY_ID }}
+          TFSTATE_R2_SECRET_ACCESS_KEY: ${{ secrets.TFSTATE_R2_SECRET_ACCESS_KEY }}
+
+      - name: Terraform init
+        run: terraform init -reconfigure -backend-config=backend.hcl
+
+      - name: Terraform plan
+        run: terraform plan -out=tfplan
+
+      - name: Export plan
+        run: terraform show -no-color tfplan > tfplan.txt
+
+      - name: Upload plan artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloudflare-terraform-plan
+          path: infra/cloudflare/tfplan.txt
+
+  apply:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: fmt_validate
+    runs-on: ubuntu-latest
+    environment: Production - tahuna
+    defaults:
+      run:
+        working-directory: infra/cloudflare
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.8
+
+      - name: Write backend config
+        run: |
+          cat > backend.hcl <<EOF
+          bucket = "${TFSTATE_R2_BUCKET}"
+          key = "${TFSTATE_R2_KEY}"
+          region = "auto"
+          skip_credentials_validation = true
+          skip_metadata_api_check = true
+          skip_region_validation = true
+          skip_requesting_account_id = true
+          skip_s3_checksum = true
+          use_path_style = true
+          access_key = "${TFSTATE_R2_ACCESS_KEY_ID}"
+          secret_key = "${TFSTATE_R2_SECRET_ACCESS_KEY}"
+          endpoints = { s3 = "${TFSTATE_R2_ENDPOINT}" }
+          EOF
+        env:
+          TFSTATE_R2_BUCKET: ${{ vars.TFSTATE_R2_BUCKET }}
+          TFSTATE_R2_KEY: ${{ vars.TFSTATE_R2_KEY }}
+          TFSTATE_R2_ENDPOINT: ${{ vars.TFSTATE_R2_ENDPOINT }}
+          TFSTATE_R2_ACCESS_KEY_ID: ${{ secrets.TFSTATE_R2_ACCESS_KEY_ID }}
+          TFSTATE_R2_SECRET_ACCESS_KEY: ${{ secrets.TFSTATE_R2_SECRET_ACCESS_KEY }}
+
+      - name: Terraform init
+        run: terraform init -reconfigure -backend-config=backend.hcl
+
+      - name: Terraform apply
+        run: terraform apply -auto-approve
