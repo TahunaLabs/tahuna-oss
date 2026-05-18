@@ -67,9 +67,7 @@ jobs:
           bunx wrangler@4.92.0 pages deploy web/.open-next \
             --project-name tahuna \
             --branch "${{ steps.frontend_branch.outputs.branch }}" \
-            --commit-hash "${{ github.sha }}" \
-            --compatibility-date 2026-05-18 \
-            --compatibility-flags nodejs_compat
+            --commit-hash "${{ github.sha }}"
 
   deploy_docs:
     runs-on: ubuntu-latest
