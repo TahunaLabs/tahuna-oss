@@ -63,7 +63,7 @@ jobs:
 
       - name: Deploy frontend
         run: |
-          bunx wrangler@4.92.0 pages deploy web/.open-next/assets \
+          bunx wrangler@4.92.0 pages deploy web/.open-next \
             --project-name tahuna \
             --branch "${{ steps.frontend_branch.outputs.branch }}" \
             --commit-hash "${{ github.sha }}"
