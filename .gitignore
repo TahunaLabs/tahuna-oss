@@ -8,6 +8,7 @@
 db.json
 todo.md
 presets/
+.wrangler/
 
 **/dummy/
 **/dummy
