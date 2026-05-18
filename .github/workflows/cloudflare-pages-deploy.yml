@@ -50,7 +50,7 @@ jobs:
           NEXT_PUBLIC_CONVEX_SITE_URL: https://unique-clownfish-231.convex.site
           NEXT_PUBLIC_DOCS_URL: https://docs.tahuna.app
           NEXT_PUBLIC_SITE_URL: https://tahuna.app
-        run: bunx @cloudflare/next-on-pages@1
+        run: bun run pages:build
 
       - name: Resolve Pages branch
         id: frontend_branch
@@ -63,7 +63,7 @@ jobs:
 
       - name: Deploy frontend
         run: |
-          bunx wrangler@4.92.0 pages deploy web/.vercel/output/static \
+          bunx wrangler@4.92.0 pages deploy web/.open-next/assets \
             --project-name tahuna \
             --branch "${{ steps.frontend_branch.outputs.branch }}" \
             --commit-hash "${{ github.sha }}"
