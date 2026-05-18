@@ -28,11 +28,11 @@ jobs:
 
       - name: Ensure frontend Pages project exists
         run: |
-          wrangler pages project create "$FRONTEND_PROJECT" --production-branch main --compatibility-date 2026-05-18 || true
+          wrangler pages project create "$FRONTEND_PROJECT" --production-branch main --compatibility-date 2026-05-18 --compatibility-flag nodejs_compat || true
 
       - name: Ensure docs Pages project exists
         run: |
-          wrangler pages project create "$DOCS_PROJECT" --production-branch main --compatibility-date 2026-05-18 || true
+          wrangler pages project create "$DOCS_PROJECT" --production-branch main --compatibility-date 2026-05-18 --compatibility-flag nodejs_compat || true
 
       - name: Ensure assets bucket exists
         if: env.ASSETS_BUCKET != ''
