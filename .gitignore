@@ -58,6 +58,7 @@ cli/tahuna-cli
 
 # Web generated artifacts
 web/.next/
+web/.open-next
 web/node_modules/
 web/.source/
 web/tsconfig.tsbuildinfo
