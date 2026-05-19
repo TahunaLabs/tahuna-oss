@@ -1,5 +1,4 @@
 import { siteMetadata } from "@/app/site-metadata"
-import { CloudVercelAnalytics } from "@/cloud/vercel-analytics"
 import { ConvexClientProvider } from "@/components/convex-client-provider"
 import { ThemeProvider } from "@/components/theme-provider"
 import { Toaster } from "@/components/ui/toaster"
@@ -41,8 +40,7 @@ export default async function RootLayout({
             </TooltipProvider>
             <Toaster />
         </ThemeProvider>
-        <CloudVercelAnalytics />
-      </body>
+</body>
     </html>
   )
 }
