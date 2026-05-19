@@ -63,11 +63,12 @@ jobs:
 
       - name: Deploy frontend
         run: |
-          cp web/.open-next/worker.js web/.open-next/assets/_worker.js
-          bunx wrangler@4.92.0 pages deploy web/.open-next/assets \
+          cp web/.open-next/worker.js web/.open-next/_worker.js
+          bunx wrangler@4.92.0 pages deploy web/.open-next \
             --project-name tahuna \
             --branch "${{ steps.frontend_branch.outputs.branch }}" \
-            --commit-hash "${{ github.sha }}"
+            --commit-hash "${{ github.sha }}" \
+            --no-bundle
 
   deploy_docs:
     runs-on: ubuntu-latest
