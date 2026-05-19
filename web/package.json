@@ -15,7 +15,7 @@
     "start": "next start"
   },
   "dependencies": {
-    "@convex-dev/better-auth": "^0.10.11",
+    "@convex-dev/better-auth": "0.10.13",
     "@convex-dev/r2": "^0.9.1",
     "@convex-dev/resend": "^0.2.3",
     "@convex-dev/workpool": "^0.4.0",
@@ -48,7 +48,7 @@
     "@radix-ui/react-toggle-group": "1.1.1",
     "@radix-ui/react-tooltip": "1.1.6",
     "autoprefixer": "^10.4.20",
-    "better-auth": "^1.4.19",
+    "better-auth": "1.4.19",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "1.0.4",
@@ -75,6 +75,9 @@
     "tailwindcss-animate": "^1.0.7",
     "vaul": "^1.1.2",
     "zod": "3.25.76"
+  },
+  "overrides": {
+    "@better-auth/core": "1.4.19"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.1.9",
