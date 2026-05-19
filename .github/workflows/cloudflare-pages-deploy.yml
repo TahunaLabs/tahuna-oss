@@ -64,8 +64,10 @@ jobs:
       - name: Deploy frontend
         working-directory: web/.open-next
         run: |
+          set -e
           cp worker.js _worker.js
           cp -r assets/_next _next
+          ls -la _next/ | head -5
           bunx wrangler@4.92.0 pages deploy . \
             --project-name tahuna \
             --branch "${{ steps.frontend_branch.outputs.branch }}" \
