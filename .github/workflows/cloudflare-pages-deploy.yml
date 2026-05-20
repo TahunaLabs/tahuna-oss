@@ -67,11 +67,12 @@ jobs:
           set -e
           cp worker.js _worker.js
           cp -r assets/_next _next
+          printf '/install.sh https://raw.githubusercontent.com/TahunaLabs/tahuna-cli/main/scripts/install-tahuna.sh 302\n' > _redirects
           cat > _routes.json << 'EOF'
           {
             "version": 1,
             "include": ["/*"],
-            "exclude": ["/_next/static/*", "/favicon.ico", "/robots.txt", "/sitemap.xml", "/manifest.webmanifest"]
+            "exclude": ["/_next/static/*", "/favicon.ico", "/robots.txt", "/sitemap.xml", "/manifest.webmanifest", "/install.sh"]
           }
           EOF
           bunx wrangler@4.92.0 pages deploy . \
