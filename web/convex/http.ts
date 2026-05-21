@@ -77,7 +77,7 @@ http.route({ pathPrefix: "/api/monitoring/wandb/files/", method: "POST", handler
 http.route({ pathPrefix: "/api/monitoring/wandb/upload/", method: "PUT", handler: wandbUpload });
 
 // Billing webhooks
-http.route({ path: "/stripe/webhook", method: "POST", handler: stripeWebhook });
+http.route({ path: "/api/stripe/webhook", method: "POST", handler: stripeWebhook });
 
 // Let's just mount getRunLogs explicitly using a custom handler that delegates if we could, or just let getRun dispatch.
 // No, the user provided exact matches for CLI endpoints in nextjs. We can register BetterAuth routes below.
