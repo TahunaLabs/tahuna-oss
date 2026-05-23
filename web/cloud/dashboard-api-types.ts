@@ -26,5 +26,5 @@ export type CloudDashboardUsageEvent = {
   reference_type: string | null
   reference_id: string | null
   metadata: unknown | null
-  created_at: number
+  updated_at: number
 }

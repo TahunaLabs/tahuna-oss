@@ -17,7 +17,7 @@ type UsageEventRow = {
   reference_type: string | null
   reference_id: string | null
   metadata: unknown | null
-  created_at: number
+  updated_at: number
 }
 
 type AuditLogsViewProps = {
@@ -112,12 +112,12 @@ function runAuditRows(runs: RunRow[], environmentNameById: ReadonlyMap<string, s
 
 function billingAuditRows(usageEvents: UsageEventRow[]): AuditRow[] {
   return usageEvents.map((event, index) => ({
-    id: `billing:${event.created_at}:${index}`,
+    id: `billing:${event.updated_at}:${index}`,
     action: "billing",
     title: eventLabel(event.event_type),
     detail: `Balance after ${formatMoney(event.balance_after_cents)}`,
     amount: `${event.credits_delta_cents < 0 ? "-" : "+"}${formatMoney(event.credits_delta_cents)}`,
-    timestamp: event.created_at,
+    timestamp: event.updated_at,
     tone: "billing",
   }))
 }
