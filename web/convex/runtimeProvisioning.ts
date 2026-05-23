@@ -20,9 +20,9 @@ export function resolveImageName(framework: string, version: string, pythonVersi
 }
 
 export function resolveRuntimeApiBase() {
-  const runtimeApiBase = process.env.NEXT_PUBLIC_CONVEX_SITE_URL?.trim();
+  const runtimeApiBase = process.env.SITE_URL?.trim();
   if (!runtimeApiBase) {
-    throw new Error("NEXT_PUBLIC_CONVEX_SITE_URL is required for machine runtime callbacks");
+    throw new Error("SITE_URL is required for machine runtime callbacks");
   }
   return runtimeApiBase.replace(/\/+$/, "");
 }
