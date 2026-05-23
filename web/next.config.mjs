@@ -16,7 +16,7 @@ const nextConfig = {
     }
     return [
       {
-        source: '/api/:path*',
+        source: '/api/((?!auth/).*)',
         destination: `${convexSiteUrl}/api/:path*`,
       },
     ];
