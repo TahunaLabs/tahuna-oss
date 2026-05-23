@@ -57,8 +57,9 @@ function requireStripeWebhookSecret() {
 }
 
 function normalizeSiteUrl() {
-  const raw = process.env.SITE_URL?.trim() || process.env.NEXT_PUBLIC_SITE_URL?.trim() || NETWORK_CONFIG.defaultApiUrl;
-  return raw.replace(/\/+$/, "");
+  const siteUrl = process.env.SITE_URL;
+  if (!siteUrl) throw new Error("SITE_URL is required");
+  return siteUrl;
 }
 
 function normalizeTopUpAmountCents(value: number) {

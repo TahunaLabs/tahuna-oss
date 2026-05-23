@@ -13,7 +13,8 @@ import { ensureUserLedger } from "@convex/credits";
 import { sendOtpEmail } from "@convex/resend";
 import { AUTH_CONFIG, BILLING_CONFIG, NETWORK_CONFIG } from "../config";
 
-const siteUrl = process.env.SITE_URL || process.env.NEXT_PUBLIC_SITE_URL || NETWORK_CONFIG.defaultApiUrl;
+const siteUrl = process.env.SITE_URL;
+if (!siteUrl) throw new Error("SITE_URL is required");
 const apiKeyListItemValidator = v.object({
   _id: v.id("apiKeys"),
   _creationTime: v.number(),

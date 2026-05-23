@@ -2,13 +2,12 @@ export type SyncKind = "code" | "data";
 
 const MIB = 1024 * 1024;
 const GIB = 1024 * MIB;
-const DEFAULT_SITE_URL = "http://localhost:3000";
-
 // Global app config: committed to git and shared by web + convex code.
 export const NETWORK_CONFIG = {
-  defaultApiUrl: DEFAULT_SITE_URL,
   get siteUrl(): string {
-    return process.env.NEXT_PUBLIC_SITE_URL?.trim() || DEFAULT_SITE_URL;
+    const url = process.env.NEXT_PUBLIC_SITE_URL;
+    if (!url) throw new Error("NEXT_PUBLIC_SITE_URL is required");
+    return url;
   },
 } as const;
 
