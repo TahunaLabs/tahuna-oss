@@ -1,6 +1,5 @@
 import { FrameworksBar } from "@/components/landing/frameworks-bar"
 import { LandingFooter } from "@/components/landing/landing-footer"
-import { LandingFoundersIncBadge } from "@/components/landing/landing-founders-inc-badge"
 import { LandingHero } from "@/components/landing/landing-hero"
 import { LandingLayersSection } from "@/components/landing/landing-layers-section"
 import { LandingNav } from "@/components/landing/landing-nav"
@@ -12,9 +11,6 @@ export function PublicHome() {
       <div className="min-h-full bg-background/70 backdrop-blur-sm">
         <LandingNav />
         <main>
-          <div className="flex justify-center px-6 py-6">
-            <LandingFoundersIncBadge />
-          </div>
           <LandingHero />
           <FrameworksBar />
           <LandingTerminalSection />

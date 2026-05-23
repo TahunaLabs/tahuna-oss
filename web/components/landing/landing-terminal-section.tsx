@@ -3,6 +3,7 @@
 import { Check, Copy } from "lucide-react"
 import { useState } from "react"
 
+import { LandingFoundersIncBadge } from "@/components/landing/landing-founders-inc-badge"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -39,7 +40,10 @@ export function LandingTerminalSection() {
   }
 
   return (
-    <section id="loop" className="border-t border-border px-6 py-20 md:py-28">
+    <section id="loop" className="relative border-t border-border px-6 py-20 md:py-28">
+      <div className="absolute right-6 top-6 z-10">
+        <LandingFoundersIncBadge />
+      </div>
       <div className="mx-auto flex max-w-7xl flex-col gap-12 lg:flex-row lg:gap-20">
         <div className="shrink-0 lg:w-1/3">
           <div className="mb-4 flex items-center gap-2">
