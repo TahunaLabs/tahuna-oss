@@ -1,6 +1,4 @@
 /** @type {import('next').NextConfig} */
-const convexSiteUrl = process.env.NEXT_PUBLIC_CONVEX_SITE_URL
-
 const nextConfig = {
   images: {
     remotePatterns: [
@@ -9,17 +7,6 @@ const nextConfig = {
         hostname: "pub-5f7c225fd68446a9b652150d7c7e52e9.r2.dev",
       },
     ],
-  },
-  async rewrites() {
-    if (!convexSiteUrl) {
-      return []
-    }
-    return [
-      {
-        source: '/api/((?!auth/).*)',
-        destination: `${convexSiteUrl}/api/:path*`,
-      },
-    ];
   },
 }
 
