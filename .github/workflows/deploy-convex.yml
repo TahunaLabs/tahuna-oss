@@ -4,11 +4,12 @@ on:
   push:
     branches:
       - main
+      - develop
   workflow_dispatch:
 
 jobs:
   deploy:
-    environment: Production – tahuna
+    environment: ${{ github.ref_name == 'main' && 'Production – tahuna' || 'Preview – tahuna' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
