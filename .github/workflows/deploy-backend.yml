@@ -1,4 +1,4 @@
-name: Deploy Convex
+name: Deploy Backend
 
 on:
   push:
@@ -9,10 +9,10 @@ on:
 
 jobs:
   deploy:
-    environment: ${{ github.ref_name == 'main' && 'Production – tahuna' || 'Preview – tahuna' }}
     runs-on: ubuntu-latest
+    environment: ${{ github.ref_name == 'main' && 'production' || 'staging' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - uses: oven-sh/setup-bun@v2
         with:
@@ -20,9 +20,9 @@ jobs:
 
       - name: Install dependencies
         working-directory: web
-        run: bun install
+        run: bun install --frozen-lockfile
 
-      - name: Deploy Convex
+      - name: Deploy
         working-directory: web
         run: bunx convex deploy
         env:
