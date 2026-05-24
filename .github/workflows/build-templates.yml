@@ -48,7 +48,7 @@ jobs:
   build:
     needs: matrix
     runs-on: ubuntu-latest
-    environment: ${{ github.ref_name == 'main' && 'Production – tahuna' || 'Develop – tahuna' }}
+    environment: ${{ github.ref_name == 'main' && 'Production – tahuna' || 'Preview – tahuna' }}
     permissions:
       contents: read
       packages: write
