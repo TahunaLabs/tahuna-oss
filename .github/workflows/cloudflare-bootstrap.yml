@@ -13,6 +13,7 @@ env:
 jobs:
   bootstrap:
     runs-on: ubuntu-latest
+    environment: Production – tahuna
     steps:
       - uses: actions/checkout@v5
 
@@ -39,26 +40,3 @@ jobs:
         run: |
           wrangler r2 bucket create "$ASSETS_BUCKET" --location weur || true
 
-      - name: Sync frontend Pages secrets
-        env:
-          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
-          STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
-          TAHUNA_MANAGED_RUNPOD_API_KEY: ${{ secrets.TAHUNA_MANAGED_RUNPOD_API_KEY }}
-        run: |
-          secrets_file="$(mktemp)"
-          jq -n \
-            --arg stripe "$STRIPE_SECRET_KEY" \
-            --arg webhook "$STRIPE_WEBHOOK_SECRET" \
-            --arg runpod "$TAHUNA_MANAGED_RUNPOD_API_KEY" \
-            '{
-              STRIPE_SECRET_KEY: $stripe,
-              STRIPE_WEBHOOK_SECRET: $webhook,
-              TAHUNA_MANAGED_RUNPOD_API_KEY: $runpod
-            } | with_entries(select(.value != ""))' > "$secrets_file"
-
-          if [ "$(jq 'length' "$secrets_file")" -eq 0 ]; then
-            echo "No frontend secrets provided. Skipping secret sync."
-            exit 0
-          fi
-
-          wrangler pages secret bulk "$secrets_file" --project-name "$FRONTEND_PROJECT"
