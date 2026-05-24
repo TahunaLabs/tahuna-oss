@@ -5,6 +5,9 @@ on:
     branches:
       - main
       - develop
+    paths:
+      - web/**
+      - .github/workflows/deploy-backend.yml
   workflow_dispatch:
 
 jobs:
