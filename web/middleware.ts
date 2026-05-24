@@ -1,9 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-export function middleware(request: NextRequest) {
-  const convexSiteUrl = process.env.NEXT_PUBLIC_CONVEX_SITE_URL;
-  if (!convexSiteUrl) return;
+const convexSiteUrl = process.env.NEXT_PUBLIC_CONVEX_SITE_URL;
+if (!convexSiteUrl) throw new Error("NEXT_PUBLIC_CONVEX_SITE_URL is required");
 
+export function middleware(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
   return NextResponse.rewrite(new URL(pathname + search, convexSiteUrl));
 }
