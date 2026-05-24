@@ -10,6 +10,7 @@ on:
   push:
     branches:
       - main
+      - develop
     paths:
       - web/**
       - docs/**
@@ -28,6 +29,7 @@ env:
 jobs:
   deploy_frontend:
     runs-on: ubuntu-latest
+    environment: ${{ github.ref == 'refs/heads/main' && 'Production – tahuna' || 'Preview – tahuna' }}
     steps:
       - uses: actions/checkout@v5
 
@@ -46,10 +48,10 @@ jobs:
       - name: Build frontend for Cloudflare Pages
         working-directory: web
         env:
-          NEXT_PUBLIC_CONVEX_URL: https://unique-clownfish-231.convex.cloud
-          NEXT_PUBLIC_CONVEX_SITE_URL: https://unique-clownfish-231.convex.site
-          NEXT_PUBLIC_DOCS_URL: https://docs.tahuna.app
-          NEXT_PUBLIC_SITE_URL: https://tahuna.app
+          NEXT_PUBLIC_CONVEX_URL: ${{ vars.NEXT_PUBLIC_CONVEX_URL }}
+          NEXT_PUBLIC_CONVEX_SITE_URL: ${{ vars.NEXT_PUBLIC_CONVEX_SITE_URL }}
+          NEXT_PUBLIC_DOCS_URL: ${{ vars.NEXT_PUBLIC_DOCS_URL }}
+          NEXT_PUBLIC_SITE_URL: ${{ vars.NEXT_PUBLIC_SITE_URL }}
         run: bun run pages:build
 
       - name: Resolve Pages branch
