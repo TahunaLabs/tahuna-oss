@@ -10,11 +10,10 @@ on:
       - runtime/images/prebake/**
       - runtime/warden/**
       - web/convex/runtime-images.json
-      - .github/workflows/build-templates.yml
+      - .github/workflows/build-images.yml
   workflow_dispatch:
 
 jobs:
-  # First job: read runtime image definitions and output matrix
   matrix:
     runs-on: ubuntu-latest
     outputs:
@@ -24,7 +23,6 @@ jobs:
       - id: set-matrix
         run: |
           PREBAKED_PACKAGES=$(jq -r '.default | join(",")' runtime/images/prebake/protected-packages.json)
-          # Cross-product framework × version × python_version into matrix entries
           MATRIX=$(jq -c --arg protected "$PREBAKED_PACKAGES" '
             [
               to_entries[] | .key as $fw |
@@ -44,11 +42,10 @@ jobs:
           ' web/convex/runtime-images.json)
           echo "images=$MATRIX" >> $GITHUB_OUTPUT
 
-  # Second job: build each image
   build:
     needs: matrix
     runs-on: ubuntu-latest
-    environment: ${{ github.ref_name == 'main' && 'Production – tahuna' || 'Preview – tahuna' }}
+    environment: ${{ github.ref_name == 'main' && 'production' || 'staging' }}
     permissions:
       contents: read
       packages: write
