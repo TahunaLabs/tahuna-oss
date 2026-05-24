@@ -59,7 +59,7 @@ jobs:
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             echo "branch=pr-${{ github.event.pull_request.number }}" >> "$GITHUB_OUTPUT"
           else
-            echo "branch=main" >> "$GITHUB_OUTPUT"
+            echo "branch=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Deploy frontend
@@ -109,7 +109,7 @@ jobs:
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             echo "branch=pr-${{ github.event.pull_request.number }}" >> "$GITHUB_OUTPUT"
           else
-            echo "branch=main" >> "$GITHUB_OUTPUT"
+            echo "branch=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Deploy docs
