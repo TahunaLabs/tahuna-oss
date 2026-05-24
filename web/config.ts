@@ -24,6 +24,10 @@ export const BILLING_CONFIG = {
   minimumChargeCents: 1,
 } as const;
 
+export const RUNPOD_CONFIG = {
+  defaultCloudType: "SECURE" as "COMMUNITY" | "SECURE",
+} as const;
+
 export const RUN_CONFIG = {
   statusPollSeconds: 5,
   logsPollSeconds: 2,
