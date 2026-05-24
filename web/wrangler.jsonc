@@ -4,10 +4,4 @@
   "pages_build_output_dir": ".open-next/assets",
   "compatibility_date": "2026-05-18",
   "compatibility_flags": ["nodejs_compat"],
-  "vars": {
-    "NEXT_PUBLIC_CONVEX_URL": "https://unique-clownfish-231.convex.cloud",
-    "NEXT_PUBLIC_CONVEX_SITE_URL": "https://unique-clownfish-231.convex.site",
-    "NEXT_PUBLIC_DOCS_URL": "https://docs.tahuna.app",
-    "NEXT_PUBLIC_SITE_URL": "https://tahuna.app"
-  }
 }
