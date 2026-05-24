@@ -29,7 +29,7 @@ env:
 jobs:
   deploy_frontend:
     runs-on: ubuntu-latest
-    environment: ${{ github.ref == 'refs/heads/main' && 'Production – tahuna' || 'Preview – tahuna' }}
+    environment: ${{ github.ref_name == 'main' && 'Production – tahuna' || 'Preview – tahuna' }}
     steps:
       - uses: actions/checkout@v5
 
