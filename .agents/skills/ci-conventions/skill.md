@@ -44,7 +44,3 @@ environment: ${{ github.ref_name == 'main' && 'production' || 'staging' }}
 - `develop` = staging; no separate staging branch
 - `wrangler.jsonc` holds only static Cloudflare Worker config — no vars
 - GitHub environment branch rules enforce which branch can deploy to which environment — don't duplicate that logic in workflow conditions beyond the environment selector
-
-## Dev exceptions
-
-**Machine runtime callbacks (`runtimeProvisioning.ts`)**: in `ENV=development`, `SITE_URL` is `localhost` which is unreachable from RunPod (cloud). The callback base switches to `CONVEX_SITE_URL` (a Convex built-in, always present) so the machine calls Convex HTTP actions directly, bypassing the frontend rewrite. In staging/prod, `SITE_URL` is used as normal and `CONVEX_SITE_URL` is never read by application code.
