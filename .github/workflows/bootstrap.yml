@@ -1,4 +1,4 @@
-name: Cloudflare Bootstrap
+name: Bootstrap
 
 on:
   workflow_dispatch:
@@ -13,30 +13,29 @@ env:
 jobs:
   bootstrap:
     runs-on: ubuntu-latest
-    environment: Production – tahuna
+    environment: production
     steps:
       - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: oven-sh/setup-bun@v2
         with:
-          node-version: 22
+          bun-version: 1.3.10
 
       - name: Install Wrangler
-        run: npm install --global wrangler@4.92.0
+        run: bunx wrangler@4.92.0 --version
 
       - name: Verify Cloudflare auth
-        run: wrangler whoami
+        run: bunx wrangler@4.92.0 whoami
 
       - name: Ensure frontend Pages project exists
         run: |
-          wrangler pages project create "$FRONTEND_PROJECT" --production-branch main --compatibility-date 2026-05-18 --compatibility-flag nodejs_compat || true
+          bunx wrangler@4.92.0 pages project create "$FRONTEND_PROJECT" --production-branch main --compatibility-date 2026-05-18 --compatibility-flag nodejs_compat || true
 
       - name: Ensure docs Pages project exists
         run: |
-          wrangler pages project create "$DOCS_PROJECT" --production-branch main --compatibility-date 2026-05-18 --compatibility-flag nodejs_compat || true
+          bunx wrangler@4.92.0 pages project create "$DOCS_PROJECT" --production-branch main --compatibility-date 2026-05-18 --compatibility-flag nodejs_compat || true
 
       - name: Ensure assets bucket exists
         if: env.ASSETS_BUCKET != ''
         run: |
-          wrangler r2 bucket create "$ASSETS_BUCKET" --location weur || true
-
+          bunx wrangler@4.92.0 r2 bucket create "$ASSETS_BUCKET" --location weur || true
