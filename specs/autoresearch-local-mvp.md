@@ -14,6 +14,56 @@ The user's local agent owns code edits through a Tahuna autoresearch skill. The 
 
 Reference: <https://github.com/karpathy/autoresearch>
 
+## Implementation PR Plan
+
+Implement the MVP in reviewable slices:
+
+1. **Final metric API**
+   - Add deterministic `GET /api/runs/{run_id}/metrics/final?name=<metric>` lookup over persisted `runRuntimeMetrics`.
+   - Select the final sample by metric name, preferring `source=train` when present, then highest numeric step, then newest timestamp.
+   - Return a `detail` error when the final metric was not emitted.
+   - Validate with `cd web && bun run lint`.
+
+2. **Research command skeleton and session state**
+   - Add `tahuna research run` and `tahuna research graph` command routing, help text, flag parsing, and human/verbose output.
+   - Persist inspectable session JSON under `.tahuna/research/<session-id>.json`.
+   - Validate project, linked environment, git repository, direction, metric source, budget flags, and editable allowlist.
+   - Keep baseline/trial launch out of this slice.
+   - Validate with `make validate-cli`.
+
+3. **Baseline run**
+   - Wire a new session to code/data sync, named baseline run creation, terminal polling, final metric capture, baseline/incumbent persistence, and `awaiting_patch` exit.
+   - Validate with `make validate-cli`.
+
+4. **Git safety and editable allowlist**
+   - Add dirty tree checks, changed-file allowlist matching, patch snapshots, patch hashes, and incumbent restore primitives.
+   - Refuse unexpected changes before any GPU run.
+   - Validate with `make validate-cli`.
+
+5. **Single-trial resume loop**
+   - Implement `tahuna research run --resume <session-id>` for one candidate patch.
+   - Validate the patch, sync code, launch `research-<session>-trial-<N>`, score the run, accept/reject/inconclusive the patch, and append trial state.
+   - Validate with `make validate-cli`.
+
+6. **Budgets and cancellation**
+   - Enforce `--max-trials`, `--max-spend-usd`, `--max-trial-minutes`, `--stop-after-no-improvement`, and `--min-improvement`.
+   - Estimate spend from GPU catalog, effective run compute, observed baseline duration, and current elapsed run time.
+   - Cancel or mark trials inconclusive when `--max-trial-minutes` is exceeded.
+   - Validate with `make validate-cli`.
+
+7. **External scorer**
+   - Add `--metric-cmd`, invoke it after terminal run status, parse scorer JSON, and mark non-zero or invalid output inconclusive.
+   - Validate with `make validate-cli`.
+
+8. **Progress graph**
+   - Implement `tahuna research graph <session-id> --output <path>` as local SVG rendering from session state.
+   - Plot baseline, accepted/rejected/inconclusive trials, and running best.
+   - Validate with `make validate-cli`.
+
+9. **Docs and agent skill follow-up**
+   - Update CLI docs and the external `tahuna-autoresearch-project` agent skill after the CLI harness is usable.
+   - Keep Tahuna CLI as a harness only; it must not launch or configure an agent.
+
 ## Non-Goals
 
 - No cloud-hosted coding agent in the MVP.
