@@ -532,7 +532,10 @@ func runResearchBaseline(session *researchSession) error {
 	}
 	fmt.Printf("%s✓%s baseline run created: %s (%s)\n", cAmpGreen, cReset, runID, runDashboardURL(runID))
 
-	terminalRun, err := pollResearchRunTerminal(runID, 5*time.Second)
+	if err := monitorRunWithLogs(runID, 5); err != nil {
+		return err
+	}
+	terminalRun, err := doJSONAs[runResponse](http.MethodGet, "/runs/"+runID, nil)
 	if err != nil {
 		return err
 	}
@@ -644,27 +647,6 @@ func writeResearchPatchSnapshot(sessionID, name, diff string) error {
 		return err
 	}
 	return os.WriteFile(filepath.Join(dir, name), []byte(diff), 0o600)
-}
-
-func pollResearchRunTerminal(runID string, interval time.Duration) (runResponse, error) {
-	if interval <= 0 {
-		interval = 5 * time.Second
-	}
-	for {
-		resp, err := doJSONAs[runResponse](http.MethodGet, "/runs/"+runID, nil)
-		if err != nil {
-			return runResponse{}, err
-		}
-		status := strings.TrimSpace(resp.Status)
-		if status == "" {
-			status = "queued"
-		}
-		fmt.Printf("Baseline status: %s\n", status)
-		if isTerminalRunStatus(status) {
-			return resp, nil
-		}
-		time.Sleep(interval)
-	}
 }
 
 func fetchResearchFinalMetric(runID, name string) (finalMetricResponse, error) {
