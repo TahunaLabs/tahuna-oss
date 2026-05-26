@@ -7,6 +7,8 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"net/http"
+	neturl "net/url"
 	"os"
 	"os/exec"
 	"path"
@@ -180,6 +182,9 @@ func createResearchSession(opts researchRunOptions) error {
 	if err != nil {
 		return err
 	}
+	if metric.Type != "final" {
+		return errors.New("--metric-cmd scoring will be wired in the external scorer implementation slice")
+	}
 	environmentID, startingCommit, err := validateResearchProject(opts.editable, opts.allowDirty)
 	if err != nil {
 		return err
@@ -207,6 +212,11 @@ func createResearchSession(opts researchRunOptions) error {
 		Trials: []researchTrial{},
 	}
 	if err := saveResearchSession(session); err != nil {
+		return err
+	}
+	if err := runResearchBaseline(&session); err != nil {
+		session.Status = "failed"
+		_ = saveResearchSession(session)
 		return err
 	}
 	printResearchSessionCreated(session, opts.verbose)
@@ -469,7 +479,109 @@ func printResearchSessionCreated(session researchSession, verbose bool) {
 	}
 	fmt.Printf(" (%s)\n", session.Direction)
 	fmt.Printf("Session file: %s\n", researchSessionPath(session.SessionID))
-	fmt.Printf("%sBaseline launch will be wired in the next implementation slice.%s\n", cAmpMuted, cReset)
+	if session.Baseline != nil {
+		fmt.Println()
+		fmt.Println("Baseline:")
+		fmt.Printf("  run: %s\n", session.Baseline.RunID)
+		if session.Baseline.Value != nil {
+			fmt.Printf("  final %s: %s\n", session.Metric.Name, strconvFloat(*session.Baseline.Value))
+		}
+		fmt.Printf("  status: %s\n", session.Baseline.Status)
+	}
+	fmt.Println()
+	fmt.Println("Next: edit one allowed file, then run:")
+	fmt.Printf("  tahuna research run --resume %s\n", session.SessionID)
+}
+
+func runResearchBaseline(session *researchSession) error {
+	fmt.Printf("Research session: %s\n", session.SessionID)
+	fmt.Println("Syncing baseline code and data...")
+	if err := preRunSync(session.EnvironmentID); err != nil {
+		return err
+	}
+
+	runName := session.SessionID + "-baseline"
+	fmt.Printf("Launching baseline run: %s\n", runName)
+	resp, err := createRunWithCapacityPrompt("/environments/"+session.EnvironmentID+"/runs", map[string]any{
+		"name": runName,
+	})
+	if err != nil {
+		return err
+	}
+	runID := strings.TrimSpace(resp.RunID)
+	if runID == "" {
+		return errors.New("baseline run create response did not include run_id")
+	}
+	fmt.Printf("%s✓%s baseline run created: %s (%s)\n", cAmpGreen, cReset, runID, runDashboardURL(runID))
+
+	terminalRun, err := pollResearchRunTerminal(runID, 5*time.Second)
+	if err != nil {
+		return err
+	}
+	session.Baseline = &researchRunResult{
+		RunID:  runID,
+		Status: terminalRun.Status,
+	}
+	if !strings.EqualFold(terminalRun.Status, "completed") {
+		if err := saveResearchSession(*session); err != nil {
+			return err
+		}
+		return fmt.Errorf("baseline run ended with status %s", terminalRun.Status)
+	}
+
+	metric, err := fetchResearchFinalMetric(runID, session.Metric.Name)
+	if err != nil {
+		if err := saveResearchSession(*session); err != nil {
+			return err
+		}
+		return err
+	}
+	value := metric.Value
+	session.Baseline.Value = &value
+	session.Incumbent = &researchIncumbent{
+		Trial: 0,
+		RunID: runID,
+		Value: &value,
+	}
+	session.Status = "awaiting_patch"
+	return saveResearchSession(*session)
+}
+
+func pollResearchRunTerminal(runID string, interval time.Duration) (runResponse, error) {
+	if interval <= 0 {
+		interval = 5 * time.Second
+	}
+	for {
+		resp, err := doJSONAs[runResponse](http.MethodGet, "/runs/"+runID, nil)
+		if err != nil {
+			return runResponse{}, err
+		}
+		status := strings.TrimSpace(resp.Status)
+		if status == "" {
+			status = "queued"
+		}
+		fmt.Printf("Baseline status: %s\n", status)
+		if isTerminalRunStatus(status) {
+			return resp, nil
+		}
+		time.Sleep(interval)
+	}
+}
+
+func fetchResearchFinalMetric(runID, name string) (finalMetricResponse, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return finalMetricResponse{}, errors.New("final metric name is required")
+	}
+	return doJSONAs[finalMetricResponse](
+		http.MethodGet,
+		"/runs/"+strings.TrimSpace(runID)+"/metrics/final?name="+neturl.QueryEscape(name),
+		nil,
+	)
+}
+
+func strconvFloat(value float64) string {
+	return fmt.Sprintf("%.6f", value)
 }
 
 func researchGraph(args []string) {

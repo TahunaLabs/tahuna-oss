@@ -200,6 +200,15 @@ type metricResponse struct {
 	Source    string  `json:"source"`
 }
 
+type finalMetricResponse struct {
+	RunID     string  `json:"run_id"`
+	Name      string  `json:"name"`
+	Value     float64 `json:"value"`
+	Step      *int64  `json:"step"`
+	Timestamp int64   `json:"timestamp"`
+	Source    string  `json:"source"`
+}
+
 // runLogsResponse is the response from GET /runs/{id}/logs.
 type runLogsResponse struct {
 	RunID         string            `json:"run_id"`
