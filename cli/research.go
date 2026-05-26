@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -250,17 +251,11 @@ func resumeResearchSession(opts researchRunOptions) error {
 	if _, _, err := validateResearchProject(session.Editable, opts.allowDirty); err != nil {
 		return err
 	}
-	if err := validateResearchIncumbentSnapshot(session); err != nil {
-		return err
-	}
 	if opts.verbose {
 		printJSON(session)
 		return nil
 	}
-	fmt.Printf("Research session: %s\n", session.SessionID)
-	fmt.Printf("Status: %s\n", session.Status)
-	fmt.Printf("%sBaseline/trial resume will be wired in the next implementation slice.%s\n", cAmpMuted, cReset)
-	return nil
+	return runResearchTrial(&session)
 }
 
 func validateResearchRunConfig(opts researchRunOptions) (researchMetricConfig, string, error) {
@@ -576,6 +571,230 @@ func runResearchBaseline(session *researchSession) error {
 	}
 	session.Status = "awaiting_patch"
 	return saveResearchSession(*session)
+}
+
+func runResearchTrial(session *researchSession) error {
+	if session.Status != "awaiting_patch" {
+		return fmt.Errorf("research session must be awaiting_patch, got %s", session.Status)
+	}
+	if session.Metric.Type != "final" {
+		return errors.New("resume currently requires a final:<name> metric")
+	}
+	if session.Incumbent == nil || session.Incumbent.Value == nil {
+		return errors.New("research session has no scored incumbent")
+	}
+
+	candidate, err := captureResearchWorktreeSnapshot(".")
+	if err != nil {
+		return err
+	}
+	if candidate.SHA256 == session.Incumbent.PatchSHA256 {
+		return errors.New("candidate patch is empty; edit one allowed file before resuming")
+	}
+	if hasUntracked, err := hasResearchUntrackedFiles("."); err != nil {
+		return err
+	} else if hasUntracked {
+		return errors.New("candidate patch includes untracked files; add them to git before resuming")
+	}
+	if strings.TrimSpace(candidate.Diff) == "" {
+		return errors.New("candidate patch has no tracked diff")
+	}
+
+	trialNumber := len(session.Trials) + 1
+	patchName := fmt.Sprintf("trial-%d.patch", trialNumber)
+	if err := writeResearchPatchSnapshot(session.SessionID, patchName, candidate.Diff); err != nil {
+		return err
+	}
+
+	trial := researchTrial{
+		Number:      trialNumber,
+		Status:      "running",
+		PatchSHA256: candidate.SHA256,
+		StartedAt:   time.Now().UTC().Format(time.RFC3339),
+	}
+	session.Status = "running_trial"
+	session.Trials = append(session.Trials, trial)
+	if err := saveResearchSession(*session); err != nil {
+		return err
+	}
+
+	fmt.Printf("Research session: %s\n", session.SessionID)
+	fmt.Printf("Trial: %d\n", trialNumber)
+	fmt.Println("Syncing trial code and data...")
+	if err := preRunSync(session.EnvironmentID); err != nil {
+		return finishResearchTrial(session, trialNumber, "inconclusive", "", nil, fmt.Sprintf("sync failed: %v", err))
+	}
+
+	runName := fmt.Sprintf("%s-trial-%d", session.SessionID, trialNumber)
+	fmt.Printf("Launching trial run: %s\n", runName)
+	resp, err := createRunWithCapacityPrompt("/environments/"+session.EnvironmentID+"/runs", map[string]any{
+		"name": runName,
+	})
+	if err != nil {
+		return finishResearchTrial(session, trialNumber, "inconclusive", "", nil, fmt.Sprintf("run create failed: %v", err))
+	}
+	runID := strings.TrimSpace(resp.RunID)
+	if runID == "" {
+		return finishResearchTrial(session, trialNumber, "inconclusive", "", nil, "run create response did not include run_id")
+	}
+	fmt.Printf("%s✓%s trial run created: %s (%s)\n", cAmpGreen, cReset, runID, runDashboardURL(runID))
+	session.Trials[len(session.Trials)-1].RunID = runID
+	if err := saveResearchSession(*session); err != nil {
+		return err
+	}
+
+	if err := monitorRunWithLogs(runID, 5); err != nil {
+		return finishResearchTrial(session, trialNumber, "inconclusive", runID, nil, fmt.Sprintf("run monitor failed: %v", err))
+	}
+	terminalRun, err := doJSONAs[runResponse](http.MethodGet, "/runs/"+runID, nil)
+	if err != nil {
+		return finishResearchTrial(session, trialNumber, "inconclusive", runID, nil, fmt.Sprintf("run status lookup failed: %v", err))
+	}
+	if !strings.EqualFold(terminalRun.Status, "completed") {
+		return finishResearchTrial(session, trialNumber, "inconclusive", runID, nil, "run ended with status "+terminalRun.Status)
+	}
+
+	metric, err := fetchResearchFinalMetric(runID, session.Metric.Name)
+	if err != nil {
+		return finishResearchTrial(session, trialNumber, "inconclusive", runID, nil, fmt.Sprintf("metric lookup failed: %v", err))
+	}
+	value := metric.Value
+	label := "rejected"
+	reason := "metric did not improve incumbent"
+	if researchMetricImproved(session.Direction, value, *session.Incumbent.Value, session.Budget.MinImprovement) {
+		label = "accepted"
+		reason = "metric improved incumbent"
+	}
+	return finishResearchTrial(session, trialNumber, label, runID, &value, reason)
+}
+
+func finishResearchTrial(session *researchSession, trialNumber int, label, runID string, value *float64, reason string) error {
+	if trialNumber <= 0 || trialNumber > len(session.Trials) {
+		return errors.New("invalid research trial number")
+	}
+	trial := &session.Trials[trialNumber-1]
+	trial.Status = label
+	trial.Label = label
+	trial.Reason = reason
+	trial.CompletedAt = time.Now().UTC().Format(time.RFC3339)
+	if strings.TrimSpace(runID) != "" {
+		trial.RunID = strings.TrimSpace(runID)
+	}
+	if value != nil {
+		v := *value
+		trial.Value = &v
+	}
+
+	accepted := label == "accepted"
+	if accepted {
+		snapshot, err := captureResearchWorktreeSnapshot(".")
+		if err != nil {
+			return err
+		}
+		session.Incumbent = &researchIncumbent{
+			Trial:       trialNumber,
+			RunID:       trial.RunID,
+			Value:       trial.Value,
+			PatchSHA256: snapshot.SHA256,
+			PatchPath:   researchPatchSnapshotRelPath(session.SessionID, "incumbent.patch"),
+		}
+		if err := writeResearchPatchSnapshot(session.SessionID, "incumbent.patch", snapshot.Diff); err != nil {
+			return err
+		}
+	} else if err := restoreResearchIncumbentPatch(*session); err != nil {
+		return err
+	}
+
+	if session.Incumbent != nil && session.Incumbent.Value != nil {
+		best := *session.Incumbent.Value
+		trial.RunningBest = &best
+	}
+	session.Status = "awaiting_patch"
+	if err := saveResearchSession(*session); err != nil {
+		return err
+	}
+	printResearchTrialResult(*session, *trial)
+	return nil
+}
+
+func researchMetricImproved(direction string, candidate, incumbent, minImprovement float64) bool {
+	var delta float64
+	if direction == "maximize" {
+		delta = candidate - incumbent
+	} else {
+		delta = incumbent - candidate
+	}
+	return delta > 0 && delta >= minImprovement
+}
+
+func restoreResearchIncumbentPatch(session researchSession) error {
+	if session.Incumbent == nil {
+		return errors.New("research session has no incumbent")
+	}
+	current, err := captureResearchWorktreeSnapshot(".")
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(current.Diff) != "" {
+		if err := gitApplyPatch(".", current.Diff, "--reverse"); err != nil {
+			return fmt.Errorf("failed to remove candidate patch: %w", err)
+		}
+	}
+	patchPath := session.Incumbent.PatchPath
+	if strings.TrimSpace(patchPath) == "" {
+		patchPath = researchPatchSnapshotRelPath(session.SessionID, "incumbent.patch")
+	}
+	raw, err := os.ReadFile(patchPath)
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(string(raw)) != "" {
+		if err := gitApplyPatch(".", string(raw)); err != nil {
+			return fmt.Errorf("failed to restore incumbent patch: %w", err)
+		}
+	}
+	return validateResearchIncumbentSnapshot(session)
+}
+
+func gitApplyPatch(dir, diff string, args ...string) error {
+	cmdArgs := append([]string{"apply", "--whitespace=nowarn"}, args...)
+	cmdArgs = append(cmdArgs, "-")
+	cmd := exec.Command("git", cmdArgs...)
+	cmd.Dir = dir
+	cmd.Stdin = bytes.NewBufferString(diff)
+	raw, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("%w: %s", err, strings.TrimSpace(string(raw)))
+	}
+	return nil
+}
+
+func hasResearchUntrackedFiles(dir string) (bool, error) {
+	raw, err := gitOutput(dir, "ls-files", "--others", "--exclude-standard")
+	if err != nil {
+		return false, err
+	}
+	return strings.TrimSpace(raw) != "", nil
+}
+
+func printResearchTrialResult(session researchSession, trial researchTrial) {
+	fmt.Println()
+	fmt.Printf("Trial %d: %s\n", trial.Number, trial.Label)
+	if trial.RunID != "" {
+		fmt.Printf("  run: %s\n", trial.RunID)
+	}
+	if trial.Value != nil {
+		fmt.Printf("  final %s: %s\n", session.Metric.Name, strconvFloat(*trial.Value))
+	}
+	if trial.RunningBest != nil {
+		fmt.Printf("  running best: %s\n", strconvFloat(*trial.RunningBest))
+	}
+	if trial.Reason != "" {
+		fmt.Printf("  reason: %s\n", trial.Reason)
+	}
+	fmt.Println()
+	fmt.Println("Next: edit one allowed file, then run:")
+	fmt.Printf("  tahuna research run --resume %s\n", session.SessionID)
 }
 
 func validateResearchIncumbentSnapshot(session researchSession) error {
