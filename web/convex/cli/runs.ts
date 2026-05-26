@@ -162,11 +162,12 @@ export const getRunOrLogs = httpAction(async (ctx, request) => {
     });
   }
 
-  // Pattern: /api/runs/{run_id} or /api/runs/{run_id}/logs
+  // Pattern: /api/runs/{run_id}, /api/runs/{run_id}/logs, or /api/runs/{run_id}/metrics/final
   const parts = url.pathname.split("/").filter(Boolean); // remove empty strings
 
   const isLogs = parts[parts.length - 1] === "logs";
-  const runId = isLogs ? parts[parts.length - 2] : parts[parts.length - 1];
+  const isFinalMetric = parts.length >= 5 && parts[parts.length - 2] === "metrics" && parts[parts.length - 1] === "final";
+  const runId = isLogs ? parts[parts.length - 2] : isFinalMetric ? parts[parts.length - 3] : parts[parts.length - 1];
 
   if (!runId || runId === "runs") {
     return new Response(JSON.stringify({ detail: "run_id is required" }), {
@@ -187,6 +188,33 @@ export const getRunOrLogs = httpAction(async (ctx, request) => {
       });
     } catch (err) {
       const detail = toClientErrorDetail(err, "failed to load run logs");
+      return new Response(JSON.stringify({ detail }), {
+        status: 404,
+        headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+      });
+    }
+  }
+
+  if (isFinalMetric) {
+    const name = url.searchParams.get("name")?.trim() || "";
+    if (!name) {
+      return new Response(JSON.stringify({ detail: "metric name is required" }), {
+        status: 400,
+        headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+      });
+    }
+    try {
+      const data = await ctx.runQuery(internal.runs.internalGetFinalMetric, {
+        userId,
+        runId: runId as Id<"runs">,
+        name,
+      });
+      return new Response(JSON.stringify(data), {
+        status: 200,
+        headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
+      });
+    } catch (err) {
+      const detail = toClientErrorDetail(err, `final metric ${name} was not emitted`);
       return new Response(JSON.stringify({ detail }), {
         status: 404,
         headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),

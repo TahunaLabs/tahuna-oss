@@ -161,6 +161,39 @@ export async function listRecentRuntimeMetrics(ctx: QueryCtx, runId: Id<"runs">)
   };
 }
 
+function compareFinalMetricRows(a: Doc<"runRuntimeMetrics">, b: Doc<"runRuntimeMetrics">) {
+  const aHasStep = typeof a.step === "number";
+  const bHasStep = typeof b.step === "number";
+  if (aHasStep !== bHasStep) return aHasStep ? -1 : 1;
+  if (aHasStep && bHasStep && a.step !== b.step) return (b.step ?? 0) - (a.step ?? 0);
+  if (a.timestamp !== b.timestamp) return b.timestamp - a.timestamp;
+  if (a._creationTime !== b._creationTime) return b._creationTime - a._creationTime;
+  return String(b._id).localeCompare(String(a._id));
+}
+
+export async function resolveFinalRuntimeMetric(ctx: QueryCtx, runId: Id<"runs">, name: string) {
+  const rows = await ctx.db
+    .query("runRuntimeMetrics")
+    .withIndex("by_run_and_name", (q) => q.eq("runId", runId).eq("name", name))
+    .collect();
+  if (rows.length === 0) {
+    return null;
+  }
+
+  const trainRows = rows.filter((row) => row.source === "train");
+  const candidates = trainRows.length > 0 ? trainRows : rows;
+  candidates.sort(compareFinalMetricRows);
+  const row = candidates[0];
+  return {
+    run_id: String(row.runId),
+    name: row.name,
+    value: row.value,
+    step: row.step ?? null,
+    timestamp: row.timestamp,
+    source: row.source,
+  };
+}
+
 export async function toRunLogsResponse(ctx: QueryCtx, row: Doc<"runs">) {
   const [recentLogs, recentMetrics] = await Promise.all([
     listRecentRuntimeLogs(ctx, row._id),

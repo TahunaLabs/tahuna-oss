@@ -278,7 +278,9 @@ export default defineSchema({
     step: v.optional(v.number()),
     unit: v.optional(v.string()),
     source: v.string(),
-  }).index("by_run", ["runId"]),
+  })
+    .index("by_run", ["runId"])
+    .index("by_run_and_name", ["runId", "name"]),
 
   shareLinks: defineTable({
     resourceType: v.union(v.literal("environment"), v.literal("run"), v.literal("data")),

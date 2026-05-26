@@ -62,7 +62,14 @@ import {
   type RunLifecycleStatus,
 } from "@convex/core/runLifecyclePlan";
 import { getAccessibleRun } from "@convex/runsAccess";
-import { listByUserId, toRunLogsOnlyResponse, toRunLogsResponse, toRunMetricsOnlyResponse, toRunResponse } from "@convex/runsRead";
+import {
+  listByUserId,
+  resolveFinalRuntimeMetric,
+  toRunLogsOnlyResponse,
+  toRunLogsResponse,
+  toRunMetricsOnlyResponse,
+  toRunResponse,
+} from "@convex/runsRead";
 import { storageKeys } from "@convex/core/storage";
 import { objectStore } from "@convex/objectStore";
 import { resolveComputeCompatibilityCloudType } from "@convex/computeProvider";
@@ -224,6 +231,14 @@ const runMetricsOnlyResponseValidator = v.object({
       source: v.string(),
     }),
   ),
+});
+const finalMetricResponseValidator = v.object({
+  run_id: v.string(),
+  name: v.string(),
+  value: v.number(),
+  step: v.union(v.number(), v.null()),
+  timestamp: v.number(),
+  source: v.string(),
 });
 const provisioningPayloadValidator = v.object({
   run_id: v.string(),
@@ -549,6 +564,23 @@ export const internalGetLogs = internalQuery({
   handler: async (ctx, args) => {
     const row = await getAccessibleRun(ctx, args.userId, args.runId, "read");
     return toRunLogsResponse(ctx, row);
+  },
+});
+
+export const internalGetFinalMetric = internalQuery({
+  args: { userId: v.string(), runId: v.id("runs"), name: v.string() },
+  returns: finalMetricResponseValidator,
+  handler: async (ctx, args) => {
+    await getAccessibleRun(ctx, args.userId, args.runId, "read");
+    const name = args.name.trim();
+    if (!name) {
+      throw new ConvexError("metric name is required");
+    }
+    const metric = await resolveFinalRuntimeMetric(ctx, args.runId, name);
+    if (!metric) {
+      throw new ConvexError(`final metric ${name} was not emitted`);
+    }
+    return metric;
   },
 });
 
