@@ -372,7 +372,11 @@ func ensureGitWorkTree(dir string) error {
 }
 
 func validateResearchDirtyFiles(dir string, editable []string) error {
-	raw, err := gitOutput(dir, "status", "--porcelain")
+	raw, err := gitOutput(dir, "status", "--porcelain", "--", ".")
+	if err != nil {
+		return err
+	}
+	projectPrefix, err := gitProjectPrefix(dir)
 	if err != nil {
 		return err
 	}
@@ -385,15 +389,40 @@ func validateResearchDirtyFiles(dir string, editable []string) error {
 		if relPath == "" {
 			continue
 		}
-		if isResearchEditablePath(relPath, editable) {
+		projectRelPath := researchProjectRelativePath(relPath, projectPrefix)
+		if isResearchEditablePath(projectRelPath, editable) {
 			continue
 		}
-		unexpected = append(unexpected, relPath)
+		unexpected = append(unexpected, projectRelPath)
 	}
 	if len(unexpected) > 0 {
 		return fmt.Errorf("dirty files outside --editable paths: %s", strings.Join(unexpected, ", "))
 	}
 	return nil
+}
+
+func gitProjectPrefix(dir string) (string, error) {
+	raw, err := gitOutput(dir, "rev-parse", "--show-prefix")
+	if err != nil {
+		return "", err
+	}
+	return filepath.ToSlash(filepath.Clean(strings.TrimSpace(raw))), nil
+}
+
+func researchProjectRelativePath(relPath, projectPrefix string) string {
+	relPath = filepath.ToSlash(filepath.Clean(relPath))
+	projectPrefix = filepath.ToSlash(filepath.Clean(strings.TrimSpace(projectPrefix)))
+	if projectPrefix == "." || projectPrefix == "" {
+		return relPath
+	}
+	projectPrefix = strings.TrimSuffix(projectPrefix, "/")
+	if relPath == projectPrefix {
+		return "."
+	}
+	if strings.HasPrefix(relPath, projectPrefix+"/") {
+		return strings.TrimPrefix(relPath, projectPrefix+"/")
+	}
+	return relPath
 }
 
 func parseGitStatusPath(line string) string {
@@ -770,7 +799,7 @@ func gitApplyPatch(dir, diff string, args ...string) error {
 }
 
 func hasResearchUntrackedFiles(dir string) (bool, error) {
-	raw, err := gitOutput(dir, "ls-files", "--others", "--exclude-standard")
+	raw, err := gitOutput(dir, "ls-files", "--others", "--exclude-standard", "--", ".")
 	if err != nil {
 		return false, err
 	}
@@ -816,11 +845,11 @@ func validateResearchIncumbentSnapshot(session researchSession) error {
 }
 
 func captureResearchWorktreeSnapshot(dir string) (researchWorktreeSnapshot, error) {
-	diff, err := gitOutput(dir, "diff", "--binary", "HEAD")
+	diff, err := gitOutput(dir, "diff", "--binary", "HEAD", "--", ".")
 	if err != nil {
 		return researchWorktreeSnapshot{}, err
 	}
-	untracked, err := gitOutput(dir, "ls-files", "--others", "--exclude-standard")
+	untracked, err := gitOutput(dir, "ls-files", "--others", "--exclude-standard", "--", ".")
 	if err != nil {
 		return researchWorktreeSnapshot{}, err
 	}
