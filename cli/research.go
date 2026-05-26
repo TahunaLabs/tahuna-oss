@@ -20,6 +20,15 @@ import (
 
 const (
 	researchStateDir = "research"
+
+	researchSessionStatusAwaitingPatch = "awaiting_patch"
+	researchSessionStatusRunning       = "running"
+	researchSessionStatusRunningTrial  = "running_trial"
+
+	researchTrialLabelAccepted     = "accepted"
+	researchTrialLabelInconclusive = "inconclusive"
+	researchTrialLabelRejected     = "rejected"
+	researchTrialStatusRunning     = "running"
 )
 
 type repeatedResearchFlag []string
@@ -99,8 +108,9 @@ type researchSession struct {
 }
 
 type researchWorktreeSnapshot struct {
-	Diff   string
-	SHA256 string
+	Diff         string
+	SHA256       string
+	HasUntracked bool
 }
 
 type researchRunOptions struct {
@@ -206,7 +216,7 @@ func createResearchSession(opts researchRunOptions) error {
 	session := researchSession{
 		SessionID:      researchSessionID(now),
 		CreatedAt:      now.Format(time.RFC3339),
-		Status:         "running",
+		Status:         researchSessionStatusRunning,
 		Program:        filepath.ToSlash(filepath.Clean(opts.program)),
 		Direction:      direction,
 		Metric:         metric,
@@ -598,13 +608,13 @@ func runResearchBaseline(session *researchSession) error {
 	if err := writeResearchPatchSnapshot(session.SessionID, "incumbent.patch", incumbentSnapshot.Diff); err != nil {
 		return err
 	}
-	session.Status = "awaiting_patch"
+	session.Status = researchSessionStatusAwaitingPatch
 	return saveResearchSession(*session)
 }
 
 func runResearchTrial(session *researchSession) error {
-	if session.Status != "awaiting_patch" {
-		return fmt.Errorf("research session must be awaiting_patch, got %s", session.Status)
+	if session.Status != researchSessionStatusAwaitingPatch {
+		return fmt.Errorf("research session must be %s, got %s", researchSessionStatusAwaitingPatch, session.Status)
 	}
 	if session.Metric.Type != "final" {
 		return errors.New("resume currently requires a final:<name> metric")
@@ -620,9 +630,7 @@ func runResearchTrial(session *researchSession) error {
 	if candidate.SHA256 == session.Incumbent.PatchSHA256 {
 		return errors.New("candidate patch is empty; edit one allowed file before resuming")
 	}
-	if hasUntracked, err := hasResearchUntrackedFiles("."); err != nil {
-		return err
-	} else if hasUntracked {
+	if candidate.HasUntracked {
 		return errors.New("candidate patch includes untracked files; add them to git before resuming")
 	}
 	if strings.TrimSpace(candidate.Diff) == "" {
@@ -637,11 +645,11 @@ func runResearchTrial(session *researchSession) error {
 
 	trial := researchTrial{
 		Number:      trialNumber,
-		Status:      "running",
+		Status:      researchTrialStatusRunning,
 		PatchSHA256: candidate.SHA256,
 		StartedAt:   time.Now().UTC().Format(time.RFC3339),
 	}
-	session.Status = "running_trial"
+	session.Status = researchSessionStatusRunningTrial
 	session.Trials = append(session.Trials, trial)
 	if err := saveResearchSession(*session); err != nil {
 		return err
@@ -651,7 +659,7 @@ func runResearchTrial(session *researchSession) error {
 	fmt.Printf("Trial: %d\n", trialNumber)
 	fmt.Println("Syncing trial code and data...")
 	if err := preRunSync(session.EnvironmentID); err != nil {
-		return finishResearchTrial(session, trialNumber, "inconclusive", "", nil, fmt.Sprintf("sync failed: %v", err))
+		return finishInconclusiveResearchTrial(session, trialNumber, "", fmt.Sprintf("sync failed: %v", err))
 	}
 
 	runName := fmt.Sprintf("%s-trial-%d", session.SessionID, trialNumber)
@@ -660,11 +668,11 @@ func runResearchTrial(session *researchSession) error {
 		"name": runName,
 	})
 	if err != nil {
-		return finishResearchTrial(session, trialNumber, "inconclusive", "", nil, fmt.Sprintf("run create failed: %v", err))
+		return finishInconclusiveResearchTrial(session, trialNumber, "", fmt.Sprintf("run create failed: %v", err))
 	}
 	runID := strings.TrimSpace(resp.RunID)
 	if runID == "" {
-		return finishResearchTrial(session, trialNumber, "inconclusive", "", nil, "run create response did not include run_id")
+		return finishInconclusiveResearchTrial(session, trialNumber, "", "run create response did not include run_id")
 	}
 	fmt.Printf("%s✓%s trial run created: %s (%s)\n", cAmpGreen, cReset, runID, runDashboardURL(runID))
 	session.Trials[len(session.Trials)-1].RunID = runID
@@ -673,28 +681,32 @@ func runResearchTrial(session *researchSession) error {
 	}
 
 	if err := monitorRunWithLogs(runID, 5); err != nil {
-		return finishResearchTrial(session, trialNumber, "inconclusive", runID, nil, fmt.Sprintf("run monitor failed: %v", err))
+		return finishInconclusiveResearchTrial(session, trialNumber, runID, fmt.Sprintf("run monitor failed: %v", err))
 	}
 	terminalRun, err := doJSONAs[runResponse](http.MethodGet, "/runs/"+runID, nil)
 	if err != nil {
-		return finishResearchTrial(session, trialNumber, "inconclusive", runID, nil, fmt.Sprintf("run status lookup failed: %v", err))
+		return finishInconclusiveResearchTrial(session, trialNumber, runID, fmt.Sprintf("run status lookup failed: %v", err))
 	}
 	if !strings.EqualFold(terminalRun.Status, "completed") {
-		return finishResearchTrial(session, trialNumber, "inconclusive", runID, nil, "run ended with status "+terminalRun.Status)
+		return finishInconclusiveResearchTrial(session, trialNumber, runID, "run ended with status "+terminalRun.Status)
 	}
 
 	metric, err := fetchResearchFinalMetric(runID, session.Metric.Name)
 	if err != nil {
-		return finishResearchTrial(session, trialNumber, "inconclusive", runID, nil, fmt.Sprintf("metric lookup failed: %v", err))
+		return finishInconclusiveResearchTrial(session, trialNumber, runID, fmt.Sprintf("metric lookup failed: %v", err))
 	}
 	value := metric.Value
-	label := "rejected"
+	label := researchTrialLabelRejected
 	reason := "metric did not improve incumbent"
 	if researchMetricImproved(session.Direction, value, *session.Incumbent.Value, session.Budget.MinImprovement) {
-		label = "accepted"
+		label = researchTrialLabelAccepted
 		reason = "metric improved incumbent"
 	}
 	return finishResearchTrial(session, trialNumber, label, runID, &value, reason)
+}
+
+func finishInconclusiveResearchTrial(session *researchSession, trialNumber int, runID, reason string) error {
+	return finishResearchTrial(session, trialNumber, researchTrialLabelInconclusive, runID, nil, reason)
 }
 
 func finishResearchTrial(session *researchSession, trialNumber int, label, runID string, value *float64, reason string) error {
@@ -714,7 +726,7 @@ func finishResearchTrial(session *researchSession, trialNumber int, label, runID
 		trial.Value = &v
 	}
 
-	accepted := label == "accepted"
+	accepted := label == researchTrialLabelAccepted
 	if accepted {
 		snapshot, err := captureResearchWorktreeSnapshot(".")
 		if err != nil {
@@ -738,7 +750,7 @@ func finishResearchTrial(session *researchSession, trialNumber int, label, runID
 		best := *session.Incumbent.Value
 		trial.RunningBest = &best
 	}
-	session.Status = "awaiting_patch"
+	session.Status = researchSessionStatusAwaitingPatch
 	if err := saveResearchSession(*session); err != nil {
 		return err
 	}
@@ -798,14 +810,6 @@ func gitApplyPatch(dir, diff string, args ...string) error {
 	return nil
 }
 
-func hasResearchUntrackedFiles(dir string) (bool, error) {
-	raw, err := gitOutput(dir, "ls-files", "--others", "--exclude-standard", "--", ".")
-	if err != nil {
-		return false, err
-	}
-	return strings.TrimSpace(raw) != "", nil
-}
-
 func printResearchTrialResult(session researchSession, trial researchTrial) {
 	fmt.Println()
 	fmt.Printf("Trial %d: %s\n", trial.Number, trial.Label)
@@ -855,11 +859,13 @@ func captureResearchWorktreeSnapshot(dir string) (researchWorktreeSnapshot, erro
 	}
 	var material strings.Builder
 	material.WriteString(diff)
+	hasUntracked := false
 	for _, relPath := range strings.Split(untracked, "\n") {
 		relPath = filepath.ToSlash(filepath.Clean(strings.TrimSpace(relPath)))
 		if relPath == "" || relPath == "." || strings.HasPrefix(relPath, "../") {
 			continue
 		}
+		hasUntracked = true
 		fullPath := filepath.Join(dir, filepath.FromSlash(relPath))
 		info, err := os.Lstat(fullPath)
 		if err != nil || info.IsDir() || !info.Mode().IsRegular() || (info.Mode()&os.ModeSymlink) != 0 {
@@ -876,8 +882,9 @@ func captureResearchWorktreeSnapshot(dir string) (researchWorktreeSnapshot, erro
 	}
 	sum := sha256.Sum256([]byte(material.String()))
 	return researchWorktreeSnapshot{
-		Diff:   diff,
-		SHA256: hex.EncodeToString(sum[:]),
+		Diff:         diff,
+		SHA256:       hex.EncodeToString(sum[:]),
+		HasUntracked: hasUntracked,
 	}, nil
 }
 
