@@ -69,6 +69,8 @@ func main() {
 		handleData(os.Args[2:])
 	case "run":
 		handleRun(os.Args[2:])
+	case "research":
+		handleResearch(os.Args[2:])
 	case "serve":
 		handleServe(os.Args[2:])
 	case "sync":
@@ -108,6 +110,7 @@ Usage:
   tahuna gpus list
   tahuna data list|show ...
   tahuna run create|rename|list|show|watch|logs|cancel|rm ...
+  tahuna research run|graph ...
   tahuna serve create|list|show|logs|stop ...
   tahuna up
   tahuna version
@@ -125,6 +128,12 @@ Run commands:
   tahuna run metrics <run>... --metric|-m <name>... [--tail|-n <N>] [--follow]
   tahuna run cancel <run_id|run_name> [-f]
   tahuna run rm <run_id|run_name|pattern>... [--all|-a] [--cancel|-c] [--force|-f]
+
+Research commands:
+  tahuna research help
+  tahuna research run --program <program.md> --metric final:<name> --minimize|--maximize --max-trials <N> --max-spend-usd <USD> --max-trial-minutes <N> --editable <path>
+  tahuna research run --resume <session-id>
+  tahuna research graph <session-id> [--output <path>]
 
 Serve commands:
   tahuna serve help
