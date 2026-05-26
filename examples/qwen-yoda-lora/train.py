@@ -233,6 +233,7 @@ def main() -> None:
         write_json(output_dir / "sample_predictions.json", sample_outputs)
 
         print(f"Writing artifacts to {output_dir.resolve()}")
+        print(f"eval_loss={eval_metrics['eval_loss']:.6f}", flush=True)
         print(eval_metrics)
     finally:
         wandb.finish()
