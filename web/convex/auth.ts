@@ -11,7 +11,7 @@ import { sha256Hex } from "@convex/crypto";
 import { generateApiKeyPlaintext } from "@convex/secretTokens";
 import { ensureUserLedger } from "@convex/credits";
 import { sendOtpEmail } from "@convex/resend";
-import { AUTH_CONFIG, BILLING_CONFIG, NETWORK_CONFIG } from "../config";
+import { AUTH_CONFIG, BILLING_CONFIG } from "../config";
 
 const siteUrl = process.env.SITE_URL;
 if (!siteUrl) throw new Error("SITE_URL is required");

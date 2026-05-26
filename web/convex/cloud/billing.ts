@@ -5,7 +5,6 @@ import type { ActionCtx, MutationCtx } from "@convex/_generated/server";
 import { action, httpAction, internalMutation, mutation, query } from "@convex/_generated/server";
 import Stripe from "stripe";
 import { CLOUD_BILLING_CONFIG } from "@/cloud/config";
-import { NETWORK_CONFIG } from "@convex/appConfig";
 import { authComponent, requireUser } from "@convex/auth";
 import {
   ensureUserLedger,

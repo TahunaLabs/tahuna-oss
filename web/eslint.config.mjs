@@ -82,6 +82,7 @@ export default [
     ignores: [
       "**/node_modules/**",
       "**/.next/**",
+      "**/.open-next/**",
       ".source/**",
       "convex/_generated/**",
     ],
