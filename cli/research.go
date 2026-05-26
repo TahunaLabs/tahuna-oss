@@ -62,6 +62,7 @@ type researchIncumbent struct {
 	RunID       string   `json:"run_id"`
 	Value       *float64 `json:"value,omitempty"`
 	PatchSHA256 string   `json:"patch_sha256"`
+	PatchPath   string   `json:"patch_path,omitempty"`
 }
 
 type researchTrial struct {
@@ -90,9 +91,15 @@ type researchSession struct {
 	Budget         researchBudgetConfig `json:"budget"`
 	EnvironmentID  string               `json:"environment_id,omitempty"`
 	StartingCommit string               `json:"starting_commit,omitempty"`
+	StartingPatch  string               `json:"starting_patch_sha256,omitempty"`
 	Baseline       *researchRunResult   `json:"baseline,omitempty"`
 	Incumbent      *researchIncumbent   `json:"incumbent,omitempty"`
 	Trials         []researchTrial      `json:"trials"`
+}
+
+type researchWorktreeSnapshot struct {
+	Diff   string
+	SHA256 string
 }
 
 type researchRunOptions struct {
@@ -189,6 +196,10 @@ func createResearchSession(opts researchRunOptions) error {
 	if err != nil {
 		return err
 	}
+	startingSnapshot, err := captureResearchWorktreeSnapshot(".")
+	if err != nil {
+		return err
+	}
 
 	now := time.Now().UTC()
 	session := researchSession{
@@ -201,6 +212,7 @@ func createResearchSession(opts researchRunOptions) error {
 		Editable:       append([]string{}, opts.editable...),
 		EnvironmentID:  environmentID,
 		StartingCommit: startingCommit,
+		StartingPatch:  startingSnapshot.SHA256,
 		Budget: researchBudgetConfig{
 			MaxTrials:              opts.maxTrials,
 			MaxSpendUSD:            opts.maxSpendUSD,
@@ -210,6 +222,9 @@ func createResearchSession(opts researchRunOptions) error {
 			ObservedSpendUSD:       0,
 		},
 		Trials: []researchTrial{},
+	}
+	if err := writeResearchPatchSnapshot(session.SessionID, "starting.patch", startingSnapshot.Diff); err != nil {
+		return err
 	}
 	if err := saveResearchSession(session); err != nil {
 		return err
@@ -233,6 +248,9 @@ func resumeResearchSession(opts researchRunOptions) error {
 		return err
 	}
 	if _, _, err := validateResearchProject(session.Editable, opts.allowDirty); err != nil {
+		return err
+	}
+	if err := validateResearchIncumbentSnapshot(session); err != nil {
 		return err
 	}
 	if opts.verbose {
@@ -539,12 +557,93 @@ func runResearchBaseline(session *researchSession) error {
 	value := metric.Value
 	session.Baseline.Value = &value
 	session.Incumbent = &researchIncumbent{
-		Trial: 0,
-		RunID: runID,
-		Value: &value,
+		Trial:       0,
+		RunID:       runID,
+		Value:       &value,
+		PatchSHA256: session.StartingPatch,
+		PatchPath:   researchPatchSnapshotRelPath(session.SessionID, "incumbent.patch"),
+	}
+	incumbentSnapshot, err := captureResearchWorktreeSnapshot(".")
+	if err != nil {
+		return err
+	}
+	session.Incumbent.PatchSHA256 = incumbentSnapshot.SHA256
+	if err := writeResearchPatchSnapshot(session.SessionID, "incumbent.patch", incumbentSnapshot.Diff); err != nil {
+		return err
 	}
 	session.Status = "awaiting_patch"
 	return saveResearchSession(*session)
+}
+
+func validateResearchIncumbentSnapshot(session researchSession) error {
+	expected := strings.TrimSpace(session.StartingPatch)
+	if session.Incumbent != nil && strings.TrimSpace(session.Incumbent.PatchSHA256) != "" {
+		expected = strings.TrimSpace(session.Incumbent.PatchSHA256)
+	}
+	if expected == "" {
+		return errors.New("research session has no incumbent patch snapshot")
+	}
+	current, err := captureResearchWorktreeSnapshot(".")
+	if err != nil {
+		return err
+	}
+	if current.SHA256 != expected {
+		return fmt.Errorf("working tree does not match incumbent patch snapshot: expected %s, got %s", expected, current.SHA256)
+	}
+	return nil
+}
+
+func captureResearchWorktreeSnapshot(dir string) (researchWorktreeSnapshot, error) {
+	diff, err := gitOutput(dir, "diff", "--binary", "HEAD")
+	if err != nil {
+		return researchWorktreeSnapshot{}, err
+	}
+	untracked, err := gitOutput(dir, "ls-files", "--others", "--exclude-standard")
+	if err != nil {
+		return researchWorktreeSnapshot{}, err
+	}
+	var material strings.Builder
+	material.WriteString(diff)
+	for _, relPath := range strings.Split(untracked, "\n") {
+		relPath = filepath.ToSlash(filepath.Clean(strings.TrimSpace(relPath)))
+		if relPath == "" || relPath == "." || strings.HasPrefix(relPath, "../") {
+			continue
+		}
+		fullPath := filepath.Join(dir, filepath.FromSlash(relPath))
+		info, err := os.Lstat(fullPath)
+		if err != nil || info.IsDir() || !info.Mode().IsRegular() || (info.Mode()&os.ModeSymlink) != 0 {
+			continue
+		}
+		raw, err := os.ReadFile(fullPath)
+		if err != nil {
+			return researchWorktreeSnapshot{}, err
+		}
+		material.WriteString("\n-- untracked ")
+		material.WriteString(relPath)
+		material.WriteString(" --\n")
+		material.Write(raw)
+	}
+	sum := sha256.Sum256([]byte(material.String()))
+	return researchWorktreeSnapshot{
+		Diff:   diff,
+		SHA256: hex.EncodeToString(sum[:]),
+	}, nil
+}
+
+func researchSessionDir(sessionID string) string {
+	return filepath.Join(projectStateDir, researchStateDir, strings.TrimSpace(sessionID))
+}
+
+func researchPatchSnapshotRelPath(sessionID, name string) string {
+	return filepath.ToSlash(filepath.Join(projectStateDir, researchStateDir, strings.TrimSpace(sessionID), name))
+}
+
+func writeResearchPatchSnapshot(sessionID, name, diff string) error {
+	dir := researchSessionDir(sessionID)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(dir, name), []byte(diff), 0o600)
 }
 
 func pollResearchRunTerminal(runID string, interval time.Duration) (runResponse, error) {
