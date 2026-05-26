@@ -1,6 +1,6 @@
 # Tahuna Autoresearch Local MVP
 
-Last reviewed: 2026-05-26
+Last reviewed: 2026-05-27
 
 Linear: TAH-318
 
@@ -13,6 +13,28 @@ The local MVP keeps the research controller on the user's machine. Tahuna contin
 The user's local agent owns code edits through a Tahuna autoresearch skill. The Tahuna CLI must not configure or launch a coding agent. It exposes deterministic research primitives the agent can call.
 
 Reference: <https://github.com/karpathy/autoresearch>
+
+## Current Implementation Status
+
+Implemented:
+
+- Deterministic final metric lookup over persisted `runRuntimeMetrics`.
+- CLI research command routing for `tahuna research run` and `tahuna research graph`.
+- Session JSON persistence under `.tahuna/research/<session-id>.json`.
+- Baseline run orchestration through the normal Tahuna sync/train/monitor path.
+- Git safety for dirty project files, editable allowlist matching, patch snapshots, patch hashes, and incumbent snapshots.
+- Single-trial resume loop for `tahuna research run --resume <session-id>`.
+- Trial verdicts for `accepted`, `rejected`, and `inconclusive`.
+- Patch restore for rejected or inconclusive tracked-file candidate patches.
+- Project-scoped git handling for Tahuna projects inside larger git repositories.
+
+Still needed:
+
+- Budget enforcement and cancellation for `--max-trials`, `--max-spend-usd`, `--max-trial-minutes`, and `--stop-after-no-improvement`.
+- Observed spend recording.
+- External scorer support through `--metric-cmd`.
+- SVG progress graph rendering.
+- CLI docs and external `tahuna-autoresearch-project` agent skill updates.
 
 ## Implementation PR Plan
 
@@ -43,6 +65,7 @@ Implement the MVP in reviewable slices:
 5. **Single-trial resume loop**
    - Implement `tahuna research run --resume <session-id>` for one candidate patch.
    - Validate the patch, sync code, launch `research-<session>-trial-<N>`, score the run, accept/reject/inconclusive the patch, and append trial state.
+   - Candidate patches currently must be tracked-file diffs; untracked files are rejected before GPU spend so restore remains deterministic.
    - Validate with `make validate-cli`.
 
 6. **Budgets and cancellation**
@@ -131,8 +154,9 @@ Resume behavior:
 
 - The agent skill edits allowed files.
 - The agent calls `tahuna research run --resume <session-id>`.
-- Tahuna validates the current patch, launches the next trial, records the verdict, restores or keeps the patch, regenerates the graph, and exits.
-- If more trials remain, Tahuna prints whether the next step is `awaiting_patch` or `budget_exhausted`.
+- Tahuna validates the current patch, launches the next trial, records the verdict, restores or keeps the patch, and exits.
+- If more trials remain, Tahuna prints the next `--resume` command.
+- Budget exhaustion and graph regeneration are still pending implementation.
 
 This gives the user's agent the control loop without making Tahuna an agent launcher.
 
@@ -397,12 +421,25 @@ For each trial:
 - On rejection or inconclusive result, restore the working tree to the incumbent state.
 - On acceptance, update the incumbent patch snapshot.
 
-The first implementation can use non-interactive git commands:
+Current implementation details:
 
-- `git diff --name-only`
+- Dirty-file validation uses `git status --porcelain -- .` scoped to the current Tahuna project tree.
+- Paths returned by git are normalized from repository-root paths to Tahuna project-relative paths before matching `--editable`.
+- Patch snapshots use `git diff --binary HEAD -- .`.
+- Untracked files are detected through `git ls-files --others --exclude-standard -- .`.
+- Candidate patches with untracked files are rejected before launching a trial, because the tracked binary diff can be restored deterministically but untracked files are not yet stored as restorable patch material.
+- Rejected and inconclusive tracked-file patches are removed with `git apply --whitespace=nowarn --reverse -`.
+- The saved incumbent patch is restored with `git apply --whitespace=nowarn -`.
+- Restore is verified by comparing the current worktree snapshot hash with the incumbent patch hash.
+
+Future implementation can extend this to support untracked file materialization if needed.
+
+Non-interactive git commands used by the implementation include:
+
+- `git status --porcelain -- .`
 - `git diff --binary`
 - `git apply --reverse`
-- `git checkout-index` or equivalent restore logic
+- `git apply`
 
 The implementation must never discard user changes that predate the research session unless the user passed an explicit override.
 
@@ -489,7 +526,7 @@ Run terminal status still comes from the normal Tahuna run lifecycle: `completed
 
 ## Resume Behavior
 
-Initial resume support should be conservative:
+Resume support is conservative:
 
 ```bash
 tahuna research run --resume <session-id>
@@ -498,9 +535,19 @@ tahuna research run --resume <session-id>
 Rules:
 
 - Load the session file.
-- Verify the current working tree matches the incumbent patch snapshot.
+- Require session status `awaiting_patch`.
+- Require a scored incumbent.
+- Validate dirty project files against the session's `editable` allowlist.
+- Scope git status, diff, and untracked checks to the current Tahuna project tree.
+- Normalize monorepo-root git paths back to project-relative paths before matching `--editable`.
+- Capture the current tracked diff as `trial-<N>.patch`.
+- Reject an empty candidate patch.
+- Reject untracked files before GPU spend.
 - Continue at the next trial number.
-- Refuse to resume if unexpected files changed.
+- Sync code/data, launch `research-<session>-trial-<N>`, monitor the run, and resolve the final objective metric.
+- Accept the patch if it improves the incumbent by at least `--min-improvement`.
+- Restore the incumbent patch when the trial is rejected or inconclusive.
+- Append the trial result and return to `awaiting_patch`.
 
 ## CLI Output
 
@@ -598,17 +645,21 @@ The local MVP is complete when:
 - Accepted patches remain in the working tree.
 - `.tahuna/research/<session-id>.json` records baseline, trials, verdicts, metric values, and run IDs.
 - `tahuna research graph <session-id>` renders a progress graph with discarded trials, kept improvements, and running best.
-- `--resume` can continue a session only when the working tree matches the incumbent.
+- `--resume` can continue a session only when dirty project files are allowed by the session and the resulting accept/reject restore path is deterministic.
 
 ## Implementation Order
 
-1. Add final-metric lookup API/query over persisted `runRuntimeMetrics`.
-2. Add CLI metric resolver for `final:<name>`.
-3. Add CLI session state writer under `.tahuna/research/`.
-4. Add baseline run orchestration.
-5. Add editable path validation for patches produced by the user's external agent skill.
-6. Add trial launch, metric capture, comparison, and patch restore.
-7. Add `--metric-cmd`.
-8. Add budget checks and observed spend recording.
-9. Add SVG progress graph rendering.
-10. Add conservative `--resume`.
+1. Done: add final-metric lookup API/query over persisted `runRuntimeMetrics`.
+2. Done: add CLI metric resolver for `final:<name>`.
+3. Done: add CLI session state writer under `.tahuna/research/`.
+4. Done: add baseline run orchestration.
+5. Done: add editable path validation for patches produced by the user's external agent skill.
+6. Done: add conservative `--resume` session loading and preflight.
+7. Done: add trial launch, metric capture, comparison, accept/reject/inconclusive verdicts, and tracked patch restore.
+8. Done: scope research git status/diff/untracked checks to the current Tahuna project tree, including projects nested inside a larger git repository.
+9. Remaining: add budget checks before every GPU run, including `--max-trials`, `--max-spend-usd`, `--max-trial-minutes`, `--stop-after-no-improvement`, and `--min-improvement` enforcement.
+10. Remaining: add run cancellation when `--max-trial-minutes` is exceeded.
+11. Remaining: record observed spend and estimated spend in session state.
+12. Remaining: add `--metric-cmd` scoring after terminal run status.
+13. Remaining: add SVG progress graph rendering.
+14. Remaining: update CLI docs and the external `tahuna-autoresearch-project` agent skill.
