@@ -99,6 +99,35 @@ tahuna run logs <run-id>
 tahuna run logs <run-id> --follow
 ```
 
+## Research
+
+### `tahuna research run`
+
+Create or resume a local Auto-Research session. New sessions launch and score a baseline run. Resume calls validate one candidate patch, launch one trial, score it, and accept, reject, or mark it inconclusive.
+
+```bash
+tahuna research run \
+  --program program.md \
+  --metric final:eval_loss \
+  --minimize \
+  --max-trials 5 \
+  --max-spend-usd 5 \
+  --max-trial-minutes 30 \
+  --editable train.py
+
+tahuna research run --resume <session-id>
+```
+
+See [Auto-Research](/auto-research) for the full workflow, budget model, and session state contract.
+
+### `tahuna research graph`
+
+Reserved for local progress graph rendering.
+
+```bash
+tahuna research graph <session-id> --output .tahuna/research/<session-id>/progress.svg
+```
+
 ## Data
 
 ### `tahuna data list`
