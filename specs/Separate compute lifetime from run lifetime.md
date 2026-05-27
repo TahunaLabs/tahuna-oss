@@ -40,7 +40,7 @@ The primary user story stays centered on training:
 ```
 tahuna init .
 tahuna sync
-tahuna train --keep-warm 10m
+tahuna train --keep-warm-minutes 10
 ```
 
 What happens:
@@ -53,7 +53,7 @@ What happens:
 
 ```
 Run completed.
-Compute is warm for 10m.
+Compute is warm for 10 minutes.
 
 Next run:
   tahuna sync
@@ -83,7 +83,7 @@ Keep compute warm after training runs?
   Custom
 ```
 
-If the project config contains `train.keep_warm_after_seconds = 600`, then:
+If the project config contains `train.keep_warm_after_minutes = 10`, then:
 
 ```
 tahuna train
@@ -92,14 +92,14 @@ tahuna train
 behaves like:
 
 ```
-tahuna train --keep-warm 10m
+tahuna train --keep-warm-minutes 10
 ```
 
 Users can override the default for a single run:
 
 ```
 tahuna train --no-keep-warm
-tahuna train --keep-warm 30m
+tahuna train --keep-warm-minutes 30
 ```
 
 Power-user compute management commands can exist later for inspection or cleanup, but they are not the primary path and should not be required for the first warm-compute workflow.
@@ -194,14 +194,14 @@ There is no fallback path inside Warden. If an assignment cannot be prepared or 
 
 ```
 tahuna train
-tahuna train --keep-warm <duration>
+tahuna train --keep-warm-minutes <minutes>
 tahuna train --warm
 tahuna train --no-keep-warm
 ```
 
-`tahuna train` remains ephemeral by default unless the project config contains a keep-warm default from `tahuna init .`. Warm reuse remains explicit through either a stored keep-warm preference, `--keep-warm`, or `--warm`.
+`tahuna train` remains ephemeral by default unless the project config contains a keep-warm default from `tahuna init .`. Warm reuse remains explicit through either a stored keep-warm preference, `--keep-warm-minutes`, or `--warm`.
 
-Duration syntax accepts minute/second forms such as `10m`, `30m`, `1min`, `60s`, and `1h`.
+Keep-warm duration is always expressed in minutes. Fractional values are allowed, for example `--keep-warm-minutes 0.5` or `--keep-warm-minutes 10`.
 
 ### Backend Operations
 
@@ -324,7 +324,7 @@ Run completion alone does not terminate the machine in session mode.
 1. Add `computeSessions` schema, lifecycle planner, and backend create/list/stop operations.
 2. Add run-level assignment API and response shaping.
 3. Add `tahuna init .` keep-warm preference in `tahuna.toml`.
-4. Add `tahuna train --keep-warm`, `--warm`, and `--no-keep-warm` CLI flags.
+4. Add `tahuna train --keep-warm-minutes`, `--warm`, and `--no-keep-warm` CLI flags.
 5. Add backend keep-warm run creation that provisions Warden in session mode and assigns the first run.
 6. Add Warden session mode with heartbeat, assignment polling, per-run execution, and return-to-idle.
 7. Add idle timeout and heartbeat timeout enforcement.
@@ -333,8 +333,8 @@ Run completion alone does not terminate the machine in session mode.
 
 ## Acceptance Criteria
 
-- A user can run `tahuna train --keep-warm 10m`, edit code, sync, and run `tahuna train --warm` on the same provider machine.
-- A project with `train.keep_warm_after_seconds = 600` treats plain `tahuna train` as keep-warm unless `--no-keep-warm` is passed.
+- A user can run `tahuna train --keep-warm-minutes 10`, edit code, sync, and run `tahuna train --warm` on the same provider machine.
+- A project with `train.keep_warm_after_minutes = 10` treats plain `tahuna train` as keep-warm unless `--no-keep-warm` is passed.
 - Each run has distinct run ID, manifest hashes, logs, metrics, artifacts, and terminal status.
 - The provider machine ID is the same for both runs.
 - The session remains idle after a successful run until stopped or timed out.

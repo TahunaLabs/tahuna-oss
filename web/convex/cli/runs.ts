@@ -65,8 +65,8 @@ export const createRun = httpAction(async (ctx, request) => {
       ? (body.compute_session_id as Id<"computeSessions">)
       : undefined;
     const warm = body?.warm === true;
-    const keepWarmAfterSeconds =
-      typeof body?.keep_warm_after_seconds === "number" ? body.keep_warm_after_seconds : undefined;
+    const keepWarmAfterMinutes =
+      typeof body?.keep_warm_after_minutes === "number" ? body.keep_warm_after_minutes : undefined;
     const requestedGpuType = typeof body?.gpu_type === "string" ? body.gpu_type.trim() : "";
     const requestedGpuCount = typeof body?.gpu_count === "number" ? body.gpu_count : 0;
     if (!computeSessionId && !warm && requestedGpuCount > 0) {
@@ -89,7 +89,7 @@ export const createRun = httpAction(async (ctx, request) => {
       volume_gb: body?.volume_gb,
       computeSessionId,
       warm,
-      keepWarmAfterSeconds,
+      keepWarmAfterMinutes,
     });
     return new Response(JSON.stringify(data), {
       status: 200,

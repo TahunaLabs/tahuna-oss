@@ -1128,7 +1128,7 @@ func train(args []string) {
 	gpuType := fs.String("gpu-type", "", "Override GPU type")
 	gpuCount := fs.Int("gpu-count", 0, "Override GPU count")
 	volumeGB := fs.Int("volume-gb", 0, "Override volume size")
-	keepWarm := fs.String("keep-warm", "", "Keep compute warm after the run (for example 10m)")
+	keepWarmMinutes := fs.String("keep-warm-minutes", "", "Keep compute warm after the run for this many minutes (for example 0.5 or 10)")
 	warm := fs.Bool("warm", false, "Run on existing warm compute for this environment")
 	noKeepWarm := fs.Bool("no-keep-warm", false, "Disable the project keep-warm default for this run")
 	detached := fs.Bool("detached", false, "Create run and exit immediately")
@@ -1140,21 +1140,21 @@ func train(args []string) {
 	cfg, err := loadProjectConfig()
 	must(err)
 
-	requestedKeepWarmSeconds := 0
-	if *warm && strings.TrimSpace(*keepWarm) != "" {
-		must(errors.New("--warm cannot be combined with --keep-warm"))
+	requestedKeepWarmMinutes := 0.0
+	if *warm && strings.TrimSpace(*keepWarmMinutes) != "" {
+		must(errors.New("--warm cannot be combined with --keep-warm-minutes"))
 	}
-	if *noKeepWarm && (*warm || strings.TrimSpace(*keepWarm) != "") {
-		must(errors.New("--no-keep-warm cannot be combined with --warm or --keep-warm"))
+	if *noKeepWarm && (*warm || strings.TrimSpace(*keepWarmMinutes) != "") {
+		must(errors.New("--no-keep-warm cannot be combined with --warm or --keep-warm-minutes"))
 	}
 	if *warm && (strings.TrimSpace(*gpuType) != "" || *gpuCount > 0 || *volumeGB > 0) {
 		must(errors.New("--warm uses an existing compatible compute session; omit GPU and volume overrides"))
 	}
-	if raw := strings.TrimSpace(*keepWarm); raw != "" {
-		requestedKeepWarmSeconds, err = parseKeepWarmDuration(raw)
+	if raw := strings.TrimSpace(*keepWarmMinutes); raw != "" {
+		requestedKeepWarmMinutes, err = parseKeepWarmMinutes(raw)
 		must(err)
 	} else if !*warm && !*noKeepWarm {
-		requestedKeepWarmSeconds = cfg.TrainKeepWarmAfterSeconds
+		requestedKeepWarmMinutes = cfg.TrainKeepWarmAfterMinutes
 	}
 
 	must(preRunSync(resolvedEnvironmentID))
@@ -1163,8 +1163,8 @@ func train(args []string) {
 	if *warm {
 		payload["warm"] = true
 	}
-	if requestedKeepWarmSeconds > 0 {
-		payload["keep_warm_after_seconds"] = requestedKeepWarmSeconds
+	if requestedKeepWarmMinutes > 0 {
+		payload["keep_warm_after_minutes"] = requestedKeepWarmMinutes
 	}
 	if *gpuType != "" {
 		payload["gpu_type"] = *gpuType
@@ -1187,18 +1187,18 @@ func train(args []string) {
 	runID := resp.RunID
 	fmt.Printf("%s✓%s run created: %s - %s\n", cAmpGreen, cReset, runID, runDashboardURL(runID))
 	if *detached {
-		if requestedKeepWarmSeconds > 0 {
-			fmt.Printf("Compute will stay warm for %s after the run completes.\n", formatKeepWarmDuration(requestedKeepWarmSeconds))
+		if requestedKeepWarmMinutes > 0 {
+			fmt.Printf("Compute will stay warm for %s after the run completes.\n", formatKeepWarmMinutes(requestedKeepWarmMinutes))
 		}
 		return
 	}
 	must(monitorRunWithLogs(runID, 5))
-	if requestedKeepWarmSeconds > 0 {
+	if requestedKeepWarmMinutes > 0 {
 		terminal, err := doJSONAs[runResponse](http.MethodGet, "/runs/"+runID, nil)
 		must(err)
 		if terminal.Status == "completed" {
 			fmt.Printf("\nRun completed.\n")
-			fmt.Printf("Compute is warm for %s.\n\n", formatKeepWarmDuration(requestedKeepWarmSeconds))
+			fmt.Printf("Compute is warm for %s.\n\n", formatKeepWarmMinutes(requestedKeepWarmMinutes))
 			fmt.Printf("Next run:\n")
 			fmt.Printf("  tahuna sync\n")
 			fmt.Printf("  tahuna train --warm\n")

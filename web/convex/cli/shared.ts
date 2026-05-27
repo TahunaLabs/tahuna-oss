@@ -18,7 +18,7 @@ type CreateRunStrictArgs = {
   volume_gb?: number;
   computeSessionId?: Id<"computeSessions">;
   warm?: boolean;
-  keepWarmAfterSeconds?: number;
+  keepWarmAfterMinutes?: number;
 };
 
 type CreateServeStrictArgs = {
@@ -180,7 +180,7 @@ const SAFE_CLIENT_ERROR_PATTERNS: RegExp[] = [
   /\bmanifest\b.*\b(not found|invalid|mismatch)\b/i,
   /\bcompute session\b.*\b(not found|mismatch|required|active run|idle)\b/i,
   /\bno warm compute session is available\b/i,
-  /\btahuna train --keep-warm requires Warden session mode\b/i,
+  /\btahuna train --keep-warm-minutes requires Warden session mode\b/i,
   /\bwarm runs use an existing compatible compute session\b/i,
   /\brun\b.*\b(queued|compute session)\b/i,
   /\bblob exceeds limit\b/i,
@@ -237,8 +237,8 @@ function isNoGpuCapacityError(detail: string) {
 }
 
 export async function createAndProvisionRunStrict(ctx: ActionCtx, args: CreateRunStrictArgs) {
-  if (args.keepWarmAfterSeconds && args.keepWarmAfterSeconds > 0) {
-    throw new Error("tahuna train --keep-warm requires Warden session mode, which is not available in this build yet");
+  if (args.keepWarmAfterMinutes && args.keepWarmAfterMinutes > 0) {
+    throw new Error("tahuna train --keep-warm-minutes requires Warden session mode, which is not available in this build yet");
   }
   if (args.warm) {
     if (args.gpu_type || args.gpu_count || args.volume_gb) {
@@ -252,7 +252,7 @@ export async function createAndProvisionRunStrict(ctx: ActionCtx, args: CreateRu
     );
     if (!session) {
       throw new Error(
-        "no warm compute session is available for this environment; run `tahuna train --keep-warm 10m` to start one",
+        "no warm compute session is available for this environment; run `tahuna train --keep-warm-minutes 10` to start one",
       );
     }
     const created = await ctx.runMutation(internal.runs.internalCreate, {
