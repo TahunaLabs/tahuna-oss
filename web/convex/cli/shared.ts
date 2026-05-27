@@ -180,7 +180,7 @@ const SAFE_CLIENT_ERROR_PATTERNS: RegExp[] = [
   /\bmanifest\b.*\b(not found|invalid|mismatch)\b/i,
   /\bcompute session\b.*\b(not found|mismatch|required|active run|idle)\b/i,
   /\bno warm compute session is available\b/i,
-  /\btahuna train --keep-warm-minutes requires Warden session mode\b/i,
+  /\b--keep-warm-minutes cannot be combined with warm compute session assignment\b/i,
   /\bwarm runs use an existing compatible compute session\b/i,
   /\brun\b.*\b(queued|compute session)\b/i,
   /\bblob exceeds limit\b/i,
@@ -238,7 +238,33 @@ function isNoGpuCapacityError(detail: string) {
 
 export async function createAndProvisionRunStrict(ctx: ActionCtx, args: CreateRunStrictArgs) {
   if (args.keepWarmAfterMinutes && args.keepWarmAfterMinutes > 0) {
-    throw new Error("tahuna train --keep-warm-minutes requires Warden session mode, which is not available in this build yet");
+    if (args.warm || args.computeSessionId) {
+      throw new Error("--keep-warm-minutes cannot be combined with warm compute session assignment");
+    }
+    const idleTimeoutSeconds = Math.ceil(args.keepWarmAfterMinutes * 60);
+    const session = await ctx.runMutation(internal.computeSessions.internalCreate, {
+      userId: args.userId,
+      environmentId: args.environmentId,
+      idleTimeoutSeconds,
+      gpuType: args.gpu_type,
+      gpuCount: args.gpu_count,
+      volumeGb: args.volume_gb,
+    });
+    const created = await ctx.runMutation(internal.runs.internalCreate, {
+      ...args,
+      enqueue_provisioning: false,
+      computeSessionId: session.compute_session_id as Id<"computeSessions">,
+    });
+    const runId = created.run_id as Id<"runs">;
+    await ctx.runAction(internal.computeSessions.provisionComputeSession, {
+      userId: args.userId,
+      computeSessionId: session.compute_session_id as Id<"computeSessions">,
+      initialRunId: runId,
+    });
+    return await ctx.runQuery(internal.runs.internalGet, {
+      userId: args.userId,
+      runId,
+    });
   }
   if (args.warm) {
     if (args.gpu_type || args.gpu_count || args.volume_gb) {

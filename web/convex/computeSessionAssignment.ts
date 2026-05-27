@@ -133,6 +133,9 @@ export async function assignQueuedRunToComputeSession(
   if (!session.providerMachineId) {
     assignmentError("compute session provider machine id is required");
   }
+  if (!session.runtimeTokenHash || session.runtimeTokenHash === "revoked") {
+    assignmentError("compute session runtime token is required");
+  }
   await assertNoActiveRunOnSession(ctx, args.computeSessionId, args.runId);
 
   const environment = await ctx.db.get("environments", run.environmentId);
@@ -161,6 +164,7 @@ export async function assignQueuedRunToComputeSession(
   await ctx.db.patch("runs", args.runId, {
     status: RUN_STATUS.PROVISIONING,
     providerMachineId: session.providerMachineId,
+    runtimeTokenHash: session.runtimeTokenHash,
   });
   await ctx.db.insert("runEvents", {
     runId: args.runId,

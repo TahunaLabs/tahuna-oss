@@ -1,6 +1,8 @@
 import { ConvexError, v } from "convex/values";
+import { internal } from "@convex/_generated/api";
 import type { Doc, Id } from "@convex/_generated/dataModel";
 import {
+  internalAction,
   internalMutation,
   internalQuery,
   query,
@@ -9,8 +11,18 @@ import {
 import { requireUser } from "@convex/auth";
 import { RUN_CONFIG, PYTHON_CONFIG } from "@convex/appConfig";
 import { assignQueuedRunToComputeSession } from "@convex/computeSessionAssignment";
+import {
+  buildProvisionedRuntimeEnv,
+  resolveEnvironmentEnvVarsForEnvironmentId,
+} from "@convex/envVars";
 import { getAccessibleEnvironment } from "@convex/runsAccess";
-import { resolveImageName } from "@convex/runtimeProvisioning";
+import {
+  provisionRuntimeMachine,
+  resolveImageName,
+  resolveWandbBaseURL,
+  terminateRuntimeMachine,
+} from "@convex/runtimeProvisioning";
+import { fetchSyncManifest } from "@convex/runtimeBootstrap";
 import {
   planComputeSessionCreation,
   planComputeSessionFailure,
@@ -136,20 +148,26 @@ async function createComputeSessionForUserId(
     userId: string;
     environmentId: Id<"environments">;
     idleTimeoutSeconds?: number;
+    gpuType?: string;
+    gpuCount?: number;
+    volumeGb?: number;
   },
 ) {
   const env = await getAccessibleEnvironment(ctx, args.userId, args.environmentId);
   const pythonVersion = env.pythonVersion || PYTHON_CONFIG.defaultVersion;
   const idleTimeoutSeconds = normalizeIdleTimeoutSeconds(args.idleTimeoutSeconds);
   const imageName = resolveImageName(env.framework, env.version, pythonVersion);
+  const effectiveGpuType = args.gpuType ?? env.gpuType;
+  const effectiveGpuCount = args.gpuCount ?? env.gpuCount;
+  const effectiveVolumeGb = args.volumeGb ?? env.volumeGb;
   const now = Date.now();
   const plan = planComputeSessionCreation({
     nowMs: now,
     userId: args.userId,
     environmentId: String(args.environmentId),
-    effectiveGpuType: env.gpuType,
-    effectiveGpuCount: env.gpuCount,
-    effectiveVolumeGb: env.volumeGb,
+    effectiveGpuType,
+    effectiveGpuCount,
+    effectiveVolumeGb,
     framework: env.framework,
     frameworkVersion: env.version,
     pythonVersion,
@@ -210,10 +228,26 @@ export const internalCreate = internalMutation({
     userId: v.string(),
     environmentId: v.id("environments"),
     idleTimeoutSeconds: v.optional(v.number()),
+    gpuType: v.optional(v.string()),
+    gpuCount: v.optional(v.number()),
+    volumeGb: v.optional(v.number()),
   },
   returns: computeSessionResponseValidator,
   handler: async (ctx, args) => {
     return createComputeSessionForUserId(ctx, args);
+  },
+});
+
+export const internalSetRuntimeTokenHash = internalMutation({
+  args: { computeSessionId: v.id("computeSessions"), runtimeTokenHash: v.string() },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const row = await ctx.db.get("computeSessions", args.computeSessionId);
+    if (!row) {
+      return null;
+    }
+    await ctx.db.patch("computeSessions", args.computeSessionId, { runtimeTokenHash: args.runtimeTokenHash });
+    return null;
   },
 });
 
@@ -241,6 +275,128 @@ export const internalMarkMachineProvisioned = internalMutation({
         nowMs: Date.now(),
       }),
     );
+    return null;
+  },
+});
+
+export const provisionComputeSession = internalAction({
+  args: {
+    userId: v.string(),
+    computeSessionId: v.id("computeSessions"),
+    initialRunId: v.id("runs"),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const session = await ctx.runQuery(internal.computeSessions.internalGet, {
+      userId: args.userId,
+      computeSessionId: args.computeSessionId,
+    });
+    const provisioningPayload = await ctx.runQuery(internal.runs.internalGetProvisioningPayload, {
+      runId: args.initialRunId,
+    });
+    if (provisioningPayload.user_id !== args.userId) {
+      throw new Error("compute session user mismatch");
+    }
+    if (provisioningPayload.environment_id !== session.environment_id) {
+      throw new Error("compute session environment mismatch");
+    }
+
+    let providerMachineId = "";
+    let runtimeTokenHash = "";
+    try {
+      const codeManifestHash = provisioningPayload.code_manifest_hash;
+      const dataManifestHash = provisioningPayload.data_manifest_hash;
+      const codeManifestKey = provisioningPayload.code_manifest_key;
+      const dataManifestKey = provisioningPayload.data_manifest_key;
+      if (!codeManifestHash || !codeManifestKey) {
+        throw new Error("missing pinned code manifest hash/key in provisioning payload");
+      }
+
+      await fetchSyncManifest(ctx, "code", codeManifestKey, codeManifestHash);
+      if (dataManifestHash && dataManifestKey) {
+        await fetchSyncManifest(ctx, "data", dataManifestKey, dataManifestHash);
+      }
+
+      const environmentEnv = await resolveEnvironmentEnvVarsForEnvironmentId(
+        ctx,
+        provisioningPayload.environment_id as Id<"environments">,
+      );
+      const provisionResult = await provisionRuntimeMachine({
+        ctx,
+        shouldAbort: async () =>
+          await ctx.runQuery(internal.runs.internalShouldAbortProvisioning, { runId: args.initialRunId }),
+        setRuntimeTokenHash: async (nextRuntimeTokenHash) => {
+          runtimeTokenHash = nextRuntimeTokenHash;
+          await ctx.runMutation(internal.computeSessions.internalSetRuntimeTokenHash, {
+            computeSessionId: args.computeSessionId,
+            runtimeTokenHash: nextRuntimeTokenHash,
+          });
+        },
+        createMachine: {
+          name: `tahuna-session-${String(args.computeSessionId)}`,
+          imageName: session.image_name,
+          gpuType: session.effective_gpu_type,
+          gpuCount: session.effective_gpu_count,
+          volumeGb: session.effective_volume_gb,
+        },
+        buildEnv: ({ runtimeToken, runtimeApiBase, runtimeRequestTimeoutSeconds }) =>
+          buildProvisionedRuntimeEnv({
+            defaultEnv: {
+              WANDB_API_KEY: runtimeToken,
+              WANDB_BASE_URL: resolveWandbBaseURL(runtimeApiBase),
+            },
+            environmentEnv,
+            systemEnv: {
+              TAHUNA_COMPUTE_SESSION_ID: String(args.computeSessionId),
+              TAHUNA_ENVIRONMENT_ID: provisioningPayload.environment_id,
+              TAHUNA_API_BASE: runtimeApiBase,
+              TAHUNA_RUNTIME_TOKEN: runtimeToken,
+              TAHUNA_WORKSPACE_ROOT: "/workspace",
+              TAHUNA_RUNTIME_REQUEST_TIMEOUT_SECONDS: runtimeRequestTimeoutSeconds,
+              TAHUNA_CANCELLATION_GRACE_SECONDS: String(RUN_CONFIG.cancellationGraceSeconds),
+            },
+          }),
+      });
+      if (!provisionResult) {
+        await ctx.runMutation(internal.computeSessions.internalMarkFailed, {
+          computeSessionId: args.computeSessionId,
+          error: "compute session provisioning aborted",
+        });
+        return null;
+      }
+
+      providerMachineId = provisionResult.providerMachineId;
+      if (!runtimeTokenHash) {
+        throw new Error("compute session runtime token hash is required");
+      }
+      await ctx.runMutation(internal.computeSessions.internalMarkMachineProvisioned, {
+        computeSessionId: args.computeSessionId,
+        providerMachineId: provisionResult.providerMachineId,
+        providerCreationTime: provisionResult.providerCreationTime,
+        runtimeTokenHash,
+      });
+      await ctx.runMutation(internal.computeSessions.internalMarkIdle, {
+        computeSessionId: args.computeSessionId,
+      });
+      await ctx.runMutation(internal.computeSessions.internalAssignRun, {
+        computeSessionId: args.computeSessionId,
+        runId: args.initialRunId,
+      });
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : "compute session provisioning failed";
+      await ctx.runMutation(internal.computeSessions.internalMarkFailed, {
+        computeSessionId: args.computeSessionId,
+        error: detail,
+      });
+      await ctx.runMutation(internal.runs.markFailed, {
+        runId: args.initialRunId,
+        error: `runtime bootstrap failed: ${detail}`,
+        provisioningPayload,
+      });
+      if (providerMachineId) {
+        await terminateRuntimeMachine(ctx, { providerMachineId });
+      }
+    }
     return null;
   },
 });
