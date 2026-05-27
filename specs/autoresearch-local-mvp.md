@@ -27,14 +27,14 @@ Implemented:
 - Trial verdicts for `accepted`, `rejected`, and `inconclusive`.
 - Patch restore for rejected or inconclusive tracked-file candidate patches.
 - Project-scoped git handling for Tahuna projects inside larger git repositories.
+- Budget enforcement and cancellation for `--max-trials`, `--max-spend-usd`, `--max-trial-minutes`, `--stop-after-no-improvement`, and `--min-improvement`.
+- Estimated and observed spend recording in session state.
+- Public Auto-Research docs for the local CLI harness.
 
 Still needed:
 
-- Budget enforcement and cancellation for `--max-trials`, `--max-spend-usd`, `--max-trial-minutes`, and `--stop-after-no-improvement`.
-- Observed spend recording.
-- External scorer support through `--metric-cmd`.
 - SVG progress graph rendering.
-- CLI docs and external `tahuna-autoresearch-project` agent skill updates.
+- External `tahuna-autoresearch-project` agent skill updates.
 
 ## Implementation PR Plan
 
@@ -74,17 +74,13 @@ Implement the MVP in reviewable slices:
    - Cancel or mark trials inconclusive when `--max-trial-minutes` is exceeded.
    - Validate with `make validate-cli`.
 
-7. **External scorer**
-   - Add `--metric-cmd`, invoke it after terminal run status, parse scorer JSON, and mark non-zero or invalid output inconclusive.
-   - Validate with `make validate-cli`.
-
-8. **Progress graph**
+7. **Progress graph**
    - Implement `tahuna research graph <session-id> --output <path>` as local SVG rendering from session state.
    - Plot baseline, accepted/rejected/inconclusive trials, and running best.
    - Validate with `make validate-cli`.
 
-9. **Docs and agent skill follow-up**
-   - Update CLI docs and the external `tahuna-autoresearch-project` agent skill after the CLI harness is usable.
+8. **Docs and agent skill follow-up**
+   - Update CLI docs for graph rendering and update the external `tahuna-autoresearch-project` agent skill after the CLI harness is usable.
    - Keep Tahuna CLI as a harness only; it must not launch or configure an agent.
 
 ## Non-Goals
@@ -95,6 +91,7 @@ Implement the MVP in reviewable slices:
 - No new GPU runtime mode for research.
 - No automatic edits outside an explicit user allowlist.
 - No multi-objective optimizer in the first implementation.
+- No external scorer command in the local MVP; training code should emit a stable final metric.
 
 ## User-Facing Command
 
@@ -121,18 +118,6 @@ tahuna research run \
   --editable "src/training/**"
 ```
 
-External scorer form:
-
-```bash
-tahuna research run \
-  --program program.md \
-  --metric-cmd ./score_trial.sh \
-  --minimize \
-  --max-trials 20 \
-  --max-spend-usd 50 \
-  --editable train.py
-```
-
 Progress graph:
 
 ```bash
@@ -156,7 +141,8 @@ Resume behavior:
 - The agent calls `tahuna research run --resume <session-id>`.
 - Tahuna validates the current patch, launches the next trial, records the verdict, restores or keeps the patch, and exits.
 - If more trials remain, Tahuna prints the next `--resume` command.
-- Budget exhaustion and graph regeneration are still pending implementation.
+- If no further trial can launch within configured budgets, Tahuna writes session status `budget_exhausted`.
+- Graph regeneration is still pending implementation.
 
 This gives the user's agent the control loop without making Tahuna an agent launcher.
 
