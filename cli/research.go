@@ -8,6 +8,8 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"html"
+	"math"
 	"net/http"
 	neturl "net/url"
 	"os"
@@ -1220,13 +1222,295 @@ func strconvFloat(value float64) string {
 func researchGraph(args []string) {
 	fs := flag.NewFlagSet("research graph", flag.ExitOnError)
 	output := fs.String("output", "", "Output graph path")
-	mustParseFlags(fs, args)
+	mustParseFlags(fs, reorderResearchGraphArgs(args))
 	require(len(fs.Args()) == 1, "session_id is required (usage: tahuna research graph <session-id> [--output <path>])")
 	session, err := loadResearchSession(fs.Args()[0])
 	must(err)
-	fmt.Printf("Research session: %s\n", session.SessionID)
-	if strings.TrimSpace(*output) != "" {
-		fmt.Printf("Output: %s\n", strings.TrimSpace(*output))
+	outputPath := strings.TrimSpace(*output)
+	if outputPath == "" {
+		outputPath = filepath.Join(researchSessionDir(session.SessionID), "progress.svg")
 	}
-	must(errors.New("research graph rendering will be wired in the progress graph implementation slice"))
+	svg, err := renderResearchProgressSVG(session)
+	must(err)
+	if dir := filepath.Dir(outputPath); dir != "" && dir != "." {
+		must(os.MkdirAll(dir, 0o755))
+	}
+	must(os.WriteFile(outputPath, []byte(svg), 0o644))
+	fmt.Printf("Research session: %s\n", session.SessionID)
+	fmt.Printf("Output: %s\n", outputPath)
+}
+
+func reorderResearchGraphArgs(args []string) []string {
+	flags := make([]string, 0, len(args))
+	positionals := make([]string, 0, len(args))
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--output" {
+			require(i+1 < len(args), "--output requires a path")
+			flags = append(flags, arg, args[i+1])
+			i++
+			continue
+		}
+		if strings.HasPrefix(arg, "--output=") {
+			flags = append(flags, arg)
+			continue
+		}
+		positionals = append(positionals, arg)
+	}
+	return append(flags, positionals...)
+}
+
+type researchGraphMarker struct {
+	Trial       int
+	Value       float64
+	Label       string
+	NoValue     bool
+	RunningBest float64
+}
+
+func renderResearchProgressSVG(session researchSession) (string, error) {
+	if session.Baseline == nil || session.Baseline.Value == nil {
+		return "", errors.New("research session has no baseline value; run a baseline before rendering a graph")
+	}
+	const (
+		width      = 960.0
+		height     = 560.0
+		plotLeft   = 88.0
+		plotTop    = 64.0
+		plotRight  = 32.0
+		plotBottom = 94.0
+	)
+	plotWidth := width - plotLeft - plotRight
+	plotHeight := height - plotTop - plotBottom
+	metricName := researchGraphMetricName(session)
+	baselineValue := *session.Baseline.Value
+	bestValue := baselineValue
+	values := []float64{baselineValue}
+	markers := make([]researchGraphMarker, 0, len(session.Trials))
+	bestLine := []researchGraphMarker{{
+		Trial:       0,
+		Value:       baselineValue,
+		RunningBest: baselineValue,
+	}}
+	maxTrial := 1
+	for i, trial := range session.Trials {
+		trialNumber := trial.Number
+		if trialNumber <= 0 {
+			trialNumber = i + 1
+		}
+		maxTrial = maxInt(maxTrial, trialNumber)
+		label := researchGraphTrialLabel(trial)
+		markerValue := bestValue
+		noValue := trial.Value == nil
+		if trial.Value != nil {
+			markerValue = *trial.Value
+			values = append(values, markerValue)
+		}
+		if trial.RunningBest != nil {
+			bestValue = *trial.RunningBest
+		} else if label == researchTrialLabelAccepted && trial.Value != nil {
+			bestValue = *trial.Value
+		}
+		if noValue {
+			markerValue = bestValue
+		}
+		values = append(values, markerValue, bestValue)
+		markers = append(markers, researchGraphMarker{
+			Trial:       trialNumber,
+			Value:       markerValue,
+			Label:       label,
+			NoValue:     noValue,
+			RunningBest: bestValue,
+		})
+		bestLine = append(bestLine, researchGraphMarker{
+			Trial:       trialNumber,
+			Value:       bestValue,
+			RunningBest: bestValue,
+		})
+	}
+	minValue, maxValue := researchGraphValueDomain(values)
+	x := func(trial int) float64 {
+		return plotLeft + (float64(trial)/float64(maxTrial))*plotWidth
+	}
+	y := func(value float64) float64 {
+		return plotTop + ((maxValue - value) / (maxValue - minValue) * plotHeight)
+	}
+
+	var b strings.Builder
+	fmt.Fprintf(&b, `<svg xmlns="http://www.w3.org/2000/svg" width="%.0f" height="%.0f" viewBox="0 0 %.0f %.0f" role="img" aria-label="Tahuna research progress graph">`, width, height, width, height)
+	b.WriteString("\n")
+	b.WriteString(`<rect width="100%" height="100%" fill="#fbfaf7"/>` + "\n")
+	fmt.Fprintf(&b, `<text x="%.0f" y="32" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="20" font-weight="700" fill="#102326">Research progress: %s</text>`+"\n", plotLeft, svgText(metricName))
+	fmt.Fprintf(&b, `<text x="%.0f" y="54" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="13" fill="#596965">Session %s - %s</text>`+"\n", plotLeft, svgText(session.SessionID), svgText(session.Direction))
+	researchWriteGraphGrid(&b, plotLeft, plotTop, plotWidth, plotHeight, minValue, maxValue, y)
+	researchWriteGraphXTicks(&b, plotLeft, plotTop, plotWidth, plotHeight, maxTrial, x)
+	fmt.Fprintf(&b, `<text x="%.0f" y="%.0f" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="13" fill="#364744" text-anchor="middle">trial number</text>`+"\n", plotLeft+plotWidth/2, height-24)
+	fmt.Fprintf(&b, `<text x="18" y="%.0f" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="13" fill="#364744" text-anchor="middle" transform="rotate(-90 18 %.0f)">%s</text>`+"\n", plotTop+plotHeight/2, plotTop+plotHeight/2, svgText(metricName))
+	researchWriteRunningBestLine(&b, bestLine, x, y)
+	researchWriteBaselineMarker(&b, x(0), y(baselineValue), baselineValue)
+	for _, marker := range markers {
+		researchWriteTrialMarker(&b, marker, x(marker.Trial), y(marker.Value))
+	}
+	researchWriteGraphLegend(&b, plotLeft+plotWidth-458, 28)
+	b.WriteString("</svg>\n")
+	return b.String(), nil
+}
+
+func researchGraphMetricName(session researchSession) string {
+	if strings.TrimSpace(session.Metric.Name) != "" {
+		return strings.TrimSpace(session.Metric.Name)
+	}
+	if strings.TrimSpace(session.Metric.Command) != "" {
+		return "command metric"
+	}
+	return strings.TrimSpace(session.Metric.Type)
+}
+
+func researchGraphTrialLabel(trial researchTrial) string {
+	label := strings.TrimSpace(trial.Label)
+	if label == "" {
+		label = strings.TrimSpace(trial.Status)
+	}
+	if trial.Value == nil && label != researchTrialLabelAccepted && label != researchTrialLabelRejected {
+		return researchTrialLabelInconclusive
+	}
+	switch label {
+	case researchTrialLabelAccepted, researchTrialLabelRejected, researchTrialLabelInconclusive:
+		return label
+	default:
+		return researchTrialLabelInconclusive
+	}
+}
+
+func researchGraphValueDomain(values []float64) (float64, float64) {
+	minValue := values[0]
+	maxValue := values[0]
+	for _, value := range values[1:] {
+		minValue = math.Min(minValue, value)
+		maxValue = math.Max(maxValue, value)
+	}
+	if minValue == maxValue {
+		pad := math.Abs(minValue) * 0.05
+		if pad == 0 {
+			pad = 1
+		}
+		return minValue - pad, maxValue + pad
+	}
+	pad := (maxValue - minValue) * 0.08
+	return minValue - pad, maxValue + pad
+}
+
+func researchWriteGraphGrid(b *strings.Builder, left, top, width, height, minValue, maxValue float64, y func(float64) float64) {
+	fmt.Fprintf(b, `<line x1="%.1f" y1="%.1f" x2="%.1f" y2="%.1f" stroke="#2f3d3a" stroke-width="1.3"/>`+"\n", left, top+height, left+width, top+height)
+	fmt.Fprintf(b, `<line x1="%.1f" y1="%.1f" x2="%.1f" y2="%.1f" stroke="#2f3d3a" stroke-width="1.3"/>`+"\n", left, top, left, top+height)
+	for i := 0; i <= 4; i++ {
+		value := minValue + (maxValue-minValue)*float64(i)/4
+		yy := y(value)
+		fmt.Fprintf(b, `<line x1="%.1f" y1="%.1f" x2="%.1f" y2="%.1f" stroke="#e1ddd4" stroke-width="1"/>`+"\n", left, yy, left+width, yy)
+		fmt.Fprintf(b, `<text x="78" y="%.1f" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="12" fill="#596965" text-anchor="end" dominant-baseline="middle">%s</text>`+"\n", yy, svgText(strconvFloat(value)))
+	}
+}
+
+func researchWriteGraphXTicks(b *strings.Builder, left, top, width, height float64, maxTrial int, x func(int) float64) {
+	step := 1
+	if maxTrial > 10 {
+		step = int(math.Ceil(float64(maxTrial) / 10))
+	}
+	for trial := 0; trial <= maxTrial; trial += step {
+		xx := x(trial)
+		fmt.Fprintf(b, `<line x1="%.1f" y1="%.1f" x2="%.1f" y2="%.1f" stroke="#2f3d3a" stroke-width="1"/>`+"\n", xx, top+height, xx, top+height+6)
+		label := fmt.Sprintf("%d", trial)
+		if trial == 0 {
+			label = "baseline"
+		}
+		fmt.Fprintf(b, `<text x="%.1f" y="%.1f" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="12" fill="#596965" text-anchor="middle">%s</text>`+"\n", xx, top+height+24, svgText(label))
+	}
+	if maxTrial%step != 0 {
+		xx := x(maxTrial)
+		fmt.Fprintf(b, `<line x1="%.1f" y1="%.1f" x2="%.1f" y2="%.1f" stroke="#2f3d3a" stroke-width="1"/>`+"\n", xx, top+height, xx, top+height+6)
+		fmt.Fprintf(b, `<text x="%.1f" y="%.1f" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="12" fill="#596965" text-anchor="middle">%d</text>`+"\n", xx, top+height+24, maxTrial)
+	}
+	_ = left
+	_ = width
+}
+
+func researchWriteRunningBestLine(b *strings.Builder, points []researchGraphMarker, x func(int) float64, y func(float64) float64) {
+	if len(points) == 0 {
+		return
+	}
+	b.WriteString(`<polyline fill="none" stroke="#2f6f73" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round" points="`)
+	for _, point := range points {
+		fmt.Fprintf(b, "%.1f,%.1f ", x(point.Trial), y(point.RunningBest))
+	}
+	b.WriteString(`"/>` + "\n")
+}
+
+func researchWriteBaselineMarker(b *strings.Builder, x, y, value float64) {
+	fmt.Fprintf(b, `<circle cx="%.1f" cy="%.1f" r="6" fill="#243735" stroke="#fbfaf7" stroke-width="2"/>`+"\n", x, y)
+	fmt.Fprintf(b, `<text x="%.1f" y="%.1f" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="11" fill="#243735" text-anchor="middle">baseline %s</text>`+"\n", x, y-13, svgText(strconvFloat(value)))
+}
+
+func researchWriteTrialMarker(b *strings.Builder, marker researchGraphMarker, x, y float64) {
+	color := "#b76555"
+	if marker.Label == researchTrialLabelAccepted {
+		color = "#328760"
+	} else if marker.Label == researchTrialLabelInconclusive {
+		color = "#b4933f"
+	}
+	switch marker.Label {
+	case researchTrialLabelRejected:
+		fmt.Fprintf(b, `<line x1="%.1f" y1="%.1f" x2="%.1f" y2="%.1f" stroke="%s" stroke-width="2.5" stroke-linecap="round"/>`+"\n", x-6, y-6, x+6, y+6, color)
+		fmt.Fprintf(b, `<line x1="%.1f" y1="%.1f" x2="%.1f" y2="%.1f" stroke="%s" stroke-width="2.5" stroke-linecap="round"/>`+"\n", x-6, y+6, x+6, y-6, color)
+	case researchTrialLabelInconclusive:
+		fmt.Fprintf(b, `<path d="M %.1f %.1f L %.1f %.1f L %.1f %.1f Z" fill="%s" stroke="#fbfaf7" stroke-width="1.5"/>`+"\n", x, y-7, x-7, y+6, x+7, y+6, color)
+	default:
+		fmt.Fprintf(b, `<circle cx="%.1f" cy="%.1f" r="6" fill="%s" stroke="#fbfaf7" stroke-width="2"/>`+"\n", x, y, color)
+	}
+	label := fmt.Sprintf("%d", marker.Trial)
+	if marker.NoValue {
+		label += " no value"
+	}
+	fmt.Fprintf(b, `<text x="%.1f" y="%.1f" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="11" fill="#364744" text-anchor="middle">%s</text>`+"\n", x, y-13, svgText(label))
+}
+
+func researchWriteGraphLegend(b *strings.Builder, x, y float64) {
+	items := []struct {
+		Label string
+		Color string
+		Kind  string
+	}{
+		{"baseline", "#243735", "circle"},
+		{"accepted", "#328760", "circle"},
+		{"rejected", "#b76555", "x"},
+		{"inconclusive", "#b4933f", "triangle"},
+		{"running best", "#2f6f73", "line"},
+	}
+	fmt.Fprintf(b, `<g font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="12" fill="#364744">`+"\n")
+	for i, item := range items {
+		xx := x + float64(i)*92
+		switch item.Kind {
+		case "line":
+			fmt.Fprintf(b, `<line x1="%.1f" y1="%.1f" x2="%.1f" y2="%.1f" stroke="%s" stroke-width="2.5" stroke-linecap="round"/>`+"\n", xx, y, xx+18, y, item.Color)
+		case "x":
+			fmt.Fprintf(b, `<line x1="%.1f" y1="%.1f" x2="%.1f" y2="%.1f" stroke="%s" stroke-width="2"/>`+"\n", xx+3, y-5, xx+13, y+5, item.Color)
+			fmt.Fprintf(b, `<line x1="%.1f" y1="%.1f" x2="%.1f" y2="%.1f" stroke="%s" stroke-width="2"/>`+"\n", xx+3, y+5, xx+13, y-5, item.Color)
+		case "triangle":
+			fmt.Fprintf(b, `<path d="M %.1f %.1f L %.1f %.1f L %.1f %.1f Z" fill="%s"/>`+"\n", xx+8, y-6, xx+2, y+5, xx+14, y+5, item.Color)
+		default:
+			fmt.Fprintf(b, `<circle cx="%.1f" cy="%.1f" r="5" fill="%s"/>`+"\n", xx+8, y, item.Color)
+		}
+		fmt.Fprintf(b, `<text x="%.1f" y="%.1f" dominant-baseline="middle">%s</text>`+"\n", xx+22, y, svgText(item.Label))
+	}
+	b.WriteString("</g>\n")
+}
+
+func svgText(value string) string {
+	return html.EscapeString(value)
+}
+
+func maxInt(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }
