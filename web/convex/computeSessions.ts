@@ -8,6 +8,7 @@ import {
 } from "@convex/_generated/server";
 import { requireUser } from "@convex/auth";
 import { RUN_CONFIG, PYTHON_CONFIG } from "@convex/appConfig";
+import { assignQueuedRunToComputeSession } from "@convex/computeSessionAssignment";
 import { getAccessibleEnvironment } from "@convex/runsAccess";
 import { resolveImageName } from "@convex/runtimeProvisioning";
 import {
@@ -16,7 +17,6 @@ import {
   planComputeSessionHeartbeat,
   planComputeSessionIdle,
   planComputeSessionMachineProvisioned,
-  planComputeSessionRunAssigned,
   planComputeSessionStop,
   planComputeSessionTerminated,
   type ComputeSessionEvent,
@@ -283,19 +283,7 @@ export const internalAssignRun = internalMutation({
   args: { computeSessionId: v.id("computeSessions"), runId: v.id("runs") },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const row = await ctx.db.get("computeSessions", args.computeSessionId);
-    if (!row) {
-      return null;
-    }
-    const plan = planComputeSessionRunAssigned({
-      session: toComputeSessionState(row),
-      runId: String(args.runId),
-      nowMs: Date.now(),
-    });
-    if (plan.error) {
-      throw new ConvexError(plan.error);
-    }
-    await applyComputeSessionPlan(ctx, args.computeSessionId, plan);
+    await assignQueuedRunToComputeSession(ctx, args);
     return null;
   },
 });

@@ -161,6 +161,7 @@ export async function createRunForUserId(
     gpu_count?: number;
     volume_gb?: number;
     enqueue_provisioning?: boolean;
+    computeSessionId?: Id<"computeSessions">;
   },
   composition?: RunLifecycleComposition,
 ) {
@@ -247,7 +248,7 @@ export async function createRunForUserId(
     dataManifestHash: dataManifestHash || undefined,
     dependencyGroup,
     nowMs: Date.now(),
-    enqueueProvisioning: args.enqueue_provisioning ?? true,
+    enqueueProvisioning: args.computeSessionId ? false : args.enqueue_provisioning ?? true,
   });
 
   const runId = await ctx.db.insert("runs", {
@@ -268,6 +269,8 @@ export async function createRunForUserId(
     codeManifestHash: creation.run.codeManifestHash,
     dataManifestHash: creation.run.dataManifestHash,
     dependencyGroup: creation.run.dependencyGroup,
+    executionMode: args.computeSessionId ? "session" : "ephemeral",
+    ...(args.computeSessionId ? { computeSessionId: args.computeSessionId } : {}),
     ...(creationComposition?.runFields || {}),
   });
 
@@ -277,6 +280,8 @@ export async function createRunForUserId(
     message: creation.event.message,
     metadata: {
       ...creation.event.metadata,
+      execution_mode: args.computeSessionId ? "session" : "ephemeral",
+      ...(args.computeSessionId ? { compute_session_id: String(args.computeSessionId) } : {}),
       ...(creationComposition?.eventMetadata || {}),
     },
   });

@@ -61,9 +61,12 @@ export const createRun = httpAction(async (ctx, request) => {
   }
 
   try {
+    const computeSessionId = typeof body?.compute_session_id === "string"
+      ? (body.compute_session_id as Id<"computeSessions">)
+      : undefined;
     const requestedGpuType = typeof body?.gpu_type === "string" ? body.gpu_type.trim() : "";
     const requestedGpuCount = typeof body?.gpu_count === "number" ? body.gpu_count : 0;
-    if (requestedGpuCount > 0) {
+    if (!computeSessionId && requestedGpuCount > 0) {
       let effectiveGpuType = requestedGpuType;
       if (!effectiveGpuType) {
         const current = await ctx.runQuery(internal.environments.internalGet, {
@@ -81,6 +84,7 @@ export const createRun = httpAction(async (ctx, request) => {
       gpu_type: body?.gpu_type,
       gpu_count: body?.gpu_count,
       volume_gb: body?.volume_gb,
+      computeSessionId,
     });
     return new Response(JSON.stringify(data), {
       status: 200,

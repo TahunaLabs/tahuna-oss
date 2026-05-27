@@ -27,6 +27,8 @@ export function toRunResponse(row: Doc<"runs">) {
     logs: row.logs,
     status: row.status,
     error: row.error || "",
+    compute_session_id: row.computeSessionId ? String(row.computeSessionId) : "",
+    execution_mode: row.executionMode || "ephemeral",
     provider_machine_id: row.providerMachineId || "",
     effective_gpu_type: row.effectiveGpuType || "",
     effective_gpu_count: row.effectiveGpuCount || 0,

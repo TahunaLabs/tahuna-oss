@@ -71,6 +71,7 @@ import {
   toRunResponse,
 } from "@convex/runsRead";
 import { storageKeys } from "@convex/core/storage";
+import { assignQueuedRunToComputeSession } from "@convex/computeSessionAssignment";
 import { objectStore } from "@convex/objectStore";
 import { resolveComputeCompatibilityCloudType } from "@convex/computeProvider";
 import {
@@ -101,6 +102,8 @@ const runResponseValidator = v.object({
   logs: v.string(),
   status: v.string(),
   error: v.string(),
+  compute_session_id: v.string(),
+  execution_mode: v.string(),
   provider_machine_id: v.string(),
   effective_gpu_type: v.string(),
   effective_gpu_count: v.number(),
@@ -683,10 +686,23 @@ export const internalCreate = internalMutation({
     gpu_count: v.optional(v.number()),
     volume_gb: v.optional(v.number()),
     enqueue_provisioning: v.optional(v.boolean()),
+    computeSessionId: v.optional(v.id("computeSessions")),
   },
   returns: runResponseValidator,
   handler: async (ctx, args) => {
-    return createRunForUserId(ctx, args);
+    const created = await createRunForUserId(ctx, args);
+    if (!args.computeSessionId) {
+      return created;
+    }
+    await assignQueuedRunToComputeSession(ctx, {
+      computeSessionId: args.computeSessionId,
+      runId: created.run_id as Id<"runs">,
+    });
+    const row = await ctx.db.get("runs", created.run_id as Id<"runs">);
+    if (!row) {
+      throw new ConvexError("failed to create run");
+    }
+    return toRunResponse(row);
   },
 });
 

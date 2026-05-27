@@ -152,6 +152,8 @@ export type RunRow = {
   uptime_ms: number
   environment_id: string
   status: string
+  compute_session_id: string
+  execution_mode: string
   effective_gpu_type: string
   effective_gpu_count: number
   effective_volume_gb: number
@@ -168,6 +170,8 @@ export type RunDetail = {
   logs: string
   status: string
   error: string
+  compute_session_id: string
+  execution_mode: string
   provider_machine_id: string
   effective_gpu_type: string
   effective_gpu_count: number

@@ -16,6 +16,7 @@ type CreateRunStrictArgs = {
   gpu_type?: string;
   gpu_count?: number;
   volume_gb?: number;
+  computeSessionId?: Id<"computeSessions">;
 };
 
 type CreateServeStrictArgs = {
@@ -175,6 +176,8 @@ const SAFE_CLIENT_ERROR_PATTERNS: RegExp[] = [
   /\benv_vars\b.*\bis required\b/i,
   /\benv_vars\[\d+\]\.value must be a string\b/i,
   /\bmanifest\b.*\b(not found|invalid|mismatch)\b/i,
+  /\bcompute session\b.*\b(not found|mismatch|required|active run|idle)\b/i,
+  /\brun\b.*\b(queued|compute session)\b/i,
   /\bblob exceeds limit\b/i,
   /\bmanifest exceeds limit\b/i,
 ];
@@ -229,6 +232,17 @@ function isNoGpuCapacityError(detail: string) {
 }
 
 export async function createAndProvisionRunStrict(ctx: ActionCtx, args: CreateRunStrictArgs) {
+  if (args.computeSessionId) {
+    const created = await ctx.runMutation(internal.runs.internalCreate, {
+      ...args,
+      enqueue_provisioning: false,
+    });
+    return await ctx.runQuery(internal.runs.internalGet, {
+      userId: args.userId,
+      runId: created.run_id as Id<"runs">,
+    });
+  }
+
   const created = await ctx.runMutation(internal.runs.internalCreate, {
     ...args,
     enqueue_provisioning: false,
