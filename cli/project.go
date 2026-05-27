@@ -50,6 +50,7 @@ type projectConfig struct {
 	TrainDependencyGroup         string
 	TrainDependencyConfigured    bool
 	TrainOutputModelPath         string
+	TrainKeepWarmAfterSeconds    int
 	ServeEnabled                 bool
 	ServeCommand                 []string
 	ServeDependencyGroup         string
@@ -96,9 +97,10 @@ type projectConfigEnvironmentSection struct {
 }
 
 type projectConfigTrainSection struct {
-	Command         []string `toml:"command,omitempty"`
-	DependencyGroup string   `toml:"dependency_group,omitempty"`
-	OutputModelPath string   `toml:"output_model_path,omitempty"`
+	Command              []string `toml:"command,omitempty"`
+	DependencyGroup      string   `toml:"dependency_group,omitempty"`
+	OutputModelPath      string   `toml:"output_model_path,omitempty"`
+	KeepWarmAfterSeconds int      `toml:"keep_warm_after_seconds,omitempty"`
 }
 
 type projectConfigServeSection struct {
@@ -254,6 +256,7 @@ func collectProjectInitConfig() (projectConfig, string, error) {
 	}
 	cfg.TrainOutputModelPath = defaultTrainOutputModelPath(cfg.OutputDir)
 	cfg.ServeDefaultModelPath = cfg.TrainOutputModelPath
+	cfg.TrainKeepWarmAfterSeconds = promptKeepWarmAfterSeconds()
 
 	if fileExists("pyproject.toml") {
 		fmt.Printf("✓ Found %spyproject.toml%s\n", cAmpGold, cReset)
@@ -288,6 +291,28 @@ func promptEnableServe() bool {
 	}
 	choice := promptChoice("Do you want to serve this project?", []string{"No", "Yes"}, 0)
 	return choice == "Yes"
+}
+
+func promptKeepWarmAfterSeconds() int {
+	if !supportsInteractivePrompts() {
+		return 0
+	}
+	choice := promptChoice("Keep compute warm after training runs?", []string{"No", "Yes, 10 minutes", "Custom"}, 0)
+	switch choice {
+	case "Yes, 10 minutes":
+		return 10 * 60
+	case "Custom":
+		for {
+			raw := promptString("Keep warm duration", "1m")
+			seconds, err := parseKeepWarmDuration(raw)
+			if err == nil {
+				return seconds
+			}
+			fmt.Println(err)
+		}
+	default:
+		return 0
+	}
 }
 
 func choosePathWhenFound(label, detectedPath, defaultCreatePath string) string {
@@ -811,6 +836,9 @@ func mergeProjectConfig(base, next projectConfig) projectConfig {
 	if value := strings.TrimSpace(next.TrainOutputModelPath); value != "" {
 		base.TrainOutputModelPath = normalizeProjectPath(value)
 	}
+	if next.TrainKeepWarmAfterSeconds > 0 {
+		base.TrainKeepWarmAfterSeconds = next.TrainKeepWarmAfterSeconds
+	}
 	if next.ServeEnabled {
 		base.ServeEnabled = true
 	}
@@ -878,7 +906,8 @@ func hasTrainSection(cfg projectConfig) bool {
 	return len(cfg.TrainCommand) > 0 ||
 		cfg.TrainDependencyConfigured ||
 		strings.TrimSpace(cfg.TrainDependencyGroup) != "" ||
-		strings.TrimSpace(cfg.TrainOutputModelPath) != ""
+		strings.TrimSpace(cfg.TrainOutputModelPath) != "" ||
+		cfg.TrainKeepWarmAfterSeconds > 0
 }
 
 func hasServeSection(cfg projectConfig) bool {
@@ -968,6 +997,9 @@ func renderProjectConfig(cfg projectConfig) (string, error) {
 			trainOutputModelPath = defaultTrainOutputModelPath(outputDir)
 		}
 		lines = append(lines, fmt.Sprintf("output_model_path = \"%s\"", escapeProjectConfigValue(trainOutputModelPath)))
+		if cfg.TrainKeepWarmAfterSeconds > 0 {
+			lines = append(lines, fmt.Sprintf("keep_warm_after_seconds = %d", cfg.TrainKeepWarmAfterSeconds))
+		}
 	}
 	if hasServeSection(cfg) {
 		if len(lines) > 1 {
@@ -1107,6 +1139,7 @@ func projectConfigFromFile(file projectConfigFile, defined map[string]struct{}) 
 		cfg.TrainDependencyGroup = normalizeDependencyGroup(file.Train.DependencyGroup)
 		cfg.TrainDependencyConfigured = tomlKeyDefined(defined, "train.dependency_group")
 		cfg.TrainOutputModelPath = normalizeProjectPath(file.Train.OutputModelPath)
+		cfg.TrainKeepWarmAfterSeconds = file.Train.KeepWarmAfterSeconds
 	}
 	if file.Serve != nil {
 		cfg.ServeEnabled = true
@@ -1143,6 +1176,12 @@ func validateProjectConfigFile(file projectConfigFile, defined map[string]struct
 	if file.Train != nil {
 		if err := validateDependencyGroupField("train", file.Train.DependencyGroup, defined); err != nil {
 			return err
+		}
+		if err := validateConfiguredPositiveInt(defined, "train.keep_warm_after_seconds", file.Train.KeepWarmAfterSeconds); err != nil {
+			return err
+		}
+		if file.Train.KeepWarmAfterSeconds > maxKeepWarmAfterSeconds {
+			return fmt.Errorf("invalid train.keep_warm_after_seconds in %s: must be <= %d", projectConfigFilePath(), maxKeepWarmAfterSeconds)
 		}
 	}
 	if file.Environment != nil {
