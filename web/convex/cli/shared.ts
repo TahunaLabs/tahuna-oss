@@ -17,6 +17,8 @@ type CreateRunStrictArgs = {
   gpu_count?: number;
   volume_gb?: number;
   computeSessionId?: Id<"computeSessions">;
+  warm?: boolean;
+  keepWarmAfterSeconds?: number;
 };
 
 type CreateServeStrictArgs = {
@@ -177,6 +179,9 @@ const SAFE_CLIENT_ERROR_PATTERNS: RegExp[] = [
   /\benv_vars\[\d+\]\.value must be a string\b/i,
   /\bmanifest\b.*\b(not found|invalid|mismatch)\b/i,
   /\bcompute session\b.*\b(not found|mismatch|required|active run|idle)\b/i,
+  /\bno warm compute session is available\b/i,
+  /\btahuna train --keep-warm requires Warden session mode\b/i,
+  /\bwarm runs use an existing compatible compute session\b/i,
   /\brun\b.*\b(queued|compute session)\b/i,
   /\bblob exceeds limit\b/i,
   /\bmanifest exceeds limit\b/i,
@@ -232,6 +237,37 @@ function isNoGpuCapacityError(detail: string) {
 }
 
 export async function createAndProvisionRunStrict(ctx: ActionCtx, args: CreateRunStrictArgs) {
+  if (args.keepWarmAfterSeconds && args.keepWarmAfterSeconds > 0) {
+    throw new Error("tahuna train --keep-warm requires Warden session mode, which is not available in this build yet");
+  }
+  if (args.warm) {
+    if (args.gpu_type || args.gpu_count || args.volume_gb) {
+      throw new Error("warm runs use an existing compatible compute session; omit GPU and volume overrides");
+    }
+    const sessions = await ctx.runQuery(internal.computeSessions.internalList, {
+      userId: args.userId,
+    });
+    const session = sessions.compute_sessions.find(
+      (row) => row.environment_id === String(args.environmentId) && row.status === "idle",
+    );
+    if (!session) {
+      throw new Error(
+        "no warm compute session is available for this environment; run `tahuna train --keep-warm 10m` to start one",
+      );
+    }
+    const created = await ctx.runMutation(internal.runs.internalCreate, {
+      userId: args.userId,
+      environmentId: args.environmentId,
+      name: args.name,
+      enqueue_provisioning: false,
+      computeSessionId: session.compute_session_id as Id<"computeSessions">,
+    });
+    return await ctx.runQuery(internal.runs.internalGet, {
+      userId: args.userId,
+      runId: created.run_id as Id<"runs">,
+    });
+  }
+
   if (args.computeSessionId) {
     const created = await ctx.runMutation(internal.runs.internalCreate, {
       ...args,

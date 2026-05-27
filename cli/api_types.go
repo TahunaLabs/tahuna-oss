@@ -139,6 +139,8 @@ type runResponse struct {
 	CreatedAt         int64  `json:"created_at"`
 	UptimeMS          int64  `json:"uptime_ms"`
 	Error             string `json:"error"`
+	ComputeSessionID  string `json:"compute_session_id"`
+	ExecutionMode     string `json:"execution_mode"`
 	EffectiveGPUType  string `json:"effective_gpu_type"`
 	EffectiveGPUCount int64  `json:"effective_gpu_count"`
 	EffectiveVolumeGB int64  `json:"effective_volume_gb"`
