@@ -12,6 +12,7 @@ This spec introduces a separate compute session lifetime. A compute session owns
 - Preserve one run record per candidate execution.
 - Keep run outputs, logs, metrics, artifacts, and terminal status isolated per run.
 - Allow the CLI and autoresearch harness to sync code again, create a new run, and execute it on warm compute.
+- Keep the user mental model run-first: warm compute is an extension of `tahuna train`, not a separate thing users must create before they can train.
 - Terminate warm compute explicitly or after a configured idle timeout.
 - Keep the existing one-shot run path available as the default behavior.
 
@@ -31,6 +32,77 @@ This spec introduces a separate compute session lifetime. A compute session owns
 | Compute session | Long-lived Tahuna-owned compute lease that can execute multiple sequential runs. |
 | Assignment | The act of binding one queued run to one idle compute session. |
 | Runtime daemon | Warden mode that stays alive on the machine, waits for assignments, executes one run at a time, then returns to idle. |
+
+## CLI Mental Model
+
+The primary user story stays centered on training:
+
+```
+tahuna init .
+tahuna sync
+tahuna train --keep-warm 10m
+```
+
+What happens:
+
+1. Tahuna creates a new run.
+2. Tahuna provisions compute that can become warm compute after the run.
+3. The run executes normally and records its own run ID, logs, metrics, artifacts, manifests, and terminal status.
+4. After the run finishes, the runtime daemon returns the machine to an idle compute session for 10 minutes.
+5. The CLI prints:
+
+```
+Run completed.
+Compute is warm for 10m.
+
+Next run:
+  tahuna sync
+  tahuna train --warm
+```
+
+The iteration loop becomes:
+
+```
+# edit code
+tahuna sync
+tahuna train --warm
+
+# edit again
+tahuna sync
+tahuna train --warm
+```
+
+`tahuna train --warm` always creates a new run and assigns it to an existing idle compatible compute session for the current environment. If no compatible warm session exists, it fails clearly and does not silently fall back to ephemeral provisioning.
+
+`tahuna init .` may store a default warm-compute preference in local project config:
+
+```
+Keep compute warm after training runs?
+  No
+  Yes, 10 minutes
+  Custom
+```
+
+If the project config contains `train.keep_warm_after_seconds = 600`, then:
+
+```
+tahuna train
+```
+
+behaves like:
+
+```
+tahuna train --keep-warm 10m
+```
+
+Users can override the default for a single run:
+
+```
+tahuna train --no-keep-warm
+tahuna train --keep-warm 30m
+```
+
+Power-user compute management commands can exist later for inspection or cleanup, but they are not the primary path and should not be required for the first warm-compute workflow.
 
 ## Data Model
 
@@ -118,23 +190,25 @@ There is no fallback path inside Warden. If an assignment cannot be prepared or 
 
 ## API And CLI
 
-### New CLI Surface
+### CLI Surface
 
 ```
-tahuna compute create [--idle-timeout-minutes <N>]
-tahuna compute list
-tahuna compute stop <compute_session_id> [--force]
-tahuna run create --compute-session <compute_session_id>
-tahuna research run --compute-session <compute_session_id>
+tahuna train
+tahuna train --keep-warm <duration>
+tahuna train --warm
+tahuna train --no-keep-warm
 ```
 
-`tahuna train` remains ephemeral by default. Warm compute is explicit.
+`tahuna train` remains ephemeral by default unless the project config contains a keep-warm default from `tahuna init .`. Warm reuse remains explicit through either a stored keep-warm preference, `--keep-warm`, or `--warm`.
+
+Duration syntax accepts minute/second forms such as `10m`, `30m`, `1min`, `60s`, and `1h`.
 
 ### Backend Operations
 
-- Create compute session.
+- Create compute session as part of a keep-warm training run.
 - Stop compute session.
 - List compute sessions.
+- Resolve the current environment's compatible idle session for `tahuna train --warm`.
 - Assign queued run to idle compute session.
 - Complete assignment and release session to idle.
 - Enforce idle timeout.
@@ -216,7 +290,7 @@ The CLI loop is:
 1. User edits code.
 2. CLI syncs code/data.
 3. Backend creates a new run with the latest manifest hashes.
-4. Backend assigns that run to the specified idle compute session.
+4. Backend assigns that run to the current environment's compatible idle compute session when `--warm` is used.
 5. Warden materializes that run's pinned snapshot and executes it.
 
 The compute session never decides what code is current. The run record owns the snapshot.
@@ -237,6 +311,7 @@ No hidden free idle window. If the session is alive, the user is spending comput
 A compute session terminates when:
 
 - User runs `tahuna compute stop`.
+- User runs a future explicit stop command or the dashboard equivalent.
 - Idle timeout expires.
 - Heartbeat timeout expires.
 - Provider termination is required after unrecoverable daemon failure.
@@ -247,16 +322,19 @@ Run completion alone does not terminate the machine in session mode.
 ## Implementation Slices
 
 1. Add `computeSessions` schema, lifecycle planner, and backend create/list/stop operations.
-2. Add Warden session mode with heartbeat and idle loop.
-3. Add run assignment API and session-scoped run execution.
-4. Add CLI `tahuna compute` commands and `--compute-session` run creation.
-5. Wire autoresearch to reuse a compute session explicitly.
-6. Add idle timeout and heartbeat timeout enforcement.
-7. Update billing display for session-level spend.
+2. Add run-level assignment API and response shaping.
+3. Add `tahuna init .` keep-warm preference in `tahuna.toml`.
+4. Add `tahuna train --keep-warm`, `--warm`, and `--no-keep-warm` CLI flags.
+5. Add backend keep-warm run creation that provisions Warden in session mode and assigns the first run.
+6. Add Warden session mode with heartbeat, assignment polling, per-run execution, and return-to-idle.
+7. Add idle timeout and heartbeat timeout enforcement.
+8. Wire autoresearch to reuse warm compute through the train-owned surface.
+9. Update billing display for session-level spend.
 
 ## Acceptance Criteria
 
-- A user can create one compute session and run two separate training runs on it sequentially.
+- A user can run `tahuna train --keep-warm 10m`, edit code, sync, and run `tahuna train --warm` on the same provider machine.
+- A project with `train.keep_warm_after_seconds = 600` treats plain `tahuna train` as keep-warm unless `--no-keep-warm` is passed.
 - Each run has distinct run ID, manifest hashes, logs, metrics, artifacts, and terminal status.
 - The provider machine ID is the same for both runs.
 - The session remains idle after a successful run until stopped or timed out.
