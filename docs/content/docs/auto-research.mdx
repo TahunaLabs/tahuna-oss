@@ -91,7 +91,7 @@ print(f"eval_loss={eval_metrics['eval_loss']:.6f}", flush=True)
 
 Tahuna persists runtime metrics and resolves the final value after the run reaches a terminal status. For a metric name, the final lookup prefers training metrics when available, then the highest numeric step, then the newest timestamp.
 
-External scorer commands through `--metric-cmd` are planned, but not part of the current CLI workflow.
+External scorer commands through `--metric-cmd` are not part of the local MVP. Training code should emit the objective as a stable Tahuna metric.
 
 ## Start a session
 
@@ -310,6 +310,30 @@ ls -t .tahuna/research/*.json | head -1
 cat "$(ls -t .tahuna/research/*.json | head -1)"
 ```
 
+## Progress graph
+
+Render a local SVG progress graph from the session JSON:
+
+```bash
+tahuna research graph <session-id>
+```
+
+When `--output` is omitted, Tahuna writes:
+
+```text
+.tahuna/research/<session-id>/progress.svg
+```
+
+Pass an explicit output path when you want the SVG somewhere else:
+
+```bash
+tahuna research graph <session-id> --output reports/research-progress.svg
+```
+
+The command creates parent directories for the output path when needed and prints the session id plus the written path. The SVG includes the metric name, direction, axes, trial numbers, a legend, the baseline value, accepted trials, rejected trials, inconclusive trials, and the running best line. Minimize sessions treat lower values as better; maximize sessions treat higher values as better.
+
+Trials without metric values still appear as inconclusive markers when the graph can place them against the current running best.
+
 ## Example: Qwen Yoda LoRA
 
 From the repo example:
@@ -360,6 +384,12 @@ tahuna research run \
   --editable train.py
 ```
 
+Render the session graph:
+
+```bash
+tahuna research graph <session-id>
+```
+
 ## Troubleshooting
 
 ### `program not found: program.md`
@@ -392,8 +422,7 @@ The trial exceeded `--max-trial-minutes`. Tahuna requested cancellation, restore
 
 ## Current limitations
 
-- `--metric-cmd` external scoring is not wired yet.
-- `tahuna research graph` is reserved for a future progress graph renderer.
+- `--metric-cmd` external scoring is outside the local MVP.
 - Candidate patches are tracked-file only.
 - Tahuna does not generate candidate edits or launch an agent.
 - The local loop runs one candidate trial per `--resume` call.

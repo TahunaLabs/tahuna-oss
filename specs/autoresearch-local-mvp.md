@@ -29,12 +29,13 @@ Implemented:
 - Project-scoped git handling for Tahuna projects inside larger git repositories.
 - Budget enforcement and cancellation for `--max-trials`, `--max-spend-usd`, `--max-trial-minutes`, `--stop-after-no-improvement`, and `--min-improvement`.
 - Estimated and observed spend recording in session state.
+- SVG progress graph rendering from session state.
 - Public Auto-Research docs for the local CLI harness.
+- External agent-skill handoff checklist for `tahuna-autoresearch-project`.
 
 Still needed:
 
-- SVG progress graph rendering.
-- External `tahuna-autoresearch-project` agent skill updates.
+- Apply the `tahuna-autoresearch-project` checklist in the external `TahunaLabs/agent-skills` repository.
 
 ## Implementation PR Plan
 
@@ -80,7 +81,7 @@ Implement the MVP in reviewable slices:
    - Validate with `make validate-cli`.
 
 8. **Docs and agent skill follow-up**
-   - Update CLI docs for graph rendering and update the external `tahuna-autoresearch-project` agent skill after the CLI harness is usable.
+   - Update CLI docs for graph rendering and record the external `tahuna-autoresearch-project` agent skill checklist after the CLI harness is usable.
    - Keep Tahuna CLI as a harness only; it must not launch or configure an agent.
 
 ## Non-Goals
@@ -142,7 +143,7 @@ Resume behavior:
 - Tahuna validates the current patch, launches the next trial, records the verdict, restores or keeps the patch, and exits.
 - If more trials remain, Tahuna prints the next `--resume` command.
 - If no further trial can launch within configured budgets, Tahuna writes session status `budget_exhausted`.
-- Graph regeneration is still pending implementation.
+- The agent can call `tahuna research graph <session-id>` to regenerate the local progress SVG after trials.
 
 This gives the user's agent the control loop without making Tahuna an agent launcher.
 
@@ -186,7 +187,7 @@ This gives the user's agent the control loop without making Tahuna an agent laun
 7. Finish.
    - The working tree contains the best accepted patch.
    - The session file contains the full audit trail.
-   - The progress graph shows all experiments, discarded trials, kept improvements, and the running best line.
+   - The progress graph shows the baseline, accepted trials, rejected trials, inconclusive trials, and the running best line.
    - Human output prints baseline, incumbent, each trial value, and final recommendation.
 
 ## Agent Skill Ownership
@@ -211,9 +212,29 @@ The agent skill owns:
 - Editing allowed files.
 - Explaining the candidate patch.
 - Calling Tahuna commands between edits.
+- Regenerating or reading `tahuna research graph` when useful.
 - Stopping when Tahuna reports that budgets are exhausted.
 
 This keeps Tahuna as the research harness rather than an agent runner.
+
+### External Skill Follow-Up Checklist
+
+Update the external `tahuna-autoresearch-project` skill in `TahunaLabs/agent-skills` to use the local CLI harness instead of manually creating detached runs or maintaining a separate ledger.
+
+The intended skill behavior:
+
+- Start a new session with `tahuna research run --program <program.md> --metric final:<name> --minimize|--maximize ...` or resume an existing session when the user provides a session id.
+- Read `program.md` and `.tahuna/research/<session-id>.json` before each candidate edit.
+- Loop only for the user-requested wall-clock duration, for example 2 hours.
+- Make one coherent tracked-file candidate patch at a time.
+- Never edit outside the session editable allowlist.
+- Never add untracked files unless future CLI support exists.
+- Call `tahuna research run --resume <session-id>` for each candidate.
+- Regenerate or read `tahuna research graph <session-id>` after trials when useful.
+- Stop on `budget_exhausted`, no remaining wall-clock time, or repeated inconclusive failures.
+- Summarize the best accepted patch, best run id, baseline value, current best metric, trial counts, and any remaining recommended hypotheses.
+
+The skill must keep Tahuna as a harness. It must not ask Tahuna CLI to launch, configure, or manage an agent.
 
 ## Budget Contract
 
@@ -287,16 +308,17 @@ final_val_bpb = evaluate()
 print(f"val_bpb={final_val_bpb:.6f}", flush=True)
 ```
 
-Tahuna should use progress metrics for logs and graphs, but only the final objective metric determines accept/reject unless the user explicitly chooses another scorer.
+Tahuna should use progress metrics for logs and run inspection, but only the final objective metric determines accept/reject in the local MVP.
 
 ## Metric Contract
 
 Research metrics are user-defined, but final value capture must be deterministic.
 
-The MVP supports two metric sources:
+The MVP supports one metric source:
 
 - Tahuna runtime metric: `--metric final:<name>`
-- External metric command: `--metric-cmd <command>`
+
+External scorer commands such as `--metric-cmd` are outside the local MVP.
 
 ### Runtime Metric Source
 
@@ -576,8 +598,9 @@ tahuna research graph <session-id> \
 Default behavior:
 
 - Write SVG by default for portability.
+- Default `--output` to `.tahuna/research/<session-id>/progress.svg`.
 - Support PNG later if the CLI has a stable renderer available.
-- Use the session objective metric unless `--metric <name>` is passed.
+- Use the session objective metric.
 - Include baseline as experiment `0`.
 - Plot every completed experiment on the x-axis by experiment number.
 - Plot final objective/loss on the y-axis.
@@ -586,12 +609,11 @@ Default behavior:
 
 Required visual encoding:
 
-- Discarded/rejected trials: light gray points.
-- Kept/accepted improvements: green points.
-- Baseline: green point labeled `baseline`.
-- Running best: green step line.
-- Inconclusive/failed trials: muted hollow points or omitted from the objective line, with counts in the title.
-- Labels on accepted improvements from trial `label`, patch summary, or first line of the agent's hypothesis.
+- Rejected trials: distinct rejected markers.
+- Accepted improvements: green points.
+- Baseline: point labeled `baseline`.
+- Running best: distinct line.
+- Inconclusive/failed trials: distinct inconclusive markers, including trials without values when they can be placed against the current running best.
 
 The main progress graph is cross-experiment: one point per baseline or trial using the final objective value. Per-step training losses such as `train_loss` may be stored and rendered in a separate run detail view later, but they should not replace the cross-experiment objective graph.
 
@@ -623,7 +645,7 @@ The local MVP is complete when:
 - `tahuna research run` creates a baseline run and at least one trial run.
 - `tahuna research run` can exit with `awaiting_patch` after baseline and continue with `--resume <session-id>` after the user's agent edits code.
 - Trial runs use the normal Tahuna training path.
-- Users can define an objective through `--metric final:<name>` or `--metric-cmd`.
+- Users can define an objective through `--metric final:<name>`.
 - Final runtime metrics are captured after terminal run status from persisted metrics, not from a recent metrics window.
 - Missing or invalid final metrics produce `inconclusive`.
 - Budget limits are checked before launching each GPU run and recorded in session state.
@@ -643,9 +665,9 @@ The local MVP is complete when:
 6. Done: add conservative `--resume` session loading and preflight.
 7. Done: add trial launch, metric capture, comparison, accept/reject/inconclusive verdicts, and tracked patch restore.
 8. Done: scope research git status/diff/untracked checks to the current Tahuna project tree, including projects nested inside a larger git repository.
-9. Remaining: add budget checks before every GPU run, including `--max-trials`, `--max-spend-usd`, `--max-trial-minutes`, `--stop-after-no-improvement`, and `--min-improvement` enforcement.
-10. Remaining: add run cancellation when `--max-trial-minutes` is exceeded.
-11. Remaining: record observed spend and estimated spend in session state.
-12. Remaining: add `--metric-cmd` scoring after terminal run status.
-13. Remaining: add SVG progress graph rendering.
-14. Remaining: update CLI docs and the external `tahuna-autoresearch-project` agent skill.
+9. Done: add budget checks before every GPU run, including `--max-trials`, `--max-spend-usd`, `--max-trial-minutes`, `--stop-after-no-improvement`, and `--min-improvement` enforcement.
+10. Done: add run cancellation when `--max-trial-minutes` is exceeded.
+11. Done: record observed spend and estimated spend in session state.
+12. Done: add SVG progress graph rendering.
+13. Done: update CLI docs and record the external `tahuna-autoresearch-project` agent skill checklist.
+14. Out of MVP scope: add `--metric-cmd` scoring after terminal run status.

@@ -69,12 +69,13 @@ Run a bounded autonomous research loop for a Tahuna project while using Tahuna o
 
 Use this when an agent is helping with:
 
-- `tahuna.research.toml` or `program.md`
-- research branches and candidate commits
-- baseline and trial runs through `tahuna run create --detached`
-- Tahuna metric scoring
-- accepting or reverting candidate changes
-- local experiment ledgers
+- `program.md`
+- starting or resuming `tahuna research run` sessions
+- one coherent tracked-file candidate patch at a time
+- Tahuna final metric scoring through `final:<metric>`
+- accepted, rejected, and inconclusive trial handling
+- `tahuna research graph` progress inspection
+- stopping on budget exhaustion, repeated inconclusive failures, or the user's wall-clock limit
 
 ## Typical Agent Workflow
 

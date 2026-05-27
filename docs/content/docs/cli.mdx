@@ -122,11 +122,14 @@ See [Auto-Research](/auto-research) for the full workflow, budget model, and ses
 
 ### `tahuna research graph`
 
-Reserved for local progress graph rendering.
+Render a local SVG progress graph from `.tahuna/research/<session-id>.json`.
 
 ```bash
+tahuna research graph <session-id>
 tahuna research graph <session-id> --output .tahuna/research/<session-id>/progress.svg
 ```
+
+When `--output` is omitted, the default path is `.tahuna/research/<session-id>/progress.svg`. The SVG shows the baseline, accepted trials, rejected trials, inconclusive trials, and running best line for the session metric.
 
 ## Data
 

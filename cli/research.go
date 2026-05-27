@@ -166,7 +166,6 @@ func researchUsage() {
 	fmt.Print(`Research commands:
   tahuna research help
   tahuna research run --program <program.md> --metric final:<name> --minimize|--maximize --max-trials <N> --max-spend-usd <USD> --max-trial-minutes <N> --editable <path>
-  tahuna research run --program <program.md> --metric-cmd <command> --minimize|--maximize --max-trials <N> --max-spend-usd <USD> --max-trial-minutes <N> --editable <path>
   tahuna research run --resume <session-id> [--verbose|-v]
   tahuna research graph <session-id> [--output <path>]
 `)
@@ -187,7 +186,7 @@ func parseResearchRunOptions(args []string) researchRunOptions {
 	opts := researchRunOptions{}
 	fs.StringVar(&opts.program, "program", "", "Research program markdown path")
 	fs.StringVar(&opts.metric, "metric", "", "Tahuna metric source, for example final:val_bpb")
-	fs.StringVar(&opts.metricCmd, "metric-cmd", "", "External metric command")
+	fs.StringVar(&opts.metricCmd, "metric-cmd", "", "External metric command (not supported in local MVP)")
 	fs.BoolVar(&opts.minimize, "minimize", false, "Minimize objective")
 	fs.BoolVar(&opts.maximize, "maximize", false, "Maximize objective")
 	fs.IntVar(&opts.maxTrials, "max-trials", 0, "Maximum trial count")
@@ -212,7 +211,7 @@ func createResearchSession(opts researchRunOptions) error {
 		return err
 	}
 	if metric.Type != "final" {
-		return errors.New("--metric-cmd scoring will be wired in the external scorer implementation slice")
+		return errors.New("--metric-cmd scoring is not part of the local autoresearch MVP")
 	}
 	environmentID, startingCommit, err := validateResearchProject(opts.editable, opts.allowDirty)
 	if err != nil {
@@ -345,8 +344,11 @@ func validateResearchResumeOptions(opts researchRunOptions) error {
 func parseResearchMetric(metric, metricCmd string) (researchMetricConfig, error) {
 	metric = strings.TrimSpace(metric)
 	metricCmd = strings.TrimSpace(metricCmd)
-	if (metric == "") == (metricCmd == "") {
-		return researchMetricConfig{}, errors.New("exactly one of --metric or --metric-cmd is required")
+	if metric == "" && metricCmd == "" {
+		return researchMetricConfig{}, errors.New("--metric final:<name> is required")
+	}
+	if metric != "" && metricCmd != "" {
+		return researchMetricConfig{}, errors.New("--metric-cmd cannot be combined with --metric")
 	}
 	if metricCmd != "" {
 		return researchMetricConfig{Type: "command", Command: metricCmd}, nil
