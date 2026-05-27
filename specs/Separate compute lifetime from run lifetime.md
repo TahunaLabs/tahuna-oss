@@ -153,6 +153,60 @@ A run can be assigned to a compute session only when all are true:
 
 If any rule fails, the API returns a structured validation error. It does not create a second machine and does not silently fall back to ephemeral provisioning.
 
+## Run-Level Assignment Slice
+
+The first implementation slice after the backend foundation is run-level assignment. It must not implement Warden session mode, CLI commands, or research flags in the same commit.
+
+### Scope
+
+- Create a queued run with `executionMode = "session"` and `computeSessionId`.
+- Validate that the requested compute session can execute the run.
+- Assign the run to the compute session without provisioning a new provider machine.
+- Record the assignment in run events and compute session events.
+
+### Required Code Changes
+
+1. Extend run response shaping.
+   - Add `compute_session_id` and `execution_mode` to run API responses.
+   - Keep empty string or `ephemeral` defaults for existing runs.
+
+2. Extend run creation internals.
+   - Add an internal create path that accepts `computeSessionId`.
+   - It must create the run with `enqueue_provisioning = false`.
+   - It must set `executionMode = "session"` and `computeSessionId` on the run row.
+   - Existing one-shot run creation must keep `executionMode = "ephemeral"` or equivalent default behavior.
+
+3. Add assignment validation.
+   - Load the run and compute session in one mutation.
+   - Validate same user and same environment.
+   - Validate compute session status is `idle`.
+   - Validate run status is `queued`.
+   - Validate session has no `activeRunId`.
+   - Validate effective GPU type/count, volume size, framework, framework version, Python version, and image name match.
+
+4. Apply assignment atomically.
+   - Patch the run to `status = "provisioning"` and `providerMachineId = computeSession.providerMachineId`.
+   - Keep the run's pinned code/data manifests unchanged.
+   - Transition compute session `idle -> running`.
+   - Set `computeSessions.activeRunId = runId`.
+   - Insert a run event such as `run assigned to compute session`.
+
+5. Add tests at the backend seam.
+   - Assignment succeeds for an idle matching session.
+   - Assignment rejects mismatched environment.
+   - Assignment rejects non-idle session.
+   - Assignment rejects GPU/image/runtime mismatch.
+   - Assignment does not enqueue a provider provisioning job.
+
+### Out Of Scope For This Slice
+
+- No Warden polling or execution loop.
+- No runtime session endpoints.
+- No `tahuna compute` CLI commands.
+- No `tahuna research run --compute-session`.
+- No idle timeout enforcement.
+- No billing allocation changes.
+
 ## Sync And Snapshots
 
 Run creation still pins manifests from the environment at creation time.
