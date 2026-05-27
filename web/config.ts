@@ -33,6 +33,8 @@ export const RUN_CONFIG = {
   logsPollSeconds: 2,
   startupTimeoutSeconds: 900,
   cancellationGraceSeconds: 30,
+  computeSessionDefaultIdleTimeoutSeconds: 30 * 60,
+  computeSessionMaxIdleTimeoutSeconds: 6 * 60 * 60,
   terminationRetryMaxAttempts: 5,
   terminationRetryDelaySeconds: 10,
   runtimeLogTailLimit: 200,

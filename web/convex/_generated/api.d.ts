@@ -30,8 +30,11 @@ import type * as cloud_runpodComputeComposition from "../cloud/runpodComputeComp
 import type * as cloud_serveBilling from "../cloud/serveBilling.js";
 import type * as cloud_serveLifecycleComposition from "../cloud/serveLifecycleComposition.js";
 import type * as computeProvider from "../computeProvider.js";
+import type * as computeSessions from "../computeSessions.js";
+import type * as computeSessionsRead from "../computeSessionsRead.js";
 import type * as convexJobQueue from "../convexJobQueue.js";
 import type * as core_compute from "../core/compute.js";
+import type * as core_computeSessionLifecyclePlan from "../core/computeSessionLifecyclePlan.js";
 import type * as core_jobQueue from "../core/jobQueue.js";
 import type * as core_runLifecyclePlan from "../core/runLifecyclePlan.js";
 import type * as core_runTiming from "../core/runTiming.js";
@@ -105,8 +108,11 @@ declare const fullApi: ApiFromModules<{
   "cloud/serveBilling": typeof cloud_serveBilling;
   "cloud/serveLifecycleComposition": typeof cloud_serveLifecycleComposition;
   computeProvider: typeof computeProvider;
+  computeSessions: typeof computeSessions;
+  computeSessionsRead: typeof computeSessionsRead;
   convexJobQueue: typeof convexJobQueue;
   "core/compute": typeof core_compute;
+  "core/computeSessionLifecyclePlan": typeof core_computeSessionLifecyclePlan;
   "core/jobQueue": typeof core_jobQueue;
   "core/runLifecyclePlan": typeof core_runLifecyclePlan;
   "core/runTiming": typeof core_runTiming;

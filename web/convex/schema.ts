@@ -57,6 +57,8 @@ export default defineSchema({
   runs: defineTable({
     userId: v.string(),
     environmentId: v.id("environments"),
+    computeSessionId: v.optional(v.id("computeSessions")),
+    executionMode: v.optional(v.union(v.literal("ephemeral"), v.literal("session"))),
     name: v.optional(v.string()),
     command: v.optional(v.array(v.string())),
     dataId: v.string(),
@@ -83,8 +85,43 @@ export default defineSchema({
   })
     .index("by_user", ["userId"])
     .index("by_user_and_environment", ["userId", "environmentId"])
+    .index("by_compute_session", ["computeSessionId"])
     .index("by_status", ["status"])
     .index("by_runtime_token_hash", ["runtimeTokenHash"]),
+
+  computeSessions: defineTable({
+    userId: v.string(),
+    environmentId: v.id("environments"),
+    status: v.string(),
+    error: v.optional(v.string()),
+    providerMachineId: v.optional(v.string()),
+    providerCreationTime: v.optional(v.number()),
+    runtimeTokenHash: v.optional(v.string()),
+    activeRunId: v.optional(v.id("runs")),
+    effectiveGpuType: v.string(),
+    effectiveGpuCount: v.number(),
+    effectiveVolumeGb: v.number(),
+    framework: v.string(),
+    frameworkVersion: v.string(),
+    pythonVersion: v.string(),
+    imageName: v.string(),
+    idleTimeoutSeconds: v.number(),
+    lastHeartbeatAt: v.optional(v.number()),
+    lastIdleAt: v.optional(v.number()),
+    createdAt: v.number(),
+    terminatedAt: v.optional(v.number()),
+  })
+    .index("by_user", ["userId"])
+    .index("by_user_and_environment", ["userId", "environmentId"])
+    .index("by_status", ["status"])
+    .index("by_runtime_token_hash", ["runtimeTokenHash"]),
+
+  computeSessionEvents: defineTable({
+    computeSessionId: v.id("computeSessions"),
+    status: v.string(),
+    message: v.string(),
+    metadata: v.optional(v.any()),
+  }).index("by_compute_session", ["computeSessionId"]),
 
   jobs: defineTable({
     type: v.union(
