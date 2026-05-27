@@ -22,6 +22,7 @@ const (
 	researchStateDir = "research"
 
 	researchSessionStatusAwaitingPatch = "awaiting_patch"
+	researchSessionStatusBudgetExhaust = "budget_exhausted"
 	researchSessionStatusRunning       = "running"
 	researchSessionStatusRunningTrial  = "running_trial"
 
@@ -111,6 +112,14 @@ type researchWorktreeSnapshot struct {
 	Diff         string
 	SHA256       string
 	HasUntracked bool
+}
+
+type researchRunBudget struct {
+	GPUType          string
+	GPUCount         int64
+	EstimatedSpend   float64
+	ObservedSpend    float64
+	EstimatedMinutes float64
 }
 
 type researchRunOptions struct {
@@ -238,6 +247,9 @@ func createResearchSession(opts researchRunOptions) error {
 		return err
 	}
 	if err := saveResearchSession(session); err != nil {
+		return err
+	}
+	if err := ensureResearchBudgetForNextRun(&session, true); err != nil {
 		return err
 	}
 	if err := runResearchBaseline(&session); err != nil {
@@ -541,6 +553,10 @@ func printResearchSessionCreated(session researchSession, verbose bool) {
 		fmt.Printf("  status: %s\n", session.Baseline.Status)
 	}
 	fmt.Println()
+	if session.Status == researchSessionStatusBudgetExhaust {
+		fmt.Println("Budget exhausted; no further trial can launch.")
+		return
+	}
 	fmt.Println("Next: edit one allowed file, then run:")
 	fmt.Printf("  tahuna research run --resume %s\n", session.SessionID)
 }
@@ -573,6 +589,7 @@ func runResearchBaseline(session *researchSession) error {
 	if err != nil {
 		return err
 	}
+	recordResearchRunSpend(session, terminalRun)
 	session.Baseline = &researchRunResult{
 		RunID:  runID,
 		Status: terminalRun.Status,
@@ -609,6 +626,9 @@ func runResearchBaseline(session *researchSession) error {
 		return err
 	}
 	session.Status = researchSessionStatusAwaitingPatch
+	if researchBudgetExhausted(*session) {
+		session.Status = researchSessionStatusBudgetExhaust
+	}
 	return saveResearchSession(*session)
 }
 
@@ -621,6 +641,9 @@ func runResearchTrial(session *researchSession) error {
 	}
 	if session.Incumbent == nil || session.Incumbent.Value == nil {
 		return errors.New("research session has no scored incumbent")
+	}
+	if err := ensureResearchBudgetForNextRun(session, false); err != nil {
+		return err
 	}
 
 	candidate, err := captureResearchWorktreeSnapshot(".")
@@ -644,10 +667,11 @@ func runResearchTrial(session *researchSession) error {
 	}
 
 	trial := researchTrial{
-		Number:      trialNumber,
-		Status:      researchTrialStatusRunning,
-		PatchSHA256: candidate.SHA256,
-		StartedAt:   time.Now().UTC().Format(time.RFC3339),
+		Number:            trialNumber,
+		Status:            researchTrialStatusRunning,
+		PatchSHA256:       candidate.SHA256,
+		EstimatedSpendUSD: estimateResearchNextRunSpend(*session),
+		StartedAt:         time.Now().UTC().Format(time.RFC3339),
 	}
 	session.Status = researchSessionStatusRunningTrial
 	session.Trials = append(session.Trials, trial)
@@ -680,12 +704,19 @@ func runResearchTrial(session *researchSession) error {
 		return err
 	}
 
-	if err := monitorRunWithLogs(runID, 5); err != nil {
+	if err := monitorResearchTrialRun(session, trialNumber, runID, 5); err != nil {
 		return finishInconclusiveResearchTrial(session, trialNumber, runID, fmt.Sprintf("run monitor failed: %v", err))
+	}
+	if session.Trials[trialNumber-1].Label == researchTrialLabelInconclusive {
+		return nil
 	}
 	terminalRun, err := doJSONAs[runResponse](http.MethodGet, "/runs/"+runID, nil)
 	if err != nil {
 		return finishInconclusiveResearchTrial(session, trialNumber, runID, fmt.Sprintf("run status lookup failed: %v", err))
+	}
+	recordResearchTrialSpend(session, trialNumber, terminalRun)
+	if err := saveResearchSession(*session); err != nil {
+		return err
 	}
 	if !strings.EqualFold(terminalRun.Status, "completed") {
 		return finishInconclusiveResearchTrial(session, trialNumber, runID, "run ended with status "+terminalRun.Status)
@@ -751,6 +782,9 @@ func finishResearchTrial(session *researchSession, trialNumber int, label, runID
 		trial.RunningBest = &best
 	}
 	session.Status = researchSessionStatusAwaitingPatch
+	if researchBudgetExhausted(*session) {
+		session.Status = researchSessionStatusBudgetExhaust
+	}
 	if err := saveResearchSession(*session); err != nil {
 		return err
 	}
@@ -826,6 +860,10 @@ func printResearchTrialResult(session researchSession, trial researchTrial) {
 		fmt.Printf("  reason: %s\n", trial.Reason)
 	}
 	fmt.Println()
+	if session.Status == researchSessionStatusBudgetExhaust {
+		fmt.Println("Budget exhausted; no further trial can launch.")
+		return
+	}
 	fmt.Println("Next: edit one allowed file, then run:")
 	fmt.Printf("  tahuna research run --resume %s\n", session.SessionID)
 }
@@ -914,6 +952,265 @@ func fetchResearchFinalMetric(runID, name string) (finalMetricResponse, error) {
 		"/runs/"+strings.TrimSpace(runID)+"/metrics/final?name="+neturl.QueryEscape(name),
 		nil,
 	)
+}
+
+func ensureResearchBudgetForNextRun(session *researchSession, baseline bool) error {
+	if !baseline {
+		if session.Budget.MaxTrials > 0 && len(session.Trials) >= session.Budget.MaxTrials {
+			return markResearchBudgetExhausted(session, fmt.Sprintf("--max-trials reached (%d)", session.Budget.MaxTrials))
+		}
+		if session.Budget.StopAfterNoImprovement > 0 && researchConsecutiveNoImprovement(*session) >= session.Budget.StopAfterNoImprovement {
+			return markResearchBudgetExhausted(session, fmt.Sprintf("--stop-after-no-improvement reached (%d)", session.Budget.StopAfterNoImprovement))
+		}
+	}
+	budget, err := resolveResearchRunBudget(*session, nil, true)
+	if err != nil {
+		return err
+	}
+	estimate := budget.EstimatedSpend
+	if session.Budget.MaxSpendUSD > 0 && session.Budget.ObservedSpendUSD+estimate > session.Budget.MaxSpendUSD {
+		return markResearchBudgetExhausted(
+			session,
+			fmt.Sprintf("estimated next run spend %.6f would exceed --max-spend-usd %.6f", estimate, session.Budget.MaxSpendUSD),
+		)
+	}
+	return nil
+}
+
+func markResearchBudgetExhausted(session *researchSession, reason string) error {
+	session.Status = researchSessionStatusBudgetExhaust
+	if err := saveResearchSession(*session); err != nil {
+		return err
+	}
+	return errors.New(reason)
+}
+
+func researchBudgetExhausted(session researchSession) bool {
+	if session.Budget.MaxTrials > 0 && len(session.Trials) >= session.Budget.MaxTrials {
+		return true
+	}
+	if session.Budget.StopAfterNoImprovement > 0 && researchConsecutiveNoImprovement(session) >= session.Budget.StopAfterNoImprovement {
+		return true
+	}
+	if session.Budget.MaxSpendUSD > 0 && session.Budget.ObservedSpendUSD+estimateResearchNextRunSpend(session) > session.Budget.MaxSpendUSD {
+		return true
+	}
+	return false
+}
+
+func researchConsecutiveNoImprovement(session researchSession) int {
+	count := 0
+	for i := len(session.Trials) - 1; i >= 0; i-- {
+		if session.Trials[i].Label == researchTrialLabelAccepted {
+			break
+		}
+		if session.Trials[i].Label == researchTrialLabelRejected || session.Trials[i].Label == researchTrialLabelInconclusive {
+			count++
+		}
+	}
+	return count
+}
+
+func estimateResearchNextRunSpend(session researchSession) float64 {
+	budget, err := resolveResearchRunBudget(session, nil, true)
+	if err != nil {
+		return 0
+	}
+	return budget.EstimatedSpend
+}
+
+func recordResearchTrialSpend(session *researchSession, trialNumber int, run runResponse) {
+	if trialNumber <= 0 || trialNumber > len(session.Trials) {
+		return
+	}
+	budget, err := resolveResearchRunBudget(*session, &run, false)
+	if err != nil {
+		return
+	}
+	trial := &session.Trials[trialNumber-1]
+	if budget.EstimatedSpend > 0 {
+		trial.EstimatedSpendUSD = budget.EstimatedSpend
+	}
+	if budget.ObservedSpend > 0 {
+		trial.ObservedSpendUSD = budget.ObservedSpend
+	}
+	session.Budget.ObservedSpendUSD += budget.ObservedSpend
+}
+
+func recordResearchRunSpend(session *researchSession, run runResponse) {
+	budget, err := resolveResearchRunBudget(*session, &run, false)
+	if err != nil {
+		return
+	}
+	session.Budget.ObservedSpendUSD += budget.ObservedSpend
+}
+
+func resolveResearchRunBudget(session researchSession, run *runResponse, estimateOnly bool) (researchRunBudget, error) {
+	gpuType, gpuCount, err := researchRunCompute(session.EnvironmentID, run)
+	if err != nil {
+		return researchRunBudget{}, err
+	}
+	price, err := researchGPUHourlyPrice(gpuType)
+	if err != nil {
+		return researchRunBudget{}, err
+	}
+	minutes := researchEstimatedRunMinutes(session)
+	estimated := researchSpendUSD(price, gpuCount, time.Duration(minutes*float64(time.Minute)))
+	observed := 0.0
+	if run != nil && !estimateOnly {
+		observedDuration := researchRunObservedDuration(*run)
+		observed = researchSpendUSD(price, gpuCount, observedDuration)
+	}
+	return researchRunBudget{
+		GPUType:          gpuType,
+		GPUCount:         gpuCount,
+		EstimatedSpend:   estimated,
+		ObservedSpend:    observed,
+		EstimatedMinutes: minutes,
+	}, nil
+}
+
+func researchRunCompute(environmentID string, run *runResponse) (string, int64, error) {
+	if run != nil {
+		gpuType := strings.TrimSpace(run.EffectiveGPUType)
+		gpuCount := run.EffectiveGPUCount
+		if gpuType != "" && gpuCount > 0 {
+			return gpuType, gpuCount, nil
+		}
+	}
+	env, err := doJSONAs[environmentResponse](http.MethodGet, "/environments/"+environmentID, nil)
+	if err != nil {
+		return "", 0, err
+	}
+	gpuType := strings.TrimSpace(env.GPUType)
+	gpuCount := env.GPUCount
+	if gpuType == "" || gpuCount <= 0 {
+		return "", 0, errors.New("environment has no effective GPU configuration")
+	}
+	return gpuType, gpuCount, nil
+}
+
+func researchGPUHourlyPrice(gpuType string) (float64, error) {
+	entries, err := fetchGpusByID()
+	if err != nil {
+		return 0, err
+	}
+	entry, ok := entries[strings.ToLower(strings.TrimSpace(gpuType))]
+	if !ok {
+		return 0, fmt.Errorf("GPU type %q is not available. Run `tahuna gpus list`.", gpuType)
+	}
+	if entry.PricePerHour <= 0 {
+		return 0, fmt.Errorf("GPU type %q has no hourly price in /api/gpus", gpuType)
+	}
+	return entry.PricePerHour, nil
+}
+
+func researchEstimatedRunMinutes(session researchSession) float64 {
+	if session.Baseline != nil {
+		if run, err := doJSONAs[runResponse](http.MethodGet, "/runs/"+session.Baseline.RunID, nil); err == nil {
+			if duration := researchRunObservedDuration(run); duration > 0 {
+				return duration.Minutes()
+			}
+		}
+	}
+	if session.Budget.MaxTrialMinutes > 0 {
+		return float64(session.Budget.MaxTrialMinutes)
+	}
+	return 0
+}
+
+func researchRunObservedDuration(run runResponse) time.Duration {
+	if run.UptimeMS > 0 {
+		return time.Duration(run.UptimeMS) * time.Millisecond
+	}
+	if run.CreatedAt <= 0 {
+		return 0
+	}
+	startedAt := time.UnixMilli(run.CreatedAt)
+	if startedAt.IsZero() || startedAt.After(time.Now()) {
+		return 0
+	}
+	return time.Since(startedAt)
+}
+
+func researchSpendUSD(pricePerHour float64, gpuCount int64, duration time.Duration) float64 {
+	if pricePerHour <= 0 || gpuCount <= 0 || duration <= 0 {
+		return 0
+	}
+	return pricePerHour * float64(gpuCount) * duration.Hours()
+}
+
+func monitorResearchTrialRun(session *researchSession, trialNumber int, runID string, interval int) error {
+	const maxConsecutivePollErrors = 12
+	fmt.Printf("%sFollowing logs for run %s (Ctrl+C to stop)%s\n", cAmpMuted, runID, cReset)
+
+	seen := map[string]struct{}{}
+	consecutivePollErrors := 0
+	for {
+		statusResp, err := doJSONAs[runResponse](http.MethodGet, "/runs/"+runID, nil)
+		if err != nil {
+			if isRetryableRunPollError(err) {
+				consecutivePollErrors++
+				logWarn("unable to poll run status (%v); retrying in %ds (%d/%d)",
+					err, interval, consecutivePollErrors, maxConsecutivePollErrors)
+				if consecutivePollErrors >= maxConsecutivePollErrors {
+					return fmt.Errorf("run status polling failed %d times in a row: %w", consecutivePollErrors, err)
+				}
+				runLogsFollowSleep(time.Duration(interval) * time.Second)
+				continue
+			}
+			return err
+		}
+		if researchTrialExceededMaxMinutes(*session, statusResp) {
+			if _, err := doJSONAs[cancelRunResponse](http.MethodPost, "/runs/"+runID+"/cancel", map[string]any{"force": false}); err != nil {
+				return err
+			}
+			recordResearchTrialSpend(session, trialNumber, statusResp)
+			if err := finishInconclusiveResearchTrial(session, trialNumber, runID, "run exceeded --max-trial-minutes"); err != nil {
+				return err
+			}
+			return nil
+		}
+
+		logResp, err := doJSONAs[runLogsResponse](http.MethodGet, "/runs/"+runID+"/logs", nil)
+		if err != nil {
+			if isRetryableRunPollError(err) {
+				consecutivePollErrors++
+				logWarn("unable to poll run logs (%v); retrying in %ds (%d/%d)",
+					err, interval, consecutivePollErrors, maxConsecutivePollErrors)
+				if consecutivePollErrors >= maxConsecutivePollErrors {
+					return fmt.Errorf("run log polling failed %d times in a row: %w", consecutivePollErrors, err)
+				}
+				runLogsFollowSleep(time.Duration(interval) * time.Second)
+				continue
+			}
+			return err
+		}
+		if consecutivePollErrors > 0 {
+			logInfo("recovered run log polling")
+			consecutivePollErrors = 0
+		}
+		for _, line := range parseRecentRunLogs(logResp.RecentLogs) {
+			key := runtimeLogLineKey(line)
+			if _, exists := seen[key]; exists {
+				continue
+			}
+			seen[key] = struct{}{}
+			fmt.Println(formatRuntimeLogLine(line))
+		}
+
+		if isTerminalRunStatus(statusResp.Status) {
+			return nil
+		}
+		runLogsFollowSleep(time.Duration(interval) * time.Second)
+	}
+}
+
+func researchTrialExceededMaxMinutes(session researchSession, run runResponse) bool {
+	if session.Budget.MaxTrialMinutes <= 0 || isTerminalRunStatus(run.Status) {
+		return false
+	}
+	return researchRunObservedDuration(run) >= time.Duration(session.Budget.MaxTrialMinutes)*time.Minute
 }
 
 func strconvFloat(value float64) string {
