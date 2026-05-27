@@ -34,6 +34,13 @@ const (
 	researchTrialStatusRunning     = "running"
 )
 
+var researchWorktreePathspecs = []string{
+	".",
+	":(exclude).tahuna/research/**",
+	":(exclude).tahuna/sync_code_manifest.json",
+	":(exclude).tahuna/sync_data_manifest.json",
+}
+
 type repeatedResearchFlag []string
 
 func (v *repeatedResearchFlag) String() string {
@@ -398,7 +405,7 @@ func ensureGitWorkTree(dir string) error {
 }
 
 func validateResearchDirtyFiles(dir string, editable []string) error {
-	raw, err := gitOutput(dir, "status", "--porcelain", "--", ".")
+	raw, err := gitOutput(dir, "status", "--porcelain", "-uall", "--", ".")
 	if err != nil {
 		return err
 	}
@@ -416,6 +423,9 @@ func validateResearchDirtyFiles(dir string, editable []string) error {
 			continue
 		}
 		projectRelPath := researchProjectRelativePath(relPath, projectPrefix)
+		if isResearchOwnedLocalStatePath(projectRelPath) {
+			continue
+		}
 		if isResearchEditablePath(projectRelPath, editable) {
 			continue
 		}
@@ -483,6 +493,24 @@ func isResearchEditablePath(relPath string, editable []string) bool {
 		}
 	}
 	return false
+}
+
+func isResearchOwnedLocalStatePath(relPath string) bool {
+	relPath = filepath.ToSlash(filepath.Clean(strings.TrimSpace(relPath)))
+	switch relPath {
+	case filepath.ToSlash(filepath.Join(projectStateDir, "sync_code_manifest.json")),
+		filepath.ToSlash(filepath.Join(projectStateDir, "sync_data_manifest.json")):
+		return true
+	}
+	researchDir := filepath.ToSlash(filepath.Join(projectStateDir, researchStateDir))
+	return relPath == researchDir || strings.HasPrefix(relPath, researchDir+"/")
+}
+
+func researchGitPathspecArgs(args ...string) []string {
+	out := append([]string{}, args...)
+	out = append(out, "--")
+	out = append(out, researchWorktreePathspecs...)
+	return out
 }
 
 func gitOutput(dir string, args ...string) (string, error) {
@@ -891,11 +919,11 @@ func validateResearchIncumbentSnapshot(session researchSession) error {
 }
 
 func captureResearchWorktreeSnapshot(dir string) (researchWorktreeSnapshot, error) {
-	diff, err := gitOutput(dir, "diff", "--binary", "HEAD", "--", ".")
+	diff, err := gitOutput(dir, researchGitPathspecArgs("diff", "--binary", "HEAD")...)
 	if err != nil {
 		return researchWorktreeSnapshot{}, err
 	}
-	untracked, err := gitOutput(dir, "ls-files", "--others", "--exclude-standard", "--", ".")
+	untracked, err := gitOutput(dir, researchGitPathspecArgs("ls-files", "--others", "--exclude-standard")...)
 	if err != nil {
 		return researchWorktreeSnapshot{}, err
 	}
@@ -905,6 +933,9 @@ func captureResearchWorktreeSnapshot(dir string) (researchWorktreeSnapshot, erro
 	for _, relPath := range strings.Split(untracked, "\n") {
 		relPath = filepath.ToSlash(filepath.Clean(strings.TrimSpace(relPath)))
 		if relPath == "" || relPath == "." || strings.HasPrefix(relPath, "../") {
+			continue
+		}
+		if isResearchOwnedLocalStatePath(relPath) {
 			continue
 		}
 		hasUntracked = true
@@ -1150,6 +1181,8 @@ func monitorResearchTrialRun(session *researchSession, trialNumber int, runID st
 
 	seen := map[string]struct{}{}
 	consecutivePollErrors := 0
+	lastStatus := ""
+	noLogsNoticePrinted := false
 	for {
 		statusResp, err := doJSONAs[runResponse](http.MethodGet, "/runs/"+runID, nil)
 		if err != nil {
@@ -1164,6 +1197,15 @@ func monitorResearchTrialRun(session *researchSession, trialNumber int, runID st
 				continue
 			}
 			return err
+		}
+		status := statusResp.Status
+		if status == "" {
+			status = "queued"
+		}
+		if status != lastStatus {
+			fmt.Printf("Status: %s\n", status)
+			lastStatus = status
+			noLogsNoticePrinted = false
 		}
 		if researchTrialExceededMaxMinutes(*session, statusResp) {
 			if _, err := doJSONAs[cancelRunResponse](http.MethodPost, "/runs/"+runID+"/cancel", map[string]any{"force": false}); err != nil {
@@ -1202,8 +1244,12 @@ func monitorResearchTrialRun(session *researchSession, trialNumber int, runID st
 			seen[key] = struct{}{}
 			fmt.Println(formatRuntimeLogLine(line))
 		}
+		if len(seen) == 0 && !noLogsNoticePrinted && !isTerminalRunStatus(status) {
+			fmt.Printf("%sNo logs yet while run is %s.%s\n", cAmpMuted, status, cReset)
+			noLogsNoticePrinted = true
+		}
 
-		if isTerminalRunStatus(statusResp.Status) {
+		if isTerminalRunStatus(status) {
 			return nil
 		}
 		runLogsFollowSleep(time.Duration(interval) * time.Second)
