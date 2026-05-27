@@ -26,8 +26,9 @@ const (
 type TargetType string
 
 const (
-	TargetTypeRun   TargetType = "runs"
-	TargetTypeServe TargetType = "serves"
+	TargetTypeRun            TargetType = "runs"
+	TargetTypeServe          TargetType = "serves"
+	TargetTypeComputeSession TargetType = "compute_sessions"
 )
 
 type BootstrapEntry struct {
@@ -114,6 +115,10 @@ type ArtifactUpload struct {
 	URL  string `json:"url"`
 }
 
+type SessionAssignment struct {
+	RunID string `json:"run_id"`
+}
+
 type clientResponseAccepted struct {
 	Accepted int `json:"accepted"`
 }
@@ -132,6 +137,10 @@ func NewRun(baseURL, runID, runtimeToken string, timeout time.Duration) *Client 
 
 func NewServe(baseURL, serveID, runtimeToken string, timeout time.Duration) *Client {
 	return newClient(baseURL, TargetTypeServe, serveID, runtimeToken, timeout)
+}
+
+func NewSession(baseURL, computeSessionID, runtimeToken string, timeout time.Duration) *Client {
+	return newClient(baseURL, TargetTypeComputeSession, computeSessionID, runtimeToken, timeout)
 }
 
 func newClient(baseURL string, targetType TargetType, targetID, runtimeToken string, timeout time.Duration) *Client {
@@ -163,6 +172,27 @@ func (c *Client) GetServeBootstrapPlan(ctx context.Context) (ServeBootstrapPlan,
 		return ServeBootstrapPlan{}, err
 	}
 	return plan, nil
+}
+
+func (c *Client) GetSessionAssignment(ctx context.Context) (SessionAssignment, error) {
+	var assignment SessionAssignment
+	if err := c.doJSON(ctx, http.MethodGet, c.path("assignment"), nil, &assignment); err != nil {
+		return SessionAssignment{}, err
+	}
+	return assignment, nil
+}
+
+func (c *Client) EmitSessionHeartbeat(ctx context.Context) error {
+	return c.doJSON(ctx, http.MethodPost, c.path("heartbeat"), nil, nil)
+}
+
+func (c *Client) MarkSessionIdle(ctx context.Context, runID string) error {
+	body := struct {
+		RunID string `json:"run_id"`
+	}{
+		RunID: strings.TrimSpace(runID),
+	}
+	return c.doJSON(ctx, http.MethodPost, c.path("idle"), body, nil)
 }
 
 func (c *Client) EmitStatus(ctx context.Context, update StatusUpdate) error {

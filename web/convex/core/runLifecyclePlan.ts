@@ -566,6 +566,7 @@ export function planRuntimeStatusIngestion(args: {
   message?: string;
   error?: string;
   nowMs: number;
+  terminateMachine?: boolean;
 }): RunLifecyclePlan & { resultStatus: string } {
   if (isTerminalRunStatus(args.run.status)) {
     return {
@@ -603,10 +604,12 @@ export function planRuntimeStatusIngestion(args: {
           source: "machine-runtime",
         }),
       ],
-      jobs: planForcedMachineTermination({
-        runId: args.run.runId,
-        providerMachineId: args.run.providerMachineId,
-      }),
+      jobs: args.terminateMachine === false
+        ? []
+        : planForcedMachineTermination({
+            runId: args.run.runId,
+            providerMachineId: args.run.providerMachineId,
+          }),
       resultStatus: RUN_LIFECYCLE_STATUS.FAILED,
     };
   }
@@ -632,7 +635,7 @@ export function planRuntimeStatusIngestion(args: {
         source: "machine-runtime",
       }),
     ],
-    jobs: isTerminalStatus
+    jobs: isTerminalStatus && args.terminateMachine !== false
       ? planForcedMachineTermination({
           runId: args.run.runId,
           providerMachineId: args.run.providerMachineId,

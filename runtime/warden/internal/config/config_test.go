@@ -7,6 +7,7 @@ import (
 func TestLoadFromEnvDefaultsWorkspaceRoot(t *testing.T) {
 	t.Setenv("TAHUNA_RUN_ID", "run_123")
 	t.Setenv("TAHUNA_SERVE_ID", "")
+	t.Setenv("TAHUNA_COMPUTE_SESSION_ID", "")
 	t.Setenv("TAHUNA_API_BASE", "https://api.example.com/")
 	t.Setenv("TAHUNA_RUNTIME_TOKEN", "secret")
 	t.Setenv("TAHUNA_WORKSPACE_ROOT", "")
@@ -38,6 +39,7 @@ func TestLoadFromEnvDefaultsWorkspaceRoot(t *testing.T) {
 func TestLoadFromEnvFailsWhenRequiredVarsMissing(t *testing.T) {
 	t.Setenv("TAHUNA_RUN_ID", "")
 	t.Setenv("TAHUNA_SERVE_ID", "")
+	t.Setenv("TAHUNA_COMPUTE_SESSION_ID", "")
 	t.Setenv("TAHUNA_API_BASE", "")
 	t.Setenv("TAHUNA_RUNTIME_TOKEN", "")
 
@@ -50,6 +52,7 @@ func TestLoadFromEnvFailsWhenRequiredVarsMissing(t *testing.T) {
 func TestLoadFromEnvSupportsRuntimeRequestTimeoutOverride(t *testing.T) {
 	t.Setenv("TAHUNA_RUN_ID", "run_123")
 	t.Setenv("TAHUNA_SERVE_ID", "")
+	t.Setenv("TAHUNA_COMPUTE_SESSION_ID", "")
 	t.Setenv("TAHUNA_API_BASE", "https://api.example.com")
 	t.Setenv("TAHUNA_RUNTIME_TOKEN", "secret")
 	t.Setenv("TAHUNA_RUNTIME_REQUEST_TIMEOUT_SECONDS", "15")
@@ -70,6 +73,7 @@ func TestLoadFromEnvSupportsRuntimeRequestTimeoutOverride(t *testing.T) {
 func TestLoadFromEnvSupportsServeMode(t *testing.T) {
 	t.Setenv("TAHUNA_RUN_ID", "")
 	t.Setenv("TAHUNA_SERVE_ID", "serve_123")
+	t.Setenv("TAHUNA_COMPUTE_SESSION_ID", "")
 	t.Setenv("TAHUNA_API_BASE", "https://api.example.com")
 	t.Setenv("TAHUNA_RUNTIME_TOKEN", "secret")
 
@@ -85,9 +89,29 @@ func TestLoadFromEnvSupportsServeMode(t *testing.T) {
 	}
 }
 
+func TestLoadFromEnvSupportsSessionMode(t *testing.T) {
+	t.Setenv("TAHUNA_RUN_ID", "")
+	t.Setenv("TAHUNA_SERVE_ID", "")
+	t.Setenv("TAHUNA_COMPUTE_SESSION_ID", "session_123")
+	t.Setenv("TAHUNA_API_BASE", "https://api.example.com")
+	t.Setenv("TAHUNA_RUNTIME_TOKEN", "secret")
+
+	cfg, err := LoadFromEnv()
+	if err != nil {
+		t.Fatalf("LoadFromEnv returned error: %v", err)
+	}
+	if cfg.Mode != ModeSession {
+		t.Fatalf("expected session mode, got %q", cfg.Mode)
+	}
+	if cfg.ResourceID() != "session_123" {
+		t.Fatalf("expected session resource id, got %q", cfg.ResourceID())
+	}
+}
+
 func TestLoadFromEnvRejectsMultipleTargets(t *testing.T) {
 	t.Setenv("TAHUNA_RUN_ID", "run_123")
 	t.Setenv("TAHUNA_SERVE_ID", "serve_123")
+	t.Setenv("TAHUNA_COMPUTE_SESSION_ID", "")
 	t.Setenv("TAHUNA_API_BASE", "https://api.example.com")
 	t.Setenv("TAHUNA_RUNTIME_TOKEN", "secret")
 

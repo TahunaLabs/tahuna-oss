@@ -32,6 +32,7 @@ import type * as cloud_serveLifecycleComposition from "../cloud/serveLifecycleCo
 import type * as computeProvider from "../computeProvider.js";
 import type * as computeSessionAssignment from "../computeSessionAssignment.js";
 import type * as computeSessions from "../computeSessions.js";
+import type * as computeSessionsHttp from "../computeSessionsHttp.js";
 import type * as computeSessionsRead from "../computeSessionsRead.js";
 import type * as convexJobQueue from "../convexJobQueue.js";
 import type * as core_compute from "../core/compute.js";
@@ -111,6 +112,7 @@ declare const fullApi: ApiFromModules<{
   computeProvider: typeof computeProvider;
   computeSessionAssignment: typeof computeSessionAssignment;
   computeSessions: typeof computeSessions;
+  computeSessionsHttp: typeof computeSessionsHttp;
   computeSessionsRead: typeof computeSessionsRead;
   convexJobQueue: typeof convexJobQueue;
   "core/compute": typeof core_compute;

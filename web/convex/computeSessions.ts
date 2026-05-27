@@ -39,6 +39,7 @@ import {
   listComputeSessionsByUserId,
   toComputeSessionResponse,
 } from "@convex/computeSessionsRead";
+import { TERMINAL_STATUSES } from "@convex/runsConstants";
 
 const computeSessionResponseValidator = v.object({
   compute_session_id: v.string(),
@@ -74,6 +75,9 @@ const computeSessionEventResponseValidator = v.object({
 
 const listComputeSessionEventsResponseValidator = v.object({
   events: v.array(computeSessionEventResponseValidator),
+});
+const runtimeAssignmentResponseValidator = v.object({
+  run_id: v.string(),
 });
 
 function normalizeIdleTimeoutSeconds(value: number | undefined) {
@@ -212,6 +216,34 @@ export const internalGet = internalQuery({
       throw new ConvexError("compute session not found");
     }
     return toComputeSessionResponse(row);
+  },
+});
+
+export const internalValidateRuntimeToken = internalQuery({
+  args: { computeSessionId: v.id("computeSessions"), tokenHash: v.string() },
+  returns: v.boolean(),
+  handler: async (ctx, args) => {
+    const row = await ctx.db.get("computeSessions", args.computeSessionId);
+    if (!row || !row.runtimeTokenHash || row.runtimeTokenHash === "revoked") {
+      return false;
+    }
+    return row.runtimeTokenHash === args.tokenHash;
+  },
+});
+
+export const internalGetRuntimeAssignment = internalQuery({
+  args: { computeSessionId: v.id("computeSessions") },
+  returns: runtimeAssignmentResponseValidator,
+  handler: async (ctx, args) => {
+    const row = await ctx.db.get("computeSessions", args.computeSessionId);
+    if (!row || !row.activeRunId || row.status !== "running") {
+      return { run_id: "" };
+    }
+    const run = await ctx.db.get(row.activeRunId);
+    if (!run || TERMINAL_STATUSES.has(run.status)) {
+      return { run_id: "" };
+    }
+    return { run_id: String(row.activeRunId) };
   },
 });
 
@@ -424,6 +456,27 @@ export const internalMarkIdle = internalMutation({
   handler: async (ctx, args) => {
     const row = await ctx.db.get("computeSessions", args.computeSessionId);
     if (!row) {
+      return null;
+    }
+    await applyComputeSessionPlan(
+      ctx,
+      args.computeSessionId,
+      planComputeSessionIdle({ session: toComputeSessionState(row), nowMs: Date.now() }),
+    );
+    return null;
+  },
+});
+
+export const internalMarkIdleAfterRun = internalMutation({
+  args: { computeSessionId: v.id("computeSessions"), runId: v.id("runs") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const row = await ctx.db.get("computeSessions", args.computeSessionId);
+    if (!row || row.activeRunId !== args.runId) {
+      return null;
+    }
+    const run = await ctx.db.get(args.runId);
+    if (!run || !TERMINAL_STATUSES.has(run.status)) {
       return null;
     }
     await applyComputeSessionPlan(

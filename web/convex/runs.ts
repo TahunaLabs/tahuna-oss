@@ -1414,6 +1414,7 @@ export const ingestRuntimeStatus = internalMutation({
       message: args.message,
       error: args.error,
       nowMs: Date.now(),
+      terminateMachine: row.executionMode !== "session",
     });
     await applyRunLifecyclePlan(ctx, args.runId, row, plan);
     return { status: plan.resultStatus };

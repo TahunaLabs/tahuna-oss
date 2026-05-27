@@ -11,14 +11,16 @@ import (
 type Mode string
 
 const (
-	ModeRun   Mode = "run"
-	ModeServe Mode = "serve"
+	ModeRun     Mode = "run"
+	ModeServe   Mode = "serve"
+	ModeSession Mode = "session"
 )
 
 type Config struct {
 	Mode                 Mode
 	RunID                string
 	ServeID              string
+	ComputeSessionID     string
 	APIBase              string
 	RuntimeToken         string
 	WorkspaceRoot        string
@@ -50,7 +52,8 @@ func LoadFromEnv() (Config, error) {
 
 	runID := strings.TrimSpace(os.Getenv("TAHUNA_RUN_ID"))
 	serveID := strings.TrimSpace(os.Getenv("TAHUNA_SERVE_ID"))
-	mode, err := resolveMode(runID, serveID)
+	computeSessionID := strings.TrimSpace(os.Getenv("TAHUNA_COMPUTE_SESSION_ID"))
+	mode, err := resolveMode(runID, serveID, computeSessionID)
 	if err != nil {
 		return Config{}, err
 	}
@@ -59,6 +62,7 @@ func LoadFromEnv() (Config, error) {
 		Mode:                 mode,
 		RunID:                runID,
 		ServeID:              serveID,
+		ComputeSessionID:     computeSessionID,
 		APIBase:              strings.TrimRight(strings.TrimSpace(os.Getenv("TAHUNA_API_BASE")), "/"),
 		RuntimeToken:         strings.TrimSpace(os.Getenv("TAHUNA_RUNTIME_TOKEN")),
 		WorkspaceRoot:        strings.TrimSpace(os.Getenv("TAHUNA_WORKSPACE_ROOT")),
@@ -86,17 +90,30 @@ func (c Config) ResourceID() string {
 	if c.Mode == ModeServe {
 		return c.ServeID
 	}
+	if c.Mode == ModeSession {
+		return c.ComputeSessionID
+	}
 	return c.RunID
 }
 
-func resolveMode(runID, serveID string) (Mode, error) {
+func resolveMode(runID, serveID, computeSessionID string) (Mode, error) {
 	hasRunID := runID != ""
 	hasServeID := serveID != ""
-	if hasRunID == hasServeID {
-		return "", fmt.Errorf("exactly one runtime target is required: TAHUNA_RUN_ID or TAHUNA_SERVE_ID")
+	hasComputeSessionID := computeSessionID != ""
+	targets := 0
+	for _, present := range []bool{hasRunID, hasServeID, hasComputeSessionID} {
+		if present {
+			targets++
+		}
+	}
+	if targets != 1 {
+		return "", fmt.Errorf("exactly one runtime target is required: TAHUNA_RUN_ID, TAHUNA_SERVE_ID, or TAHUNA_COMPUTE_SESSION_ID")
 	}
 	if hasServeID {
 		return ModeServe, nil
+	}
+	if hasComputeSessionID {
+		return ModeSession, nil
 	}
 	return ModeRun, nil
 }

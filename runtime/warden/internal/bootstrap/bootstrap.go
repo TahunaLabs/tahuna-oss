@@ -43,6 +43,9 @@ func newRuntimeClient(cfg config.Config) *runtimeapi.Client {
 	if cfg.Mode == config.ModeServe {
 		return runtimeapi.NewServe(cfg.APIBase, cfg.ServeID, cfg.RuntimeToken, cfg.RequestTimeout())
 	}
+	if cfg.Mode == config.ModeSession {
+		return runtimeapi.NewSession(cfg.APIBase, cfg.ComputeSessionID, cfg.RuntimeToken, cfg.RequestTimeout())
+	}
 	return runtimeapi.NewRun(cfg.APIBase, cfg.RunID, cfg.RuntimeToken, cfg.RequestTimeout())
 }
 
@@ -54,6 +57,8 @@ func (r *Runner) Run(ctx context.Context) error {
 	switch r.cfg.Mode {
 	case config.ModeServe:
 		return r.runServe(ctx)
+	case config.ModeSession:
+		return r.runSession(ctx)
 	case config.ModeRun:
 		return r.runTraining(ctx)
 	default:

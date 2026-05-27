@@ -19,6 +19,10 @@ import {
 import { getEnvVar, listEnvVars, removeEnvVar, setEnvVars } from "@convex/cli/envVars";
 import { createRun, getRunOrLogs, listRuns, postRunRuntime, removeRun, renameRun } from "@convex/cli/runs";
 import { createServe, getServeOrLogs, listServes, postServeAction } from "@convex/cli/serves";
+import {
+  getComputeSessionRuntime,
+  postComputeSessionRuntime,
+} from "@convex/computeSessionsHttp";
 import { stripeWebhook } from "@convex/cloud/billing";
 import { fileStream as wandbFileStream, graphql as wandbGraphql, upload as wandbUpload } from "@convex/monitoring/wandb";
 
@@ -64,6 +68,10 @@ http.route({ pathPrefix: "/api/runs/", method: "GET", handler: getRunOrLogs });
 http.route({ pathPrefix: "/api/runs/", method: "PATCH", handler: renameRun });
 // Route prefix for deleting runs by ID /api/runs/{run_id}
 http.route({ pathPrefix: "/api/runs/", method: "DELETE", handler: removeRun });
+
+// Compute session runtime callbacks: /api/compute_sessions/{compute_session_id}/runtime/{action}
+http.route({ pathPrefix: "/api/compute_sessions/", method: "GET", handler: getComputeSessionRuntime });
+http.route({ pathPrefix: "/api/compute_sessions/", method: "POST", handler: postComputeSessionRuntime });
 
 // Serves (REST)
 http.route({ path: "/api/serves", method: "GET", handler: listServes });

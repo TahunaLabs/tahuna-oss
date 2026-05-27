@@ -14,6 +14,16 @@ import (
 )
 
 func (r *Runner) runTraining(ctx context.Context) error {
+	return r.runTrainingWithAPI(ctx, r.api)
+}
+
+func (r *Runner) runTrainingWithAPI(ctx context.Context, api *runtimeapi.Client) error {
+	previousAPI := r.api
+	r.api = api
+	defer func() {
+		r.api = previousAPI
+	}()
+
 	if err := r.emitProvisioning(ctx, "warden bootstrap started"); err != nil {
 		return err
 	}
