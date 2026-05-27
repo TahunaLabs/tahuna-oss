@@ -20,11 +20,15 @@ export function resolveImageName(framework: string, version: string, pythonVersi
 }
 
 export function resolveRuntimeApiBase() {
-  const runtimeApiBase = process.env.SITE_URL?.trim();
-  if (!runtimeApiBase) {
-    throw new Error("SITE_URL is required for machine runtime callbacks");
+  // Dev: machine can't reach localhost — call Convex HTTP actions directly (CONVEX_SITE_URL is a Convex built-in)
+  if (process.env.ENV === "development") {
+    const convexSiteUrl = process.env.CONVEX_SITE_URL;
+    if (!convexSiteUrl) throw new Error("CONVEX_SITE_URL is required in development");
+    return convexSiteUrl;
   }
-  return runtimeApiBase.replace(/\/+$/, "");
+  const siteUrl = process.env.SITE_URL;
+  if (!siteUrl) throw new Error("SITE_URL is required for machine runtime callbacks");
+  return siteUrl;
 }
 
 export function resolveWandbBaseURL(runtimeApiBase: string) {
