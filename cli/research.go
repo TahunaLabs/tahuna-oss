@@ -36,9 +36,8 @@ const (
 
 var researchWorktreePathspecs = []string{
 	".",
-	":(exclude).tahuna/research/**",
-	":(exclude).tahuna/sync_code_manifest.json",
-	":(exclude).tahuna/sync_data_manifest.json",
+	":(exclude)" + projectConfigFilePath(),
+	":(exclude)" + projectStateDir + "/**",
 }
 
 type repeatedResearchFlag []string
@@ -603,13 +602,14 @@ func isResearchEditablePath(relPath string, editable []string) bool {
 
 func isResearchOwnedLocalStatePath(relPath string) bool {
 	relPath = filepath.ToSlash(filepath.Clean(strings.TrimSpace(relPath)))
-	switch relPath {
-	case filepath.ToSlash(filepath.Join(projectStateDir, "sync_code_manifest.json")),
-		filepath.ToSlash(filepath.Join(projectStateDir, "sync_data_manifest.json")):
+	if relPath == "" || relPath == "." {
+		return false
+	}
+	if relPath == filepath.ToSlash(filepath.Clean(projectConfigFilePath())) {
 		return true
 	}
-	researchDir := filepath.ToSlash(filepath.Join(projectStateDir, researchStateDir))
-	return relPath == researchDir || strings.HasPrefix(relPath, researchDir+"/")
+	stateDir := filepath.ToSlash(filepath.Clean(projectStateDir))
+	return relPath == stateDir || strings.HasPrefix(relPath, stateDir+"/")
 }
 
 func researchGitPathspecArgs(args ...string) []string {
