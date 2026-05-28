@@ -22,6 +22,35 @@ tahuna train --warm
 
 There is no user-facing `tahuna compute create` flow for the main warm-compute path. Warm compute is an extension of `tahuna train`.
 
+## Flow Diagram
+
+```mermaid
+flowchart TD
+  Init["tahuna init ."] --> Config["Environment config in tahuna.toml"]
+  Config --> Sync1["tahuna sync"]
+  Sync1 --> KeepWarm["tahuna train --keep-warm-minutes 10"]
+
+  KeepWarm --> Run1["Create run A\nexecution_mode=session"]
+  Run1 --> SessionCreate["Create compute session\nsnapshot runtime spec"]
+  SessionCreate --> Link["Set environments.activeComputeSessionId"]
+  Link --> Provision["Provision one machine\nstart Warden session mode"]
+  Provision --> Execute1["Warden executes run A\nwith pinned manifests"]
+  Execute1 --> Idle["Run A completed\ncompute session idle"]
+
+  Idle --> Edit["Edit code or data"]
+  Edit --> Sync2["tahuna sync\nupdates manifests only"]
+  Sync2 --> Warm["tahuna train --warm"]
+  Warm --> Resolve["Read environments.activeComputeSessionId"]
+  Resolve --> Run2["Create run B\ncomputeSessionId=current session"]
+  Run2 --> Assign["Atomic assignment\nsession idle -> running\nrun queued -> provisioning"]
+  Assign --> Execute2["Warden executes run B\nwith new pinned manifests"]
+  Execute2 --> Idle
+
+  ConfigChange["Runtime spec changes\nGPU, volume, framework, Python, image"] --> Stale["Clear activeComputeSessionId\nterminate stale session"]
+  Stale --> WarmFail["tahuna train --warm fails clearly"]
+  WarmFail --> KeepWarm
+```
+
 ## User Story
 
 ### Start Warm Compute
