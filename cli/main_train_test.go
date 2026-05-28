@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 )
 
 func TestTrainDetached_EndToEndPreflightAndRunCreation(t *testing.T) {
@@ -211,6 +212,72 @@ func TestTrainAttached_MonitorsUntilCompletion(t *testing.T) {
 	}
 	if !strings.Contains(output, "epoch=1 train_loss=0.1688") {
 		t.Fatalf("expected streamed training log output, got: %s", output)
+	}
+}
+
+func TestTrainWarm_PrintsRemainingWarmTime(t *testing.T) {
+	mock := newSyncBackendMock()
+	installSyncStubs(t, mock)
+	setupTestProject(t, false)
+
+	if err := saveLinkedEnvironmentID("env-test"); err != nil {
+		t.Fatalf("failed to save linked environment id: %v", err)
+	}
+
+	expiresAt := time.Now().Add(6 * time.Minute).UnixMilli()
+	var runCreatePayload map[string]any
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if serveGpusAndEnvironment(w, r) {
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/api/environments/env-test/runs":
+			if err := json.NewDecoder(r.Body).Decode(&runCreatePayload); err != nil {
+				t.Fatalf("failed decoding run create payload: %v", err)
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"run_id": "run-warm"})
+			return
+		case r.Method == http.MethodGet && r.URL.Path == "/api/runs/run-warm":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"run_id":                                "run-warm",
+				"status":                                "completed",
+				"compute_session_id":                    "session-warm",
+				"compute_session_idle_expires_at":       expiresAt,
+				"execution_mode":                        "session",
+				"compute_session_idle_expires_at_extra": "ignored",
+			})
+			return
+		case r.Method == http.MethodGet && r.URL.Path == "/api/runs/run-warm/logs":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"run_id":         "run-warm",
+				"recent_logs":    []map[string]any{},
+				"recent_metrics": []map[string]any{},
+			})
+			return
+		default:
+			w.WriteHeader(http.StatusNotFound)
+			_ = json.NewEncoder(w).Encode(map[string]any{"detail": "not found"})
+			return
+		}
+	}))
+	defer server.Close()
+
+	t.Setenv("TAHUNA_API_URL", server.URL)
+	t.Setenv("TAHUNA_BROWSER_URL", server.URL)
+	t.Setenv("TERM", "dumb")
+
+	output := captureStdout(t, func() {
+		train([]string{"--warm"})
+	})
+
+	if runCreatePayload["warm"] != true {
+		t.Fatalf("expected warm run payload, got %v", runCreatePayload)
+	}
+	if !strings.Contains(output, "Compute is warm for another 6 minutes.") {
+		t.Fatalf("expected remaining warm time in output, got: %s", output)
 	}
 }
 

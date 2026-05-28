@@ -1193,17 +1193,38 @@ func train(args []string) {
 		return
 	}
 	must(monitorRunWithLogs(runID, 5))
-	if requestedKeepWarmMinutes > 0 {
-		terminal, err := doJSONAs[runResponse](http.MethodGet, "/runs/"+runID, nil)
+	if requestedKeepWarmMinutes > 0 || *warm {
+		terminal, err := getTerminalRunWithWarmExpiry(runID)
 		must(err)
 		if terminal.Status == "completed" {
-			fmt.Printf("\nRun completed.\n")
-			fmt.Printf("Compute is warm for %s.\n\n", formatKeepWarmMinutes(requestedKeepWarmMinutes))
-			fmt.Printf("Next run:\n")
-			fmt.Printf("  tahuna sync\n")
-			fmt.Printf("  tahuna train --warm\n")
+			if remaining := formatRemainingWarmTime(terminal.WarmExpiresAtMS, time.Now()); remaining != "" {
+				fmt.Printf("\nRun completed.\n")
+				fmt.Printf("Compute is warm for another %s.\n\n", remaining)
+				fmt.Printf("Next run:\n")
+				fmt.Printf("  tahuna sync\n")
+				fmt.Printf("  tahuna train --warm\n")
+			} else if requestedKeepWarmMinutes > 0 {
+				fmt.Printf("\nRun completed.\n")
+				fmt.Printf("Compute is warm for %s.\n\n", formatKeepWarmMinutes(requestedKeepWarmMinutes))
+				fmt.Printf("Next run:\n")
+				fmt.Printf("  tahuna sync\n")
+				fmt.Printf("  tahuna train --warm\n")
+			}
 		}
 	}
+}
+
+func getTerminalRunWithWarmExpiry(runID string) (runResponse, error) {
+	var terminal runResponse
+	var err error
+	for attempt := 0; attempt < 5; attempt++ {
+		terminal, err = doJSONAs[runResponse](http.MethodGet, "/runs/"+runID, nil)
+		if err != nil || terminal.WarmExpiresAtMS > 0 || terminal.ComputeSessionID == "" || terminal.Status != "completed" {
+			return terminal, err
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+	return terminal, err
 }
 
 func createRunWithCapacityPrompt(path string, payload map[string]any) (createRunResponse, error) {

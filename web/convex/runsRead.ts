@@ -28,6 +28,7 @@ export function toRunResponse(row: Doc<"runs">) {
     status: row.status,
     error: row.error || "",
     compute_session_id: row.computeSessionId ? String(row.computeSessionId) : "",
+    compute_session_idle_expires_at: 0,
     execution_mode: row.executionMode || "ephemeral",
     provider_machine_id: row.providerMachineId || "",
     effective_gpu_type: row.effectiveGpuType || "",
@@ -37,6 +38,23 @@ export function toRunResponse(row: Doc<"runs">) {
     data_manifest_hash: row.dataManifestHash || "",
     cancellation_requested: row.cancellationRequested,
     artifact_keys: row.artifactKeys || [],
+  };
+}
+
+export async function toRunResponseWithComputeSession(ctx: QueryCtx, row: Doc<"runs">) {
+  const response = toRunResponse(row);
+  if (!row.computeSessionId) {
+    return response;
+  }
+
+  const session = await ctx.db.get(row.computeSessionId);
+  if (!session || session.status !== "idle" || !session.lastIdleAt) {
+    return response;
+  }
+
+  return {
+    ...response,
+    compute_session_idle_expires_at: session.lastIdleAt + session.idleTimeoutSeconds * 1000,
   };
 }
 

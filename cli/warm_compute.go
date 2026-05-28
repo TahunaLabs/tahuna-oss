@@ -2,8 +2,10 @@ package main
 
 import (
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
+	"time"
 )
 
 const maxKeepWarmAfterMinutes = 60
@@ -28,4 +30,22 @@ func formatKeepWarmMinutes(minutes float64) string {
 		return "1 minute"
 	}
 	return fmt.Sprintf("%g minutes", minutes)
+}
+
+func formatRemainingWarmTime(expiresAtMS int64, now time.Time) string {
+	if expiresAtMS <= 0 {
+		return ""
+	}
+	remaining := time.Until(time.UnixMilli(expiresAtMS))
+	if !now.IsZero() {
+		remaining = time.UnixMilli(expiresAtMS).Sub(now)
+	}
+	if remaining <= 0 {
+		return ""
+	}
+	minutes := math.Ceil(remaining.Minutes())
+	if minutes < 1 {
+		minutes = 1
+	}
+	return formatKeepWarmMinutes(minutes)
 }

@@ -68,7 +68,7 @@ import {
   toRunLogsOnlyResponse,
   toRunLogsResponse,
   toRunMetricsOnlyResponse,
-  toRunResponse,
+  toRunResponseWithComputeSession,
 } from "@convex/runsRead";
 import { storageKeys } from "@convex/core/storage";
 import { assignQueuedRunToComputeSession } from "@convex/computeSessionAssignment";
@@ -103,6 +103,7 @@ const runResponseValidator = v.object({
   status: v.string(),
   error: v.string(),
   compute_session_id: v.string(),
+  compute_session_idle_expires_at: v.number(),
   execution_mode: v.string(),
   provider_machine_id: v.string(),
   effective_gpu_type: v.string(),
@@ -527,7 +528,7 @@ export const get = query({
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
     const row = await getAccessibleRun(ctx, String(user._id), args.runId, "read");
-    return toRunResponse(row);
+    return toRunResponseWithComputeSession(ctx, row);
   },
 });
 
@@ -649,7 +650,7 @@ export const internalGet = internalQuery({
   returns: runResponseValidator,
   handler: async (ctx, args) => {
     const row = await getAccessibleRun(ctx, args.userId, args.runId, "read");
-    return toRunResponse(row);
+    return toRunResponseWithComputeSession(ctx, row);
   },
 });
 
@@ -703,7 +704,7 @@ export const internalCreate = internalMutation({
     if (!row) {
       throw new ConvexError("failed to create run");
     }
-    return toRunResponse(row);
+    return toRunResponseWithComputeSession(ctx, row);
   },
 });
 
