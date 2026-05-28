@@ -40,7 +40,7 @@ Still needed:
 
 - Apply the `tahuna-autoresearch-project` checklist in the external `TahunaLabs/agent-skills` repository.
 - Allocate warm-session idle/billing time into Auto-Research spend accounting.
-- Decide whether Auto-Research should inherit `train.keep_warm_after_minutes` or require explicit `--keep-warm-minutes`.
+- Auto-Research now requires explicit `--keep-warm-minutes`; it does not inherit `train.keep_warm_after_minutes`.
 
 ## Implementation PR Plan
 
@@ -311,7 +311,7 @@ Rules:
 
 ### Intentional Pragmatism
 
-- Auto-Research inherits the project `train.keep_warm_after_minutes` default when present, unless `--keep-warm-minutes` is passed. This is convenient, but an auditor should decide whether research should require an explicit flag instead.
+- Auto-Research requires explicit `--keep-warm-minutes` so warm idle spend is opt-in for research sessions.
 - The runtime-spec guard compares local `tahuna.toml` state. If the remote environment is changed elsewhere, backend assignment still protects correctness, but the CLI guard only catches it after local state reflects the change.
 - Warm-session billing is not research-aware yet. Budgets still use per-run duration estimates and observed run duration.
 
@@ -355,7 +355,7 @@ Audit against this intended model:
 - Auto-Research should preserve the runtime spec across resumes and use warm=true only for trials after a warm baseline.
 
 Pay special attention to:
-- whether Auto-Research should inherit train.keep_warm_after_minutes or require explicit --keep-warm-minutes.
+- Auto-Research requires explicit --keep-warm-minutes and must not inherit train.keep_warm_after_minutes.
 - whether remote environment changes can bypass the local runtime-spec guard.
 - missing idle timeout enforcement.
 - missing heartbeat timeout enforcement.

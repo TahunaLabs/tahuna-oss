@@ -396,7 +396,7 @@ Current harness behavior:
 
 ### Intentional Pragmatism
 
-- Auto-research uses the project `train.keep_warm_after_minutes` default when present, unless `--keep-warm-minutes` is passed. That is convenient, but an auditor should decide whether research should require an explicit flag instead.
+- Auto-research requires explicit `--keep-warm-minutes`; it does not inherit the project `train.keep_warm_after_minutes` default because warm idle spend must be opt-in for research sessions.
 - Auto-research pins runtime spec from local `tahuna.toml`. If the remote environment is changed elsewhere, backend assignment still protects correctness, but the CLI guard only catches it after local state reflects the change.
 - Stale-session termination uses direct scheduling. It is correct for the current slice, but retry/backoff semantics are thinner than run machine termination.
 
@@ -440,7 +440,7 @@ Audit against this intended model:
 - Auto-Research should preserve the runtime spec across resumes and use warm=true only for trials after a warm baseline.
 
 Pay special attention to the self-audit gaps:
-- whether Auto-Research should inherit train.keep_warm_after_minutes or require explicit --keep-warm-minutes.
+- Auto-Research requires explicit --keep-warm-minutes and must not inherit train.keep_warm_after_minutes.
 - whether remote environment changes can bypass the local runtime-spec guard.
 - missing idle timeout enforcement.
 - missing heartbeat timeout enforcement.

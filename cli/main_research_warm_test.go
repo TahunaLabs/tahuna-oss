@@ -37,6 +37,24 @@ func TestResearchRunCreatePayload_WarmBaselineAndTrial(t *testing.T) {
 	}
 }
 
+func TestResearchKeepWarmMinutesRequiresExplicitResearchFlag(t *testing.T) {
+	minutes, err := researchKeepWarmMinutes(researchRunOptions{})
+	if err != nil {
+		t.Fatalf("expected empty keep-warm flag to pass: %v", err)
+	}
+	if minutes != 0 {
+		t.Fatalf("expected Auto-Research to ignore project train keep-warm defaults, got %v", minutes)
+	}
+
+	minutes, err = researchKeepWarmMinutes(researchRunOptions{keepWarmMinutes: "7.5"})
+	if err != nil {
+		t.Fatalf("expected explicit keep-warm flag to pass: %v", err)
+	}
+	if minutes != 7.5 {
+		t.Fatalf("expected explicit keep-warm minutes, got %v", minutes)
+	}
+}
+
 func TestValidateResearchRuntimeSpecUnchangedRejectsRuntimeChange(t *testing.T) {
 	setupTestProject(t, false)
 	session := researchSession{

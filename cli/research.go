@@ -218,7 +218,7 @@ func parseResearchRunOptions(args []string) researchRunOptions {
 	fs.IntVar(&opts.maxTrialMinutes, "max-trial-minutes", 0, "Maximum minutes per trial")
 	fs.IntVar(&opts.stopAfterNoImprovement, "stop-after-no-improvement", 0, "Stop after consecutive non-improving trials")
 	fs.Float64Var(&opts.minImprovement, "min-improvement", 0, "Minimum absolute objective improvement")
-	fs.StringVar(&opts.keepWarmMinutes, "keep-warm-minutes", "", "Keep compute warm across baseline and trials for this many minutes")
+	fs.StringVar(&opts.keepWarmMinutes, "keep-warm-minutes", "", "Explicitly keep compute warm across baseline and trials for this many minutes")
 	fs.Var(&editable, "editable", "Editable path or glob, repeatable")
 	fs.BoolVar(&opts.allowDirty, "allow-dirty", false, "Allow dirty working tree state")
 	fs.StringVar(&opts.resume, "resume", "", "Resume an existing research session")
@@ -247,12 +247,9 @@ func createResearchSession(opts researchRunOptions) error {
 		return err
 	}
 	runtimeSpec := researchRuntimeSpecFromConfig(cfg)
-	keepWarmMinutes := cfg.TrainKeepWarmAfterMinutes
-	if raw := strings.TrimSpace(opts.keepWarmMinutes); raw != "" {
-		keepWarmMinutes, err = parseKeepWarmMinutes(raw)
-		if err != nil {
-			return err
-		}
+	keepWarmMinutes, err := researchKeepWarmMinutes(opts)
+	if err != nil {
+		return err
 	}
 	startingSnapshot, err := captureResearchWorktreeSnapshot(".")
 	if err != nil {
@@ -451,6 +448,14 @@ func researchRuntimeSpecFromConfig(cfg projectConfig) researchRuntimeSpec {
 		GPUCount:      cfg.GPUCount,
 		VolumeGB:      cfg.VolumeGB,
 	}
+}
+
+func researchKeepWarmMinutes(opts researchRunOptions) (float64, error) {
+	raw := strings.TrimSpace(opts.keepWarmMinutes)
+	if raw == "" {
+		return 0, nil
+	}
+	return parseKeepWarmMinutes(raw)
 }
 
 func validateResearchRuntimeSpecUnchanged(session researchSession) error {
