@@ -259,6 +259,7 @@ export async function createAndProvisionRunStrict(ctx: ActionCtx, args: CreateRu
       volume_gb: args.volume_gb,
       enqueue_provisioning: false,
       computeSessionId: session.compute_session_id as Id<"computeSessions">,
+      assignComputeSession: false,
     });
     const runId = created.run_id as Id<"runs">;
     await ctx.runAction(internal.computeSessions.provisionComputeSession, {

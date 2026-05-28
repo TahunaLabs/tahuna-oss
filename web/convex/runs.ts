@@ -687,11 +687,12 @@ export const internalCreate = internalMutation({
     volume_gb: v.optional(v.number()),
     enqueue_provisioning: v.optional(v.boolean()),
     computeSessionId: v.optional(v.id("computeSessions")),
+    assignComputeSession: v.optional(v.boolean()),
   },
   returns: runResponseValidator,
   handler: async (ctx, args) => {
     const created = await createRunForUserId(ctx, args);
-    if (!args.computeSessionId) {
+    if (!args.computeSessionId || args.assignComputeSession === false) {
       return created;
     }
     await assignQueuedRunToComputeSession(ctx, {
