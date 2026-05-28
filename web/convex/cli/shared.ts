@@ -251,7 +251,12 @@ export async function createAndProvisionRunStrict(ctx: ActionCtx, args: CreateRu
       volumeGb: args.volume_gb,
     });
     const created = await ctx.runMutation(internal.runs.internalCreate, {
-      ...args,
+      userId: args.userId,
+      environmentId: args.environmentId,
+      name: args.name,
+      gpu_type: args.gpu_type,
+      gpu_count: args.gpu_count,
+      volume_gb: args.volume_gb,
       enqueue_provisioning: false,
       computeSessionId: session.compute_session_id as Id<"computeSessions">,
     });
