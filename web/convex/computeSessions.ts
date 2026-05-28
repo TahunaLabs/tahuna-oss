@@ -22,6 +22,7 @@ import {
   resolveImageName,
   resolveWandbBaseURL,
   terminateRuntimeMachine,
+  terminateRuntimeMachineWithRetry,
 } from "@convex/runtimeProvisioning";
 import { fetchSyncManifest } from "@convex/runtimeBootstrap";
 import {
@@ -643,6 +644,19 @@ export const internalMarkTerminated = internalMutation({
   },
 });
 
+export const internalClearActiveEnvironmentLink = internalMutation({
+  args: { computeSessionId: v.id("computeSessions") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const row = await ctx.db.get("computeSessions", args.computeSessionId);
+    if (!row) {
+      return null;
+    }
+    await clearEnvironmentActiveComputeSession(ctx, row);
+    return null;
+  },
+});
+
 export const internalMarkFailed = internalMutation({
   args: { computeSessionId: v.id("computeSessions"), error: v.string() },
   returns: v.null(),
@@ -758,6 +772,7 @@ export const internalTerminateStaleEnvironmentSession = internalAction({
     userId: v.string(),
     environmentId: v.id("environments"),
     computeSessionId: v.id("computeSessions"),
+    attempt: v.optional(v.number()),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -773,16 +788,65 @@ export const internalTerminateStaleEnvironmentSession = internalAction({
       return null;
     }
 
+    await ctx.runMutation(internal.computeSessions.internalClearActiveEnvironmentLink, {
+      computeSessionId: args.computeSessionId,
+    });
     await ctx.runMutation(internal.computeSessions.internalStop, {
       userId: args.userId,
       computeSessionId: args.computeSessionId,
       force: true,
     });
-    if (session.provider_machine_id) {
-      await terminateRuntimeMachine(ctx, { providerMachineId: session.provider_machine_id });
+    if (!session.provider_machine_id) {
+      await ctx.runMutation(internal.computeSessions.internalMarkTerminated, {
+        computeSessionId: args.computeSessionId,
+      });
+      return null;
     }
-    await ctx.runMutation(internal.computeSessions.internalMarkTerminated, {
-      computeSessionId: args.computeSessionId,
+
+    await terminateRuntimeMachineWithRetry({
+      ctx,
+      providerMachineId: session.provider_machine_id,
+      attempt: args.attempt ?? 0,
+      shouldTerminate: async () => {
+        let current;
+        try {
+          current = await ctx.runQuery(internal.computeSessions.internalGet, {
+            userId: args.userId,
+            computeSessionId: args.computeSessionId,
+          });
+        } catch {
+          return false;
+        }
+        return (
+          current.environment_id === String(args.environmentId) &&
+          current.status !== "terminated" &&
+          current.status !== "failed"
+        );
+      },
+      onTerminated: async () => {
+        await ctx.runMutation(internal.computeSessions.internalMarkTerminated, {
+          computeSessionId: args.computeSessionId,
+        });
+      },
+      onRetry: async ({ nextAttempt, error }) => {
+        if (nextAttempt < RUN_CONFIG.terminationRetryMaxAttempts) {
+          await ctx.scheduler.runAfter(
+            RUN_CONFIG.terminationRetryDelaySeconds * 1000,
+            internal.computeSessions.internalTerminateStaleEnvironmentSession,
+            {
+              userId: args.userId,
+              environmentId: args.environmentId,
+              computeSessionId: args.computeSessionId,
+              attempt: nextAttempt,
+            },
+          );
+          return;
+        }
+        await ctx.runMutation(internal.computeSessions.internalMarkFailed, {
+          computeSessionId: args.computeSessionId,
+          error: `${error} (retries exhausted)`,
+        });
+      },
     });
     return null;
   },
