@@ -79,6 +79,17 @@ export function isComputeSessionHeartbeatTimedOut(args: {
   return args.nowMs >= args.lastHeartbeatAt + args.timeoutSeconds * 1000;
 }
 
+export function isComputeSessionIdleTimedOut(args: {
+  lastIdleAt?: number | null;
+  idleTimeoutSeconds: number;
+  nowMs: number;
+}) {
+  if (!args.lastIdleAt || !Number.isFinite(args.lastIdleAt)) {
+    return false;
+  }
+  return args.nowMs >= args.lastIdleAt + args.idleTimeoutSeconds * 1000;
+}
+
 export function planComputeSessionCreation(args: {
   nowMs: number;
   userId: string;

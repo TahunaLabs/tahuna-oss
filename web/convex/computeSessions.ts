@@ -33,6 +33,7 @@ import {
   planComputeSessionStop,
   planComputeSessionTerminated,
   isComputeSessionHeartbeatTimedOut,
+  isComputeSessionIdleTimedOut,
   type ComputeSessionEvent,
   type ComputeSessionPatch,
 } from "@convex/core/computeSessionLifecyclePlan";
@@ -303,6 +304,33 @@ export const internalListHeartbeatTimedOut = internalQuery({
         compute_session_id: String(row._id),
         active_run_id: row.activeRunId ? String(row.activeRunId) : "",
         reason: "heartbeat" as const,
+      }));
+  },
+});
+
+export const internalListIdleTimedOut = internalQuery({
+  args: { nowMs: v.number(), limit: v.optional(v.number()) },
+  returns: v.array(timedOutComputeSessionValidator),
+  handler: async (ctx, args) => {
+    const limit = Math.max(1, Math.min(100, Math.floor(args.limit ?? 50)));
+    const rows = await ctx.db
+      .query("computeSessions")
+      .withIndex("by_status", (q) => q.eq("status", "idle"))
+      .take(limit);
+    return rows
+      .filter((row) =>
+        isComputeSessionIdleTimedOut({
+          lastIdleAt: row.lastIdleAt,
+          idleTimeoutSeconds: row.idleTimeoutSeconds,
+          nowMs: args.nowMs,
+        }),
+      )
+      .map((row) => ({
+        user_id: row.userId,
+        environment_id: String(row.environmentId),
+        compute_session_id: String(row._id),
+        active_run_id: "",
+        reason: "idle" as const,
       }));
   },
 });
@@ -677,6 +705,26 @@ export const enforceComputeSessionHeartbeatTimeouts = internalAction({
         environmentId: session.environment_id as Id<"environments">,
         computeSessionId: session.compute_session_id as Id<"computeSessions">,
         activeRunId: session.active_run_id ? session.active_run_id as Id<"runs"> : undefined,
+        reason: session.reason,
+      });
+    }
+    return null;
+  },
+});
+
+export const enforceComputeSessionIdleTimeouts = internalAction({
+  args: {},
+  returns: v.null(),
+  handler: async (ctx) => {
+    const timedOut = await ctx.runQuery(internal.computeSessions.internalListIdleTimedOut, {
+      nowMs: Date.now(),
+      limit: 50,
+    });
+    for (const session of timedOut) {
+      await ctx.runAction(internal.computeSessions.internalTerminateTimedOutSession, {
+        userId: session.user_id,
+        environmentId: session.environment_id as Id<"environments">,
+        computeSessionId: session.compute_session_id as Id<"computeSessions">,
         reason: session.reason,
       });
     }

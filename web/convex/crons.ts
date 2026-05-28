@@ -24,4 +24,11 @@ crons.interval(
   {},
 );
 
+crons.interval(
+  "enforce compute session idle timeouts",
+  { minutes: 1 },
+  internal.computeSessions.enforceComputeSessionIdleTimeouts,
+  {},
+);
+
 export default crons;

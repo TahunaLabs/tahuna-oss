@@ -4,7 +4,10 @@ import type { ActionCtx } from "@convex/_generated/server";
 import type { SyncKind } from "@convex/syncManifest";
 import { isHostedBillingClientError } from "@convex/cloud/errors";
 import { RUN_CONFIG } from "@convex/appConfig";
-import { isComputeSessionHeartbeatTimedOut } from "@convex/core/computeSessionLifecyclePlan";
+import {
+  isComputeSessionHeartbeatTimedOut,
+  isComputeSessionIdleTimedOut,
+} from "@convex/core/computeSessionLifecyclePlan";
 import { objectStore } from "@convex/objectStore";
 
 type OwnedEnvironmentRef = {
@@ -333,6 +336,21 @@ export async function createAndProvisionRunStrict(ctx: ActionCtx, args: CreateRu
         environmentId: args.environmentId,
         computeSessionId: session.compute_session_id as Id<"computeSessions">,
         reason: "heartbeat",
+      });
+      throw new Error(
+        "warm compute is stale for this environment; run `tahuna train --keep-warm-minutes 10`",
+      );
+    }
+    if (isComputeSessionIdleTimedOut({
+      lastIdleAt: session.last_idle_at,
+      idleTimeoutSeconds: session.idle_timeout_seconds,
+      nowMs: Date.now(),
+    })) {
+      await ctx.runAction(internal.computeSessions.internalTerminateTimedOutSession, {
+        userId: args.userId,
+        environmentId: args.environmentId,
+        computeSessionId: session.compute_session_id as Id<"computeSessions">,
+        reason: "idle",
       });
       throw new Error(
         "warm compute is stale for this environment; run `tahuna train --keep-warm-minutes 10`",
