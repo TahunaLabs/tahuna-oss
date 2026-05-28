@@ -266,6 +266,27 @@ export const internalGetRuntimeAssignment = internalQuery({
   },
 });
 
+export const internalMarkIdleIfActiveRunTerminal = internalMutation({
+  args: { computeSessionId: v.id("computeSessions") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const row = await ctx.db.get("computeSessions", args.computeSessionId);
+    if (!row || row.status !== "running" || !row.activeRunId) {
+      return null;
+    }
+    const run = await ctx.db.get(row.activeRunId);
+    if (!run || !TERMINAL_STATUSES.has(run.status)) {
+      return null;
+    }
+    await applyComputeSessionPlan(
+      ctx,
+      args.computeSessionId,
+      planComputeSessionIdle({ session: toComputeSessionState(row), nowMs: Date.now() }),
+    );
+    return null;
+  },
+});
+
 export const internalGetEvents = internalQuery({
   args: { computeSessionId: v.id("computeSessions") },
   returns: listComputeSessionEventsResponseValidator,

@@ -54,6 +54,7 @@ export async function handleComputeSessionRuntimeGet(
 
   if (route.action === "assignment") {
     await ctx.runMutation(internal.computeSessions.internalHeartbeat, { computeSessionId });
+    await ctx.runMutation(internal.computeSessions.internalMarkIdleIfActiveRunTerminal, { computeSessionId });
     const assignment = await ctx.runQuery(internal.computeSessions.internalGetRuntimeAssignment, {
       computeSessionId,
     });
