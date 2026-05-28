@@ -3,6 +3,8 @@ import type { Id } from "@convex/_generated/dataModel";
 import type { ActionCtx } from "@convex/_generated/server";
 import type { SyncKind } from "@convex/syncManifest";
 import { isHostedBillingClientError } from "@convex/cloud/errors";
+import { RUN_CONFIG } from "@convex/appConfig";
+import { isComputeSessionHeartbeatTimedOut } from "@convex/core/computeSessionLifecyclePlan";
 import { objectStore } from "@convex/objectStore";
 
 type OwnedEnvironmentRef = {
@@ -179,6 +181,7 @@ const SAFE_CLIENT_ERROR_PATTERNS: RegExp[] = [
   /\benv_vars\[\d+\]\.value must be a string\b/i,
   /\bmanifest\b.*\b(not found|invalid|mismatch)\b/i,
   /\bcompute session\b.*\b(not found|mismatch|required|active run|idle)\b/i,
+  /\bcompute session\b.*\b(heartbeat|timed out|stale)\b/i,
   /\bno warm compute session is available\b/i,
   /\b--keep-warm-minutes cannot be combined with warm compute session assignment\b/i,
   /\bwarm runs use an existing compatible compute session\b/i,
@@ -319,6 +322,21 @@ export async function createAndProvisionRunStrict(ctx: ActionCtx, args: CreateRu
     }
     if (session.status !== "idle") {
       throw new Error("warm compute is not idle for this environment; wait for the active run to finish");
+    }
+    if (isComputeSessionHeartbeatTimedOut({
+      lastHeartbeatAt: session.last_heartbeat_at,
+      timeoutSeconds: RUN_CONFIG.computeSessionHeartbeatTimeoutSeconds,
+      nowMs: Date.now(),
+    })) {
+      await ctx.runAction(internal.computeSessions.internalTerminateTimedOutSession, {
+        userId: args.userId,
+        environmentId: args.environmentId,
+        computeSessionId: session.compute_session_id as Id<"computeSessions">,
+        reason: "heartbeat",
+      });
+      throw new Error(
+        "warm compute is stale for this environment; run `tahuna train --keep-warm-minutes 10`",
+      );
     }
     const created = await ctx.runMutation(internal.runs.internalCreate, {
       userId: args.userId,

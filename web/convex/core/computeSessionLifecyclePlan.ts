@@ -68,6 +68,17 @@ function sanitizeDetail(value: string | undefined) {
   return (value || "").trim().slice(0, 4000);
 }
 
+export function isComputeSessionHeartbeatTimedOut(args: {
+  lastHeartbeatAt?: number | null;
+  timeoutSeconds: number;
+  nowMs: number;
+}) {
+  if (!args.lastHeartbeatAt || !Number.isFinite(args.lastHeartbeatAt)) {
+    return false;
+  }
+  return args.nowMs >= args.lastHeartbeatAt + args.timeoutSeconds * 1000;
+}
+
 export function planComputeSessionCreation(args: {
   nowMs: number;
   userId: string;

@@ -17,4 +17,11 @@ crons.interval(
   {},
 );
 
+crons.interval(
+  "enforce compute session heartbeat timeouts",
+  { minutes: 1 },
+  internal.computeSessions.enforceComputeSessionHeartbeatTimeouts,
+  {},
+);
+
 export default crons;

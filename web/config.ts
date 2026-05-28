@@ -35,6 +35,7 @@ export const RUN_CONFIG = {
   cancellationGraceSeconds: 30,
   computeSessionDefaultIdleTimeoutSeconds: 10 * 60,
   computeSessionMaxIdleTimeoutSeconds: 60 * 60,
+  computeSessionHeartbeatTimeoutSeconds: 2 * 60,
   terminationRetryMaxAttempts: 5,
   terminationRetryDelaySeconds: 10,
   runtimeLogTailLimit: 200,

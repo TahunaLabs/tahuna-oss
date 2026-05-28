@@ -32,6 +32,7 @@ import {
   planComputeSessionMachineProvisioned,
   planComputeSessionStop,
   planComputeSessionTerminated,
+  isComputeSessionHeartbeatTimedOut,
   type ComputeSessionEvent,
   type ComputeSessionPatch,
 } from "@convex/core/computeSessionLifecyclePlan";
@@ -79,6 +80,13 @@ const listComputeSessionEventsResponseValidator = v.object({
 });
 const runtimeAssignmentResponseValidator = v.object({
   run_id: v.string(),
+});
+const timedOutComputeSessionValidator = v.object({
+  user_id: v.string(),
+  environment_id: v.string(),
+  compute_session_id: v.string(),
+  active_run_id: v.string(),
+  reason: v.union(v.literal("heartbeat"), v.literal("idle")),
 });
 
 function normalizeIdleTimeoutSeconds(value: number | undefined) {
@@ -263,6 +271,39 @@ export const internalGetRuntimeAssignment = internalQuery({
       return { run_id: "" };
     }
     return { run_id: String(row.activeRunId) };
+  },
+});
+
+export const internalListHeartbeatTimedOut = internalQuery({
+  args: { nowMs: v.number(), timeoutSeconds: v.number(), limit: v.optional(v.number()) },
+  returns: v.array(timedOutComputeSessionValidator),
+  handler: async (ctx, args) => {
+    const limit = Math.max(1, Math.min(100, Math.floor(args.limit ?? 50)));
+    const rows = await Promise.all(
+      ["idle", "running"].map((status) =>
+        ctx.db
+          .query("computeSessions")
+          .withIndex("by_status", (q) => q.eq("status", status))
+          .take(limit),
+      ),
+    );
+    return rows
+      .flat()
+      .filter((row) =>
+        isComputeSessionHeartbeatTimedOut({
+          lastHeartbeatAt: row.lastHeartbeatAt,
+          timeoutSeconds: args.timeoutSeconds,
+          nowMs: args.nowMs,
+        }),
+      )
+      .slice(0, limit)
+      .map((row) => ({
+        user_id: row.userId,
+        environment_id: String(row.environmentId),
+        compute_session_id: String(row._id),
+        active_run_id: row.activeRunId ? String(row.activeRunId) : "",
+        reason: "heartbeat" as const,
+      }));
   },
 });
 
@@ -592,6 +633,53 @@ export const internalMarkFailed = internalMutation({
         nowMs: Date.now(),
       }),
     );
+    return null;
+  },
+});
+
+export const internalTerminateTimedOutSession = internalAction({
+  args: {
+    userId: v.string(),
+    environmentId: v.id("environments"),
+    computeSessionId: v.id("computeSessions"),
+    activeRunId: v.optional(v.id("runs")),
+    reason: v.union(v.literal("heartbeat"), v.literal("idle")),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    if (args.activeRunId) {
+      await ctx.runMutation(internal.runs.markFailed, {
+        runId: args.activeRunId,
+        error: `compute session ${args.reason} timeout`,
+      });
+    }
+    await ctx.runAction(internal.computeSessions.internalTerminateStaleEnvironmentSession, {
+      userId: args.userId,
+      environmentId: args.environmentId,
+      computeSessionId: args.computeSessionId,
+    });
+    return null;
+  },
+});
+
+export const enforceComputeSessionHeartbeatTimeouts = internalAction({
+  args: {},
+  returns: v.null(),
+  handler: async (ctx) => {
+    const timedOut = await ctx.runQuery(internal.computeSessions.internalListHeartbeatTimedOut, {
+      nowMs: Date.now(),
+      timeoutSeconds: RUN_CONFIG.computeSessionHeartbeatTimeoutSeconds,
+      limit: 50,
+    });
+    for (const session of timedOut) {
+      await ctx.runAction(internal.computeSessions.internalTerminateTimedOutSession, {
+        userId: session.user_id,
+        environmentId: session.environment_id as Id<"environments">,
+        computeSessionId: session.compute_session_id as Id<"computeSessions">,
+        activeRunId: session.active_run_id ? session.active_run_id as Id<"runs"> : undefined,
+        reason: session.reason,
+      });
+    }
     return null;
   },
 });

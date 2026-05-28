@@ -1,9 +1,10 @@
 import { ConvexError } from "convex/values";
 import type { Doc, Id } from "@convex/_generated/dataModel";
 import type { MutationCtx } from "@convex/_generated/server";
-import { PYTHON_CONFIG } from "@convex/appConfig";
+import { PYTHON_CONFIG, RUN_CONFIG } from "@convex/appConfig";
 import {
   COMPUTE_SESSION_STATUS,
+  isComputeSessionHeartbeatTimedOut,
   planComputeSessionRunAssigned,
   type ComputeSessionEvent,
 } from "@convex/core/computeSessionLifecyclePlan";
@@ -136,6 +137,14 @@ export async function assignQueuedRunToComputeSession(
   if (!session.runtimeTokenHash || session.runtimeTokenHash === "revoked") {
     assignmentError("compute session runtime token is required");
   }
+  const now = Date.now();
+  if (isComputeSessionHeartbeatTimedOut({
+    lastHeartbeatAt: session.lastHeartbeatAt,
+    timeoutSeconds: RUN_CONFIG.computeSessionHeartbeatTimeoutSeconds,
+    nowMs: now,
+  })) {
+    assignmentError("compute session heartbeat timed out");
+  }
   await assertNoActiveRunOnSession(ctx, args.computeSessionId, args.runId);
 
   const environment = await ctx.db.get("environments", run.environmentId);
@@ -155,7 +164,7 @@ export async function assignQueuedRunToComputeSession(
   const plan = planComputeSessionRunAssigned({
     session: toComputeSessionState(session),
     runId: String(args.runId),
-    nowMs: Date.now(),
+    nowMs: now,
   });
   if (plan.error) {
     assignmentError(plan.error);
@@ -178,7 +187,7 @@ export async function assignQueuedRunToComputeSession(
   await ctx.db.patch("computeSessions", args.computeSessionId, {
     status: COMPUTE_SESSION_STATUS.RUNNING,
     activeRunId: args.runId,
-    lastHeartbeatAt: Date.now(),
+    lastHeartbeatAt: now,
   });
   await insertComputeSessionEvents(ctx, args.computeSessionId, plan.events);
 }
