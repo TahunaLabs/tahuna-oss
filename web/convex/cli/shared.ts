@@ -233,7 +233,11 @@ export async function requireAccessibleEnvironment(
 
 function isNoGpuCapacityError(detail: string) {
   const text = detail.toLowerCase();
-  return text.includes("no instances currently available") || text.includes("insufficient capacity");
+  return (
+    text.includes("no gpu capacity currently available") ||
+    text.includes("no instances currently available") ||
+    text.includes("insufficient capacity")
+  );
 }
 
 export async function createAndProvisionRunStrict(ctx: ActionCtx, args: CreateRunStrictArgs) {
@@ -267,10 +271,27 @@ export async function createAndProvisionRunStrict(ctx: ActionCtx, args: CreateRu
       computeSessionId: session.compute_session_id as Id<"computeSessions">,
       initialRunId: runId,
     });
-    return await ctx.runQuery(internal.runs.internalGet, {
+    const resolved = await ctx.runQuery(internal.runs.internalGet, {
       userId: args.userId,
       runId,
     });
+    if (resolved.status !== "failed") {
+      return resolved;
+    }
+
+    const detail = resolved.error || "run provisioning failed";
+    if (isNoGpuCapacityError(detail)) {
+      await ctx.runMutation(internal.runs.internalRemove, {
+        userId: args.userId,
+        runId,
+      });
+      await ctx.runMutation(internal.computeSessions.internalRemoveUnprovisioned, {
+        userId: args.userId,
+        computeSessionId: session.compute_session_id as Id<"computeSessions">,
+      });
+      throw new Error("no GPU capacity currently available; run was not created");
+    }
+    throw new Error(detail);
   }
   if (args.warm) {
     if (args.gpu_type || args.gpu_count || args.volume_gb) {

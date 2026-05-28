@@ -1,6 +1,7 @@
 import { ConvexError, v } from "convex/values";
 import { internal } from "@convex/_generated/api";
 import type { Doc, Id } from "@convex/_generated/dataModel";
+import { normalizeProvisioningError } from "@/lib/runtime-incompatibility";
 import {
   internalAction,
   internalMutation,
@@ -415,7 +416,8 @@ export const provisionComputeSession = internalAction({
         runId: args.initialRunId,
       });
     } catch (error) {
-      const detail = error instanceof Error ? error.message : "compute session provisioning failed";
+      const raw = error instanceof Error ? error.message : "compute session provisioning failed";
+      const detail = normalizeProvisioningError(raw);
       await ctx.runMutation(internal.computeSessions.internalMarkFailed, {
         computeSessionId: args.computeSessionId,
         error: detail,
@@ -549,6 +551,26 @@ export const internalMarkFailed = internalMutation({
         nowMs: Date.now(),
       }),
     );
+    return null;
+  },
+});
+
+export const internalRemoveUnprovisioned = internalMutation({
+  args: { userId: v.string(), computeSessionId: v.id("computeSessions") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const row = await ctx.db.get("computeSessions", args.computeSessionId);
+    if (!row || row.userId !== args.userId || row.providerMachineId) {
+      return null;
+    }
+    const events = await ctx.db
+      .query("computeSessionEvents")
+      .withIndex("by_compute_session", (q) => q.eq("computeSessionId", args.computeSessionId))
+      .collect();
+    for (const event of events) {
+      await ctx.db.delete(event._id);
+    }
+    await ctx.db.delete(args.computeSessionId);
     return null;
   },
 });

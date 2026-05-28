@@ -64,18 +64,31 @@ const NORMALIZED_ERRORS: {
   message: string;
 }[] = [
   {
+    regex: /there are no instances currently available|no instances currently available|insufficient capacity/i,
+    message: "no GPU capacity currently available",
+  },
+  {
     regex: /balance.*too low|insufficient.*balance|add funds|not enough.*credit|low.*balance/i,
     message: "managed compute provider funding is unavailable; contact support",
   },
 ];
 
 export function normalizeProvisioningError(detail: string): string {
+  const providerNeutralDetail = detail
+    .replace(/\bRunpod machine creation failed:\s*/gi, "compute machine creation failed: ")
+    .replace(/\bRunpod machine lookup failed:\s*/gi, "compute machine lookup failed: ")
+    .replace(/\bRunpod machine termination failed:\s*/gi, "compute machine termination failed: ")
+    .replace(/\bRunpod request failed:\s*/gi, "compute provider request failed: ")
+    .replace(/\bRunpod GPU catalog is empty\b/gi, "compute provider GPU catalog is empty")
+    .replace(/\bRunpod GPU type not found\b/gi, "compute provider GPU type not found")
+    .replace(/\bRunpod\b/g, "compute provider")
+    .replace(/\bRunPod\b/g, "compute provider");
   for (const { regex, message } of NORMALIZED_ERRORS) {
-    if (regex.test(detail)) {
+    if (regex.test(providerNeutralDetail)) {
       return message;
     }
   }
-  return detail;
+  return providerNeutralDetail;
 }
 
 export function classifyRuntimeIncompatibility(detail: string): {
