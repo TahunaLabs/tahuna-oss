@@ -33,6 +33,7 @@ export default defineSchema({
     latestCodeManifestHash: v.optional(v.string()),
     latestDataManifestHash: v.optional(v.string()),
     latestSyncAt: v.optional(v.number()),
+    activeComputeSessionId: v.optional(v.id("computeSessions")),
     command: v.array(v.string()),
     trainDependencyGroup: v.optional(v.string()),
     outputDir: v.string(),

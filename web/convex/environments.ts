@@ -310,6 +310,42 @@ function getEnvironmentLastUpdatedAt(row: Doc<"environments">) {
   return row.latestSyncAt || row._creationTime;
 }
 
+function environmentRuntimeSpecChanged(
+  row: Doc<"environments">,
+  next: {
+    gpuType: string;
+    gpuCount: number;
+    volumeGb: number;
+    framework: string;
+    version: string;
+    pythonVersion: string;
+  },
+) {
+  return (
+    next.gpuType !== row.gpuType ||
+    next.gpuCount !== row.gpuCount ||
+    next.volumeGb !== row.volumeGb ||
+    next.framework !== row.framework ||
+    next.version !== row.version ||
+    next.pythonVersion !== (row.pythonVersion || PYTHON_CONFIG.defaultVersion)
+  );
+}
+
+async function scheduleActiveComputeSessionTermination(
+  ctx: MutationCtx,
+  row: Doc<"environments">,
+  userId: string,
+) {
+  if (!row.activeComputeSessionId) {
+    return;
+  }
+  await ctx.scheduler.runAfter(0, internal.computeSessions.internalTerminateStaleEnvironmentSession, {
+    userId,
+    environmentId: row._id,
+    computeSessionId: row.activeComputeSessionId,
+  });
+}
+
 function toEnvironmentResponse(
   row: Doc<"environments">,
   access: "private" | "shared" = "private",
@@ -616,9 +652,14 @@ async function updateEnvironmentSpecsForUserId(
 
   // If any runtime field changed, validate the full combination against the image catalog.
   const runtimeChanged =
-    nextFramework !== env.framework ||
-    nextVersion !== env.version ||
-    nextPythonVersion !== (env.pythonVersion || PYTHON_CONFIG.defaultVersion);
+    environmentRuntimeSpecChanged(env, {
+      gpuType: nextGpuType,
+      gpuCount: nextGpuCount,
+      volumeGb: nextVolumeGb,
+      framework: nextFramework,
+      version: nextVersion,
+      pythonVersion: nextPythonVersion,
+    });
   if (runtimeChanged) {
     validateEnvironmentPayload({
       gpu_count: nextGpuCount,
@@ -628,6 +669,9 @@ async function updateEnvironmentSpecsForUserId(
       python_version: nextPythonVersion,
     });
   }
+  if (runtimeChanged) {
+    await scheduleActiveComputeSessionTermination(ctx, env, args.userId);
+  }
 
   await ctx.db.patch("environments", args.environmentId, {
     gpuType: nextGpuType,
@@ -636,6 +680,7 @@ async function updateEnvironmentSpecsForUserId(
     framework: nextFramework,
     version: nextVersion,
     pythonVersion: nextPythonVersion,
+    ...(runtimeChanged ? { activeComputeSessionId: undefined } : {}),
   });
 
   const updated = await ctx.db.get("environments", args.environmentId);
@@ -653,7 +698,7 @@ async function updateEnvironmentConfigForUserId(
     config_text: string;
   },
 ) {
-  await getAccessibleEnvironment(ctx, args.userId, args.environmentId);
+  const row = await getAccessibleEnvironment(ctx, args.userId, args.environmentId);
 
   let next;
   try {
@@ -664,6 +709,17 @@ async function updateEnvironmentConfigForUserId(
   }
 
   validateEnvironmentPayload(next);
+  const runtimeChanged = environmentRuntimeSpecChanged(row, {
+    gpuType: next.gpu_type.trim(),
+    gpuCount: next.gpu_count,
+    volumeGb: next.volume_gb,
+    framework: next.framework.trim(),
+    version: next.version.trim(),
+    pythonVersion: next.python_version.trim(),
+  });
+  if (runtimeChanged) {
+    await scheduleActiveComputeSessionTermination(ctx, row, args.userId);
+  }
 
   await ctx.db.patch("environments", args.environmentId, {
     name: next.name.trim(),
@@ -673,6 +729,7 @@ async function updateEnvironmentConfigForUserId(
     gpuType: next.gpu_type.trim(),
     gpuCount: next.gpu_count,
     volumeGb: next.volume_gb,
+    ...(runtimeChanged ? { activeComputeSessionId: undefined } : {}),
   });
 
   const updated = await ctx.db.get("environments", args.environmentId);
@@ -811,6 +868,17 @@ export const internalGet = internalQuery({
   handler: async (ctx, args) => {
     const row = await getAccessibleEnvironment(ctx, args.userId, args.environmentId, "read");
     return await toEnvironmentResponseWithAccess(ctx, row);
+  },
+});
+
+export const internalGetActiveComputeSession = internalQuery({
+  args: { userId: v.string(), environmentId: v.id("environments") },
+  returns: v.object({ compute_session_id: v.string() }),
+  handler: async (ctx, args) => {
+    const row = await getAccessibleEnvironment(ctx, args.userId, args.environmentId, "read");
+    return {
+      compute_session_id: row.activeComputeSessionId ? String(row.activeComputeSessionId) : "",
+    };
   },
 });
 
@@ -1057,6 +1125,7 @@ export const internalCommitSync = internalMutation({
       trainDependencyGroup?: string;
       outputDir?: string;
       serveSnapshot?: Doc<"environments">["serveSnapshot"];
+      activeComputeSessionId?: Id<"computeSessions">;
     } = { latestSyncAt: Date.now() };
 
     if (args.code_manifest_hash) {
@@ -1112,6 +1181,19 @@ export const internalCommitSync = internalMutation({
         healthFailureThreshold: args.serve_snapshot.health_failure_threshold,
         gracefulShutdownSeconds: args.serve_snapshot.graceful_shutdown_seconds,
       };
+    }
+
+    const runtimeChanged = environmentRuntimeSpecChanged(env, {
+      gpuType: patch.gpuType ?? env.gpuType,
+      gpuCount: patch.gpuCount ?? env.gpuCount,
+      volumeGb: patch.volumeGb ?? env.volumeGb,
+      framework: patch.framework ?? env.framework,
+      version: patch.version ?? env.version,
+      pythonVersion: patch.pythonVersion ?? (env.pythonVersion || PYTHON_CONFIG.defaultVersion),
+    });
+    if (runtimeChanged) {
+      patch.activeComputeSessionId = undefined;
+      await scheduleActiveComputeSessionTermination(ctx, env, args.userId);
     }
 
     await ctx.db.patch("environments", args.environmentId, patch);

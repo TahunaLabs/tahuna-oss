@@ -297,16 +297,28 @@ export async function createAndProvisionRunStrict(ctx: ActionCtx, args: CreateRu
     if (args.gpu_type || args.gpu_count || args.volume_gb) {
       throw new Error("warm runs use an existing compatible compute session; omit GPU and volume overrides");
     }
-    const sessions = await ctx.runQuery(internal.computeSessions.internalList, {
+    const active = await ctx.runQuery(internal.environments.internalGetActiveComputeSession, {
       userId: args.userId,
+      environmentId: args.environmentId,
     });
-    const session = sessions.compute_sessions.find(
-      (row) => row.environment_id === String(args.environmentId) && row.status === "idle",
-    );
-    if (!session) {
+    if (!active.compute_session_id) {
       throw new Error(
-        "no warm compute session is available for this environment; run `tahuna train --keep-warm-minutes 10` to start one",
+        "warm compute is stale for this environment; run `tahuna train --keep-warm-minutes 10`",
       );
+    }
+    let session;
+    try {
+      session = await ctx.runQuery(internal.computeSessions.internalGet, {
+        userId: args.userId,
+        computeSessionId: active.compute_session_id as Id<"computeSessions">,
+      });
+    } catch {
+      throw new Error(
+        "warm compute is stale for this environment; run `tahuna train --keep-warm-minutes 10`",
+      );
+    }
+    if (session.status !== "idle") {
+      throw new Error("warm compute is not idle for this environment; wait for the active run to finish");
     }
     const created = await ctx.runMutation(internal.runs.internalCreate, {
       userId: args.userId,

@@ -135,6 +135,16 @@ async function applyComputeSessionPlan(
   await insertComputeSessionEvents(ctx, computeSessionId, plan.events);
 }
 
+async function clearEnvironmentActiveComputeSession(
+  ctx: MutationCtx,
+  row: Doc<"computeSessions">,
+) {
+  const env = await ctx.db.get(row.environmentId);
+  if (env?.activeComputeSessionId === row._id) {
+    await ctx.db.patch(row.environmentId, { activeComputeSessionId: undefined });
+  }
+}
+
 async function getAccessibleComputeSession(
   ctx: MutationCtx,
   userId: string,
@@ -183,6 +193,14 @@ async function createComputeSessionForUserId(
     ...plan.session,
     environmentId: args.environmentId,
   });
+  if (env.activeComputeSessionId && env.activeComputeSessionId !== computeSessionId) {
+    await ctx.scheduler.runAfter(0, internal.computeSessions.internalTerminateStaleEnvironmentSession, {
+      userId: args.userId,
+      environmentId: args.environmentId,
+      computeSessionId: env.activeComputeSessionId,
+    });
+  }
+  await ctx.db.patch(args.environmentId, { activeComputeSessionId: computeSessionId });
   await insertComputeSessionEvents(ctx, computeSessionId, [plan.event]);
   const row = await ctx.db.get("computeSessions", computeSessionId);
   if (!row) {
@@ -525,6 +543,7 @@ export const internalMarkTerminated = internalMutation({
     if (!row) {
       return null;
     }
+    await clearEnvironmentActiveComputeSession(ctx, row);
     await applyComputeSessionPlan(
       ctx,
       args.computeSessionId,
@@ -542,6 +561,7 @@ export const internalMarkFailed = internalMutation({
     if (!row) {
       return null;
     }
+    await clearEnvironmentActiveComputeSession(ctx, row);
     await applyComputeSessionPlan(
       ctx,
       args.computeSessionId,
@@ -563,6 +583,7 @@ export const internalRemoveUnprovisioned = internalMutation({
     if (!row || row.userId !== args.userId || row.providerMachineId) {
       return null;
     }
+    await clearEnvironmentActiveComputeSession(ctx, row);
     const events = await ctx.db
       .query("computeSessionEvents")
       .withIndex("by_compute_session", (q) => q.eq("computeSessionId", args.computeSessionId))
@@ -571,6 +592,41 @@ export const internalRemoveUnprovisioned = internalMutation({
       await ctx.db.delete(event._id);
     }
     await ctx.db.delete(args.computeSessionId);
+    return null;
+  },
+});
+
+export const internalTerminateStaleEnvironmentSession = internalAction({
+  args: {
+    userId: v.string(),
+    environmentId: v.id("environments"),
+    computeSessionId: v.id("computeSessions"),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const session = await ctx.runQuery(internal.computeSessions.internalGet, {
+      userId: args.userId,
+      computeSessionId: args.computeSessionId,
+    });
+    if (
+      session.environment_id !== String(args.environmentId) ||
+      session.status === "terminated" ||
+      session.status === "failed"
+    ) {
+      return null;
+    }
+
+    await ctx.runMutation(internal.computeSessions.internalStop, {
+      userId: args.userId,
+      computeSessionId: args.computeSessionId,
+      force: true,
+    });
+    if (session.provider_machine_id) {
+      await terminateRuntimeMachine(ctx, { providerMachineId: session.provider_machine_id });
+    }
+    await ctx.runMutation(internal.computeSessions.internalMarkTerminated, {
+      computeSessionId: args.computeSessionId,
+    });
     return null;
   },
 });
