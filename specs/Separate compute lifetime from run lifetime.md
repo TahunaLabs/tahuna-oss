@@ -1,342 +1,353 @@
-# Spec: Separate Compute Lifetime From Run Lifetime
+# Separate Compute Lifetime From Run Lifetime
 
-## Scope
+## Current Model
 
-Tahuna training runs are currently one execution on one ephemeral machine. That is correct for normal `tahuna train`, but it is inefficient for research loops where the user repeatedly changes code, syncs again, and launches another candidate run.
+Tahuna now treats a training run and its machine lifetime as separate concepts.
 
-This spec introduces a separate compute session lifetime. A compute session owns the provider machine. A run remains one immutable recorded execution with its own pinned code/data manifests, logs, metrics, artifacts, status, and billing attribution.
+A **run** is one recorded training execution. It owns the pinned code/data manifests, logs, metrics, artifacts, status, and terminal result.
 
-## Goals
+A **compute session** is a long-lived machine lease owned by one environment. It can execute multiple sequential runs while it stays warm.
 
-- Reuse one provisioned machine for multiple sequential training runs.
-- Preserve one run record per candidate execution.
-- Keep run outputs, logs, metrics, artifacts, and terminal status isolated per run.
-- Allow the CLI and autoresearch harness to sync code again, create a new run, and execute it on warm compute.
-- Keep the user mental model run-first: warm compute is an extension of `tahuna train`, not a separate thing users must create before they can train.
-- Terminate warm compute explicitly or after a configured idle timeout.
-- Keep the existing one-shot run path available as the default behavior.
+The user-facing surface remains run-first:
 
-## Non-Goals
-
-- No concurrent runs on the same compute session.
-- No implicit reuse of arbitrary active machines.
-- No hidden fallback from warm compute to ephemeral compute.
-- No mutation of an existing terminal run to represent a new execution.
-- No reuse when GPU type, GPU count, volume size, framework image, or Python version differ.
-
-## Terms
-
-| Term | Meaning |
-|------|---------|
-| Run | One training execution. It is immutable after terminal status. |
-| Compute session | Long-lived Tahuna-owned compute lease that can execute multiple sequential runs. |
-| Assignment | The act of binding one queued run to one idle compute session. |
-| Runtime daemon | Warden mode that stays alive on the machine, waits for assignments, executes one run at a time, then returns to idle. |
-
-## CLI Mental Model
-
-The primary user story stays centered on training:
-
-```
+```bash
 tahuna init .
 tahuna sync
 tahuna train --keep-warm-minutes 10
+
+# edit code
+tahuna sync
+tahuna train --warm
 ```
 
-What happens:
+There is no user-facing `tahuna compute create` flow for the main warm-compute path. Warm compute is an extension of `tahuna train`.
 
-1. Tahuna creates a new run.
-2. Tahuna provisions compute that can become warm compute after the run.
-3. The run executes normally and records its own run ID, logs, metrics, artifacts, manifests, and terminal status.
-4. After the run finishes, the runtime daemon returns the machine to an idle compute session for 10 minutes.
-5. The CLI prints:
+## User Story
 
+### Start Warm Compute
+
+```bash
+tahuna train --keep-warm-minutes 10
 ```
+
+Tahuna creates a normal run, provisions one machine in session mode, executes the run, then keeps the machine idle for the requested duration.
+
+After completion the CLI prints the remaining warm time:
+
+```text
 Run completed.
-Compute is warm for 10 minutes.
+Compute is warm for another 10 minutes.
 
 Next run:
   tahuna sync
   tahuna train --warm
 ```
 
-The iteration loop becomes:
+### Reuse Warm Compute
 
-```
-# edit code
-tahuna sync
-tahuna train --warm
-
-# edit again
+```bash
 tahuna sync
 tahuna train --warm
 ```
 
-`tahuna train --warm` always creates a new run and assigns it to an existing idle compatible compute session for the current environment. If no compatible warm session exists, it fails clearly and does not silently fall back to ephemeral provisioning.
+Tahuna creates a new run and assigns it to the environment's current warm compute session. It does not provision a new machine and it does not silently fall back to ephemeral compute.
 
-`tahuna init .` may store a default warm-compute preference in local project config:
+Each reused run has its own run ID, pinned manifests, logs, metrics, artifacts, and terminal status.
 
+### Environment Default
+
+During `tahuna init .`, the CLI can store:
+
+```toml
+[train]
+keep_warm_after_minutes = 10
 ```
-Keep compute warm after training runs?
-  No
-  Yes, 10 minutes
-  Custom
-```
 
-If the project config contains `train.keep_warm_after_minutes = 10`, then:
+Then:
 
-```
+```bash
 tahuna train
 ```
 
 behaves like:
 
-```
+```bash
 tahuna train --keep-warm-minutes 10
 ```
 
-Users can override the default for a single run:
+Users can override this per run:
 
-```
+```bash
 tahuna train --no-keep-warm
 tahuna train --keep-warm-minutes 30
 ```
 
-Power-user compute management commands can exist later for inspection or cleanup, but they are not the primary path and should not be required for the first warm-compute workflow.
+Keep-warm duration is always expressed in minutes. Fractional values are valid, for example `0.5`.
+
+## Canonical Ownership
+
+Warm compute is environment-scoped.
+
+Each environment has at most one current warm compute session:
+
+```ts
+environments.activeComputeSessionId?: Id<"computeSessions">
+```
+
+That field is the canonical link for `tahuna train --warm`. The backend does not search for "some compatible idle session" and does not guess.
+
+When a new keep-warm run creates a compute session:
+
+1. Tahuna creates a `computeSessions` row.
+2. Tahuna sets `environments.activeComputeSessionId` to that session.
+3. If the environment already had an active session, the old one is scheduled for termination.
+
+When a warm run is requested:
+
+1. Backend reads `environments.activeComputeSessionId`.
+2. Backend loads that exact compute session.
+3. Backend requires it to be `idle`.
+4. Backend creates a queued session-mode run with `computeSessionId`.
+5. Backend atomically assigns that run to the session.
+
+If there is no current active session, the API fails clearly:
+
+```text
+warm compute is stale for this environment; run `tahuna train --keep-warm-minutes 10`
+```
+
+If the current session is busy, the API fails clearly instead of starting another machine.
+
+## Runtime Spec Changes
+
+The environment defines the intended runtime spec:
+
+- GPU type
+- GPU count
+- volume size
+- framework
+- framework version
+- Python version
+- resolved image name
+
+The compute session stores a snapshot of those values from when the machine was created.
+
+Changing code or data does **not** invalidate warm compute. That is the point of the loop: sync new code/data, create a new run, materialize that run's pinned manifests on the existing machine.
+
+Changing the runtime spec **does** invalidate warm compute. Runtime spec changes can come from:
+
+- `tahuna sync` pushing changed `[environment]` fields from local `tahuna.toml`
+- environment update endpoints
+- dashboard environment config edits
+
+When runtime spec changes:
+
+1. `environments.activeComputeSessionId` is cleared.
+2. The old active compute session is scheduled for termination.
+3. Future `tahuna train --warm` fails with the stale warm-compute error until the user starts a new keep-warm run.
 
 ## Data Model
 
+### `environments`
+
+| Field | Description |
+| --- | --- |
+| `activeComputeSessionId` | The current warm compute session for this environment, if any. This is the canonical warm-session link. |
+
 ### `computeSessions`
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `userId` | string | Owner |
-| `environmentId` | id | Parent environment |
-| `status` | enum | `provisioning`, `idle`, `running`, `terminating`, `terminated`, `failed` |
-| `providerMachineId` | string? | Provider-native machine identifier |
-| `runtimeTokenHash` | string | Token for session daemon callbacks |
-| `activeRunId` | id? | Current run assigned to this session |
-| `effectiveGpuType` | string | Machine GPU type |
-| `effectiveGpuCount` | number | Machine GPU count |
-| `effectiveVolumeGb` | number | Machine volume size |
-| `framework` | string | Runtime framework |
-| `frameworkVersion` | string | Runtime framework version |
-| `pythonVersion` | string | Runtime Python version |
-| `imageName` | string | Resolved runtime image |
-| `idleTimeoutSeconds` | number | Time to keep compute alive after becoming idle |
-| `lastHeartbeatAt` | number? | Last daemon heartbeat time |
-| `lastIdleAt` | number? | Time the session most recently became idle |
-| `createdAt` | number | Creation timestamp |
-| `terminatedAt` | number? | Terminal timestamp |
-| `error` | string? | Failure detail |
+| Field | Description |
+| --- | --- |
+| `userId` | Owner. |
+| `environmentId` | Owning environment. |
+| `status` | `provisioning`, `idle`, `running`, `terminating`, `terminated`, or `failed`. |
+| `providerMachineId` | Provider-native machine identifier. |
+| `runtimeTokenHash` | Token hash for Warden session callbacks. |
+| `activeRunId` | Currently assigned run, when status is `running`. |
+| `effectiveGpuType` | Machine GPU type snapshot. |
+| `effectiveGpuCount` | Machine GPU count snapshot. |
+| `effectiveVolumeGb` | Machine volume snapshot. |
+| `framework` | Runtime framework snapshot. |
+| `frameworkVersion` | Runtime framework version snapshot. |
+| `pythonVersion` | Runtime Python version snapshot. |
+| `imageName` | Resolved runtime image snapshot. |
+| `idleTimeoutSeconds` | Requested warm idle lifetime. |
+| `lastHeartbeatAt` | Last Warden heartbeat time. |
+| `lastIdleAt` | Most recent idle transition time. |
+| `terminatedAt` | Terminal timestamp. |
+| `error` | Failure detail. |
 
 ### `runs`
 
-Add fields:
+| Field | Description |
+| --- | --- |
+| `computeSessionId` | Session used by this run, when execution mode is `session`. |
+| `executionMode` | `ephemeral` for one-shot machine runs, `session` for warm-compute runs. |
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `computeSessionId` | id? | Session used for this run, when warm compute is used |
-| `executionMode` | enum | `ephemeral` or `session` |
+Run responses include:
 
-Keep existing run fields canonical. `providerMachineId` can remain on runs for read compatibility and audit denormalization, but compute ownership belongs to `computeSessions`.
+- `compute_session_id`
+- `compute_session_idle_expires_at`
+- `execution_mode`
+
+Existing historical runs read as no compute session and `ephemeral`.
 
 ## Lifecycles
 
 ### Compute Session
 
-```
+```text
 provisioning -> idle -> running -> idle -> terminating -> terminated
-                    |        |
-                    |        +-> failed
-                    +----------> terminating
+        |                               |
+        +-------------------------------> failed
 ```
 
 Rules:
 
-- `provisioning`: backend creates the provider machine and starts Warden in session mode.
-- `idle`: daemon is ready and no run is assigned.
-- `running`: exactly one run is assigned and executing.
-- `terminating`: user stopped the session, idle timeout expired, heartbeat timeout fired, or terminal failure requires cleanup.
-- `terminated`: provider machine is gone.
-- `failed`: daemon or provider setup failed before the session became usable.
+- `provisioning`: backend is creating the provider machine and starting Warden in session mode.
+- `idle`: Warden is alive and waiting for a run.
+- `running`: exactly one run is assigned.
+- `terminating`: stop was requested or stale-session cleanup is in progress.
+- `terminated`: provider machine is gone and runtime token is revoked.
+- `failed`: provisioning or daemon-level failure made the session unusable.
 
-### Run On Compute Session
+### Session Run
 
-```
+```text
 queued -> provisioning -> running -> completed
                           |       -> failed
                           |       -> cancelling -> cancelled
 ```
 
-The run lifecycle stays the same from the user's perspective. The difference is that `provisioning` means "assigned to a ready compute session and materializing this run's pinned snapshot" instead of "creating a new provider machine".
+For session-mode runs, `provisioning` means "assigned to a ready warm session and preparing this run's pinned snapshot", not "creating a provider machine".
 
 ## Runtime Contract
 
-Warden gets a new session mode.
+Warden has a session mode selected by `TAHUNA_COMPUTE_SESSION_ID`.
 
-1. Start once on the provider machine with `TAHUNA_COMPUTE_SESSION_ID`.
-2. Emit session heartbeat.
-3. Poll or long-poll for the next assignment.
-4. Fetch the run bootstrap plan for the assigned `runId`.
-5. Materialize the run's pinned code/data manifests into the workspace.
-6. Install dependencies when the dependency fingerprint changed.
-7. Execute the run command.
-8. Emit logs, metrics, artifacts, and terminal status to that run's runtime endpoints.
-9. Report assignment complete to the compute session endpoint.
-10. Return to idle and wait for the next assignment.
+In session mode, Warden:
 
-There is no fallback path inside Warden. If an assignment cannot be prepared or executed, that run becomes `failed` and the session either returns to `idle` or becomes `failed` based on whether the daemon itself is still healthy.
+1. Starts once on the provider machine.
+2. Heartbeats as a compute session.
+3. Polls `/api/compute_sessions/{id}/runtime/assignment`.
+4. Receives one assigned run at a time.
+5. Fetches that run's bootstrap plan.
+6. Materializes the run's pinned code/data manifests into the workspace.
+7. Reuses dependency/cache state when compatible.
+8. Executes the run command.
+9. Sends logs, metrics, status, artifacts, and terminal result to the run runtime endpoints.
+10. Reports the session idle after the run finishes.
 
-## API And CLI
+Warden does not choose runs and does not decide what code is current. The backend assigns runs; the run record owns the snapshot.
 
-### CLI Surface
+## Assignment Rules
 
-```
+Assignment is atomic and strict. A run can attach to a compute session only when all are true:
+
+- same user
+- same environment
+- run is `queued`
+- run is explicitly queued for that `computeSessionId`
+- session is `idle`
+- session has no `activeRunId`
+- no other active run points at that session
+- session has a provider machine ID
+- session has a valid runtime token
+- GPU type/count, volume, framework, framework version, Python version, and image name match
+
+On success:
+
+- run `queued -> provisioning`
+- run gets the session `providerMachineId`
+- compute session `idle -> running`
+- `computeSessions.activeRunId = runId`
+- run and compute session events are inserted
+
+On failure, Tahuna does not provision fallback ephemeral compute.
+
+## Sync And Snapshots
+
+Every run still pins the latest environment manifests at creation time.
+
+Warm iteration works because code/data changes are represented by new run records, not by mutating a terminal run or changing the compute session:
+
+1. User edits code/data.
+2. User runs `tahuna sync`.
+3. Backend updates environment manifest hashes.
+4. User runs `tahuna train --warm`.
+5. Backend creates a new run with those manifest hashes.
+6. Warden materializes that run's snapshot on the warm machine.
+
+The compute session is a machine cache, not a source of truth for code or data.
+
+## CLI Surface
+
+Supported:
+
+```bash
 tahuna train
 tahuna train --keep-warm-minutes <minutes>
 tahuna train --warm
 tahuna train --no-keep-warm
 ```
 
-`tahuna train` remains ephemeral by default unless the project config contains a keep-warm default from `tahuna init .`. Warm reuse remains explicit through either a stored keep-warm preference, `--keep-warm-minutes`, or `--warm`.
+Rules:
 
-Keep-warm duration is always expressed in minutes. Fractional values are allowed, for example `--keep-warm-minutes 0.5` or `--keep-warm-minutes 10`.
+- `--warm` cannot be combined with GPU or volume overrides.
+- `--warm` cannot be combined with `--keep-warm-minutes`.
+- `--no-keep-warm` disables the project keep-warm default for that run.
+- No fallback to ephemeral provisioning on warm-run failure.
 
-### Backend Operations
+## Current Implementation State
 
-- Create compute session as part of a keep-warm training run.
-- Stop compute session.
-- List compute sessions.
-- Resolve the current environment's compatible idle session for `tahuna train --warm`.
-- Assign queued run to idle compute session.
-- Complete assignment and release session to idle.
-- Enforce idle timeout.
-- Enforce heartbeat timeout.
+Implemented:
 
-## Assignment Rules
+- compute session schema and events
+- run response shaping for compute session fields
+- `tahuna init .` keep-warm preference
+- `tahuna train --keep-warm-minutes`
+- `tahuna train --warm`
+- `tahuna train --no-keep-warm`
+- Warden session mode
+- session runtime assignment, heartbeat, and idle callbacks
+- environment-scoped canonical warm session link
+- stale-session invalidation and termination scheduling on runtime spec changes
+- remaining warm-time CLI output after successful warm runs
 
-A run can be assigned to a compute session only when all are true:
+Still pending or intentionally deferred:
 
-- Same user.
-- Same environment.
-- Session status is `idle`.
-- Run status is `queued`.
-- GPU type, GPU count, volume size, image name, framework, framework version, and Python version match.
-- Session has no `activeRunId`.
+- idle timeout enforcement after `idleTimeoutSeconds`
+- heartbeat timeout enforcement
+- user/dashboard stop controls for compute sessions
+- billing allocation/display for warm session lifetime
+- full auto-research integration with warm compute
 
-If any rule fails, the API returns a structured validation error. It does not create a second machine and does not silently fall back to ephemeral provisioning.
+## Auto-Research Readiness
 
-## Run-Level Assignment Slice
+Auto-research can use this model when each trial keeps the same runtime spec and only changes tracked code inside the editable allowlist.
 
-The first implementation slice after the backend foundation is run-level assignment. It must not implement Warden session mode, CLI commands, or research flags in the same commit.
+Ready assumptions:
 
-### Scope
+- each trial is still a separate run
+- each trial can sync code and create a new run
+- warm compute can be reused across sequential trials
+- dependencies/cache can be reused when the project dependency state is unchanged
+- changing code/data does not stale the session
 
-- Create a queued run with `executionMode = "session"` and `computeSessionId`.
-- Validate that the requested compute session can execute the run.
-- Assign the run to the compute session without provisioning a new provider machine.
-- Record the assignment in run events and compute session events.
+Hard constraints:
 
-### Required Code Changes
-
-1. Extend run response shaping.
-   - Add `compute_session_id` and `execution_mode` to run API responses.
-   - Keep empty string or `ephemeral` defaults for existing runs.
-
-2. Extend run creation internals.
-   - Add an internal create path that accepts `computeSessionId`.
-   - It must create the run with `enqueue_provisioning = false`.
-   - It must set `executionMode = "session"` and `computeSessionId` on the run row.
-   - Existing one-shot run creation must keep `executionMode = "ephemeral"` or equivalent default behavior.
-
-3. Add assignment validation.
-   - Load the run and compute session in one mutation.
-   - Validate same user and same environment.
-   - Validate compute session status is `idle`.
-   - Validate run status is `queued`.
-   - Validate session has no `activeRunId`.
-   - Validate effective GPU type/count, volume size, framework, framework version, Python version, and image name match.
-
-4. Apply assignment atomically.
-   - Patch the run to `status = "provisioning"` and `providerMachineId = computeSession.providerMachineId`.
-   - Keep the run's pinned code/data manifests unchanged.
-   - Transition compute session `idle -> running`.
-   - Set `computeSessions.activeRunId = runId`.
-   - Insert a run event such as `run assigned to compute session`.
-
-5. Add tests at the backend seam.
-   - Assignment succeeds for an idle matching session.
-   - Assignment rejects mismatched environment.
-   - Assignment rejects non-idle session.
-   - Assignment rejects GPU/image/runtime mismatch.
-   - Assignment does not enqueue a provider provisioning job.
-
-### Out Of Scope For This Slice
-
-- No Warden polling or execution loop.
-- No runtime session endpoints.
-- No `tahuna compute` CLI commands.
-- No `tahuna research run --compute-session`.
-- No idle timeout enforcement.
-- No billing allocation changes.
-
-## Sync And Snapshots
-
-Run creation still pins manifests from the environment at creation time.
-
-The CLI loop is:
-
-1. User edits code.
-2. CLI syncs code/data.
-3. Backend creates a new run with the latest manifest hashes.
-4. Backend assigns that run to the current environment's compatible idle compute session when `--warm` is used.
-5. Warden materializes that run's pinned snapshot and executes it.
-
-The compute session never decides what code is current. The run record owns the snapshot.
-
-## Billing
-
-Compute session billing is based on machine lifetime, not individual run duration.
-
-Each run records its own execution duration and artifacts for audit, but the billable provider lease belongs to the compute session. Run-level cost display should allocate session cost by one explicit policy:
-
-- MVP policy: show session-level spend only, and show per-run execution duration without allocated cost.
-- Later policy: allocate session cost across runs by runtime plus idle time attribution.
-
-No hidden free idle window. If the session is alive, the user is spending compute credits.
-
-## Termination
-
-A compute session terminates when:
-
-- User runs `tahuna compute stop`.
-- User runs a future explicit stop command or the dashboard equivalent.
-- Idle timeout expires.
-- Heartbeat timeout expires.
-- Provider termination is required after unrecoverable daemon failure.
-- Force cancellation requests immediate cleanup.
-
-Run completion alone does not terminate the machine in session mode.
-
-## Implementation Slices
-
-1. Add `computeSessions` schema, lifecycle planner, and backend create/list/stop operations.
-2. Add run-level assignment API and response shaping.
-3. Add `tahuna init .` keep-warm preference in `tahuna.toml`.
-4. Add `tahuna train --keep-warm-minutes`, `--warm`, and `--no-keep-warm` CLI flags.
-5. Add backend keep-warm run creation that provisions Warden in session mode and assigns the first run.
-6. Add Warden session mode with heartbeat, assignment polling, per-run execution, and return-to-idle.
-7. Add idle timeout and heartbeat timeout enforcement.
-8. Wire autoresearch to reuse warm compute through the train-owned surface.
-9. Update billing display for session-level spend.
+- do not mutate `tahuna.toml` runtime fields during an auto-research session unless the user explicitly permits a new warm session
+- do not change GPU type/count, volume, framework, framework version, Python version, or image
+- do not add untracked files
+- keep one trial running at a time per environment warm session
+- if warm compute is stale or not idle, stop and surface the condition instead of falling back silently
 
 ## Acceptance Criteria
 
-- A user can run `tahuna train --keep-warm-minutes 10`, edit code, sync, and run `tahuna train --warm` on the same provider machine.
-- A project with `train.keep_warm_after_minutes = 10` treats plain `tahuna train` as keep-warm unless `--no-keep-warm` is passed.
-- Each run has distinct run ID, manifest hashes, logs, metrics, artifacts, and terminal status.
-- The provider machine ID is the same for both runs.
-- The session remains idle after a successful run until stopped or timed out.
-- A mismatched run/session assignment fails before execution.
-- Terminal run status never mutates into a new execution.
+- `tahuna train --keep-warm-minutes 10` creates a run, provisions one session-mode machine, executes the run, and leaves the session idle.
+- `tahuna train --warm` creates a new run and attaches it only to `environments.activeComputeSessionId`.
+- Reused runs keep separate run IDs, logs, metrics, artifacts, manifest hashes, and terminal statuses.
+- Provider machine ID is reused across warm runs.
+- Code/data sync does not invalidate warm compute.
+- Runtime spec sync/update clears the active session and terminates the stale machine.
+- Warm failure never silently provisions a replacement ephemeral machine.
