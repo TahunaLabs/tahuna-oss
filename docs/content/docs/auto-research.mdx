@@ -135,40 +135,6 @@ Patch snapshots are stored under:
 .tahuna/research/<session-id>/
 ```
 
-## Warm compute
-
-Auto-Research can reuse the same warm Tahuna machine across a baseline and sequential trial runs:
-
-```bash
-tahuna research run \
-  --program program.md \
-  --metric final:eval_loss \
-  --minimize \
-  --max-trials 5 \
-  --max-spend-usd 5 \
-  --max-trial-minutes 30 \
-  --keep-warm-minutes 30 \
-  --editable train.py
-```
-
-With `--keep-warm-minutes`, the baseline run starts the environment's warm compute session. Later resumes create trial runs on warm compute:
-
-```bash
-tahuna research run --resume <session-id>
-```
-
-Warm Auto-Research follows the same run/compute split as `tahuna train --warm`:
-
-- each baseline and trial is still a separate run
-- each run gets its own pinned code/data manifests, logs, metrics, artifacts, and terminal status
-- the warm machine is linked by the backend environment, not by a local `.tahuna/` file
-- code and data changes are allowed between trials
-- runtime spec changes are not allowed inside the same warm research session
-
-Runtime spec means GPU type, GPU count, volume size, framework, framework version, Python version, and the resolved runtime image.
-
-When a research session starts, Tahuna records the local runtime spec from `tahuna.toml`. On resume, Tahuna rejects local runtime-spec drift before syncing or launching a run. If warm compute is stale or busy, the resume command surfaces that condition directly instead of silently launching cold compute or counting the candidate as an inconclusive trial.
-
 ## Resume with a candidate patch
 
 After the baseline completes, make one focused tracked-file edit inside the `--editable` allowlist. Then resume:
@@ -248,8 +214,6 @@ tahuna research run \
 
 The spend budget is too small for one possible 30-minute run on that GPU.
 
-Warm compute note: current Auto-Research spend accounting still estimates and records per-run execution duration. It does not yet allocate idle warm-session machine time across the research session. Use `--max-spend-usd` as a run-budget guard, not as a complete warm-session cost ledger.
-
 ### `--max-trial-minutes`
 
 `--max-trial-minutes` is a per-run time cap for trial runs.
@@ -315,8 +279,6 @@ The session JSON is the audit log for the loop. It records:
 - metric config
 - editable allowlist
 - budget config
-- runtime spec snapshot
-- warm compute configuration, when enabled
 - aggregate observed spend
 - starting commit and starting patch hash
 - baseline run id, status, and metric value
@@ -464,5 +426,3 @@ The trial exceeded `--max-trial-minutes`. Tahuna requested cancellation, restore
 - Candidate patches are tracked-file only.
 - Tahuna does not generate candidate edits or launch an agent.
 - The local loop runs one candidate trial per `--resume` call.
-- Warm compute idle/billing time is not yet allocated into Auto-Research spend accounting.
-- Warm sessions still need backend idle-timeout and heartbeat-timeout enforcement.

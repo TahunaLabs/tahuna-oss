@@ -32,10 +32,15 @@ Implemented:
 - SVG progress graph rendering from session state.
 - Public Auto-Research docs for the local CLI harness.
 - External agent-skill handoff checklist for `tahuna-autoresearch-project`.
+- Warm compute support through `tahuna research run --keep-warm-minutes <minutes>`.
+- Baseline warm-session creation and trial warm-session reuse.
+- Runtime-spec pinning in research session state and resume-time runtime-spec drift rejection.
 
 Still needed:
 
 - Apply the `tahuna-autoresearch-project` checklist in the external `TahunaLabs/agent-skills` repository.
+- Allocate warm-session idle/billing time into Auto-Research spend accounting.
+- Decide whether Auto-Research should inherit `train.keep_warm_after_minutes` or require explicit `--keep-warm-minutes`.
 
 ## Implementation PR Plan
 
@@ -104,6 +109,7 @@ tahuna research run \
   --max-trials 20 \
   --max-spend-usd 50 \
   --max-trial-minutes 30 \
+  --keep-warm-minutes 30 \
   --editable train.py
 ```
 
@@ -146,6 +152,36 @@ Resume behavior:
 - The agent can call `tahuna research graph <session-id>` to regenerate the local progress SVG after trials.
 
 This gives the user's agent the control loop without making Tahuna an agent launcher.
+
+### Warm Compute Execution
+
+Auto-Research can reuse the same warm Tahuna machine across a baseline and sequential trial runs:
+
+```bash
+tahuna research run \
+  --program program.md \
+  --metric final:val_bpb \
+  --minimize \
+  --max-trials 20 \
+  --max-spend-usd 50 \
+  --max-trial-minutes 30 \
+  --keep-warm-minutes 30 \
+  --editable train.py
+```
+
+With `--keep-warm-minutes`, the baseline run starts the environment's warm compute session by creating a normal run with `keep_warm_after_minutes`. Later `--resume` calls create trial runs with `warm=true`, so they attach only to the environment's canonical `activeComputeSessionId`.
+
+Warm Auto-Research follows the same run/compute split as `tahuna train --warm`:
+
+- each baseline and trial remains a separate run
+- each run owns its own pinned code/data manifests, logs, metrics, artifacts, and terminal status
+- the warm machine is linked by the backend environment, not by local `.tahuna/` state
+- code and data changes are allowed between trials
+- runtime spec changes are not allowed inside the same warm research session
+
+Runtime spec means GPU type, GPU count, volume size, framework, framework version, Python version, and resolved runtime image.
+
+When a research session starts, Tahuna records the local runtime spec from `tahuna.toml`. On resume, Tahuna rejects local runtime-spec drift before syncing or launching a run. If warm compute is stale or busy, the resume command surfaces that condition directly instead of silently launching cold compute or counting the candidate as an inconclusive trial.
 
 ## Core Loop
 
@@ -233,6 +269,9 @@ The intended skill behavior:
 - Regenerate or read `tahuna research graph <session-id>` after trials when useful.
 - Stop on `budget_exhausted`, no remaining wall-clock time, or repeated inconclusive failures.
 - Summarize the best accepted patch, best run id, baseline value, current best metric, trial counts, and any remaining recommended hypotheses.
+- For long loops, prefer `tahuna research run --keep-warm-minutes <minutes>` when the user accepts the warm-compute cost.
+- Preserve runtime spec fields during a warm research session; do not edit GPU type/count, volume, framework, framework version, Python version, or image unless the user explicitly starts a new warm session.
+- If Tahuna reports warm compute is stale or busy, stop and report that condition instead of retrying with cold compute.
 
 The skill must keep Tahuna as a harness. It must not ask Tahuna CLI to launch, configure, or manage an agent.
 
@@ -258,6 +297,74 @@ Rules:
 - Tahuna must stop the session after `--stop-after-no-improvement` consecutive rejected or inconclusive trials.
 - `--min-improvement` defines the minimum absolute objective change required to accept a patch.
 - Spend estimates should use the effective GPU type/count, hourly rate, observed baseline duration when available, and current run elapsed time.
+- Current warm compute gap: spend accounting estimates and records per-run execution duration. It does not yet allocate idle warm-session machine time across the research session.
+
+## Self-Audit
+
+### Solid Decisions
+
+- Auto-Research now uses the same run/session surface as `tahuna train --warm`; there is no separate research-only runtime mode.
+- Baseline warm-session creation uses `keep_warm_after_minutes`, and trial resumes use `warm=true`.
+- Each baseline and trial remains a distinct run with pinned manifests and isolated logs, metrics, artifacts, and terminal status.
+- Research session state records the starting runtime spec and rejects local runtime-spec drift before sync or run creation.
+- Warm stale/busy errors are surfaced directly and do not count the candidate patch as an inconclusive trial.
+
+### Intentional Pragmatism
+
+- Auto-Research inherits the project `train.keep_warm_after_minutes` default when present, unless `--keep-warm-minutes` is passed. This is convenient, but an auditor should decide whether research should require an explicit flag instead.
+- The runtime-spec guard compares local `tahuna.toml` state. If the remote environment is changed elsewhere, backend assignment still protects correctness, but the CLI guard only catches it after local state reflects the change.
+- Warm-session billing is not research-aware yet. Budgets still use per-run duration estimates and observed run duration.
+
+### Known Gaps
+
+- Warm-session idle/billing time is not allocated into Auto-Research spend accounting.
+- Backend idle timeout enforcement for compute sessions is still pending.
+- Backend heartbeat timeout enforcement for compute sessions is still pending.
+- Stale-session termination uses direct scheduling; retry/backoff semantics should be audited against existing run machine termination behavior.
+- There is no user-facing compute session inspect/stop surface yet.
+
+### Audit Prompt For The Next Agent
+
+Use this prompt to audit the implementation:
+
+```text
+You are auditing Tahuna's warm-compute and Auto-Research integration.
+
+Read:
+- specs/autoresearch-local-mvp.md
+- specs/Separate compute lifetime from run lifetime.md
+- cli/research.go
+- cli/commands_core.go
+- web/convex/schema.ts
+- web/convex/cli/shared.ts
+- web/convex/computeSessions.ts
+- web/convex/computeSessionAssignment.ts
+- web/convex/environments.ts
+- runtime/warden/internal/bootstrap/session.go
+- runtime/warden/internal/config/config.go
+
+Audit against this intended model:
+- environments.activeComputeSessionId is the only canonical current warm-session link.
+- tahuna train --warm and auto-research trial runs attach only through that link.
+- no search/guesswork/fallback to arbitrary idle sessions.
+- each run remains a distinct immutable execution with pinned manifests.
+- code/data sync must not stale warm compute.
+- runtime spec changes must clear activeComputeSessionId and terminate the old session.
+- assignment must remain atomic and validate user, environment, run status, session status, active run exclusivity, provider machine ID, runtime token, and exact runtime spec.
+- Warden session mode should run sequential assignments and return idle after each terminal run.
+- Auto-Research should preserve the runtime spec across resumes and use warm=true only for trials after a warm baseline.
+
+Pay special attention to:
+- whether Auto-Research should inherit train.keep_warm_after_minutes or require explicit --keep-warm-minutes.
+- whether remote environment changes can bypass the local runtime-spec guard.
+- missing idle timeout enforcement.
+- missing heartbeat timeout enforcement.
+- warm-session billing/idle spend not allocated to Auto-Research.
+- stale-session termination retry/backoff robustness.
+- lack of user-facing compute session inspect/stop controls.
+
+Produce findings first, ordered by severity, with file/line references and concrete reproduction or failure scenarios. Then list any tests that should be added.
+```
 
 The session state must record budget configuration and actual observed usage so the agent can reason about remaining budget without scraping human output.
 
