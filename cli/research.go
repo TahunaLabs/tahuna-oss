@@ -77,6 +77,20 @@ type researchRunResult struct {
 	Value  *float64 `json:"value,omitempty"`
 }
 
+type researchRuntimeSpec struct {
+	Framework     string `json:"framework"`
+	Version       string `json:"version"`
+	PythonVersion string `json:"python_version"`
+	GPUType       string `json:"gpu_type"`
+	GPUCount      int    `json:"gpu_count"`
+	VolumeGB      int    `json:"volume_gb"`
+}
+
+type researchWarmComputeConfig struct {
+	Enabled         bool    `json:"enabled"`
+	KeepWarmMinutes float64 `json:"keep_warm_minutes,omitempty"`
+}
+
 type researchIncumbent struct {
 	Trial       int      `json:"trial"`
 	RunID       string   `json:"run_id"`
@@ -101,20 +115,22 @@ type researchTrial struct {
 }
 
 type researchSession struct {
-	SessionID      string               `json:"session_id"`
-	CreatedAt      string               `json:"created_at"`
-	Status         string               `json:"status"`
-	Program        string               `json:"program"`
-	Direction      string               `json:"direction"`
-	Metric         researchMetricConfig `json:"metric"`
-	Editable       []string             `json:"editable"`
-	Budget         researchBudgetConfig `json:"budget"`
-	EnvironmentID  string               `json:"environment_id,omitempty"`
-	StartingCommit string               `json:"starting_commit,omitempty"`
-	StartingPatch  string               `json:"starting_patch_sha256,omitempty"`
-	Baseline       *researchRunResult   `json:"baseline,omitempty"`
-	Incumbent      *researchIncumbent   `json:"incumbent,omitempty"`
-	Trials         []researchTrial      `json:"trials"`
+	SessionID      string                     `json:"session_id"`
+	CreatedAt      string                     `json:"created_at"`
+	Status         string                     `json:"status"`
+	Program        string                     `json:"program"`
+	Direction      string                     `json:"direction"`
+	Metric         researchMetricConfig       `json:"metric"`
+	Editable       []string                   `json:"editable"`
+	Budget         researchBudgetConfig       `json:"budget"`
+	EnvironmentID  string                     `json:"environment_id,omitempty"`
+	StartingCommit string                     `json:"starting_commit,omitempty"`
+	StartingPatch  string                     `json:"starting_patch_sha256,omitempty"`
+	RuntimeSpec    researchRuntimeSpec        `json:"runtime_spec"`
+	WarmCompute    *researchWarmComputeConfig `json:"warm_compute,omitempty"`
+	Baseline       *researchRunResult         `json:"baseline,omitempty"`
+	Incumbent      *researchIncumbent         `json:"incumbent,omitempty"`
+	Trials         []researchTrial            `json:"trials"`
 }
 
 type researchWorktreeSnapshot struct {
@@ -142,6 +158,7 @@ type researchRunOptions struct {
 	maxTrialMinutes        int
 	stopAfterNoImprovement int
 	minImprovement         float64
+	keepWarmMinutes        string
 	editable               []string
 	allowDirty             bool
 	resume                 string
@@ -172,7 +189,7 @@ func handleResearch(args []string) {
 func researchUsage() {
 	fmt.Print(`Research commands:
   tahuna research help
-  tahuna research run --program <program.md> --metric final:<name> --minimize|--maximize --max-trials <N> --max-spend-usd <USD> --max-trial-minutes <N> --editable <path>
+  tahuna research run --program <program.md> --metric final:<name> --minimize|--maximize --max-trials <N> --max-spend-usd <USD> --max-trial-minutes <N> [--keep-warm-minutes <n>] --editable <path>
   tahuna research run --resume <session-id> [--verbose|-v]
   tahuna research graph <session-id> [--output <path>]
 `)
@@ -201,6 +218,7 @@ func parseResearchRunOptions(args []string) researchRunOptions {
 	fs.IntVar(&opts.maxTrialMinutes, "max-trial-minutes", 0, "Maximum minutes per trial")
 	fs.IntVar(&opts.stopAfterNoImprovement, "stop-after-no-improvement", 0, "Stop after consecutive non-improving trials")
 	fs.Float64Var(&opts.minImprovement, "min-improvement", 0, "Minimum absolute objective improvement")
+	fs.StringVar(&opts.keepWarmMinutes, "keep-warm-minutes", "", "Keep compute warm across baseline and trials for this many minutes")
 	fs.Var(&editable, "editable", "Editable path or glob, repeatable")
 	fs.BoolVar(&opts.allowDirty, "allow-dirty", false, "Allow dirty working tree state")
 	fs.StringVar(&opts.resume, "resume", "", "Resume an existing research session")
@@ -224,6 +242,18 @@ func createResearchSession(opts researchRunOptions) error {
 	if err != nil {
 		return err
 	}
+	cfg, err := loadProjectConfig()
+	if err != nil {
+		return err
+	}
+	runtimeSpec := researchRuntimeSpecFromConfig(cfg)
+	keepWarmMinutes := cfg.TrainKeepWarmAfterMinutes
+	if raw := strings.TrimSpace(opts.keepWarmMinutes); raw != "" {
+		keepWarmMinutes, err = parseKeepWarmMinutes(raw)
+		if err != nil {
+			return err
+		}
+	}
 	startingSnapshot, err := captureResearchWorktreeSnapshot(".")
 	if err != nil {
 		return err
@@ -241,6 +271,7 @@ func createResearchSession(opts researchRunOptions) error {
 		EnvironmentID:  environmentID,
 		StartingCommit: startingCommit,
 		StartingPatch:  startingSnapshot.SHA256,
+		RuntimeSpec:    runtimeSpec,
 		Budget: researchBudgetConfig{
 			MaxTrials:              opts.maxTrials,
 			MaxSpendUSD:            opts.maxSpendUSD,
@@ -250,6 +281,12 @@ func createResearchSession(opts researchRunOptions) error {
 			ObservedSpendUSD:       0,
 		},
 		Trials: []researchTrial{},
+	}
+	if keepWarmMinutes > 0 {
+		session.WarmCompute = &researchWarmComputeConfig{
+			Enabled:         true,
+			KeepWarmMinutes: keepWarmMinutes,
+		}
 	}
 	if err := writeResearchPatchSnapshot(session.SessionID, "starting.patch", startingSnapshot.Diff); err != nil {
 		return err
@@ -279,6 +316,9 @@ func resumeResearchSession(opts researchRunOptions) error {
 		return err
 	}
 	if _, _, err := validateResearchProject(session.Editable, opts.allowDirty); err != nil {
+		return err
+	}
+	if err := validateResearchRuntimeSpecUnchanged(session); err != nil {
 		return err
 	}
 	if opts.verbose {
@@ -319,6 +359,11 @@ func validateResearchRunConfig(opts researchRunOptions) (researchMetricConfig, s
 	if opts.minImprovement < 0 {
 		return researchMetricConfig{}, "", errors.New("--min-improvement cannot be negative")
 	}
+	if strings.TrimSpace(opts.keepWarmMinutes) != "" {
+		if _, err := parseKeepWarmMinutes(opts.keepWarmMinutes); err != nil {
+			return researchMetricConfig{}, "", err
+		}
+	}
 
 	metric, err := parseResearchMetric(opts.metric, opts.metricCmd)
 	if err != nil {
@@ -342,6 +387,7 @@ func validateResearchResumeOptions(opts researchRunOptions) error {
 		opts.maxTrialMinutes != 0 ||
 		opts.stopAfterNoImprovement != 0 ||
 		opts.minImprovement != 0 ||
+		strings.TrimSpace(opts.keepWarmMinutes) != "" ||
 		len(opts.editable) != 0 {
 		return errors.New("--resume cannot be combined with new session flags")
 	}
@@ -394,6 +440,61 @@ func validateResearchProject(editable []string, allowDirty bool) (string, string
 		}
 	}
 	return environmentID, strings.TrimSpace(commit), nil
+}
+
+func researchRuntimeSpecFromConfig(cfg projectConfig) researchRuntimeSpec {
+	return researchRuntimeSpec{
+		Framework:     strings.TrimSpace(cfg.Framework),
+		Version:       strings.TrimSpace(cfg.FrameworkVersion),
+		PythonVersion: strings.TrimSpace(cfg.PythonVersion),
+		GPUType:       strings.TrimSpace(cfg.GPUType),
+		GPUCount:      cfg.GPUCount,
+		VolumeGB:      cfg.VolumeGB,
+	}
+}
+
+func validateResearchRuntimeSpecUnchanged(session researchSession) error {
+	if strings.TrimSpace(session.RuntimeSpec.Framework) == "" {
+		return nil
+	}
+	cfg, err := loadProjectConfig()
+	if err != nil {
+		return err
+	}
+	current := researchRuntimeSpecFromConfig(cfg)
+	if current == session.RuntimeSpec {
+		return nil
+	}
+	return fmt.Errorf(
+		"research runtime spec changed; warm compute is environment-scoped and would be replaced. Start a new research session or restore %s runtime fields",
+		projectConfigFilePath(),
+	)
+}
+
+func researchWarmComputeEnabled(session researchSession) bool {
+	return session.WarmCompute != nil && session.WarmCompute.Enabled
+}
+
+func researchRunCreatePayload(name string, session researchSession, baseline bool) map[string]any {
+	payload := map[string]any{"name": name}
+	if !researchWarmComputeEnabled(session) {
+		return payload
+	}
+	if baseline {
+		payload["keep_warm_after_minutes"] = session.WarmCompute.KeepWarmMinutes
+	} else {
+		payload["warm"] = true
+	}
+	return payload
+}
+
+func isWarmComputeUnavailableError(err error) bool {
+	if err == nil {
+		return false
+	}
+	text := strings.ToLower(err.Error())
+	return strings.Contains(text, "warm compute is stale") ||
+		strings.Contains(text, "warm compute is not idle")
 }
 
 func ensureGitWorkTree(dir string) error {
@@ -602,9 +703,10 @@ func runResearchBaseline(session *researchSession) error {
 
 	runName := session.SessionID + "-baseline"
 	fmt.Printf("Launching baseline run: %s\n", runName)
-	resp, err := createRunWithCapacityPrompt("/environments/"+session.EnvironmentID+"/runs", map[string]any{
-		"name": runName,
-	})
+	resp, err := createRunWithCapacityPrompt(
+		"/environments/"+session.EnvironmentID+"/runs",
+		researchRunCreatePayload(runName, *session, true),
+	)
 	if err != nil {
 		return err
 	}
@@ -720,10 +822,17 @@ func runResearchTrial(session *researchSession) error {
 
 	runName := fmt.Sprintf("%s-trial-%d", session.SessionID, trialNumber)
 	fmt.Printf("Launching trial run: %s\n", runName)
-	resp, err := createRunWithCapacityPrompt("/environments/"+session.EnvironmentID+"/runs", map[string]any{
-		"name": runName,
-	})
+	resp, err := createRunWithCapacityPrompt(
+		"/environments/"+session.EnvironmentID+"/runs",
+		researchRunCreatePayload(runName, *session, false),
+	)
 	if err != nil {
+		if researchWarmComputeEnabled(*session) && isWarmComputeUnavailableError(err) {
+			session.Status = researchSessionStatusAwaitingPatch
+			session.Trials = session.Trials[:len(session.Trials)-1]
+			_ = saveResearchSession(*session)
+			return err
+		}
 		return finishInconclusiveResearchTrial(session, trialNumber, "", fmt.Sprintf("run create failed: %v", err))
 	}
 	runID := strings.TrimSpace(resp.RunID)

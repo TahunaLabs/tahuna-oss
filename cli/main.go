@@ -131,7 +131,7 @@ Run commands:
 
 Research commands:
   tahuna research help
-  tahuna research run --program <program.md> --metric final:<name> --minimize|--maximize --max-trials <N> --max-spend-usd <USD> --max-trial-minutes <N> --editable <path>
+  tahuna research run --program <program.md> --metric final:<name> --minimize|--maximize --max-trials <N> --max-spend-usd <USD> --max-trial-minutes <N> [--keep-warm-minutes <n>] --editable <path>
   tahuna research run --resume <session-id>
   tahuna research graph <session-id> [--output <path>]
 
