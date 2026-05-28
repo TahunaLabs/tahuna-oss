@@ -328,7 +328,8 @@ export async function createAndProvisionRunStrict(ctx: ActionCtx, args: CreateRu
     }
     if (isComputeSessionHeartbeatTimedOut({
       lastHeartbeatAt: session.last_heartbeat_at,
-      timeoutSeconds: RUN_CONFIG.computeSessionHeartbeatTimeoutSeconds,
+      heartbeatTimeoutSeconds: RUN_CONFIG.computeSessionHeartbeatTimeoutSeconds,
+      startupTimeoutSeconds: RUN_CONFIG.startupTimeoutSeconds,
       nowMs: Date.now(),
     })) {
       await ctx.runAction(internal.computeSessions.internalTerminateTimedOutSession, {

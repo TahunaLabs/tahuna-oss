@@ -70,13 +70,23 @@ function sanitizeDetail(value: string | undefined) {
 
 export function isComputeSessionHeartbeatTimedOut(args: {
   lastHeartbeatAt?: number | null;
-  timeoutSeconds: number;
+  providerCreationTime?: number | null;
+  createdAt?: number | null;
+  heartbeatTimeoutSeconds: number;
+  startupTimeoutSeconds: number;
   nowMs: number;
 }) {
-  if (!args.lastHeartbeatAt || !Number.isFinite(args.lastHeartbeatAt)) {
+  if (args.lastHeartbeatAt && Number.isFinite(args.lastHeartbeatAt)) {
+    return args.nowMs >= args.lastHeartbeatAt + args.heartbeatTimeoutSeconds * 1000;
+  }
+  const startupStartedAt =
+    args.providerCreationTime && Number.isFinite(args.providerCreationTime)
+      ? args.providerCreationTime
+      : args.createdAt;
+  if (!startupStartedAt || !Number.isFinite(startupStartedAt)) {
     return false;
   }
-  return args.nowMs >= args.lastHeartbeatAt + args.timeoutSeconds * 1000;
+  return args.nowMs >= startupStartedAt + args.startupTimeoutSeconds * 1000;
 }
 
 export function isComputeSessionIdleTimedOut(args: {
@@ -189,7 +199,6 @@ export function planComputeSessionIdle(args: {
     patch: {
       status: COMPUTE_SESSION_STATUS.IDLE,
       activeRunId: undefined,
-      lastHeartbeatAt: args.nowMs,
       lastIdleAt: args.nowMs,
     },
     events: [
@@ -217,7 +226,6 @@ export function planComputeSessionRunAssigned(args: {
     patch: {
       status: COMPUTE_SESSION_STATUS.RUNNING,
       activeRunId: runId,
-      lastHeartbeatAt: args.nowMs,
     },
     events: [
       sessionEvent(COMPUTE_SESSION_STATUS.RUNNING, "compute session run assigned", {

@@ -140,7 +140,10 @@ export async function assignQueuedRunToComputeSession(
   const now = Date.now();
   if (isComputeSessionHeartbeatTimedOut({
     lastHeartbeatAt: session.lastHeartbeatAt,
-    timeoutSeconds: RUN_CONFIG.computeSessionHeartbeatTimeoutSeconds,
+    providerCreationTime: session.providerCreationTime,
+    createdAt: session.createdAt,
+    heartbeatTimeoutSeconds: RUN_CONFIG.computeSessionHeartbeatTimeoutSeconds,
+    startupTimeoutSeconds: RUN_CONFIG.startupTimeoutSeconds,
     nowMs: now,
   })) {
     assignmentError("compute session heartbeat timed out");
@@ -187,7 +190,6 @@ export async function assignQueuedRunToComputeSession(
   await ctx.db.patch("computeSessions", args.computeSessionId, {
     status: COMPUTE_SESSION_STATUS.RUNNING,
     activeRunId: args.runId,
-    lastHeartbeatAt: now,
   });
   await insertComputeSessionEvents(ctx, args.computeSessionId, plan.events);
 }

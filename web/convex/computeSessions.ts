@@ -294,7 +294,10 @@ export const internalListHeartbeatTimedOut = internalQuery({
       .filter((row) =>
         isComputeSessionHeartbeatTimedOut({
           lastHeartbeatAt: row.lastHeartbeatAt,
-          timeoutSeconds: args.timeoutSeconds,
+          providerCreationTime: row.providerCreationTime,
+          createdAt: row.createdAt,
+          heartbeatTimeoutSeconds: args.timeoutSeconds,
+          startupTimeoutSeconds: RUN_CONFIG.startupTimeoutSeconds,
           nowMs: args.nowMs,
         }),
       )

@@ -101,6 +101,7 @@ export async function handleComputeSessionRuntimePost(
         headers: new Headers({ "Content-Type": "application/json", ...corsHeaders() }),
       });
     }
+    await ctx.runMutation(internal.computeSessions.internalHeartbeat, { computeSessionId });
     await ctx.runMutation(internal.computeSessions.internalMarkIdleAfterRun, {
       computeSessionId,
       runId: runId as Id<"runs">,
