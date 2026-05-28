@@ -342,6 +342,9 @@ Implemented:
 - environment-scoped canonical warm session link
 - stale-session invalidation and termination scheduling on runtime spec changes
 - remaining warm-time CLI output after successful warm runs
+- `tahuna research run --keep-warm-minutes`
+- auto-research baseline warm-session creation and trial warm-session reuse
+- auto-research runtime-spec pinning across resumes
 
 Still pending or intentionally deferred:
 
@@ -349,7 +352,7 @@ Still pending or intentionally deferred:
 - heartbeat timeout enforcement
 - user/dashboard stop controls for compute sessions
 - billing allocation/display for warm session lifetime
-- full auto-research integration with warm compute
+- auto-research billing allocation for warm-session idle time
 
 ## Auto-Research Readiness
 
@@ -370,6 +373,83 @@ Hard constraints:
 - do not add untracked files
 - keep one trial running at a time per environment warm session
 - if warm compute is stale or not idle, stop and surface the condition instead of falling back silently
+
+Current harness behavior:
+
+- `tahuna research run --keep-warm-minutes <minutes>` starts the baseline as the warm-session owner.
+- `tahuna research run --resume <session-id>` launches trial runs with `warm=true`.
+- the research session stores the starting runtime spec from local `tahuna.toml`.
+- resume rejects local runtime-spec drift before sync or run creation.
+- stale or busy warm-compute errors are surfaced directly and the candidate is not counted as an inconclusive trial.
+
+## Self-Audit
+
+### Solid Decisions
+
+- The core model has no compatibility guesswork: `environments.activeComputeSessionId` is the canonical current warm session.
+- `tahuna train --warm` attaches only through that backend-owned link.
+- Runtime spec changes invalidate and terminate the old warm session.
+- Code/data changes do not invalidate the session; each run owns its pinned manifests.
+- Assignment remains atomic and validates user, environment, status, runtime spec, machine ID, runtime token, and active-run exclusivity.
+- Warm run failures do not silently fall back to ephemeral provisioning.
+- Auto-research trials now use the same run/session surface as `tahuna train --warm`.
+
+### Intentional Pragmatism
+
+- Auto-research uses the project `train.keep_warm_after_minutes` default when present, unless `--keep-warm-minutes` is passed. That is convenient, but an auditor should decide whether research should require an explicit flag instead.
+- Auto-research pins runtime spec from local `tahuna.toml`. If the remote environment is changed elsewhere, backend assignment still protects correctness, but the CLI guard only catches it after local state reflects the change.
+- Stale-session termination uses direct scheduling. It is correct for the current slice, but retry/backoff semantics are thinner than run machine termination.
+
+### Known Gaps
+
+- Idle timeout enforcement is not complete. `idleTimeoutSeconds` is stored and shown, but backend cleanup after the timeout still needs a watchdog/scheduled enforcement path.
+- Heartbeat timeout enforcement is not complete. If Warden dies or the provider machine disappears, a watchdog must mark the session failed or terminated and clear the environment link.
+- Warm-session billing is not allocated across runs or auto-research sessions. Auto-research spend accounting still estimates and records per-run execution duration, not idle machine lifetime.
+- There is no user-facing compute session inspect/stop surface yet. The primary path intentionally avoids `tahuna compute create`, but users still need a simple cleanup/control surface.
+- Runtime image deployment remains operationally important: old Warden images will not support session mode.
+
+### Audit Prompt For The Next Agent
+
+Use this prompt to audit the implementation:
+
+```text
+You are auditing Tahuna's warm-compute and Auto-Research integration.
+
+Read:
+- specs/Separate compute lifetime from run lifetime.md
+- cli/research.go
+- cli/commands_core.go
+- web/convex/schema.ts
+- web/convex/cli/shared.ts
+- web/convex/computeSessions.ts
+- web/convex/computeSessionAssignment.ts
+- web/convex/environments.ts
+- runtime/warden/internal/bootstrap/session.go
+- runtime/warden/internal/config/config.go
+- docs/content/docs/auto-research.mdx
+
+Audit against this intended model:
+- environments.activeComputeSessionId is the only canonical current warm-session link.
+- tahuna train --warm and auto-research trial runs attach only through that link.
+- no search/guesswork/fallback to arbitrary idle sessions.
+- each run remains a distinct immutable execution with pinned manifests.
+- code/data sync must not stale warm compute.
+- runtime spec changes must clear activeComputeSessionId and terminate the old session.
+- assignment must remain atomic and validate user, environment, run status, session status, active run exclusivity, provider machine ID, runtime token, and exact runtime spec.
+- Warden session mode should run sequential assignments and return idle after each terminal run.
+- Auto-Research should preserve the runtime spec across resumes and use warm=true only for trials after a warm baseline.
+
+Pay special attention to the self-audit gaps:
+- whether Auto-Research should inherit train.keep_warm_after_minutes or require explicit --keep-warm-minutes.
+- whether remote environment changes can bypass the local runtime-spec guard.
+- missing idle timeout enforcement.
+- missing heartbeat timeout enforcement.
+- warm-session billing/idle spend not allocated to Auto-Research.
+- stale-session termination retry/backoff robustness.
+- lack of user-facing compute session inspect/stop controls.
+
+Produce findings first, ordered by severity, with file/line references and concrete reproduction or failure scenarios. Then list any tests that should be added.
+```
 
 ## Acceptance Criteria
 
