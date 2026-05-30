@@ -58,7 +58,7 @@ function MetricChart({ metric }: MetricChartProps) {
           <p className="font-mono text-sm text-foreground">{formatMetricValue(metric.latestValue)}</p>
         </div>
       </div>
-      <div className="h-36 w-full">
+      <div className="h-28 w-full">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={metric.points}>
             <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="var(--border)" opacity={0.35} />
@@ -79,7 +79,7 @@ function MetricChart({ metric }: MetricChartProps) {
               }}
             />
             <YAxis
-              width={56}
+              width={44}
               tick={{ fontSize: 10 }}
               domain={yDomain}
               tickFormatter={(value: number) => formatAxisValue(value)}

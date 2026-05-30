@@ -29,7 +29,7 @@ function MetricSection({
       {metrics.length === 0 ? (
         <p className="text-sm text-muted-foreground">{emptyMessage}</p>
       ) : (
-        <div className="grid grid-cols-1 gap-4 2xl:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 2xl:grid-cols-3">
           {metrics.map((metric) => (
             <MetricChart key={`${metric.source}:${metric.name}`} metric={metric} />
           ))}
