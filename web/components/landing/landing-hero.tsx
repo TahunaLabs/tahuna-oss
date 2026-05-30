@@ -23,24 +23,14 @@ export function LandingHero() {
             </div>
 
             <div className="flex flex-col items-start gap-3 self-start">
-              <Button
-                asChild
-                variant="default"
-                size="compact"
-                className="font-serif text-base uppercase tracking-tight"
-              >
+              <Button asChild variant="default" size="lg">
                 <Link href="/login">
                   Get started
                   <ArrowRight />
                 </Link>
               </Button>
 
-              <Button
-                asChild
-                variant="outline"
-                size="compact"
-                className="font-serif text-base uppercase tracking-tight"
-              >
+              <Button asChild variant="outline" size="lg">
                 <Link href="https://cal.com/monaimel/15min" target="_blank" rel="noreferrer">
                   Talk to an engineer
                   <ArrowRight />
