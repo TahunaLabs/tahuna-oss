@@ -1,86 +1,70 @@
-import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
-import { StatusDot, toStatusDotVariant } from "@/components/ui/status-dot"
+import { StatusDot } from "@/components/ui/status-dot"
 
-const runRows = [
-  { name: "minimax-2.5", status: "running", device: "H200 ×8", runtime: "pt2.4-cu124" },
-  { name: "qwen3-coder", status: "provisioning", device: "B200 ×2", runtime: "pt2.5-cu128" },
-  { name: "llama-rl", status: "queued", device: "A100 ×4", runtime: "pt2.2-cu121" },
-  { name: "phi-sft", status: "failed", device: "L40S ×1", runtime: "pt2.2-cu121" },
+// Descending train-loss curve — one run's live metrics.
+const lossCurve = [96, 90, 84, 79, 81, 72, 67, 63, 65, 56, 52, 49, 44, 46, 38, 34, 31, 27, 24, 19]
+
+const stats = [
+  { label: "epoch", value: "3 / 8" },
+  { label: "throughput", value: "1.2k tok/s" },
+  { label: "step", value: "2,310" },
 ]
-
-const lossSparkline = [92, 80, 74, 66, 58, 52, 47, 39, 34, 28, 23, 18]
-
-const columns = "grid-cols-[1.5fr_1.1fr_1fr_1.1fr]"
 
 export function HeroDecoration() {
   return (
-    <div className="relative mx-auto h-[26rem] w-full max-w-lg select-none lg:mx-0" aria-hidden>
-      {/* Main panel: runs table — angled, bleeds off the right edge */}
-      <Card variant="default" className="absolute left-0 top-2 w-[34rem] max-w-none rotate-1 bg-card">
-        <div className="flex items-center gap-2 border-b border-border px-4 py-2.5">
-          <div className="flex gap-1.5">
-            <span className="size-2 rounded-full bg-muted-foreground/30" />
-            <span className="size-2 rounded-full bg-muted-foreground/30" />
-            <span className="size-2 rounded-full bg-muted-foreground/30" />
-          </div>
-          <span className="ml-1 text-ui-caption text-muted-foreground">tahuna runs</span>
-          <Badge variant="run-status" className="ml-auto">
-            4 active
-          </Badge>
-        </div>
-
-        <div className={`grid ${columns} gap-3 border-b border-border px-4 py-2 text-ui-micro uppercase tracking-ui-eyebrow text-muted-foreground`}>
-          <span>Run</span>
-          <span>Status</span>
-          <span>Device</span>
-          <span>Runtime</span>
-        </div>
-
-        <div className="divide-y divide-border">
-          {runRows.map((row) => (
-            <div key={row.name} className={`grid ${columns} items-center gap-3 px-4 py-2.5`}>
-              <span className="truncate text-ui-caption text-foreground">{row.name}</span>
-              <span className="flex items-center gap-1.5">
-                <StatusDot variant={toStatusDotVariant(row.status)} size="xs" />
-                <span className="text-ui-micro capitalize text-muted-foreground">{row.status}</span>
-              </span>
-              <span className="text-ui-micro text-muted-foreground">{row.device}</span>
-              <span className="text-ui-micro text-muted-foreground">{row.runtime}</span>
-            </div>
-          ))}
-        </div>
-      </Card>
-
-      {/* Overlapping live-run card — counter-rotated, lifts off the table */}
-      <Card variant="default" className="absolute -bottom-1 left-[-1.25rem] z-10 w-60 -rotate-2 bg-card">
-        <div className="flex items-center justify-between border-b border-border px-3 py-2">
-          <span className="text-ui-micro uppercase tracking-ui-eyebrow text-muted-foreground">minimax-2.5</span>
+    <div className="relative mx-auto h-[24rem] w-full max-w-lg select-none lg:mx-0" aria-hidden>
+      {/* Main panel: a single run's live metrics — angled, bleeds off the right edge */}
+      <Card variant="default" className="absolute left-0 top-4 w-[32rem] max-w-none rotate-1 bg-card">
+        <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
+          <span className="text-ui-caption text-foreground">minimax-2.5</span>
           <span className="flex items-center gap-1.5">
             <StatusDot variant="running" size="xs" />
-            <span className="text-ui-micro text-muted-foreground">running</span>
+            <span className="text-ui-micro text-muted-foreground">running · epoch 3/8</span>
           </span>
         </div>
 
-        <div className="flex flex-col gap-2.5 px-3 py-3">
-          <div className="flex h-8 items-end gap-0.5">
-            {lossSparkline.map((height, index) => (
-              <span key={index} className="flex-1 bg-foreground/25" style={{ height: `${height}%` }} />
+        <div className="flex flex-col gap-4 px-4 py-4">
+          <div>
+            <div className="mb-2 flex items-baseline justify-between">
+              <span className="text-ui-micro uppercase tracking-ui-eyebrow text-muted-foreground">train loss</span>
+              <span className="text-ui-caption text-foreground">
+                <span className="text-muted-foreground">2.41 → </span>0.94
+              </span>
+            </div>
+            <div className="flex h-16 items-end gap-0.5">
+              {lossCurve.map((height, index) => (
+                <span key={index} className="flex-1 bg-foreground/25" style={{ height: `${height}%` }} />
+              ))}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-3 border-t border-border pt-3">
+            {stats.map((stat) => (
+              <div key={stat.label} className="flex flex-col gap-0.5">
+                <span className="text-ui-micro uppercase tracking-ui-eyebrow text-muted-foreground">{stat.label}</span>
+                <span className="text-ui-caption text-foreground">{stat.value}</span>
+              </div>
             ))}
           </div>
-          <div className="flex items-baseline justify-between">
-            <span className="text-ui-micro text-muted-foreground">epoch</span>
-            <span className="text-ui-caption text-foreground">3 / 8</span>
+        </div>
+      </Card>
+
+      {/* Overlapping terminal accent — the command that started the run */}
+      <Card variant="default" className="absolute -bottom-2 left-[-1.5rem] z-10 w-56 -rotate-2 bg-card">
+        <div className="flex items-center gap-1.5 border-b border-border px-3 py-1.5">
+          <div className="flex gap-1">
+            <span className="h-2 w-2 rounded-full bg-muted-foreground/30" />
+            <span className="h-2 w-2 rounded-full bg-muted-foreground/30" />
+            <span className="h-2 w-2 rounded-full bg-muted-foreground/30" />
           </div>
-          <div className="h-1 w-full bg-border">
-            <div className="h-1 w-2/5 bg-foreground" />
-          </div>
-          <div className="flex items-baseline justify-between">
-            <span className="text-ui-micro text-muted-foreground">loss</span>
-            <span className="text-ui-caption text-foreground">
-              <span className="text-muted-foreground">2.41 → 1.87 →</span> 0.94
-            </span>
-          </div>
+          <span className="ml-1 text-ui-micro text-muted-foreground">tahuna train</span>
+        </div>
+        <div className="flex flex-col gap-1.5 px-3 py-2.5 text-ui-caption">
+          <span className="text-foreground/85">&gt; $ tahuna train</span>
+          <span className="flex items-center gap-1.5 text-muted-foreground">
+            <StatusDot variant="running" size="xs" />
+            streaming metrics
+          </span>
         </div>
       </Card>
     </div>
