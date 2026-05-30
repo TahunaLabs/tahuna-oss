@@ -19,8 +19,8 @@ export function LandingNav() {
   const { theme, setTheme } = useTheme()
 
   return (
-    <header className="flex h-14 shrink-0 items-center px-8">
-      <Link href="/" className="flex shrink-0 items-center gap-2.5">
+    <header className="flex h-14 shrink-0 items-center px-6 md:px-8">
+      <Link href="/" className="flex shrink-0 items-center gap-2">
         <Logo className="h-6 w-auto" />
         <span className="text-xl font-semibold tracking-tight">Tahuna</span>
       </Link>

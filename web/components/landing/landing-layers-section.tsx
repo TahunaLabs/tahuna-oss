@@ -33,7 +33,7 @@ const layers = [
 
 export function LandingLayersSection() {
   return (
-    <section id="layers" className="border-t border-border px-6 py-20 md:py-28">
+    <section id="layers" className="border-t border-border px-6 py-24 md:px-8 md:py-32">
       <div className="mx-auto max-w-7xl">
         <div className="mb-12 flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
           <div>

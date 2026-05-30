@@ -36,7 +36,7 @@ const FOOTER_SECTIONS = [
 export function LandingFooter() {
   return (
     <footer id="start" className="overflow-hidden border-t border-white/10 bg-black text-white">
-      <div className="mx-auto max-w-7xl px-6 pt-10 md:px-16 md:pt-14">
+      <div className="mx-auto max-w-7xl px-6 pt-16 md:px-8 md:pt-24">
         {/* Top area: brand left, links right */}
         <div className="flex flex-col gap-10 md:flex-row md:items-start md:justify-between">
           {/* Brand + copyright grouped */}
