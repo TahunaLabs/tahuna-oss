@@ -28,14 +28,14 @@ export function LandingPricingSection() {
         <div className="mb-12 flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
           <div>
             <p className="mb-3 text-xs font-mono uppercase tracking-ui-eyebrow text-muted-foreground">Pricing</p>
-            <h2 className="font-serif text-3xl leading-tight tracking-tight text-foreground md:text-4xl">
+            <h2 className="text-3xl font-semibold leading-tight tracking-tight text-foreground md:text-4xl">
               Pay for compute
               <br />
-              <span className="italic">and Storage you use</span>
+              and storage you use
             </h2>
           </div>
 
-          <p className="max-w-lg text-lg font-serif font-medium text-foreground md:text-xl">
+          <p className="max-w-lg text-lg font-medium text-foreground md:text-xl">
             Runs and serves draw down credits for active GPU time and attached volume.
           </p>
         </div>
@@ -45,7 +45,7 @@ export function LandingPricingSection() {
             <CardContent className="p-0">
               <div className="flex flex-col gap-3 border-b border-border p-5 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <h3 className="font-serif text-2xl text-foreground">GPU compute</h3>
+                  <h3 className="text-xl font-semibold text-foreground">GPU compute</h3>
                   <p className="mt-1 text-sm text-muted-foreground">Hourly prices from the current Tahuna GPU catalog.</p>
                 </div>
                 <Badge variant="filled">Per hour</Badge>
@@ -93,8 +93,8 @@ export function LandingPricingSection() {
             <Card variant="default" className="bg-card/95">
               <CardContent>
                 <div className="mb-4 flex items-center justify-between gap-3">
-                  <h3 className="font-serif text-2xl text-foreground">Volumes</h3>
-                  <Badge variant="ghost">Flexible and persisitent storage</Badge>
+                  <h3 className="text-xl font-semibold text-foreground">Volumes</h3>
+                  <Badge variant="ghost">Flexible and persistent storage</Badge>
                 </div>
                 <div className="space-y-3 text-sm">
                   <div className="flex items-center justify-between gap-4">

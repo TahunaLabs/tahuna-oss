@@ -38,15 +38,15 @@ export function LandingLayersSection() {
         <div className="mb-12 flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
           <div>
             <p className="mb-3 text-xs font-mono uppercase tracking-ui-eyebrow text-muted-foreground">The Layers</p>
-            <h2 className="font-serif text-3xl leading-tight tracking-tight text-foreground md:text-4xl">
+            <h2 className="text-3xl font-semibold leading-tight tracking-tight text-foreground md:text-4xl">
               Explore
               <br />
-              <span className="italic">the</span> core loop
+              the core loop
             </h2>
           </div>
 
           <div className="flex items-center gap-6">
-            <p className="max-w-md text-lg font-serif font-medium text-foreground md:text-xl">
+            <p className="max-w-md text-lg font-medium text-foreground md:text-xl">
               You keep the training loop. Tahuna handles the post-training infrastructure around it in four clear
               steps.
             </p>
@@ -68,7 +68,7 @@ export function LandingLayersSection() {
 
                 <div className="relative flex flex-1 flex-col">
                   <div className="flex flex-1 flex-col justify-center">
-                    <h3 className="mb-3 text-center font-serif text-xl text-foreground">{layer.title}</h3>
+                    <h3 className="mb-3 text-center text-lg font-semibold text-foreground">{layer.title}</h3>
                     <p className="text-center text-xs text-muted-foreground">{layer.owner}</p>
                     <p className="mt-4 text-center text-sm leading-relaxed text-foreground/80">{layer.detail}</p>
                   </div>

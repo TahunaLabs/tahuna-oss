@@ -50,7 +50,7 @@ export function LandingTerminalSection() {
             <Badge variant="filled">Install</Badge>
             <Badge variant="ghost">Tahuna</Badge>
           </div>
-          <h2 className="font-serif text-3xl tracking-tight text-foreground md:text-4xl">
+          <h2 className="text-3xl font-semibold tracking-tight text-foreground md:text-4xl">
             A gentle control plane
             <br />
             for post-training

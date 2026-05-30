@@ -43,7 +43,7 @@ export function LandingFooter() {
           <div className="flex shrink-0 flex-col gap-4">
             <Link href="/" className="inline-flex items-center gap-3 text-white">
               <Logo className="h-7" />
-              <span className="font-serif text-xl tracking-tight">Tahuna</span>
+              <span className="text-xl font-semibold tracking-tight">Tahuna</span>
             </Link>
             <p className="text-sm text-white/40">
               © 2026 Tahuna. All rights reserved.
@@ -78,7 +78,7 @@ export function LandingFooter() {
         {/* Decorative text — in normal flow, no overlap */}
         <div className="pointer-events-none -mt-20 select-none overflow-hidden text-center">
           <p
-            className="font-serif leading-none font-semibold tracking-tight text-white/10"
+            className="leading-none font-semibold tracking-tight text-white/10"
             style={{ fontSize: "clamp(10rem, 24vw, 24rem)", transform: "translateY(22%)" }}
           >
             Tahuna
