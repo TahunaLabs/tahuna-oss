@@ -7,19 +7,18 @@ import { LandingTerminalSection } from "@/components/landing/landing-terminal-se
 
 export function PublicHome() {
   return (
-    <div className="h-full overflow-y-auto">
-      <div className="min-h-full bg-background/70 backdrop-blur-sm">
+    <div className="relative h-full overflow-y-auto bg-background">
+      <div
+        aria-hidden
+        className="surface-noise pointer-events-none fixed inset-0 opacity-[0.015] dark:opacity-[0.03]"
+      />
+      <div className="relative min-h-full">
         <LandingNav />
         <main>
           <LandingHero />
           <FrameworksBar />
           <LandingTerminalSection />
-          <div className="relative">
-            <div className="absolute inset-0 bg-background/75" />
-            <div className="relative">
-              <LandingLayersSection />
-            </div>
-          </div>
+          <LandingLayersSection />
         </main>
         <LandingFooter />
       </div>

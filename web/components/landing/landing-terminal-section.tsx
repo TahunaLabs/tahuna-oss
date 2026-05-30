@@ -40,7 +40,7 @@ export function LandingTerminalSection() {
   }
 
   return (
-    <section id="loop" className="relative border-t border-border px-6 py-24 md:px-8 md:py-32">
+    <section id="loop" className="relative border-t border-border bg-muted/30 px-6 py-24 md:px-8 md:py-32">
       <div className="absolute right-6 top-6 z-10">
         <LandingFoundersIncBadge />
       </div>
