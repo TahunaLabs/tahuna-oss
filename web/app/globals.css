@@ -62,10 +62,10 @@
   --tracking-normal: 0em;
   --spacing: 0.25rem;
 
-  /* App font stack — preserved from project, not tweakcn Mono's monospace default */
-  --font-sans: "Geist", "Geist Fallback", sans-serif;
-  --font-serif: "Cormorant Garamond", serif;
-  --font-mono: "Geist Mono", "Geist Mono Fallback";
+  /* Full monospace type system (tweakcn Mono) — every role maps to Geist Mono */
+  --font-sans: var(--font-mono);
+  --font-serif: var(--font-mono);
+  --font-mono: "Geist Mono", "Geist Mono Fallback", monospace;
 
   /* Project tokens (not emitted by tweakcn) */
   --logo: var(--foreground);
