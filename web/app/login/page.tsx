@@ -1,6 +1,7 @@
 "use client"
 
 import { LandingNav } from "@/components/landing/landing-nav"
+import { TerminalMock } from "@/components/landing/terminal-mock"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -118,8 +119,17 @@ export default function LoginPage() {
       <div className="relative flex min-h-screen flex-col">
         <LandingNav />
         <div className="flex flex-1 items-center justify-center px-4 py-12">
-          <div className="relative w-full max-w-sm">
-            <div className="rounded-xl border border-border bg-card px-6 py-7 shadow-sm">
+          <div className="grid w-full max-w-4xl items-center gap-12 lg:grid-cols-2">
+            <div className="hidden lg:block">
+              <p className="mb-3 text-xs uppercase tracking-ui-eyebrow text-muted-foreground">The control plane</p>
+              <h2 className="mb-8 max-w-sm text-2xl font-semibold leading-tight tracking-tight text-foreground">
+                Your code, your loop — on managed GPUs.
+              </h2>
+              <TerminalMock />
+            </div>
+
+            <div className="relative mx-auto w-full max-w-sm">
+              <div className="rounded-xl border border-border bg-card px-6 py-7 shadow-sm">
               {step === "email" ? (
                 <div className="space-y-5">
                   <div className="space-y-1">
@@ -239,11 +249,12 @@ export default function LoginPage() {
                   </div>
                 </form>
               )}
-            </div>
+              </div>
 
-            <p className="mt-5 text-center text-xs text-muted-foreground">
-              No password needed — sign in with a provider or email.
-            </p>
+              <p className="mt-5 text-center text-xs text-muted-foreground">
+                No password needed — sign in with a provider or email.
+              </p>
+            </div>
           </div>
         </div>
       </div>
