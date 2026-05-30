@@ -2,11 +2,15 @@ import Link from "next/link"
 import { ArrowRight } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import { Crosshair, DotGrid } from "@/components/landing/section-decorations"
 
 export function LandingHero() {
   return (
     <section className="relative overflow-hidden px-6 py-24 md:px-8 md:py-32">
-      <div className="mx-auto max-w-7xl">
+      <DotGrid className="inset-y-0 right-0 w-2/5" />
+      <Crosshair className="right-10 top-12 hidden lg:block" />
+      <Crosshair className="bottom-12 right-1/3 hidden lg:block" />
+      <div className="relative mx-auto max-w-7xl">
         <div className="max-w-5xl">
           <h1 className="mb-8 font-serif text-4xl leading-display-tight tracking-tight text-foreground md:text-6xl xl:text-6xl">
             The future is not a single intelligent blob.

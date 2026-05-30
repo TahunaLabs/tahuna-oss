@@ -1,3 +1,4 @@
+import { DotGrid } from "@/components/landing/section-decorations"
 import { Card, CardContent } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
 
@@ -34,8 +35,9 @@ const layers = [
 
 export function LandingLayersSection() {
   return (
-    <section id="layers" className="border-t border-border px-6 py-24 md:px-8 md:py-32">
-      <div className="mx-auto grid max-w-7xl gap-12 lg:grid-cols-12 lg:gap-16">
+    <section id="layers" className="relative overflow-hidden border-t border-border px-6 py-24 md:px-8 md:py-32">
+      <DotGrid className="left-0 top-20 h-64 w-1/3" />
+      <div className="relative mx-auto grid max-w-7xl gap-12 lg:grid-cols-12 lg:gap-16">
         <div className="lg:col-span-4 lg:sticky lg:top-24 lg:self-start">
           <p className="mb-3 text-xs uppercase tracking-ui-eyebrow text-muted-foreground">The Layers</p>
           <h2 className="text-3xl font-semibold leading-tight tracking-tight text-foreground md:text-4xl">

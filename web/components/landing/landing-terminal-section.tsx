@@ -4,6 +4,7 @@ import { Check, Copy } from "lucide-react"
 import { useState } from "react"
 
 import { LandingFoundersIncBadge } from "@/components/landing/landing-founders-inc-badge"
+import { TiltedChip } from "@/components/landing/section-decorations"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -66,7 +67,12 @@ export function LandingTerminalSection() {
         </div>
 
         <div className="min-w-0 lg:-mr-12 lg:w-3/5">
-          <Card variant="default" className="mb-8 rounded-lg bg-card/95">
+          <div className="relative mb-8">
+            <TiltedChip className="absolute -left-3 -top-3 z-10 -rotate-2">
+              <span className="size-1.5 rounded-full bg-[var(--status-dot-running)]" />
+              training
+            </TiltedChip>
+            <Card variant="default" className="rounded-lg bg-card/95">
             <div className="flex items-center gap-2 border-b border-border px-4 py-3">
               <div className="flex gap-1.5">
                 <div className="h-3 w-3 rounded-full bg-muted-foreground/30" />
@@ -102,7 +108,8 @@ export function LandingTerminalSection() {
                 </div>
               </div>
             </CardContent>
-          </Card>
+            </Card>
+          </div>
 
           <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center">
             <div className="flex items-center gap-1 rounded-full border border-border bg-card">
