@@ -40,12 +40,12 @@ export function LandingTerminalSection() {
   }
 
   return (
-    <section id="loop" className="relative border-t border-border bg-muted/30 px-6 py-24 md:px-8 md:py-32">
+    <section id="loop" className="relative overflow-hidden border-t border-border bg-muted/30 px-6 py-24 md:px-8 md:py-32">
       <div className="absolute right-6 top-6 z-10">
         <LandingFoundersIncBadge />
       </div>
-      <div className="mx-auto flex max-w-7xl flex-col gap-12 lg:flex-row lg:gap-20">
-        <div className="shrink-0 lg:w-1/3">
+      <div className="mx-auto flex max-w-7xl flex-col gap-12 lg:flex-row lg:items-start lg:gap-16">
+        <div className="shrink-0 lg:w-2/5 lg:pt-12">
           <div className="mb-4 flex items-center gap-2">
             <Badge variant="filled">Install</Badge>
             <Badge variant="ghost">Tahuna</Badge>
@@ -65,7 +65,7 @@ export function LandingTerminalSection() {
           </p>
         </div>
 
-        <div className="min-w-0 lg:w-2/3">
+        <div className="min-w-0 lg:-mr-12 lg:w-3/5">
           <Card variant="default" className="mb-8 rounded-lg bg-card/95">
             <div className="flex items-center gap-2 border-b border-border px-4 py-3">
               <div className="flex gap-1.5">

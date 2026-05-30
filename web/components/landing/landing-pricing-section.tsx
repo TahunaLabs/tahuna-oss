@@ -89,7 +89,7 @@ export function LandingPricingSection() {
             </CardContent>
           </Card>
 
-          <div>
+          <div className="lg:mt-16">
             <Card variant="default" className="bg-card/95">
               <CardContent>
                 <div className="mb-4 flex items-center justify-between gap-3">
