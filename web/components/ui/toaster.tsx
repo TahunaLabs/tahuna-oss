@@ -25,7 +25,7 @@ function Toaster(props: ToasterProps) {
           error: "border-destructive text-destructive",
           success: "border-success text-success",
           warning: "border-warning text-warning",
-          info: "border-accent text-accent",
+          info: "border-border text-foreground",
           closeButton:
             "absolute top-1 right-1 rounded-md p-1 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:text-foreground",
           actionButton:

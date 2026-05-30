@@ -99,10 +99,10 @@ function MetricChart({ metric }: MetricChartProps) {
             <Line
               type="linear"
               dataKey="value"
-              stroke="var(--accent)"
+              stroke="var(--chart-1)"
               strokeWidth={3}
-              dot={metric.pointCount <= 4 ? { r: 3, strokeWidth: 0, fill: "var(--accent)" } : false}
-              activeDot={{ r: 5, strokeWidth: 0, fill: "var(--accent)" }}
+              dot={metric.pointCount <= 4 ? { r: 3, strokeWidth: 0, fill: "var(--chart-1)" } : false}
+              activeDot={{ r: 5, strokeWidth: 0, fill: "var(--chart-1)" }}
               connectNulls
             />
           </LineChart>
