@@ -5,9 +5,9 @@ import { useState } from "react"
 
 import { LandingFoundersIncBadge } from "@/components/landing/landing-founders-inc-badge"
 import { TiltedChip } from "@/components/landing/section-decorations"
+import { TerminalMock } from "@/components/landing/terminal-mock"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
 import { TruncatedTooltip } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 
@@ -17,18 +17,6 @@ const commands = {
   stable: `${installerScriptCommand} | bash`,
   nightly: `${installerScriptCommand} | bash -s -- --channel nightly`,
 } as const
-
-const terminalSteps = [
-  { kind: "command", value: "$ tahuna init ." },
-  { kind: "status", value: "config def" },
-  { kind: "status", value: "entrypoint detected, environment scaffolded" },
-  { kind: "command", value: "$ tahuna sync" },
-  { kind: "status", value: "syncing code, data, env config" },
-  { kind: "command", value: "$ tahuna train" },
-  { kind: "status", value: "materializing" },
-  { kind: "status", value: "finetuning minimax2.5" },
-  { kind: "status", value: "streaming metrics" },
-]
 
 export function LandingTerminalSection() {
   const [activeCommand, setActiveCommand] = useState<keyof typeof commands>("stable")
@@ -72,43 +60,14 @@ export function LandingTerminalSection() {
               <span className="size-1.5 rounded-full bg-[var(--status-dot-running)]" />
               training
             </TiltedChip>
-            <Card variant="default" className="rounded-lg bg-card/95">
-            <div className="flex items-center gap-2 border-b border-border px-4 py-3">
-              <div className="flex gap-1.5">
-                <div className="h-3 w-3 rounded-full bg-muted-foreground/30" />
-                <div className="h-3 w-3 rounded-full bg-muted-foreground/30" />
-                <div className="h-3 w-3 rounded-full bg-muted-foreground/30" />
-              </div>
-              <span className="ml-2 text-xs font-mono text-muted-foreground">tahuna train</span>
-            </div>
-
-            <CardContent className="min-h-80 space-y-4 p-5 font-mono text-sm">
-              <div className="space-y-1.5">
-                {terminalSteps.map((step) => (
-                  <div key={step.value} className="flex items-center gap-2 text-xs">
-                    {step.kind === "command" ? (
-                      <span className="text-primary">&gt;</span>
-                    ) : (
-                      <span className="ml-3 h-1 w-1 rounded-full bg-foreground/45" />
-                    )}
-                    <span className={cn(
-                      "leading-relaxed",
-                      step.kind === "command" ? "text-foreground/85" : "text-muted-foreground",
-                    )}>
-                      {step.value}
-                    </span>
-                  </div>
-                ))}
-              </div>
-
-              <div className="mt-4 flex items-center justify-between border-t border-border pt-4">
-                <div className="ml-auto flex items-center gap-4 text-xs text-muted-foreground">
+            <TerminalMock
+              footer={
+                <div className="ml-auto flex items-center gap-4">
                   <span>runtime/warden</span>
                   <span>wandb-compatible metrics</span>
                 </div>
-              </div>
-            </CardContent>
-            </Card>
+              }
+            />
           </div>
 
           <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center">
