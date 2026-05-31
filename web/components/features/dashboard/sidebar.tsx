@@ -87,17 +87,10 @@ export function Sidebar({
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton size="lg" asChild>
-              <Link href="/" aria-label="Go to home">
-                <div className="flex aspect-square size-8 shrink-0 items-center justify-center rounded-md border border-sidebar-border bg-sidebar-accent">
-                  <Logo className="h-5 w-auto" preserveAspectRatio="xMidYMid slice" />
-                </div>
-                <div className="grid flex-1 text-left leading-tight">
-                  <span className="truncate text-sm font-semibold text-sidebar-foreground">Tahuna</span>
-                  <span className="truncate text-ui-micro text-muted-foreground">Control plane</span>
-                </div>
-              </Link>
-            </SidebarMenuButton>
+            <Link href="/" aria-label="Go to home" className="flex items-center gap-2 px-2 py-1.5">
+              <Logo className="h-12 w-auto" />
+              <span className="text-sm font-light tracking-[0.2em] text-sidebar-foreground">Tahuna</span>
+            </Link>
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarHeader>
