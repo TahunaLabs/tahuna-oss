@@ -40,17 +40,16 @@ export function LandingTerminalSection() {
             <Badge variant="ghost">Tahuna</Badge>
           </div>
           <h2 className="text-3xl font-semibold tracking-tight text-foreground md:text-4xl">
-            A gentle control plane
+            From local project
             <br />
-            for post-training
+            to remote run
           </h2>
           <p className="mt-4 max-w-sm text-base leading-relaxed text-muted-foreground">
-            Post-training is the new frontier, but the infrastructure hasn&apos;t caught up yet.
+            Run tahuna init, sync changed files, then tahuna train.
           </p>
           <p className="mt-3 max-w-sm text-base leading-relaxed text-muted-foreground">
-            Tahuna is a gentle control plane for post-training that keeps your code and your loop intact while
-            handling provisioning, sync, dependencies, monitoring, and artifacts — so you can focus on AI agent
-            training instead of DevOps.
+            Tahuna materializes the exact snapshot on a GPU pod, installs dependencies with uv, executes your
+            entrypoint, and streams the run back to you.
           </p>
         </div>
 

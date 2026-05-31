@@ -127,22 +127,22 @@ const features = [
   {
     eyebrow: "Train",
     title: "Watch training as it happens",
-    body: "Provision GPUs, materialize your workspace, and stream Weights & Biases-compatible metrics live — no dashboards to wire up.",
-    bullets: ["Live loss & throughput", "Logs stream as they happen", "Your loop stays yours"],
+    body: "Run your own code while Tahuna handles pod setup, workspace materialization, and live run telemetry.",
+    bullets: ["Live loss and throughput", "Logs stream as they happen", "W&B-compatible metrics"],
     visual: <MetricsVisual />,
   },
   {
     eyebrow: "Sync",
-    title: "Environments, versioned and shareable",
-    body: "Each environment pins your code, data, device, and runtime. Only changed files travel, and every run snapshots to an exact state.",
-    bullets: ["Incremental, delta-only sync", "Pinned runtimes per environment", "Private by default"],
+    title: "Runs stay traceable",
+    body: "Each run is tied to exact code, data, device, and runtime inputs, so experiments remain reproducible.",
+    bullets: ["Code/data manifests", "Pinned runtime inputs", "Private by default"],
     visual: <EnvironmentsVisual />,
   },
   {
     eyebrow: "Serve",
     title: "Serve a checkpoint in one command",
-    body: "Promote a trained snapshot to an inference endpoint. Tahuna provisions compute, loads the model, and brings it online.",
-    bullets: ["One command from run to endpoint", "Health-checked, autoscaled", "OpenAI-compatible API"],
+    body: "Promote a completed artifact into managed serve compute without rebuilding the infrastructure path.",
+    bullets: ["Pinned model snapshot", "Authenticated proxying", "Health checks"],
     visual: <ServeVisual />,
   },
 ]
@@ -154,7 +154,7 @@ export function LandingFeaturesSection() {
         <div className="mb-16 max-w-2xl">
           <p className="mb-3 text-xs uppercase tracking-ui-eyebrow text-muted-foreground">The product</p>
           <h2 className="text-3xl font-semibold leading-tight tracking-tight text-foreground md:text-4xl">
-            Everything around your training loop
+            Full control without GPU operations
           </h2>
         </div>
 

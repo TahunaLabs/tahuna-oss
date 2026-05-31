@@ -1,9 +1,9 @@
 import { CDN_CONFIG, NETWORK_CONFIG } from "@/config"
 import type { Metadata } from "next"
 
-const SITE_TITLE = "Tahuna | A gentle control plane for post-training"
+const SITE_TITLE = "Tahuna | Post-training control plane"
 const SITE_DESCRIPTION =
-  "A gentle control plane for post-training. Where AI agents practice, adapt, and improve through experience — no research lab required."
+  "Run custom training and post-training jobs on cloud GPUs from your terminal while Tahuna handles sync, provisioning, dependencies, logs, metrics, and artifacts."
 
 function faviconAsset(filename: string) {
   return `${CDN_CONFIG.baseUrl}${CDN_CONFIG.faviconPath}/${filename}`

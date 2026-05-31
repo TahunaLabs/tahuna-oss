@@ -6,30 +6,30 @@ const layers = [
   {
     title: "Tahuna init",
     owner: "tahuna init",
-    detail: "Tahuna scans your project, detects your framework, identifies your entrypoint and data, and scaffolds anything missing.",
+    detail: "Detect the project, framework, entrypoint, data, and environment, then scaffold the missing config.",
     statA: "Project-aware",
-    statB: "No boilerplate",
+    statB: "Config scaffolded",
   },
   {
     title: "Align",
     owner: "tahuna sync",
-    detail: "Your code and data are synced incrementally. Only changed files travel, and every run is pinned to exact snapshots.",
-    statA: "Incremental sync",
-    statB: "Delta-only uploads",
+    detail: "Upload changed files and pin code/data manifests so each run stays tied to the inputs that produced it.",
+    statA: "Manifest pinned",
+    statB: "Delta uploads",
   },
   {
     title: "Train",
     owner: "tahuna train",
-    detail: "Tahuna provisions the GPU, materializes the workspace, installs dependencies, and runs your training entrypoint.",
-    statA: "Logs stream live",
-    statB: "Your loop stays yours",
+    detail: "Provision GPUs, materialize the workspace, install dependencies, and execute your configured Python entrypoint.",
+    statA: "GPU-backed",
+    statB: "Your script runs",
   },
   {
     title: "Serve",
     owner: "tahuna serve",
-    detail: "Tahuna provisions inference compute, loads a pinned model snapshot, installs what your service needs, and brings it online.",
-    statA: "Inference-ready",
-    statB: "Health-checked",
+    detail: "Provision inference compute, load a pinned model snapshot, install service dependencies, and proxy authenticated traffic.",
+    statA: "Pinned snapshot",
+    statB: "Authenticated proxy",
   },
 ]
 
@@ -41,13 +41,13 @@ export function LandingLayersSection() {
         <div className="lg:col-span-4 lg:sticky lg:top-24 lg:self-start">
           <p className="mb-3 text-xs uppercase tracking-ui-eyebrow text-muted-foreground">The Layers</p>
           <h2 className="text-3xl font-semibold leading-tight tracking-tight text-foreground md:text-4xl">
-            Explore
+            Everything around
             <br />
-            the core loop
+            the training loop
           </h2>
           <p className="mt-6 max-w-sm text-base leading-relaxed text-muted-foreground">
-            You keep the training loop. Tahuna handles the post-training infrastructure around it in four clear
-            steps.
+            You own the algorithm, reward logic, rollout code, and data. Tahuna owns provisioning, sync, execution,
+            monitoring, checkpoints, and artifacts.
           </p>
         </div>
 

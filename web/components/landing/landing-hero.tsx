@@ -10,10 +10,10 @@ import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
 const FEATURES = [
-  { icon: Server, title: "Managed GPUs", body: "Provision H100s, A100s, and more — no infrastructure to wire up." },
-  { icon: RefreshCw, title: "Incremental sync", body: "Only changed files travel; every run pins to an exact snapshot." },
-  { icon: Activity, title: "Live metrics", body: "Stream W&B-compatible loss and throughput as you train." },
-  { icon: Rocket, title: "One-command serve", body: "Promote a checkpoint to an inference endpoint in a single step." },
+  { icon: Server, title: "Managed GPUs", body: "Provision A100s, H100s, and more without building GPU operations." },
+  { icon: RefreshCw, title: "Pinned snapshots", body: "Push local deltas and tie every run to exact code and data." },
+  { icon: Activity, title: "Live telemetry", body: "Stream logs and W&B-compatible metrics while your job runs." },
+  { icon: Rocket, title: "Run to serve", body: "Launch a pinned model snapshot behind managed compute." },
 ]
 
 const SLIDES = [
@@ -50,13 +50,14 @@ export function LandingHero() {
         <div className="max-w-xl lg:max-w-[36rem]">
           <div>
             <h1 className="font-serif text-4xl leading-[1.1] tracking-tight text-foreground md:text-5xl">
-              Own your intelligence,
+              Own your intelligence
               <br />
-              <span className="italic">own your training loop.</span>
+              <span className="italic">loop.</span>
             </h1>
 
             <p className="mt-6 max-w-lg text-xl leading-relaxed text-muted-foreground md:text-2xl">
-              The future isn&apos;t a single intelligent blob — it&apos;s billions of species of models.
+              Run custom training and post-training jobs on cloud GPUs from your terminal. Keep your Python loop;
+              Tahuna handles the infrastructure around it.
             </p>
 
             <div className="mt-10 grid gap-x-10 gap-y-7 sm:grid-cols-2">

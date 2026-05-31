@@ -5,11 +5,11 @@ import { CLOUD_LINKS_CONFIG } from "@/cloud/links"
 const FAQS = [
   {
     q: "What is Tahuna?",
-    a: "A gentle control plane for post-training. You keep your training loop; Tahuna handles provisioning, sync, dependencies, monitoring, and artifacts on managed GPUs.",
+    a: "A control plane between your training code and cloud GPUs. You keep the loop; Tahuna handles the infrastructure around it.",
   },
   {
     q: "Do I have to change my training code?",
-    a: "No. Tahuna scans your project, detects your framework and entrypoint, and runs your loop as-is. Your code stays yours.",
+    a: "No. Tahuna runs your configured Python entrypoint, so your code owns the training loop.",
   },
   {
     q: "Which frameworks are supported?",
@@ -17,11 +17,11 @@ const FAQS = [
   },
   {
     q: "Where do my metrics go?",
-    a: "Metrics stream live and are Weights & Biases-compatible, so you can keep using the dashboards you already have.",
+    a: "Logs and metrics stream live. Metrics are Weights & Biases-compatible, so you can keep using familiar dashboards.",
   },
   {
     q: "How does pricing work?",
-    a: "You pay for active GPU time and attached volume — no idle fees, no seats. See the pricing page for the current GPU catalog.",
+    a: "You pay for active GPU time and attached volume from prepaid credits. See the pricing section for the current GPU catalog.",
   },
   {
     q: "Which GPUs are available?",
