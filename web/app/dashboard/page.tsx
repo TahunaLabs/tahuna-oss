@@ -198,6 +198,7 @@ export default function DashboardPage() {
             userAccountLabel={userAccountLabel}
             userLoading={userMenuLoading}
             onLogout={logout}
+            creditsLabel={myCredits ? `$${(myCredits.balance_cents / 100).toFixed(2)}` : undefined}
             navAdmin={CLOUD_NAV_ADMIN}
             navDocs={CLOUD_DASHBOARD_DOCS_NAV}
           />

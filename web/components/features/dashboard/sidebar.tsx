@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import type { ElementType } from "react"
-import { HardDrive, Server, Play, LogOut, Settings, ChevronsUpDown, ChevronRight, Rocket, LayoutGrid } from "lucide-react"
+import { HardDrive, Server, Play, LogOut, Settings, ChevronsUpDown, ChevronRight, Rocket, LayoutGrid, Plus } from "lucide-react"
 import {
   SidebarContent,
   SidebarFooter,
@@ -26,6 +26,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Logo } from "@/components/logo"
 
@@ -49,6 +50,7 @@ interface SidebarProps {
   userAccountLabel: string
   userLoading?: boolean
   onLogout: () => void
+  creditsLabel?: string
   navPlatform?: DashboardNavItem[]
   navAdmin?: DashboardNavItem[]
   navDocs?: DashboardNavDocItem[]
@@ -75,6 +77,7 @@ export function Sidebar({
   userAccountLabel,
   userLoading = false,
   onLogout,
+  creditsLabel,
   navPlatform = DEFAULT_NAV_PLATFORM,
   navAdmin = DEFAULT_NAV_ADMIN,
   navDocs = DEFAULT_NAV_DOCS,
@@ -100,6 +103,16 @@ export function Sidebar({
       </SidebarHeader>
 
       <SidebarContent>
+        <div className="px-2 pt-2 group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
+          <Button
+            onClick={() => onViewChange("environments")}
+            className="w-full justify-center gap-2 group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:w-8 group-data-[collapsible=icon]:px-0"
+          >
+            <Plus className="size-4" />
+            <span className="group-data-[collapsible=icon]:hidden">New run</span>
+          </Button>
+        </div>
+
         <SidebarGroup>
           <SidebarGroupLabel>Platform</SidebarGroupLabel>
           <SidebarGroupContent>
@@ -144,6 +157,18 @@ export function Sidebar({
       </SidebarContent>
 
       <SidebarFooter>
+        <div className="px-2 group-data-[collapsible=icon]:hidden">
+          <div className="rounded-md border border-sidebar-border bg-sidebar-accent/40 p-3">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-ui-micro uppercase tracking-ui-eyebrow text-muted-foreground">Credits</span>
+              <span className="text-ui-caption font-medium text-sidebar-foreground">{creditsLabel ?? "—"}</span>
+            </div>
+            <Button variant="outline" size="sm" className="mt-2 w-full" onClick={() => onViewChange("billing")}>
+              Add credits
+            </Button>
+          </div>
+        </div>
+
         {navDocs.length > 0 ? (
           <SidebarGroup>
             <SidebarGroupLabel>Help</SidebarGroupLabel>

@@ -1,7 +1,7 @@
 "use client"
 
 import type * as React from "react"
-import { Bug, Moon, Sun } from "lucide-react"
+import { Bug, Moon, Search, Sun } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { useTheme } from "@/components/theme-provider"
@@ -33,7 +33,16 @@ function CloudDashboardTopBar({ title, ...props }: CloudDashboardTopBarProps) {
         ) : null}
       </nav>
 
-      <div className="ml-auto flex items-center gap-1">
+      <div className="ml-auto flex items-center gap-2">
+        <button
+          type="button"
+          aria-label="Search"
+          className="hidden w-60 items-center gap-2 rounded-md border border-border bg-background px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted lg:flex"
+        >
+          <Search className="size-3.5 shrink-0" />
+          <span>Search…</span>
+          <kbd className="ml-auto rounded border border-border px-1 text-ui-micro">⌘K</kbd>
+        </button>
         <Button variant="ghost" size="sm" asChild className="hidden sm:inline-flex">
           <a href={CLOUD_LINKS_CONFIG.docsUrl} target="_blank" rel="noopener noreferrer">
             Docs
