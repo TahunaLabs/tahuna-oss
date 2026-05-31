@@ -4,7 +4,7 @@ import { Card } from "@/components/ui/card"
 import { StatusDot, toStatusDotVariant } from "@/components/ui/status-dot"
 import { cn } from "@/lib/utils"
 
-const shell = "flex h-full flex-col overflow-hidden bg-card shadow-[0_28px_80px_-32px_rgba(0,0,0,0.5)]"
+const shell = "flex h-full flex-col overflow-hidden bg-card shadow-float"
 
 function WindowBar({ title, right }: { title: string; right?: ReactNode }) {
   return (

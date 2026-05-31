@@ -4,7 +4,7 @@ import { Card } from "@/components/ui/card"
 import { StatusDot } from "@/components/ui/status-dot"
 import { cn } from "@/lib/utils"
 
-const float = "shadow-[0_24px_60px_-30px_rgba(0,0,0,0.4)]"
+const float = "shadow-float"
 
 function WindowBar({ title, right }: { title: string; right?: ReactNode }) {
   return (

@@ -80,6 +80,7 @@
   --status-dot-running: #16a34a;
   --status-dot-failed: #dc2626;
   --status-dot-cancelling: #ea580c;
+  --elevation: 0 28px 80px -32px rgb(0 0 0 / 0.18);
 }
 
 .dark {
@@ -125,6 +126,7 @@
   --status-dot-running: #4ade80;
   --status-dot-failed: #f87171;
   --status-dot-cancelling: #fb923c;
+  --elevation: 0 28px 80px -32px rgb(0 0 0 / 0.55);
 }
 
 @theme inline {
@@ -247,4 +249,10 @@ html {
 
 .surface-noise {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* Localized elevation — Mono zeroes the theme shadow tokens, so the landing
+   illustrations opt back in via a single theme-aware token. */
+.shadow-float {
+  box-shadow: var(--elevation);
 }
