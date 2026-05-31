@@ -2,7 +2,7 @@
 
 import Image from "next/image"
 import Link from "next/link"
-import { Activity, ArrowRight, RefreshCw, Rocket, Server } from "lucide-react"
+import { ArrowRight, Braces, CircuitBoard, Fingerprint, Waypoints } from "lucide-react"
 import { useEffect, useState } from "react"
 
 import { EnvironmentsScreen, OverviewScreen, RunScreen } from "@/components/landing/hero-screens"
@@ -12,24 +12,24 @@ import { CDN_CONFIG } from "@/config"
 
 const FEATURES = [
   {
-    icon: RefreshCw,
-    title: "Usage to training",
-    body: "Bring traces, feedback, failures, rewards, and evals into your post-training loop.",
+    icon: Braces,
+    title: "Own the recipe",
+    body: "Use your own entrypoint, eval harness, reward logic, and training code.",
   },
   {
-    icon: Server,
-    title: "Managed GPUs",
-    body: "Run that loop on A100s, H100s, and more without building GPU operations.",
+    icon: CircuitBoard,
+    title: "Managed compute",
+    body: "Provision GPUs and materialize your workspace without SSH or cluster setup.",
   },
   {
-    icon: Activity,
-    title: "Reproducible signal",
-    body: "Tie every run to exact code and data so improvements stay traceable.",
+    icon: Fingerprint,
+    title: "Pinned evidence",
+    body: "Attach code, data, logs, metrics, checkpoints, and artifacts to each run.",
   },
   {
-    icon: Rocket,
-    title: "Train to serve",
-    body: "Promote a trained snapshot when it improves on your workflow.",
+    icon: Waypoints,
+    title: "Artifact to serve",
+    body: "Promote the model snapshot that performs best on your workflow.",
   },
 ]
 
@@ -81,18 +81,21 @@ export function LandingHero() {
       <div className="relative mx-auto max-w-7xl">
         <div className="max-w-2xl lg:max-w-[44rem]">
           <div>
+            <p className="mb-3 text-xs uppercase tracking-ui-eyebrow text-muted-foreground">
+              Not a single intelligent blob
+            </p>
             <h1 className="font-serif text-4xl leading-[1.1] tracking-tight text-foreground md:text-5xl">
-              The future isn&apos;t a single intelligent blob.
+              Models that improve
               <br />
-              <span className="italic">It&apos;s models that improve from real usage.</span>
+              <span className="italic">from real usage.</span>
             </h1>
 
-            <p className="mt-6 max-w-2xl text-xl leading-relaxed text-muted-foreground md:text-2xl">
-              Tahuna runs your training code on cloud GPUs today, and is built for production traces, feedback, evals,
-              and rewards to become the next run you control.
+            <p className="mt-5 max-w-xl text-lg leading-relaxed text-muted-foreground md:text-xl">
+              Turn product traces, feedback, evals, and rewards into specialized models that fit your workflow, instead
+              of paying ever-larger generalists to approximate it.
             </p>
 
-            <div className="mt-10 grid gap-x-10 gap-y-7 sm:grid-cols-2">
+            <div className="mt-8 grid gap-x-8 gap-y-5 sm:grid-cols-2">
               {FEATURES.map(({ icon: Icon, title, body }) => (
                 <div key={title} className="flex gap-3">
                   <Icon className="mt-0.5 size-5 shrink-0 text-foreground" />
@@ -104,7 +107,7 @@ export function LandingHero() {
               ))}
             </div>
 
-            <div className="mt-10 flex flex-col items-start gap-3 sm:flex-row">
+            <div className="mt-8 flex flex-col items-start gap-3 sm:flex-row">
               <Button asChild variant="default" size="lg">
                 <Link href="/login">
                   Get started
