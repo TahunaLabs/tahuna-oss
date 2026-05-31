@@ -23,7 +23,10 @@ const SLIDES = [
   { label: "Environments", screen: <EnvironmentsScreen /> },
 ]
 
-const heroGradientSrc = `${CDN_CONFIG.baseUrl}${CDN_CONFIG.artefactsPath}/tahuna-hero-gradient.png`
+const heroGradientSrc =
+  process.env.NODE_ENV === "development"
+    ? "/landing/tahuna-hero-gradient.png"
+    : `${CDN_CONFIG.baseUrl}${CDN_CONFIG.artefactsPath}/tahuna-hero-gradient.png`
 
 export function LandingHero() {
   const [active, setActive] = useState(0)
