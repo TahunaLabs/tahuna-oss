@@ -35,17 +35,17 @@ const FOOTER_SECTIONS = [
 
 export function LandingFooter() {
   return (
-    <footer id="start" className="overflow-hidden border-t border-white/10 bg-black text-white">
+    <footer id="start" className="overflow-hidden border-t border-border bg-foreground text-background">
       <div className="mx-auto max-w-7xl px-6 pt-16 md:px-8 md:pt-24">
         {/* Top area: brand left, links right */}
         <div className="flex flex-col gap-10 md:flex-row md:items-start md:justify-between">
           {/* Brand + copyright grouped */}
           <div className="flex shrink-0 flex-col gap-4">
-            <Link href="/" className="inline-flex items-center gap-3 text-white">
+            <Link href="/" className="inline-flex items-center gap-3 text-background">
               <Logo className="h-7" />
               <span className="text-xl font-semibold tracking-tight">Tahuna</span>
             </Link>
-            <p className="text-sm text-white/40">
+            <p className="text-sm text-background/40">
               © 2026 Tahuna. All rights reserved.
             </p>
           </div>
@@ -54,7 +54,7 @@ export function LandingFooter() {
           <div className="grid grid-cols-2 gap-x-16 gap-y-8 md:grid-cols-4">
             {FOOTER_SECTIONS.map((section) => (
               <div key={section.title} className="flex flex-col gap-3">
-                <span className="text-xs font-medium tracking-widest uppercase text-white/50">
+                <span className="text-xs font-medium tracking-widest uppercase text-background/50">
                   {section.title}
                 </span>
                 <ul className="flex flex-col gap-2">
@@ -63,7 +63,7 @@ export function LandingFooter() {
                       <Link
                         href={link.href}
                         {...(link.external ? { target: "_blank", rel: "noreferrer" } : {})}
-                        className="text-sm text-white/70 transition-colors hover:text-white"
+                        className="text-sm text-background/70 transition-colors hover:text-background"
                       >
                         {link.label}
                       </Link>
@@ -78,7 +78,7 @@ export function LandingFooter() {
         {/* Decorative text — in normal flow, no overlap */}
         <div className="pointer-events-none -mt-20 select-none overflow-hidden text-center">
           <p
-            className="leading-none font-semibold tracking-tight text-white/10"
+            className="leading-none font-semibold tracking-tight text-background/10"
             style={{ fontSize: "clamp(10rem, 24vw, 24rem)", transform: "translateY(22%)" }}
           >
             Tahuna
