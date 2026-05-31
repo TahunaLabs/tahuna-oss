@@ -92,4 +92,6 @@ export const CDN_CONFIG = {
   frameworkIconsPath: "/assets/frameworks",
   faviconPath: "/assets/favicon",
   artefactsPath: R2_ARTEFACTS_PATH,
+  heroGradientLight: "tahuna-hero-gradient-teal-lime.avif",
+  heroGradientDark: "tahuna-hero-gradient-dark-teal-lime.avif",
 } as const;

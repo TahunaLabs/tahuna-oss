@@ -40,14 +40,8 @@ const SLIDES = [
   { label: "Environments", screen: <EnvironmentsScreen /> },
 ]
 
-const heroLightGradientSrc =
-  process.env.NODE_ENV === "development"
-    ? "/landing/tahuna-hero-gradient-teal-lime.png"
-    : `${CDN_CONFIG.baseUrl}${CDN_CONFIG.artefactsPath}/tahuna-hero-gradient-teal-lime.png`
-const heroDarkGradientSrc =
-  process.env.NODE_ENV === "development"
-    ? "/landing/tahuna-hero-gradient-dark-teal-lime.png"
-    : `${CDN_CONFIG.baseUrl}${CDN_CONFIG.artefactsPath}/tahuna-hero-gradient-dark-teal-lime.png`
+const heroLightGradientSrc = `${CDN_CONFIG.baseUrl}${CDN_CONFIG.artefactsPath}/${CDN_CONFIG.heroGradientLight}`
+const heroDarkGradientSrc = `${CDN_CONFIG.baseUrl}${CDN_CONFIG.artefactsPath}/${CDN_CONFIG.heroGradientDark}`
 
 export function LandingHero() {
   const [active, setActive] = useState(0)

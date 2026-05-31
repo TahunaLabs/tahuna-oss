@@ -19,14 +19,8 @@ const ownershipColumns = [
   },
 ] as const
 
-const loopLightGradientSrc =
-  process.env.NODE_ENV === "development"
-    ? "/landing/tahuna-hero-gradient-teal-lime.png"
-    : `${CDN_CONFIG.baseUrl}${CDN_CONFIG.artefactsPath}/tahuna-hero-gradient-teal-lime.png`
-const loopDarkGradientSrc =
-  process.env.NODE_ENV === "development"
-    ? "/landing/tahuna-hero-gradient-dark-teal-lime.png"
-    : `${CDN_CONFIG.baseUrl}${CDN_CONFIG.artefactsPath}/tahuna-hero-gradient-dark-teal-lime.png`
+const loopLightGradientSrc = `${CDN_CONFIG.baseUrl}${CDN_CONFIG.artefactsPath}/${CDN_CONFIG.heroGradientLight}`
+const loopDarkGradientSrc = `${CDN_CONFIG.baseUrl}${CDN_CONFIG.artefactsPath}/${CDN_CONFIG.heroGradientDark}`
 
 export function LandingLayersSection() {
   return (
