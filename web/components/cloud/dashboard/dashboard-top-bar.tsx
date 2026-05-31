@@ -10,9 +10,10 @@ import { CLOUD_LINKS_CONFIG } from "@/cloud/links"
 
 type CloudDashboardTopBarProps = React.ComponentProps<"header"> & {
   title?: string
+  onOpenSearch?: () => void
 }
 
-function CloudDashboardTopBar({ title, ...props }: CloudDashboardTopBarProps) {
+function CloudDashboardTopBar({ title, onOpenSearch, ...props }: CloudDashboardTopBarProps) {
   const { theme, setTheme } = useTheme()
 
   return (
@@ -37,6 +38,7 @@ function CloudDashboardTopBar({ title, ...props }: CloudDashboardTopBarProps) {
         <button
           type="button"
           aria-label="Search"
+          onClick={onOpenSearch}
           className="hidden w-60 items-center gap-2 rounded-md border border-border bg-background px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted lg:flex"
         >
           <Search className="size-3.5 shrink-0" />

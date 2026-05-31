@@ -14,6 +14,7 @@ import {
 import { CloudDashboardTopBar } from "@/components/cloud/dashboard/dashboard-top-bar"
 import { CLOUD_DASHBOARD_DOCS_NAV } from "@/components/cloud/dashboard/sidebar-links"
 import { EnvironmentsContainer } from "@/components/features/dashboard/environments-container"
+import { DashboardCommandMenu } from "@/components/features/dashboard/dashboard-command-menu"
 import { MachinesContainer } from "@/components/features/dashboard/machines-container"
 import { OverviewContainer } from "@/components/features/dashboard/overview-container"
 import { RunsContainer } from "@/components/features/dashboard/runs-container"
@@ -65,6 +66,7 @@ export default function DashboardPage() {
   const [shareDialogOpen, setShareDialogOpen] = useState(false)
   const [shareTarget, setShareTarget] = useState<{ resourceType: ResourceType; resourceId: string } | null>(null)
   const [shareBusy, setShareBusy] = useState(false)
+  const [commandOpen, setCommandOpen] = useState(false)
 
   const [activeView, setActiveView] = useQueryState(
     "view",
@@ -189,7 +191,7 @@ export default function DashboardPage() {
   return (
     <>
       <DashboardAppLayout
-        topBar={<CloudDashboardTopBar title={VIEW_LABELS[activeView] ?? ""} />}
+        topBar={<CloudDashboardTopBar title={VIEW_LABELS[activeView] ?? ""} onOpenSearch={() => setCommandOpen(true)} />}
         sidebar={(
           <Sidebar
             activeView={activeView}
@@ -224,6 +226,12 @@ export default function DashboardPage() {
           onRevokeLink={(shareLinkId) => { void handleRevokeLink(shareLinkId) }}
         />
       )}
+      <DashboardCommandMenu
+        open={commandOpen}
+        onOpenChange={setCommandOpen}
+        enabled={shouldLoadQueries}
+        onSelectView={(view) => { void setActiveView(view as CloudDashboardView) }}
+      />
     </>
   )
 }
