@@ -1,5 +1,6 @@
 "use client"
 
+import Image from "next/image"
 import Link from "next/link"
 import { Activity, ArrowRight, RefreshCw, Rocket, Server } from "lucide-react"
 import { useEffect, useState } from "react"
@@ -7,6 +8,7 @@ import { useEffect, useState } from "react"
 import { EnvironmentsScreen, OverviewScreen, RunScreen } from "@/components/landing/hero-screens"
 import { DotGrid } from "@/components/landing/section-decorations"
 import { Button } from "@/components/ui/button"
+import { CDN_CONFIG } from "@/config"
 
 const FEATURES = [
   { icon: Server, title: "Managed GPUs", body: "Provision A100s, H100s, and more without building GPU operations." },
@@ -21,6 +23,8 @@ const SLIDES = [
   { label: "Environments", screen: <EnvironmentsScreen /> },
 ]
 
+const heroGradientSrc = `${CDN_CONFIG.baseUrl}${CDN_CONFIG.artefactsPath}/tahuna-hero-gradient.png`
+
 export function LandingHero() {
   const [active, setActive] = useState(0)
 
@@ -31,6 +35,16 @@ export function LandingHero() {
 
   return (
     <section className="relative overflow-hidden px-6 pb-0 pt-24 md:px-8 md:pt-32">
+      <div aria-hidden className="pointer-events-none absolute inset-0 opacity-70 dark:opacity-30">
+        <Image
+          src={heroGradientSrc}
+          alt=""
+          fill
+          priority
+          sizes="100vw"
+          className="object-cover object-center"
+        />
+      </div>
       <DotGrid className="inset-y-0 right-0 w-1/2" />
 
       {/* Product — anchored to the viewport's right edge; the wrapper clips it
