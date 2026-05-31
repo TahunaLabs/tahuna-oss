@@ -5,7 +5,7 @@ import Link from "next/link"
 import { ArrowRight, Braces, CircuitBoard, Fingerprint, Waypoints } from "lucide-react"
 import { useEffect, useState } from "react"
 
-import { EnvironmentsScreen, OverviewScreen, RunScreen } from "@/components/landing/hero-screens"
+import { EnvironmentsScreen, MetricsScreen, OverviewScreen, RunScreen } from "@/components/landing/hero-screens"
 import { DotGrid } from "@/components/landing/section-decorations"
 import { Button } from "@/components/ui/button"
 import { CDN_CONFIG } from "@/config"
@@ -34,6 +34,7 @@ const FEATURES = [
 ]
 
 const SLIDES = [
+  { label: "Metrics", screen: <MetricsScreen /> },
   { label: "Overview", screen: <OverviewScreen /> },
   { label: "Runs", screen: <RunScreen /> },
   { label: "Environments", screen: <EnvironmentsScreen /> },

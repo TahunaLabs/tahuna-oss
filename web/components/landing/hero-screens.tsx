@@ -52,6 +52,81 @@ function MiniChart({ label, latest, points }: { label: string; latest: string; p
   )
 }
 
+// ── Metrics CLI — tailing gsm8k/acc for two runs ──────────────────
+const metricsRows = [
+  { step: 100,  gemma: "0.3124", qwen: "0.2891" },
+  { step: 200,  gemma: "0.3560", qwen: "0.3247" },
+  { step: 300,  gemma: "0.3892", qwen: "0.3589" },
+  { step: 400,  gemma: "0.4231", qwen: "0.3901" },
+  { step: 500,  gemma: "0.4521", qwen: "0.4178" },
+  { step: 600,  gemma: "0.4799", qwen: "0.4432" },
+  { step: 700,  gemma: "0.5012", qwen: "0.4687" },
+  { step: 800,  gemma: "0.5247", qwen: "0.4921" },
+  { step: 900,  gemma: "0.5489", qwen: "0.5184" },
+  { step: 1000, gemma: "0.5712", qwen: "0.5412" },
+  { step: 1100, gemma: "0.5934", qwen: "0.5638" },
+  { step: 1200, gemma: "0.6143", qwen: "0.5871" },
+  { step: 1300, gemma: "0.6378", qwen: "0.6099" },
+  { step: 1400, gemma: "0.6589", qwen: "0.6314" },
+]
+
+export function MetricsScreen() {
+  return (
+    <Card variant="default" className={shell}>
+      <WindowBar title="tahuna metrics" />
+      <div className="flex-1 overflow-hidden p-4 font-mono text-xs">
+        {/* command line */}
+        <div className="mb-4 flex items-center gap-2">
+          <span className="text-muted-foreground">$</span>
+          <span className="text-foreground/90">
+            tahuna run metrics gemma4-e2b qwen3-5-2b{" "}
+            <span className="text-muted-foreground">--metric</span>{" "}
+            <span className="text-foreground">gsm8k/acc</span>
+          </span>
+        </div>
+
+        {/* status line */}
+        <div className="mb-3 text-muted-foreground">
+          tailing <span className="text-foreground/80">gsm8k/acc</span> &nbsp;·&nbsp; 2 runs
+        </div>
+
+        {/* table header */}
+        <div className="mb-1 grid grid-cols-[5rem_7rem_7rem] gap-2 border-b border-border pb-1 uppercase tracking-ui-eyebrow text-muted-foreground">
+          <span>step</span>
+          <span>gemma4-e2b</span>
+          <span>qwen3-5-2b</span>
+        </div>
+
+        {/* rows */}
+        <div className="divide-y divide-border/40">
+          {metricsRows.map((row, i) => {
+            const isLive = i === metricsRows.length - 1
+            return (
+              <div
+                key={row.step}
+                className={cn(
+                  "grid grid-cols-[5rem_7rem_7rem] gap-2 py-1.5",
+                  isLive ? "text-foreground" : "text-muted-foreground",
+                )}
+              >
+                <span>{row.step}</span>
+                <span className={cn(isLive && "font-medium text-[hsl(var(--primary))]")}>{row.gemma}</span>
+                <span className={cn(isLive && "font-medium")}>{row.qwen}</span>
+              </div>
+            )
+          })}
+        </div>
+
+        {/* live cursor */}
+        <div className="mt-2 flex items-center gap-2 text-muted-foreground">
+          <span className="text-foreground/60">$</span>
+          <span className="inline-block h-3.5 w-1.5 animate-pulse bg-foreground/60" />
+        </div>
+      </div>
+    </Card>
+  )
+}
+
 // ── Runs (run detail) — dense W&B-style metric grid ───────────────
 export function RunScreen() {
   return (
