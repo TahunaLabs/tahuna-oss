@@ -16,17 +16,14 @@ function frameworkIcon(filename: string) {
 
 export function FrameworksBar() {
   return (
-    <section className="border-t border-border px-6 py-20 md:px-8 md:py-24">
+    <section className="border-t border-border px-6 py-12 md:px-8 md:py-14">
       <div className="mx-auto max-w-4xl text-center">
         <h2 className="text-2xl font-semibold tracking-tight text-foreground md:text-3xl">
           Bring the stack you already use
         </h2>
-        <p className="mx-auto mt-3 max-w-2xl text-lg leading-relaxed text-muted-foreground">
-          PyTorch, Hugging Face, Unsloth, TRL, Verifiers, or any project that runs from a standard Python entrypoint.
-        </p>
       </div>
 
-      <div className="mx-auto mt-12 flex max-w-5xl flex-wrap items-center justify-center gap-x-14 gap-y-8">
+      <div className="mx-auto mt-8 flex max-w-5xl flex-wrap items-center justify-center gap-x-14 gap-y-6">
         {FRAMEWORKS.map(({ name, logo }) => (
           <span
             key={name}
