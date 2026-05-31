@@ -1,8 +1,8 @@
 "use client"
 
-import { ACTIVE_STATUSES } from "@/components/features/dashboard-model"
+import { ACTIVE_STATUSES, TERMINAL_STATUSES } from "@/components/features/dashboard-model"
 import { OverviewView, type ActivityPoint, type OverviewKpi } from "@/components/features/dashboard/overview-view"
-import { useDashboardEnvironments, useDashboardRuns } from "@/lib/dashboard-api"
+import { useDashboardEnvironments, useDashboardRuns, useDashboardServes } from "@/lib/dashboard-api"
 
 const DAY_MS = 86_400_000
 const ACTIVITY_DAYS = 14
@@ -14,20 +14,25 @@ type Props = {
 export function OverviewContainer({ shouldLoadQueries }: Props) {
   const runResult = useDashboardRuns(shouldLoadQueries)
   const envResult = useDashboardEnvironments(shouldLoadQueries)
+  const serveResult = useDashboardServes(shouldLoadQueries)
 
   const runs = runResult?.runs
   const environments = envResult?.environments ?? []
+  const serves = serveResult?.serves ?? []
   const loading = runs === undefined
   const safeRuns = runs ?? []
 
   const activeRuns = safeRuns.filter((run) => ACTIVE_STATUSES.has(run.status)).length
   const computeHours = safeRuns.reduce((total, run) => total + Math.max(run.uptime_ms, 0), 0) / 3_600_000
+  const terminalRuns = safeRuns.filter((run) => TERMINAL_STATUSES.has(run.status))
+  const succeededRuns = safeRuns.filter((run) => run.status === "completed" || run.status === "succeeded").length
+  const successRate = terminalRuns.length > 0 ? Math.round((succeededRuns / terminalRuns.length) * 100) : null
 
   const kpis: OverviewKpi[] = [
     { label: "Active runs", value: String(activeRuns), hint: "Provisioning or running" },
-    { label: "Total runs", value: String(safeRuns.length), hint: "All time" },
-    { label: "Environments", value: String(environments.length), hint: "Configured" },
-    { label: "Compute hours", value: computeHours.toFixed(1), hint: "Across all runs" },
+    { label: "Success rate", value: successRate === null ? "—" : `${successRate}%`, hint: "Completed vs failed" },
+    { label: "GPU hours", value: computeHours.toFixed(1), hint: "Across all runs" },
+    { label: "Deployed", value: String(serves.length), hint: "Models serving" },
   ]
 
   const startOfToday = new Date()
