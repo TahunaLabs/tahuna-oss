@@ -31,23 +31,22 @@ export function LandingHero() {
   }, [])
 
   return (
-    <section className="relative overflow-hidden px-6 py-24 md:px-8 md:py-36">
+    <section className="relative overflow-hidden px-6 pb-24 pt-24 md:px-8 md:pb-28 md:pt-32">
       <DotGrid className="inset-y-0 right-0 w-1/2" />
       <div className="relative mx-auto max-w-7xl">
-        <div className="grid items-start gap-12 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)] lg:gap-20">
+        <div className="grid items-start gap-12 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)] lg:gap-16">
           <div>
-            <h1 className="font-serif text-4xl leading-[1.12] tracking-tight text-foreground md:text-5xl">
-              The future is not a single intelligent blob.
+            <h1 className="font-serif text-4xl leading-[1.1] tracking-tight text-foreground md:text-5xl">
+              Own your intelligence,
               <br />
-              <span className="italic">It&apos;s billions of species of models.</span>
+              <span className="italic">own your training loop.</span>
             </h1>
 
-            <p className="mt-8 max-w-lg text-xl leading-relaxed text-muted-foreground md:text-2xl">
-              Post-training infrastructure should be easily accessible — a wide field of specialized systems, not
-              one monolith.
+            <p className="mt-6 max-w-lg text-xl leading-relaxed text-muted-foreground md:text-2xl">
+              The future isn&apos;t a single intelligent blob — it&apos;s billions of species of models.
             </p>
 
-            <div className="mt-14 grid gap-x-10 gap-y-10 sm:grid-cols-2">
+            <div className="mt-10 grid gap-x-10 gap-y-7 sm:grid-cols-2">
               {FEATURES.map(({ icon: Icon, title, body }) => (
                 <div key={title} className="flex gap-3">
                   <Icon className="mt-0.5 size-5 shrink-0 text-foreground" />
@@ -59,7 +58,7 @@ export function LandingHero() {
               ))}
             </div>
 
-            <div className="mt-12 flex flex-col items-start gap-3 sm:flex-row">
+            <div className="mt-10 flex flex-col items-start gap-3 sm:flex-row">
               <Button asChild variant="default" size="lg">
                 <Link href="/login">
                   Get started
