@@ -42,8 +42,8 @@ export function LandingFooter() {
           {/* Brand + copyright grouped */}
           <div className="flex shrink-0 flex-col gap-4">
             <Link href="/" className="inline-flex items-center gap-3 text-background">
-              <Logo className="h-7" />
-              <span className="text-xl font-semibold tracking-tight">Tahuna</span>
+              <Logo className="h-14" />
+              <span className="text-sm font-light tracking-[0.2em]">Tahuna</span>
             </Link>
             <p className="text-sm text-background/40">
               © 2026 Tahuna. All rights reserved.
