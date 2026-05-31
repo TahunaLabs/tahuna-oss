@@ -85,11 +85,11 @@ export function LandingHero() {
 
       {/* Product — anchored to the viewport's right edge; the wrapper clips it
           at the screen edge (right) and at a fixed height (bottom). */}
-      <div className="pointer-events-none absolute right-0 top-28 hidden h-[40rem] w-[46vw] overflow-hidden lg:block xl:top-32 xl:h-[44rem]">
+      <div className="pointer-events-none absolute right-0 top-28 hidden h-[36rem] w-[42vw] overflow-hidden lg:block xl:top-32 xl:h-[40rem]">
         <div
           key={active}
           aria-hidden
-          className="absolute left-0 top-0 w-[52rem] animate-in fade-in duration-500 xl:w-[60rem]"
+          className="absolute left-0 top-0 w-[44rem] animate-in fade-in duration-500 xl:w-[52rem]"
         >
           {SLIDES[active].screen}
         </div>
@@ -101,13 +101,13 @@ export function LandingHero() {
             <p className="mb-3 text-xs uppercase tracking-ui-eyebrow text-muted-foreground">
               Not a single intelligent blob
             </p>
-            <h1 className="font-serif text-4xl leading-[1.1] tracking-tight text-foreground md:text-5xl">
+            <h1 className="font-serif text-3xl leading-[1.1] tracking-tight text-foreground md:text-4xl">
               Models that improve
               <br />
               <span className="italic">from real usage.</span>
             </h1>
 
-            <p className="mt-5 max-w-xl text-lg leading-relaxed text-muted-foreground md:text-xl">
+            <p className="mt-5 max-w-xl text-base leading-relaxed text-muted-foreground md:text-lg">
               Turn product traces, feedback, evals, and rewards into specialized models that fit your workflow, instead
               of paying ever-larger generalists to approximate it.
             </p>
@@ -144,7 +144,7 @@ export function LandingHero() {
           <div className="relative hidden overflow-hidden lg:block">
             <div
               key={active}
-              className="absolute left-0 top-0 w-[50rem] animate-in fade-in duration-500 xl:w-[56rem]"
+              className="absolute left-0 top-0 w-[42rem] animate-in fade-in duration-500 xl:w-[48rem]"
             >
               {SLIDES[active].screen}
             </div>
