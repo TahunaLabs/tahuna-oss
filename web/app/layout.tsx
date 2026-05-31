@@ -1,5 +1,6 @@
 import { siteMetadata } from "@/app/site-metadata"
 import { ConvexClientProvider } from "@/components/convex-client-provider"
+import { PostHogProvider } from "@/components/posthog-provider"
 import { ThemeProvider } from "@/components/theme-provider"
 import { Toaster } from "@/components/ui/toaster"
 import { TooltipProvider } from "@/components/ui/tooltip"
@@ -26,15 +27,17 @@ export default async function RootLayout({
   return (
     <html lang="en" className={`${geistMono.variable} ${initialTheme}`}>
       <body className="font-sans antialiased bg-sidebar h-svh overflow-hidden">
-        <ThemeProvider initialTheme={initialTheme}>
-            <TooltipProvider>
-              <NuqsAdapter>
-                <ConvexClientProvider initialToken={token}>{children}</ConvexClientProvider>
-              </NuqsAdapter>
-            </TooltipProvider>
-            <Toaster />
-        </ThemeProvider>
-</body>
+        <PostHogProvider>
+          <ThemeProvider initialTheme={initialTheme}>
+              <TooltipProvider>
+                <NuqsAdapter>
+                  <ConvexClientProvider initialToken={token}>{children}</ConvexClientProvider>
+                </NuqsAdapter>
+              </TooltipProvider>
+              <Toaster />
+          </ThemeProvider>
+        </PostHogProvider>
+      </body>
     </html>
   )
 }
