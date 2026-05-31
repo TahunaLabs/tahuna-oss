@@ -33,8 +33,21 @@ export function LandingHero() {
   return (
     <section className="relative overflow-hidden px-6 pb-24 pt-24 md:px-8 md:pb-28 md:pt-32">
       <DotGrid className="inset-y-0 right-0 w-1/2" />
+
+      {/* Product — anchored to the viewport's right edge; the wrapper clips it
+          at the screen edge (right) and at a fixed height (bottom). */}
+      <div className="pointer-events-none absolute right-0 top-28 hidden h-[40rem] w-[46vw] overflow-hidden lg:block xl:top-32 xl:h-[44rem]">
+        <div
+          key={active}
+          aria-hidden
+          className="absolute left-0 top-0 w-[52rem] animate-in fade-in duration-500 xl:w-[60rem]"
+        >
+          {SLIDES[active].screen}
+        </div>
+      </div>
+
       <div className="relative mx-auto max-w-7xl">
-        <div className="grid items-stretch gap-10 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,0.9fr)]">
+        <div className="max-w-xl lg:max-w-[36rem]">
           <div>
             <h1 className="font-serif text-4xl leading-[1.1] tracking-tight text-foreground md:text-5xl">
               Own your intelligence,
