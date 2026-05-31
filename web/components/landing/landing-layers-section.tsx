@@ -1,6 +1,5 @@
 import { DotGrid } from "@/components/landing/section-decorations"
 import { Card, CardContent } from "@/components/ui/card"
-import { cn } from "@/lib/utils"
 
 const layers = [
   {
@@ -35,33 +34,32 @@ const layers = [
 
 export function LandingLayersSection() {
   return (
-    <section id="layers" className="relative overflow-hidden border-t border-border px-6 py-24 md:px-8 md:py-32">
+    <section id="layers" className="relative overflow-hidden border-t border-border px-6 py-20 md:px-8 md:py-24">
       <DotGrid className="left-0 top-20 h-64 w-1/3" />
-      <div className="relative mx-auto grid max-w-7xl gap-12 lg:grid-cols-12 lg:gap-16">
-        <div className="lg:col-span-4 lg:sticky lg:top-24 lg:self-start">
-          <p className="mb-3 text-xs uppercase tracking-ui-eyebrow text-muted-foreground">The Layers</p>
-          <h2 className="text-3xl font-semibold leading-tight tracking-tight text-foreground md:text-4xl">
-            Everything around
-            <br />
-            the training loop
-          </h2>
-          <p className="mt-6 max-w-sm text-base leading-relaxed text-muted-foreground">
+      <div className="relative mx-auto max-w-7xl">
+        <div className="mb-10 grid gap-6 lg:grid-cols-12 lg:items-end">
+          <div className="lg:col-span-5">
+            <p className="mb-3 text-xs uppercase tracking-ui-eyebrow text-muted-foreground">The Layers</p>
+            <h2 className="text-3xl font-semibold leading-tight tracking-tight text-foreground md:text-4xl">
+              Everything around
+              <br />
+              the training loop
+            </h2>
+          </div>
+          <p className="max-w-2xl text-base leading-relaxed text-muted-foreground lg:col-span-7">
             You own the algorithm, reward logic, rollout code, and data. Tahuna owns provisioning, sync, execution,
             monitoring, checkpoints, and artifacts.
           </p>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2 lg:col-span-8">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {layers.map((layer, index) => (
             <Card
               key={layer.title}
               variant="default"
-              className={cn(
-                "flex flex-col border-border bg-card/95",
-                index % 2 === 1 && "sm:mt-12",
-              )}
+              className="flex flex-col border-border bg-card/95"
             >
-              <CardContent className="flex h-full flex-1 flex-col p-6">
+              <CardContent className="flex h-full flex-1 flex-col p-5">
                 <div className="flex items-baseline justify-between">
                   <span className="text-sm text-muted-foreground">{layer.owner}</span>
                   <span className="text-2xl tabular-nums text-muted-foreground/30">
