@@ -4,8 +4,9 @@ import { Card } from "@/components/ui/card"
 import { StatusDot, toStatusDotVariant } from "@/components/ui/status-dot"
 import { cn } from "@/lib/utils"
 
-// Fixed-height, densely-packed screens that crop at the edge like a real screenshot.
-const shell = "flex h-[34rem] flex-col overflow-hidden bg-card shadow-float"
+// Tall, densely-packed screens. The hero clips them on the right + bottom, so
+// they read as a real screenshot that continues past the edge of the viewport.
+const shell = "flex h-[42rem] flex-col overflow-hidden bg-card shadow-float"
 
 function WindowBar({ title, right }: { title: string; right?: ReactNode }) {
   return (
@@ -111,6 +112,11 @@ const envRows = [
   { name: "bert-classifier", device: "L40S ×2", runtime: "pt2.10-cu128", status: "completed" },
   { name: "deepseek-rl", device: "H200 ×4", runtime: "pt2.11-cu130", status: "queued" },
   { name: "t5-summarizer", device: "A100 ×2", runtime: "pt2.2-cu121", status: "completed" },
+  { name: "clip-finetune", device: "L40S ×1", runtime: "pt2.4-cu124", status: "completed" },
+  { name: "mamba-base", device: "H100 ×4", runtime: "pt2.10-cu128", status: "running" },
+  { name: "yolo-detect", device: "RTX 4090 ×2", runtime: "pt2.2-cu121", status: "completed" },
+  { name: "rwkv-world", device: "A100 ×1", runtime: "pt2.11-cu130", status: "queued" },
+  { name: "phi3-distill", device: "B200 ×4", runtime: "pt2.11-cu130", status: "completed" },
 ]
 
 export function EnvironmentsScreen() {
@@ -148,6 +154,12 @@ const recentRuns = [
   { name: "rapid-river-tiger", env: "mnist", status: "completed", time: "14d ago" },
   { name: "bold-summit-owl", env: "phi-sft", status: "running", time: "1h ago" },
   { name: "calm-harbor-fox", env: "gemma-tune", status: "completed", time: "2d ago" },
+  { name: "warm-meadow-otter", env: "mixtral-lora", status: "running", time: "5h ago" },
+  { name: "swift-canyon-hawk", env: "deepseek-rl", status: "completed", time: "6d ago" },
+  { name: "lone-summit-crane", env: "whisper-ft", status: "completed", time: "8d ago" },
+  { name: "brisk-harbor-seal", env: "bert-classifier", status: "queued", time: "1d ago" },
+  { name: "pale-river-moth", env: "t5-summarizer", status: "completed", time: "9d ago" },
+  { name: "quiet-forest-elk", env: "sdxl-dreambooth", status: "completed", time: "12d ago" },
 ]
 
 export function OverviewScreen() {

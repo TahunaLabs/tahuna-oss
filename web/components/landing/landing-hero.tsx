@@ -34,7 +34,7 @@ export function LandingHero() {
     <section className="relative overflow-hidden px-6 pb-24 pt-24 md:px-8 md:pb-28 md:pt-32">
       <DotGrid className="inset-y-0 right-0 w-1/2" />
       <div className="relative mx-auto max-w-7xl">
-        <div className="grid items-start gap-12 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)] lg:gap-16">
+        <div className="grid items-stretch gap-10 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,0.9fr)]">
           <div>
             <h1 className="font-serif text-4xl leading-[1.1] tracking-tight text-foreground md:text-5xl">
               Own your intelligence,
@@ -72,33 +72,37 @@ export function LandingHero() {
                 </Link>
               </Button>
             </div>
+
+            <div className="mt-12 hidden items-center justify-center gap-4 lg:flex">
+              <div className="flex items-center gap-1.5">
+                {SLIDES.map((slide, index) => (
+                  <button
+                    key={slide.label}
+                    type="button"
+                    aria-label={`Show ${slide.label}`}
+                    onClick={() => setActive(index)}
+                    className={cn(
+                      "h-1.5 rounded-full transition-all",
+                      index === active ? "w-6 bg-foreground" : "w-1.5 bg-muted-foreground/30",
+                    )}
+                  />
+                ))}
+              </div>
+              <span className="text-ui-caption text-muted-foreground">
+                {active + 1} of {SLIDES.length} — {SLIDES[active].label}
+              </span>
+            </div>
           </div>
 
-          <div className="relative hidden lg:block">
-            <div key={active} className="w-[52rem] max-w-none animate-in fade-in duration-500 xl:w-[60rem]">
+          {/* Product — off-center; clipped on the right + bottom, top-left corner shows */}
+          <div className="relative hidden overflow-hidden lg:block">
+            <div
+              key={active}
+              className="absolute left-0 top-0 w-[50rem] animate-in fade-in duration-500 xl:w-[56rem]"
+            >
               {SLIDES[active].screen}
             </div>
           </div>
-        </div>
-
-        <div className="mt-14 hidden items-center justify-center gap-4 lg:flex">
-          <div className="flex items-center gap-1.5">
-            {SLIDES.map((slide, index) => (
-              <button
-                key={slide.label}
-                type="button"
-                aria-label={`Show ${slide.label}`}
-                onClick={() => setActive(index)}
-                className={cn(
-                  "h-1.5 rounded-full transition-all",
-                  index === active ? "w-6 bg-foreground" : "w-1.5 bg-muted-foreground/30",
-                )}
-              />
-            ))}
-          </div>
-          <span className="text-ui-caption text-muted-foreground">
-            {active + 1} of {SLIDES.length} — {SLIDES[active].label}
-          </span>
         </div>
       </div>
     </section>
