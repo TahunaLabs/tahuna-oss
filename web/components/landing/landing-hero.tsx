@@ -7,7 +7,6 @@ import { useEffect, useState } from "react"
 import { EnvironmentsScreen, OverviewScreen, RunScreen } from "@/components/landing/hero-screens"
 import { DotGrid } from "@/components/landing/section-decorations"
 import { Button } from "@/components/ui/button"
-import { cn } from "@/lib/utils"
 
 const FEATURES = [
   { icon: Server, title: "Managed GPUs", body: "Provision A100s, H100s, and more without building GPU operations." },
@@ -31,7 +30,7 @@ export function LandingHero() {
   }, [])
 
   return (
-    <section className="relative overflow-hidden px-6 pb-24 pt-24 md:px-8 md:pb-28 md:pt-32">
+    <section className="relative overflow-hidden px-6 pb-0 pt-24 md:px-8 md:pt-32">
       <DotGrid className="inset-y-0 right-0 w-1/2" />
 
       {/* Product — anchored to the viewport's right edge; the wrapper clips it
@@ -47,7 +46,7 @@ export function LandingHero() {
       </div>
 
       <div className="relative mx-auto max-w-7xl">
-        <div className="max-w-xl lg:max-w-[36rem]">
+        <div className="max-w-2xl lg:max-w-[44rem]">
           <div>
             <h1 className="font-serif text-4xl leading-[1.1] tracking-tight text-foreground md:text-5xl">
               Own your intelligence
@@ -55,7 +54,7 @@ export function LandingHero() {
               <span className="italic">loop.</span>
             </h1>
 
-            <p className="mt-6 max-w-lg text-xl leading-relaxed text-muted-foreground md:text-2xl">
+            <p className="mt-6 max-w-2xl text-xl leading-relaxed text-muted-foreground md:text-2xl">
               Run custom training and post-training jobs on cloud GPUs from your terminal. Keep your Python loop;
               Tahuna handles the infrastructure around it.
             </p>
@@ -85,26 +84,6 @@ export function LandingHero() {
                   <ArrowRight />
                 </Link>
               </Button>
-            </div>
-
-            <div className="mt-12 hidden items-center justify-center gap-4 lg:flex">
-              <div className="flex items-center gap-1.5">
-                {SLIDES.map((slide, index) => (
-                  <button
-                    key={slide.label}
-                    type="button"
-                    aria-label={`Show ${slide.label}`}
-                    onClick={() => setActive(index)}
-                    className={cn(
-                      "h-1.5 rounded-full transition-all",
-                      index === active ? "w-6 bg-foreground" : "w-1.5 bg-muted-foreground/30",
-                    )}
-                  />
-                ))}
-              </div>
-              <span className="text-ui-caption text-muted-foreground">
-                {active + 1} of {SLIDES.length} — {SLIDES[active].label}
-              </span>
             </div>
           </div>
 
