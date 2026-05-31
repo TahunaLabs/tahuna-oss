@@ -39,10 +39,14 @@ const SLIDES = [
   { label: "Environments", screen: <EnvironmentsScreen /> },
 ]
 
-const heroGradientSrc =
+const heroLightGradientSrc =
   process.env.NODE_ENV === "development"
-    ? "/landing/tahuna-hero-gradient.png"
-    : `${CDN_CONFIG.baseUrl}${CDN_CONFIG.artefactsPath}/tahuna-hero-gradient.png`
+    ? "/landing/tahuna-hero-gradient-teal-lime.png"
+    : `${CDN_CONFIG.baseUrl}${CDN_CONFIG.artefactsPath}/tahuna-hero-gradient-teal-lime.png`
+const heroDarkGradientSrc =
+  process.env.NODE_ENV === "development"
+    ? "/landing/tahuna-hero-gradient-dark-teal-lime.png"
+    : `${CDN_CONFIG.baseUrl}${CDN_CONFIG.artefactsPath}/tahuna-hero-gradient-dark-teal-lime.png`
 
 export function LandingHero() {
   const [active, setActive] = useState(0)
@@ -54,16 +58,28 @@ export function LandingHero() {
 
   return (
     <section className="relative overflow-hidden px-6 pb-0 pt-24 md:px-8 md:pt-32">
-      <div aria-hidden className="pointer-events-none absolute inset-0 opacity-70 dark:opacity-30">
+      <div aria-hidden className="pointer-events-none absolute inset-0 opacity-70 dark:hidden">
         <Image
-          src={heroGradientSrc}
+          src={heroLightGradientSrc}
           alt=""
           fill
-          priority
           sizes="100vw"
           className="object-cover object-center"
         />
       </div>
+      <div aria-hidden className="pointer-events-none absolute inset-0 hidden dark:block">
+        <Image
+          src={heroDarkGradientSrc}
+          alt=""
+          fill
+          sizes="100vw"
+          className="object-cover object-center"
+        />
+      </div>
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-y-0 left-0 w-[58%] bg-gradient-to-r from-background via-background/80 to-transparent dark:w-[44%] dark:via-background/10"
+      />
       <DotGrid className="inset-y-0 right-0 w-1/2" />
 
       {/* Product — anchored to the viewport's right edge; the wrapper clips it

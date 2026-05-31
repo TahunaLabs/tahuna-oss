@@ -19,10 +19,14 @@ const ownershipColumns = [
   },
 ] as const
 
-const loopGradientSrc =
+const loopLightGradientSrc =
   process.env.NODE_ENV === "development"
-    ? "/landing/tahuna-hero-gradient.png"
-    : `${CDN_CONFIG.baseUrl}${CDN_CONFIG.artefactsPath}/tahuna-hero-gradient.png`
+    ? "/landing/tahuna-hero-gradient-teal-lime.png"
+    : `${CDN_CONFIG.baseUrl}${CDN_CONFIG.artefactsPath}/tahuna-hero-gradient-teal-lime.png`
+const loopDarkGradientSrc =
+  process.env.NODE_ENV === "development"
+    ? "/landing/tahuna-hero-gradient-dark-teal-lime.png"
+    : `${CDN_CONFIG.baseUrl}${CDN_CONFIG.artefactsPath}/tahuna-hero-gradient-dark-teal-lime.png`
 
 export function LandingLayersSection() {
   return (
@@ -42,19 +46,26 @@ export function LandingLayersSection() {
           </p>
         </div>
 
-        <Card variant="default" className="relative border-border bg-card/95 lg:col-span-8">
-          <div
-            aria-hidden
-            className="pointer-events-none absolute inset-0 opacity-80 dark:opacity-35"
-          >
+        <Card variant="default" className="relative overflow-hidden border-border bg-card/95 lg:col-span-8">
+          <div aria-hidden className="pointer-events-none absolute inset-0 opacity-45 dark:hidden">
             <Image
-              src={loopGradientSrc}
+              src={loopLightGradientSrc}
               alt=""
               fill
               sizes="70vw"
               className="object-cover object-center"
             />
           </div>
+          <div aria-hidden className="pointer-events-none absolute inset-0 hidden dark:block">
+            <Image
+              src={loopDarkGradientSrc}
+              alt=""
+              fill
+              sizes="70vw"
+              className="object-cover object-center"
+            />
+          </div>
+          <div aria-hidden className="pointer-events-none absolute inset-0 bg-card/55 dark:bg-card/15" />
 
           <CardContent className="relative p-0">
             <div className="grid md:grid-cols-2">
