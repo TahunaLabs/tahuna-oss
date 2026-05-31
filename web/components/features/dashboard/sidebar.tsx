@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import type { ElementType } from "react"
-import { HardDrive, Server, Play, LogOut, Settings, ChevronsUpDown, ChevronRight, Rocket } from "lucide-react"
+import { HardDrive, Server, Play, LogOut, Settings, ChevronsUpDown, ChevronRight, Rocket, LayoutGrid } from "lucide-react"
 import {
   SidebarContent,
   SidebarFooter,
@@ -55,6 +55,7 @@ interface SidebarProps {
 }
 
 const DEFAULT_NAV_PLATFORM: DashboardNavItem[] = [
+  { icon: LayoutGrid, label: "Overview", view: "overview" },
   { icon: HardDrive, label: "Storage", view: "storage" },
   { icon: Server, label: "Environments", view: "environments" },
   { icon: Play, label: "Runs", view: "runs" },

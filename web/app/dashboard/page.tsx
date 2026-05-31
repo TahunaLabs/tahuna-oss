@@ -15,6 +15,7 @@ import { CloudDashboardTopBar } from "@/components/cloud/dashboard/dashboard-top
 import { CLOUD_DASHBOARD_DOCS_NAV } from "@/components/cloud/dashboard/sidebar-links"
 import { EnvironmentsContainer } from "@/components/features/dashboard/environments-container"
 import { MachinesContainer } from "@/components/features/dashboard/machines-container"
+import { OverviewContainer } from "@/components/features/dashboard/overview-container"
 import { RunsContainer } from "@/components/features/dashboard/runs-container"
 import { SettingsContainer } from "@/components/features/dashboard/settings-container"
 import { ServingContainer } from "@/components/features/dashboard/serving-container"
@@ -55,7 +56,7 @@ export default function DashboardPage() {
 
   const [activeView, setActiveView] = useQueryState(
     "view",
-    parseAsStringLiteral(CLOUD_DASHBOARD_VIEW_VALUES).withDefault("environments"),
+    parseAsStringLiteral(CLOUD_DASHBOARD_VIEW_VALUES).withDefault("overview"),
   )
 
   const shouldLoadQueries = !authLoading && isAuthenticated && !loggingOut
@@ -137,6 +138,8 @@ export default function DashboardPage() {
 
   function renderActiveView() {
     switch (activeView) {
+      case "overview":
+        return <OverviewContainer shouldLoadQueries={shouldLoadQueries} />
       case "storage":
         return <StorageContainer shouldLoadQueries={shouldLoadQueries} onOpenShareDialog={openShareDialog} />
       case "environments":
