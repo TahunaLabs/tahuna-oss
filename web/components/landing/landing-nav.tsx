@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button"
 import { useTheme } from "@/components/theme-provider"
 
 const NAV_LINKS = [
-  { label: "Pricing", href: "/pricing", external: false },
+  { label: "Pricing", href: "#pricing", external: false },
   { label: "Dashboard", href: "/dashboard", external: false },
   { label: "Docs", href: CLOUD_LINKS_CONFIG.docsUrl, external: true },
   // { label: "Blog", href: "#" },
@@ -17,6 +17,14 @@ const NAV_LINKS = [
 
 export function LandingNav() {
   const { theme, setTheme } = useTheme()
+
+  const handleAnchorClick = (event: React.MouseEvent<HTMLAnchorElement>, href: string) => {
+    if (!href.startsWith("#")) return
+    const target = document.getElementById(href.slice(1))
+    if (!target) return
+    event.preventDefault()
+    target.scrollIntoView({ behavior: "smooth", block: "start" })
+  }
 
   return (
     <header className="flex h-14 shrink-0 items-center px-6 md:px-8">
@@ -33,7 +41,9 @@ export function LandingNav() {
                 {label}
               </a>
             ) : (
-              <Link href={href}>{label}</Link>
+              <Link href={href} onClick={(event) => handleAnchorClick(event, href)}>
+                {label}
+              </Link>
             )}
           </Button>
         ))}
