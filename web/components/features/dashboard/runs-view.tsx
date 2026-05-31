@@ -153,6 +153,7 @@ export function RunsView({
                 runDetail={runDetail}
                 runLogs={runLogs}
                 runMetrics={runMetrics}
+                environmentLabel={environmentNameById.get(runDetail.environment_id)}
                 busy={busy}
                 onSelectRun={onSelectRun}
                 onCancelRun={onCancelRun}
