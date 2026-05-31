@@ -1,13 +1,13 @@
 import type { BaseLayoutProps } from "fumadocs-ui/layouts/shared"
-import { artefactAsset } from "@/config"
+import { faviconAsset } from "@/config"
 
-const docsLogo = artefactAsset("logo_3shades_gaussienfilter_tight.svg")
+const docsLogo = faviconAsset("apple-touch-icon.png")
 
 export const baseOptions: BaseLayoutProps = {
   nav: {
     title: (
       <div className="flex items-center gap-2">
-        <img src={docsLogo} alt="Tahuna" className="h-6 w-auto" />
+        <img src={docsLogo} alt="Tahuna" className="h-6 w-6 rounded-md" />
         <span className="font-semibold">Tahuna Docs</span>
       </div>
     ),
