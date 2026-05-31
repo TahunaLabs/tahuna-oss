@@ -11,10 +11,26 @@ import { Button } from "@/components/ui/button"
 import { CDN_CONFIG } from "@/config"
 
 const FEATURES = [
-  { icon: Server, title: "Managed GPUs", body: "Provision A100s, H100s, and more without building GPU operations." },
-  { icon: RefreshCw, title: "Pinned snapshots", body: "Push local deltas and tie every run to exact code and data." },
-  { icon: Activity, title: "Live telemetry", body: "Stream logs and W&B-compatible metrics while your job runs." },
-  { icon: Rocket, title: "Run to serve", body: "Launch a pinned model snapshot behind managed compute." },
+  {
+    icon: RefreshCw,
+    title: "Usage to training",
+    body: "Bring traces, feedback, failures, rewards, and evals into your post-training loop.",
+  },
+  {
+    icon: Server,
+    title: "Managed GPUs",
+    body: "Run that loop on A100s, H100s, and more without building GPU operations.",
+  },
+  {
+    icon: Activity,
+    title: "Reproducible signal",
+    body: "Tie every run to exact code and data so improvements stay traceable.",
+  },
+  {
+    icon: Rocket,
+    title: "Train to serve",
+    body: "Promote a trained snapshot when it improves on your workflow.",
+  },
 ]
 
 const SLIDES = [
@@ -66,14 +82,14 @@ export function LandingHero() {
         <div className="max-w-2xl lg:max-w-[44rem]">
           <div>
             <h1 className="font-serif text-4xl leading-[1.1] tracking-tight text-foreground md:text-5xl">
-              Own your intelligence
+              The future isn&apos;t a single intelligent blob.
               <br />
-              <span className="italic">loop.</span>
+              <span className="italic">It&apos;s models that improve from real usage.</span>
             </h1>
 
             <p className="mt-6 max-w-2xl text-xl leading-relaxed text-muted-foreground md:text-2xl">
-              Run custom training and post-training jobs on cloud GPUs from your terminal. Keep your Python loop;
-              Tahuna handles the infrastructure around it.
+              Tahuna runs your training code on cloud GPUs today, and is built for production traces, feedback, evals,
+              and rewards to become the next run you control.
             </p>
 
             <div className="mt-10 grid gap-x-10 gap-y-7 sm:grid-cols-2">

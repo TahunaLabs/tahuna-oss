@@ -13,10 +13,14 @@ export function LandingCtaSection() {
       <div className="relative mx-auto max-w-3xl text-center">
         <p className="mb-4 text-xs uppercase tracking-ui-eyebrow text-muted-foreground">Get started</p>
         <h2 className="text-4xl font-semibold leading-display-tight tracking-tight text-foreground md:text-5xl">
-          Run your next post-training job without rebuilding GPU ops.
+          Turn product usage into your next model improvement.
         </h2>
         <p className="mx-auto mt-6 max-w-xl text-lg leading-relaxed text-muted-foreground">
-          Keep your code, framework, and training loop. Tahuna handles the reproducible run lifecycle around it.
+          Bring your code, framework, and training loop. Tahuna handles the reproducible path from new data to GPU run
+          to artifact.
+        </p>
+        <p className="mt-4 text-sm font-medium text-foreground">
+          Don&apos;t rent intelligence. Compound it.
         </p>
         <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
           <Button asChild size="lg">

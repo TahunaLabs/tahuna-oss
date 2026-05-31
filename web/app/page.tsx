@@ -7,7 +7,7 @@ import { redirect } from "next/navigation"
 export const metadata: Metadata = {
   title: "Tahuna | Post-training control plane",
   description:
-    "Run custom training and post-training jobs on cloud GPUs from your terminal. Keep your Python loop while Tahuna handles sync, provisioning, dependencies, logs, metrics, and artifacts.",
+    "Post-training infrastructure for adaptive AI systems. Run your training code on cloud GPUs and build toward models that improve from real usage.",
   alternates: { canonical: "/" },
 }
 
@@ -27,7 +27,7 @@ const jsonLd = {
       operatingSystem: "Linux, macOS",
       url: NETWORK_CONFIG.siteUrl,
       description:
-        "A post-training control plane between your training code and cloud GPUs. Tahuna handles sync, provisioning, dependencies, logs, metrics, and artifacts.",
+        "Post-training infrastructure for adaptive AI systems. Tahuna runs your training code on cloud GPUs and handles the run lifecycle around it.",
       offers: {
         "@type": "Offer",
         price: "0",

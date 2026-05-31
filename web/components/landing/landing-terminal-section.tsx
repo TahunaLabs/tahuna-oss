@@ -40,16 +40,17 @@ export function LandingTerminalSection() {
             <Badge variant="ghost">Tahuna</Badge>
           </div>
           <h2 className="text-3xl font-semibold tracking-tight text-foreground md:text-4xl">
-            From local project
+            From product signal
             <br />
-            to remote run
+            to training run
           </h2>
           <p className="mt-4 max-w-sm text-base leading-relaxed text-muted-foreground">
-            Run tahuna init, sync changed files, then tahuna train.
+            When your product creates new traces, evals, or training data, Tahuna makes the next run a terminal
+            workflow.
           </p>
           <p className="mt-3 max-w-sm text-base leading-relaxed text-muted-foreground">
-            Tahuna materializes the exact snapshot on a GPU pod, installs dependencies with uv, executes your
-            entrypoint, and streams the run back to you.
+            Sync changed code and data, provision GPUs, execute your entrypoint, and keep artifacts tied to the run
+            that produced them.
           </p>
         </div>
 

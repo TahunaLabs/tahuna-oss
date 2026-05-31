@@ -3,7 +3,7 @@ import type { Metadata } from "next"
 
 const SITE_TITLE = "Tahuna | Post-training control plane"
 const SITE_DESCRIPTION =
-  "Run custom training and post-training jobs on cloud GPUs from your terminal while Tahuna handles sync, provisioning, dependencies, logs, metrics, and artifacts."
+  "Post-training infrastructure for adaptive AI systems. Run your training code on cloud GPUs and build toward models that improve from real usage."
 
 function faviconAsset(filename: string) {
   return `${CDN_CONFIG.baseUrl}${CDN_CONFIG.faviconPath}/${filename}`

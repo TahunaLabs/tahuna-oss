@@ -8,13 +8,13 @@ const ownershipColumns = [
   {
     title: "You own",
     headline: "Your loop",
-    items: ["Algorithm", "Reward logic", "Rollout code", "Data"],
+    items: ["Traces", "Feedback", "Evals", "Rewards", "Training code", "Model choices"],
     className: "border-b border-border md:border-b-0 md:border-r border-background/40 bg-background/80",
   },
   {
     title: "Tahuna handles",
     headline: "Tahuna path",
-    items: ["Provisioning", "Sync", "Execution", "Monitoring", "Checkpoints", "Artifacts"],
+    items: ["Sync", "GPUs", "Execution", "Metrics", "Checkpoints", "Artifacts"],
     className: "bg-card/75",
   },
 ] as const
@@ -37,8 +37,8 @@ export function LandingLayersSection() {
             the training loop
           </h2>
           <p className="mt-6 max-w-sm text-base leading-relaxed text-muted-foreground">
-            Keep the parts that make your model different. Tahuna takes the operational path from local project to
-            GPU run to serve.
+            You own the learning loop: traces, evals, reward logic, rollout code, and training recipe. Tahuna handles
+            the run lifecycle around it.
           </p>
         </div>
 

@@ -5,7 +5,7 @@ import { CLOUD_LINKS_CONFIG } from "@/cloud/links"
 const FAQS = [
   {
     q: "What is Tahuna?",
-    a: "A control plane between your training code and cloud GPUs. You keep the loop; Tahuna handles the infrastructure around it.",
+    a: "Post-training infrastructure for adaptive AI systems. You keep the training loop; Tahuna handles the cloud GPU lifecycle around it.",
   },
   {
     q: "Do I have to change my training code?",
@@ -18,6 +18,10 @@ const FAQS = [
   {
     q: "Where do my metrics go?",
     a: "Logs and metrics stream live. Metrics are Weights & Biases-compatible, so you can keep using familiar dashboards.",
+  },
+  {
+    q: "Does Tahuna automatically retrain from production traffic?",
+    a: "No. Tahuna is not a black-box retraining system. Today, it runs your training code and handles the reproducible GPU lifecycle. The path we are building toward is production traces, feedback, evals, rewards, and training data feeding the next run you control.",
   },
   {
     q: "How does pricing work?",
