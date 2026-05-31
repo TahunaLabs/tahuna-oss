@@ -8,17 +8,37 @@ import { useTheme } from "@/components/theme-provider"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { CLOUD_LINKS_CONFIG } from "@/cloud/links"
 
-function CloudDashboardTopBar(props: React.ComponentProps<"header">) {
+type CloudDashboardTopBarProps = React.ComponentProps<"header"> & {
+  title?: string
+}
+
+function CloudDashboardTopBar({ title, ...props }: CloudDashboardTopBarProps) {
   const { theme, setTheme } = useTheme()
 
   return (
     <header
       data-slot="dashboard-top-bar"
-      className="flex h-16 shrink-0 items-center bg-background px-6 gap-2"
+      className="flex h-14 shrink-0 items-center gap-2 border-b border-border bg-background px-4 lg:px-6"
       {...props}
     >
       <SidebarTrigger />
+      <span aria-hidden className="mx-1 h-4 w-px bg-border" />
+      <nav aria-label="Breadcrumb" className="flex items-center gap-2 text-sm">
+        <span className="text-muted-foreground">Dashboard</span>
+        {title ? (
+          <>
+            <span aria-hidden className="text-muted-foreground/40">/</span>
+            <span className="font-medium text-foreground">{title}</span>
+          </>
+        ) : null}
+      </nav>
+
       <div className="ml-auto flex items-center gap-1">
+        <Button variant="ghost" size="sm" asChild className="hidden sm:inline-flex">
+          <a href={CLOUD_LINKS_CONFIG.docsUrl} target="_blank" rel="noopener noreferrer">
+            Docs
+          </a>
+        </Button>
         <Button variant="ghost" size="icon" asChild>
           <a
             href={CLOUD_LINKS_CONFIG.bugReportUrl}

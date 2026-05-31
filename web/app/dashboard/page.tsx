@@ -46,6 +46,18 @@ const CLOUD_NAV_ADMIN: DashboardNavItem[] = [
   { icon: Settings, label: "Settings", view: "settings" },
 ]
 
+const VIEW_LABELS: Record<string, string> = {
+  overview: "Overview",
+  storage: "Storage",
+  environments: "Environments",
+  serving: "Serving",
+  runs: "Runs",
+  machines: "Machines",
+  billing: "Billing",
+  audit_logs: "Audit logs",
+  settings: "Settings",
+}
+
 export default function DashboardPage() {
   const router = useRouter()
   const { isAuthenticated, isLoading: authLoading } = useDashboardAuthState()
@@ -177,7 +189,7 @@ export default function DashboardPage() {
   return (
     <>
       <DashboardAppLayout
-        topBar={<CloudDashboardTopBar />}
+        topBar={<CloudDashboardTopBar title={VIEW_LABELS[activeView] ?? ""} />}
         sidebar={(
           <Sidebar
             activeView={activeView}
