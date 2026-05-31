@@ -34,7 +34,7 @@ export function LandingHero() {
     <section className="relative overflow-hidden px-6 py-20 md:px-8 md:py-24">
       <DotGrid className="inset-y-0 right-0 w-1/2" />
       <div className="relative mx-auto max-w-7xl">
-        <div className="grid items-center gap-12 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] lg:gap-16">
+        <div className="grid items-stretch gap-12 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)] lg:gap-16">
           <div>
             <h1 className="font-serif text-4xl leading-display-tight tracking-tight text-foreground md:text-5xl">
               The future is not a single intelligent blob.
@@ -76,7 +76,10 @@ export function LandingHero() {
           </div>
 
           <div className="relative hidden lg:block">
-            <div key={active} className="animate-in fade-in duration-500 lg:-mr-12 xl:-mr-20">
+            <div
+              key={active}
+              className="absolute inset-y-0 left-0 right-[-6rem] animate-in fade-in duration-500 xl:right-[-10rem]"
+            >
               {SLIDES[active].screen}
             </div>
           </div>
