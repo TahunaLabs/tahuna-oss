@@ -1,10 +1,6 @@
 name: Deploy Docs
 
 on:
-  pull_request:
-    paths:
-      - docs/**
-      - .github/workflows/deploy-docs.yml
   push:
     branches:
       - main
@@ -47,12 +43,7 @@ jobs:
 
       - name: Resolve branch
         id: branch
-        run: |
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            echo "name=pr-${{ github.event.pull_request.number }}" >> "$GITHUB_OUTPUT"
-          else
-            echo "name=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
-          fi
+        run: echo "name=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
 
       - name: Deploy
         run: |
