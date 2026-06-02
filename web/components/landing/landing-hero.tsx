@@ -70,7 +70,7 @@ export function LandingHero() {
         <div className="max-w-2xl lg:max-w-[44rem]">
           <div>
             <p className="mb-3 text-xs uppercase tracking-ui-eyebrow text-muted-foreground">
-              Infrastructure for continual learning
+              Infrastructure for adaptive AI systems
             </p>
             <h1 className="font-serif text-3xl leading-[1.1] tracking-tight text-foreground md:text-4xl">
               Own the intelligence loop
@@ -79,8 +79,7 @@ export function LandingHero() {
             </h1>
 
             <p className="mt-5 max-w-xl text-base leading-relaxed text-muted-foreground md:text-lg">
-              Tahuna gives builders the first primitives for continual learning: run training, serve model snapshots,
-              search over improvements, and compare candidates without giving the loop to a black box.
+              Start with the primitives that make continual learning possible: training, serving, and experiment search for adaptive AI products.
             </p>
 
             <div className="mt-8 flex flex-col items-start gap-3 sm:flex-row">
