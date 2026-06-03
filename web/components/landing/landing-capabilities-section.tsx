@@ -2,12 +2,12 @@ const capabilities = [
   {
     name: "Tahuna Compute",
     label: "Compute",
-    body: "Run training and inference on managed GPUs Sandboxes for safe experimentation and debugging",
+    body: "Run training, inference, and sandboxed experiments on managed GPUs.",
   },
   {
     name: "Tahuna Hillclimb",
     label: "Hillclimb",
-    body: "Autonomous research to recursively improve model performance",
+    body: "Search over improvements and compare candidates against your metrics.",
   },
   {
     name: "Tahuna Serve",
