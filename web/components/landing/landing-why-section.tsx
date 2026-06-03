@@ -1,15 +1,15 @@
 const reasons = [
   {
-    title: "Signal from real usage",
-    body: "Benchmarks are a starting point. The durable signal comes from how your product is actually used: retries, edits, accepts, evals, and task outcomes.",
+    title: "Capture the real signal",
+    body: "The best training signal is hidden in how people use your product: retries, edits, accepts, rejections, evals, and completed tasks. Tahuna captures this signal and turns it into a powerful engine for improvement.",
   },
   {
-    title: "Steer the learning loop",
-    body: "Model behavior is something you shape. Tahuna starts with the primitives to run, compare, and promote improvements under your control.",
+    title: "Shape model behavior",
+    body: "Model behavior is something you shape. Tahuna starts with the primitives to run, compare, auto-research, and promote improvements under your control.",
   },
   {
-    title: "Intelligence that compounds",
-    body: "The stack stops being static. Training code, evals, prompts, and model snapshots become part of a repeatable loop that gets better with every iteration.",
+    title: "Compounding intelligence",
+    body: "Move beyond one-off model updates. Every run, eval, prompt, and snapshot becomes part of an improvement loop that compounds over time.",
   },
 ] as const
 
