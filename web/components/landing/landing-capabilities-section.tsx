@@ -2,7 +2,7 @@ const capabilities = [
   {
     name: "Tahuna Compute",
     label: "Compute",
-    body: "Run training, inference, and sandboxed experiments on managed GPUs.",
+    body: "Run training jobs and sandboxed experiments on managed GPUs.",
   },
   {
     name: "Tahuna Hillclimb",
@@ -12,12 +12,12 @@ const capabilities = [
   {
     name: "Tahuna Serve",
     label: "Serve",
-    body: "Promote model snapshots into inference endpoints.",
+    body: "Promote model snapshots into production inference endpoints.",
   },
   {
-    name: "Tahuna Lineage",
-    label: "Lineage",
-    body: "Track the code, data, metrics, checkpoints, and artifacts behind each result.",
+    name: "Tahuna Observability",
+    label: "Observability",
+    body: "Track the agent signals, metrics, and artifacts that decide what improves next.",
   },
 ] as const
 
@@ -33,8 +33,8 @@ export function LandingCapabilitiesSection() {
             Owned Intelligence
           </h2>
           <p className="mt-6 max-w-md text-base leading-relaxed text-muted-foreground">
-            Start with the pieces that exist today: compute for training and serving, hillclimb for experiment search,
-            and lineage for the evidence behind every result.
+            Start with the pieces that exist today: compute for training and sandboxes, hillclimb for experiment search,
+            serve for production inference, and observability for the evidence behind every improvement.
           </p>
         </div>
 
