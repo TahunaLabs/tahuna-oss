@@ -7,6 +7,7 @@ import { LandingHero } from "@/components/landing/landing-hero"
 import { LandingLayersSection } from "@/components/landing/landing-layers-section"
 import { LandingNav } from "@/components/landing/landing-nav"
 import { LandingTerminalSection } from "@/components/landing/landing-terminal-section"
+import { LandingWhySection } from "@/components/landing/landing-why-section"
 
 export function PublicHome() {
   return (
@@ -21,6 +22,7 @@ export function PublicHome() {
           <LandingHero />
           <FrameworksBar />
           <LandingCapabilitiesSection />
+          <LandingWhySection />
           <LandingTerminalSection />
           <LandingLayersSection />
           <LandingFaqSection />
