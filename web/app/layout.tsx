@@ -5,13 +5,20 @@ import { ThemeProvider } from "@/components/theme-provider"
 import { Toaster } from "@/components/ui/toaster"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { getToken } from "@/lib/auth-server"
-import { Geist_Mono } from "next/font/google"
+import localFont from "next/font/local"
 import { cookies } from "next/headers"
 import { NuqsAdapter } from "nuqs/adapters/next/app"
 import type React from "react"
 import "./globals.css"
 
-const geistMono = Geist_Mono({ subsets: ["latin"], variable: "--font-mono" })
+const geistMono = localFont({
+  src: [
+    { path: "../public/fonts/geist-mono-latin-ext.woff2", weight: "100 900", style: "normal" },
+    { path: "../public/fonts/geist-mono-latin.woff2",     weight: "100 900", style: "normal" },
+  ],
+  variable: "--font-mono",
+  display: "swap",
+})
 
 export const metadata = siteMetadata
 
