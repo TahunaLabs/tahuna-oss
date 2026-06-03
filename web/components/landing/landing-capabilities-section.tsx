@@ -26,7 +26,7 @@ export function LandingCapabilitiesSection() {
     <section id="capabilities" className="border-t border-border bg-muted/30 px-6 py-20 md:px-8 md:py-24">
       <div className="mx-auto grid max-w-7xl gap-12 lg:grid-cols-12 lg:items-start">
         <div className="lg:col-span-5">
-          <p className="mb-3 text-xs uppercase tracking-ui-eyebrow text-muted-foreground">Capabilities</p>
+          <p className="mb-3 text-xs uppercase tracking-ui-eyebrow text-muted-foreground">The Platform</p>
           <h2 className="text-3xl font-semibold leading-tight tracking-tight text-foreground md:text-4xl">
             Primitives for
             <br />
