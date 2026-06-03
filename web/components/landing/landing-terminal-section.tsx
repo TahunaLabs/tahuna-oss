@@ -40,17 +40,16 @@ export function LandingTerminalSection() {
             <Badge variant="ghost">Tahuna</Badge>
           </div>
           <h2 className="text-3xl font-semibold tracking-tight text-foreground md:text-4xl">
-            From product signal
+            Turn iteration
             <br />
-            to training run
+            into better models
           </h2>
           <p className="mt-4 max-w-sm text-base leading-relaxed text-muted-foreground">
-            When your product creates new traces, evals, or training data, Tahuna makes the next run a terminal
-            workflow.
+            When a new eval, dataset, or hypothesis is ready, Tahuna turns it into a reproducible training run.
           </p>
           <p className="mt-3 max-w-sm text-base leading-relaxed text-muted-foreground">
-            Sync changed code and data, provision GPUs, execute your entrypoint, and keep artifacts tied to the run
-            that produced them.
+            Sync the workspace, provision the GPU, execute your recipe, stream metrics, and preserve the evidence
+            behind every candidate.
           </p>
         </div>
 
