@@ -1,4 +1,5 @@
 import { FrameworksBar } from "@/components/landing/frameworks-bar"
+import { LandingCapabilitiesSection } from "@/components/landing/landing-capabilities-section"
 import { LandingCtaSection } from "@/components/landing/landing-cta-section"
 import { LandingFaqSection } from "@/components/landing/landing-faq-section"
 import { LandingFooter } from "@/components/landing/landing-footer"
@@ -19,6 +20,7 @@ export function PublicHome() {
         <main>
           <LandingHero />
           <FrameworksBar />
+          <LandingCapabilitiesSection />
           <LandingTerminalSection />
           <LandingLayersSection />
           <LandingFaqSection />
