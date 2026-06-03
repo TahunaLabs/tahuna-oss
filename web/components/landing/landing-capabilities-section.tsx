@@ -2,7 +2,7 @@ const capabilities = [
   {
     name: "Tahuna Compute",
     label: "Compute",
-    body: "Run training and inference on managed GPUs.",
+    body: "Run training and inference on managed GPUs Sandboxes for safe experimentation and debugging",
   },
   {
     name: "Tahuna Hillclimb",
@@ -28,9 +28,9 @@ export function LandingCapabilitiesSection() {
         <div className="lg:col-span-5">
           <p className="mb-3 text-xs uppercase tracking-ui-eyebrow text-muted-foreground">Capabilities</p>
           <h2 className="text-3xl font-semibold leading-tight tracking-tight text-foreground md:text-4xl">
-            Primitives for the
+            Primitives for
             <br />
-            intelligence loop
+            Owned Intelligence
           </h2>
           <p className="mt-6 max-w-md text-base leading-relaxed text-muted-foreground">
             Start with the pieces that exist today: compute for training and serving, hillclimb for experiment search,
