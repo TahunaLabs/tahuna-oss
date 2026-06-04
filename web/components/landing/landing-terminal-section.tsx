@@ -3,7 +3,6 @@
 import { Check, Copy } from "lucide-react"
 import { useState } from "react"
 
-import { LandingFoundersIncBadge } from "@/components/landing/landing-founders-inc-badge"
 import { TerminalMock } from "@/components/landing/terminal-mock"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -29,9 +28,6 @@ export function LandingTerminalSection() {
 
   return (
     <section id="loop" className="relative overflow-hidden border-t border-border bg-muted/30 px-6 py-24 md:px-8 md:py-32">
-      <div className="absolute right-6 top-6 z-10">
-        <LandingFoundersIncBadge />
-      </div>
       <div className="mx-auto flex max-w-7xl flex-col gap-12 lg:flex-row lg:items-start lg:gap-16">
         <div className="shrink-0 lg:w-2/5 lg:pt-12">
           <div className="mb-4 flex items-center gap-2">

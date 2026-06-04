@@ -28,7 +28,7 @@ export function LandingNav() {
   }
 
   return (
-    <header className="flex h-14 shrink-0 items-center px-6 md:px-8">
+    <header className="sticky top-0 z-50 flex h-14 shrink-0 items-center border-b border-border bg-background/95 px-6 backdrop-blur md:px-8">
       <Link href="/" className="flex shrink-0 items-center gap-2">
         <Logo className="h-12 w-auto" />
         <span className="text-sm font-light tracking-[0.2em]">Tahuna</span>
