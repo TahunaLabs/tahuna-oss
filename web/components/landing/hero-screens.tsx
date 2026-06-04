@@ -70,6 +70,8 @@ const metricsRows = [
   { step: 1400, gemma: "0.6589", qwen: "0.6314" },
 ]
 
+const metricsGridCols = "grid grid-cols-[5rem_7rem_7rem] gap-2"
+
 export function MetricsScreen() {
   return (
     <Card variant="default" className={shell}>
@@ -91,7 +93,7 @@ export function MetricsScreen() {
         </div>
 
         {/* table header */}
-        <div className="mb-1 grid grid-cols-[5rem_7rem_7rem] gap-2 border-b border-border pb-1 uppercase tracking-ui-eyebrow text-muted-foreground">
+        <div className={cn(metricsGridCols, "mb-1 border-b border-border pb-1 uppercase tracking-ui-eyebrow text-muted-foreground")}>
           <span>step</span>
           <span>gemma4-e2b</span>
           <span>qwen3-5-2b</span>
@@ -105,12 +107,13 @@ export function MetricsScreen() {
               <div
                 key={row.step}
                 className={cn(
-                  "grid grid-cols-[5rem_7rem_7rem] gap-2 py-1.5",
+                  metricsGridCols,
+                  "py-1.5",
                   isLive ? "text-foreground" : "text-muted-foreground",
                 )}
               >
                 <span>{row.step}</span>
-                <span className={cn(isLive && "font-medium text-[hsl(var(--primary))]")}>{row.gemma}</span>
+                <span className={cn(isLive && "font-medium text-primary")}>{row.gemma}</span>
                 <span className={cn(isLive && "font-medium")}>{row.qwen}</span>
               </div>
             )
@@ -194,18 +197,20 @@ const envRows = [
   { name: "phi3-distill", device: "B200 ×4", runtime: "pt2.11-cu130", status: "completed" },
 ]
 
+const envGridCols = "grid grid-cols-[1.5fr_1fr_1.1fr] gap-3"
+
 export function EnvironmentsScreen() {
   return (
     <Card variant="default" className={shell}>
       <WindowBar title="tahuna · environments" right={<span className="text-ui-micro text-muted-foreground">12 environments</span>} />
-      <div className="grid shrink-0 grid-cols-[1.5fr_1fr_1.1fr] gap-3 border-b border-border px-4 py-2.5 text-ui-micro uppercase tracking-ui-eyebrow text-muted-foreground">
+      <div className={cn(envGridCols, "shrink-0 border-b border-border px-4 py-2.5 text-ui-micro uppercase tracking-ui-eyebrow text-muted-foreground")}>
         <span>Name</span>
         <span>Device</span>
         <span>Runtime</span>
       </div>
       <div className="divide-y divide-border">
         {envRows.map((row) => (
-          <div key={row.name} className="grid grid-cols-[1.5fr_1fr_1.1fr] items-center gap-3 px-4 py-2.5">
+          <div key={row.name} className={cn(envGridCols, "items-center px-4 py-2.5")}>
             <span className="flex items-center gap-1.5 truncate text-ui-caption text-foreground">
               <StatusDot variant={toStatusDotVariant(row.status)} size="xs" />
               {row.name}
