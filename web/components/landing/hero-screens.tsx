@@ -4,9 +4,9 @@ import { Card } from "@/components/ui/card"
 import { StatusDot, toStatusDotVariant } from "@/components/ui/status-dot"
 import { cn } from "@/lib/utils"
 
-// Tall, densely-packed screens. The hero clips them on the right + bottom, so
-// they read as a real screenshot that continues past the edge of the viewport.
-const shell = "flex h-[42rem] flex-col overflow-hidden bg-card shadow-float"
+// Tall, densely-packed screens with fixed artwork dimensions. HeroProduct clips
+// them on the right so they read as a screenshot continuing past the column edge.
+const shell = "flex h-[42rem] w-[44rem] flex-col overflow-hidden bg-card shadow-float xl:w-[52rem]"
 
 function WindowBar({ title, right }: { title: string; right?: ReactNode }) {
   return (
