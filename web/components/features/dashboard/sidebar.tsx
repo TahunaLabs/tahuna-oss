@@ -1,6 +1,5 @@
 "use client"
 
-import Link from "next/link"
 import type { ElementType } from "react"
 import { HardDrive, Server, Play, LogOut, Settings, ChevronsUpDown, ChevronRight, Rocket, LayoutGrid, Plus } from "lucide-react"
 import {
@@ -28,7 +27,7 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Logo } from "@/components/logo"
+import { BrandLockup } from "@/components/brand-lockup"
 
 export interface DashboardNavItem {
   icon: ElementType
@@ -87,10 +86,7 @@ export function Sidebar({
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
-            <Link href="/" aria-label="Go to home" className="flex items-center gap-2 px-2 py-1.5">
-              <Logo className="h-12 w-auto" />
-              <span className="text-sm font-light tracking-[0.2em] text-sidebar-foreground">Tahuna</span>
-            </Link>
+            <BrandLockup aria-label="Go to home" className="px-2 py-1.5" wordmarkClassName="text-sidebar-foreground" />
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarHeader>

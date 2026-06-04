@@ -4,7 +4,7 @@ import { Moon, Sun } from "lucide-react"
 import Link from "next/link"
 
 import { CLOUD_LINKS_CONFIG } from "@/cloud/links"
-import { Logo } from "@/components/logo"
+import { BrandLockup } from "@/components/brand-lockup"
 import { Button } from "@/components/ui/button"
 import { useTheme } from "@/components/theme-provider"
 
@@ -29,10 +29,7 @@ export function LandingNav() {
 
   return (
     <header className="sticky top-0 z-50 flex h-14 shrink-0 items-center border-b border-border bg-background/95 px-6 backdrop-blur md:px-8">
-      <Link href="/" className="flex shrink-0 items-center gap-2">
-        <Logo className="h-12 w-auto" />
-        <span className="text-sm font-light tracking-[0.2em]">Tahuna</span>
-      </Link>
+      <BrandLockup className="shrink-0" />
 
       <div className="ml-auto flex items-center gap-1">
         {NAV_LINKS.map(({ label, href, external }) => (

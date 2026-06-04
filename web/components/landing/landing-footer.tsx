@@ -1,7 +1,7 @@
 import Link from "next/link"
 
 import { CLOUD_LINKS_CONFIG } from "@/cloud/links"
-import { Logo } from "@/components/logo"
+import { BrandLockup } from "@/components/brand-lockup"
 
 const FOOTER_SECTIONS = [
   {
@@ -41,10 +41,7 @@ export function LandingFooter() {
         <div className="flex flex-col gap-10 md:flex-row md:items-start md:justify-between">
           {/* Brand + copyright grouped */}
           <div className="flex shrink-0 flex-col gap-4">
-            <Link href="/" className="inline-flex items-center gap-3 text-background">
-              <Logo className="h-14" />
-              <span className="text-sm font-light tracking-[0.2em]">Tahuna</span>
-            </Link>
+            <BrandLockup className="gap-3 text-background" logoClassName="h-14" />
             <p className="text-sm text-background/40">
               © 2026 Tahuna. All rights reserved.
             </p>
