@@ -108,12 +108,7 @@ export default function LoginPage() {
       {/* Subtle background texture */}
       <div
         aria-hidden
-        className="pointer-events-none fixed inset-0 opacity-[0.03] dark:opacity-[0.05]"
-        style={{
-          backgroundImage:
-            "radial-gradient(circle, currentColor 1px, transparent 1px)",
-          backgroundSize: "24px 24px",
-        }}
+        className="bg-dot-grid pointer-events-none fixed inset-0 opacity-[0.03] dark:opacity-[0.05]"
       />
 
       <div className="relative flex min-h-screen flex-col">

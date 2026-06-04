@@ -2,6 +2,7 @@ import Link from "next/link"
 
 import { CLOUD_LINKS_CONFIG } from "@/cloud/links"
 import { BrandLockup } from "@/components/brand-lockup"
+import { FooterWordmark } from "@/components/landing/footer-wordmark"
 
 const FOOTER_SECTIONS = [
   {
@@ -73,14 +74,7 @@ export function LandingFooter() {
         </div>
 
         {/* Decorative text — in normal flow, no overlap */}
-        <div className="pointer-events-none -mt-20 select-none overflow-hidden text-center">
-          <p
-            className="leading-none font-semibold tracking-tight text-background/10"
-            style={{ fontSize: "clamp(10rem, 24vw, 24rem)", transform: "translateY(22%)" }}
-          >
-            Tahuna
-          </p>
-        </div>
+        <FooterWordmark />
       </div>
     </footer>
   )
