@@ -7,12 +7,11 @@ type RunStatTilesProps = {
   environmentLabel?: string
 }
 
-/** At-a-glance run facts. Shared by the inline run panel and the standalone run page. */
 export function RunStatTiles({ run, environmentLabel }: RunStatTilesProps) {
-  const tiles = [
-    { label: "Status", value: run.status, detail: "Lifecycle state" },
-    { label: "Duration", value: formatRunUptime(run.uptime_ms), detail: "Compute time" },
-    { label: "Environment", value: environmentLabel ?? "—", detail: "Training environment" },
+  const tiles: Array<{ label: string; value: string; detail?: string }> = [
+    { label: "Status", value: run.status },
+    { label: "Duration", value: formatRunUptime(run.uptime_ms) },
+    { label: "Environment", value: environmentLabel ?? "—" },
     {
       label: "Compute",
       value: `${run.effective_gpu_type || "-"} ×${run.effective_gpu_count || "-"}`,
@@ -26,7 +25,7 @@ export function RunStatTiles({ run, environmentLabel }: RunStatTilesProps) {
         <Card key={tile.label} variant="surface" className="p-4">
           <p className="text-ui-micro uppercase tracking-ui-eyebrow text-muted-foreground">{tile.label}</p>
           <p className="mt-2 truncate text-lg font-semibold text-foreground">{tile.value}</p>
-          <p className="mt-1 text-ui-caption text-muted-foreground">{tile.detail}</p>
+          {tile.detail ? <p className="mt-1 text-ui-caption text-muted-foreground">{tile.detail}</p> : null}
         </Card>
       ))}
     </div>

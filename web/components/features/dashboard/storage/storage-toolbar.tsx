@@ -25,8 +25,8 @@ const SOURCE_OPTIONS: FilterDropdownOption[] = STORAGE_SOURCE_FILTER_VALUES.map(
 const SORT_LABELS: Record<StorageSort, string> = {
   created_desc: "Newest first",
   created_asc: "Oldest first",
-  name_asc: "Name A–Z",
-  name_desc: "Name Z–A",
+  name_asc: "Name A-Z",
+  name_desc: "Name Z-A",
   size_desc: "Largest first",
   size_asc: "Smallest first",
 }

@@ -23,7 +23,7 @@ function DashboardTablePagination({
   return (
     <div className="flex items-center justify-between px-1 py-2 text-xs text-muted-foreground">
       <span>
-        {start}–{end} of {total}
+        {start}-{end} of {total}
       </span>
       <div className="flex items-center gap-3">
         <button

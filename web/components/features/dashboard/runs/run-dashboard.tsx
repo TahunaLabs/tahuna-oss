@@ -44,18 +44,12 @@ type RunDashboardProps = {
   logs: RunLogsOnlyDetail | undefined
   metrics: RunMetricsOnlyDetail | undefined
   environmentLabel?: string
-  /** Optional element rendered at the start of the header (e.g. a back button). */
+  // Header start, e.g. a back button.
   leading?: ReactNode
-  /** Header actions rendered on the right (refresh, close, run actions, …). */
+  // Header right side, e.g. refresh, close, run actions.
   actions?: ReactNode
 }
 
-/**
- * The run dashboard body shared by the standalone run page (new tab) and the
- * inline panel under the runs table. Both render the same tabbed layout; the
- * surrounding chrome (back link, refresh, close, run actions) is passed in via
- * the `leading` and `actions` slots.
- */
 export function RunDashboard({
   run,
   logs,
@@ -154,7 +148,7 @@ export function RunDashboard({
               <div>
                 <h2 className="text-sm font-semibold text-foreground">Runtime logs</h2>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  {logs?.note ?? "Runtime logs are streamed by the machine and persisted in Convex."}
+                  {logs?.note ?? "Runtime logs streamed from the machine."}
                 </p>
               </div>
               {logs ? (
