@@ -30,3 +30,9 @@ jobs:
         run: bunx convex deploy
         env:
           CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
+
+      - name: Sync runtime image repo
+        working-directory: web
+        run: bunx convex env set TAHUNA_RUNTIME_IMAGE_REPO "${{ vars.TAHUNA_RUNTIME_IMAGE_REPO }}"
+        env:
+          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
