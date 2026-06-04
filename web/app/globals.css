@@ -4,100 +4,114 @@
 @custom-variant dark (&:is(.dark *));
 
 /* ============================================================
-   Theme — replace :root, .dark, and @theme inline blocks
-   with tweakcn output to swap the entire look & feel.
+   THEME (tweakcn) — to swap the entire look & feel, paste a new
+   tweakcn export over the THREE blocks in this section only:
+   `:root`, `.dark`, and `@theme inline` below.
+   Base palette: tweakcn "Mono" (monochrome, neutral).
+
+   Project-specific tokens (logo, status, typography, secondary-*,
+   elevation) live in their OWN blocks in the PROJECT TOKENS section
+   further down — tweakcn never emits them, so leave that section
+   untouched when swapping themes and everything keeps working.
    ============================================================ */
 
 :root {
-  --background: #f6f9f8;
-  --foreground: #162123;
-  --card: #ffffff;
-  --card-foreground: #162123;
-  --popover: #ffffff;
-  --popover-foreground: #162123;
-  --primary: #c8a84e;
-  --primary-foreground: #1a1c12;
-  --secondary: #e9f0ef;
-  --secondary-foreground: #1e3133;
-  --muted: #eef4f3;
-  --muted-foreground: #5f7473;
-  --accent: #c8a84e;
-  --accent-foreground: #1a1c12;
-  --destructive: #c0392b;
-  --destructive-foreground: #f7f9f9;
-  --border: #d6e2e0;
-  --input: #d6e2e0;
-  --ring: #c8a84e;
-  --radius: 0.5rem;
-  --font-sans: "Geist", "Geist Fallback", sans-serif;
-  --font-serif: "Cormorant Garamond", serif;
-  --font-mono: "Geist Mono", "Geist Mono Fallback";
+  --background: oklch(1.0000 0 0);
+  --foreground: oklch(0.1448 0 0);
+  --card: oklch(1.0000 0 0);
+  --card-foreground: oklch(0.1448 0 0);
+  --popover: oklch(1.0000 0 0);
+  --popover-foreground: oklch(0.1448 0 0);
+  /* A — teal: --primary: oklch(0.55 0.13 185); --ring: oklch(0.65 0.12 185); */
+  /* B — jade: --primary: oklch(0.52 0.15 158); --ring: oklch(0.63 0.14 158); */
+  --primary: oklch(0.58 0.17 128);
+  --primary-foreground: oklch(0.9851 0 0);
+  --secondary: oklch(0.9702 0 0);
+  --secondary-foreground: oklch(0.2046 0 0);
+  --muted: oklch(0.9702 0 0);
+  --muted-foreground: oklch(0.5486 0 0);
+  --accent: oklch(0.9702 0 0);
+  --accent-foreground: oklch(0.2046 0 0);
+  --destructive: oklch(0.5830 0.2387 28.4765);
+  --destructive-foreground: oklch(0.9702 0 0);
+  --border: oklch(0.9219 0 0);
+  --input: oklch(0.9219 0 0);
+  --ring: oklch(0.68 0.16 128);
+  --chart-1: oklch(0.5555 0 0);
+  --chart-2: oklch(0.5555 0 0);
+  --chart-3: oklch(0.5555 0 0);
+  --chart-4: oklch(0.5555 0 0);
+  --chart-5: oklch(0.5555 0 0);
+  --sidebar: oklch(0.9851 0 0);
+  --sidebar-foreground: oklch(0.1448 0 0);
+  --sidebar-primary: oklch(0.2046 0 0);
+  --sidebar-primary-foreground: oklch(0.9851 0 0);
+  --sidebar-accent: oklch(0.9702 0 0);
+  --sidebar-accent-foreground: oklch(0.2046 0 0);
+  --sidebar-border: oklch(0.9219 0 0);
+  --sidebar-ring: oklch(0.7090 0 0);
+  --radius: 0rem;
+  --shadow-x: 0px;
+  --shadow-y: 1px;
+  --shadow-blur: 0px;
+  --shadow-spread: 0px;
+  --shadow-opacity: 0;
+  --shadow-color: hsl(0 0% 0%);
+  --shadow-2xs: 0px 1px 0px 0px hsl(0 0% 0% / 0.00);
+  --shadow-xs: 0px 1px 0px 0px hsl(0 0% 0% / 0.00);
+  --shadow-sm: 0px 1px 0px 0px hsl(0 0% 0% / 0.00), 0px 1px 2px -1px hsl(0 0% 0% / 0.00);
+  --shadow: 0px 1px 0px 0px hsl(0 0% 0% / 0.00), 0px 1px 2px -1px hsl(0 0% 0% / 0.00);
+  --shadow-md: 0px 1px 0px 0px hsl(0 0% 0% / 0.00), 0px 2px 4px -1px hsl(0 0% 0% / 0.00);
+  --shadow-lg: 0px 1px 0px 0px hsl(0 0% 0% / 0.00), 0px 4px 6px -1px hsl(0 0% 0% / 0.00);
+  --shadow-xl: 0px 1px 0px 0px hsl(0 0% 0% / 0.00), 0px 8px 10px -1px hsl(0 0% 0% / 0.00);
+  --shadow-2xl: 0px 1px 0px 0px hsl(0 0% 0% / 0.00);
+  --tracking-normal: 0em;
+  --spacing: 0.25rem;
 
-  /* Project tokens (derived from theme) */
-  --logo: var(--ring);
-  --warning: #d97706;
-  --success: #16a34a;
-  --sidebar: #f2f6f5;
-  --sidebar-foreground: #162123;
-  --sidebar-primary: #c8a84e;
-  --sidebar-primary-foreground: #1a1c12;
-  --sidebar-accent: #dce6e4;
-  --sidebar-accent-foreground: #162123;
-  --sidebar-border: #c7d6d4;
-  --sidebar-ring: #c8a84e;
-  --secondary-dim: color-mix(in srgb, var(--secondary) 70%, var(--background));
-  --secondary-hover: color-mix(in srgb, var(--secondary) 50%, var(--background));
-  --secondary-subtle: color-mix(in srgb, var(--secondary) 20%, var(--background));
-  --secondary-faint: color-mix(in srgb, var(--secondary) 30%, var(--background));
-  --status-dot-queued: #ca8a04;
-  --status-dot-provisioning: #2563eb;
-  --status-dot-running: #16a34a;
-  --status-dot-failed: #dc2626;
-  --status-dot-cancelling: #ea580c;
+  /* Full monospace type system (tweakcn Mono) — every role maps to Geist Mono */
+  --font-sans: var(--font-mono);
+  --font-serif: var(--font-mono);
+  --font-mono: "Geist Mono", "Geist Mono Fallback", monospace;
 }
 
 .dark {
-  --background: #0b1d1f;
-  --foreground: #e8e0d4;
-  --card: #0f2628;
-  --card-foreground: #e8e0d4;
-  --popover: #0b1d1f;
-  --popover-foreground: #e8e0d4;
-  --primary: #c8a84e;
-  --primary-foreground: #0b1d1f;
-  --secondary: #142e30;
-  --secondary-foreground: #e8e0d4;
-  --muted: #1a3638;
-  --muted-foreground: #8a9a93;
-  --accent: #c8a84e;
-  --accent-foreground: #0b1d1f;
-  --destructive: #c0392b;
-  --destructive-foreground: #e8e0d4;
-  --border: #1e3e40;
-  --input: #1e3e40;
-  --ring: #c8a84e;
-
-  /* Project tokens (dark overrides) */
-  --logo: var(--ring);
-  --warning: #fbbf24;
-  --success: #4ade80;
-  --sidebar: #102628;
-  --sidebar-foreground: #e8e0d4;
-  --sidebar-primary: #c8a84e;
-  --sidebar-primary-foreground: #0b1d1f;
-  --sidebar-accent: #1a3638;
-  --sidebar-accent-foreground: #e8e0d4;
-  --sidebar-border: #24474a;
-  --sidebar-ring: #c8a84e;
-  --status-dot-queued: #facc15;
-  --status-dot-provisioning: #60a5fa;
-  --status-dot-running: #4ade80;
-  --status-dot-failed: #f87171;
-  --status-dot-cancelling: #fb923c;
+  --background: oklch(0.1448 0 0);
+  --foreground: oklch(0.9851 0 0);
+  --card: oklch(0.2134 0 0);
+  --card-foreground: oklch(0.9851 0 0);
+  --popover: oklch(0.2686 0 0);
+  --popover-foreground: oklch(0.9851 0 0);
+  /* A — teal: --primary: oklch(0.72 0.13 185); --ring: oklch(0.65 0.13 185); */
+  /* B — jade: --primary: oklch(0.70 0.15 158); --ring: oklch(0.63 0.15 158); */
+  --primary: oklch(0.80 0.17 128);
+  --primary-foreground: oklch(0.9851 0 0);
+  --secondary: oklch(0.2686 0 0);
+  --secondary-foreground: oklch(0.9851 0 0);
+  --muted: oklch(0.2686 0 0);
+  --muted-foreground: oklch(0.7090 0 0);
+  --accent: oklch(0.3715 0 0);
+  --accent-foreground: oklch(0.9851 0 0);
+  --destructive: oklch(0.7022 0.1892 22.2279);
+  --destructive-foreground: oklch(0.2686 0 0);
+  --border: oklch(0.3407 0 0);
+  --input: oklch(0.4386 0 0);
+  --ring: oklch(0.72 0.16 128);
+  --chart-1: oklch(0.5555 0 0);
+  --chart-2: oklch(0.5555 0 0);
+  --chart-3: oklch(0.5555 0 0);
+  --chart-4: oklch(0.5555 0 0);
+  --chart-5: oklch(0.5555 0 0);
+  --sidebar: oklch(0.2046 0 0);
+  --sidebar-foreground: oklch(0.9851 0 0);
+  --sidebar-primary: oklch(0.9851 0 0);
+  --sidebar-primary-foreground: oklch(0.2046 0 0);
+  --sidebar-accent: oklch(0.2686 0 0);
+  --sidebar-accent-foreground: oklch(0.9851 0 0);
+  --sidebar-border: oklch(0.3407 0 0);
+  --sidebar-ring: oklch(0.4386 0 0);
 }
 
 @theme inline {
-  /* Standard shadcn/tweakcn tokens */
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -117,18 +131,11 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
-  --font-sans: var(--font-sans);
-  --font-serif: var(--font-serif);
-  --font-mono: var(--font-mono);
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
-
-  /* Project color extensions */
-  --color-logo: var(--logo);
-  --color-warning: var(--warning);
-  --color-success: var(--success);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar-primary: var(--sidebar-primary);
@@ -137,6 +144,66 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+  --font-serif: var(--font-serif);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  --shadow-2xs: var(--shadow-2xs);
+  --shadow-xs: var(--shadow-xs);
+  --shadow-sm: var(--shadow-sm);
+  --shadow: var(--shadow);
+  --shadow-md: var(--shadow-md);
+  --shadow-lg: var(--shadow-lg);
+  --shadow-xl: var(--shadow-xl);
+  --shadow-2xl: var(--shadow-2xl);
+}
+
+/* ============================================================
+   PROJECT TOKENS — NOT emitted by tweakcn. Keep these blocks when
+   swapping the theme above. Values that should track the palette
+   are derived from tweakcn tokens (var/color-mix); semantic status
+   colors are intentionally fixed (red = failed, green = running…).
+   ============================================================ */
+
+:root {
+  --logo: var(--foreground);
+  --warning: #d97706;
+  --success: #16a34a;
+  --secondary-dim: color-mix(in srgb, var(--secondary) 70%, var(--background));
+  --secondary-hover: color-mix(in srgb, var(--secondary) 50%, var(--background));
+  --secondary-subtle: color-mix(in srgb, var(--secondary) 20%, var(--background));
+  --secondary-faint: color-mix(in srgb, var(--secondary) 30%, var(--background));
+  --status-dot-queued: #ca8a04;
+  --status-dot-provisioning: #2563eb;
+  --status-dot-running: #16a34a;
+  --status-dot-failed: #dc2626;
+  --status-dot-cancelling: #ea580c;
+  --elevation: 0 28px 80px -32px rgb(0 0 0 / 0.18);
+}
+
+.dark {
+  --logo: var(--foreground);
+  --warning: #fbbf24;
+  --success: #4ade80;
+  --status-dot-queued: #facc15;
+  --status-dot-provisioning: #60a5fa;
+  --status-dot-running: #4ade80;
+  --status-dot-failed: #f87171;
+  --status-dot-cancelling: #fb923c;
+  --elevation: 0 28px 80px -32px rgb(0 0 0 / 0.55);
+}
+
+@theme inline {
+  /* Project color extensions (derived from project tokens) */
+  --color-logo: var(--logo);
+  --color-warning: var(--warning);
+  --color-success: var(--success);
   --color-secondary-dim: var(--secondary-dim);
   --color-secondary-hover: var(--secondary-hover);
   --color-secondary-subtle: var(--secondary-subtle);
@@ -157,7 +224,6 @@
   --leading-display-tight: 0.95;
   --tracking-ui-eyebrow: 0.22em;
   --tracking-ui-label: 0.01em;
-
 }
 
 @layer base {
@@ -183,9 +249,34 @@ html {
 }
 
 .badge-status-info {
-  @apply border-accent/50 bg-accent/20 text-accent;
+  @apply border-border bg-muted text-foreground;
 }
 
 .badge-status-error {
   @apply border-destructive/50 bg-destructive/20 text-destructive;
+}
+
+/* ============================================================
+   Surface texture utilities — depth without color.
+   Use currentColor + a low text-opacity to tint the dots;
+   layer .surface-noise as a fixed, low-opacity overlay.
+   ============================================================ */
+.bg-dot-grid {
+  background-image: radial-gradient(circle, currentColor 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+.surface-noise {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* Localized elevation — Mono zeroes the theme shadow tokens, so the landing
+   illustrations opt back in via a single theme-aware token. */
+.shadow-float {
+  box-shadow: var(--elevation);
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }

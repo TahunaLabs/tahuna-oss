@@ -5,9 +5,9 @@ import type { Metadata } from "next"
 import { redirect } from "next/navigation"
 
 export const metadata: Metadata = {
-  title: "Tahuna | A gentle control plane for post-training",
+  title: "Tahuna | Post-training control plane",
   description:
-    "Train, fine-tune, and run reinforcement learning on your AI models — no research lab required. Tahuna gives you full control over post-training with managed GPU infrastructure.",
+    "Post-training infrastructure for adaptive AI systems. Run your training code on cloud GPUs and build toward models that improve from real usage.",
   alternates: { canonical: "/" },
 }
 
@@ -27,7 +27,7 @@ const jsonLd = {
       operatingSystem: "Linux, macOS",
       url: NETWORK_CONFIG.siteUrl,
       description:
-        "A gentle control plane for post-training. Where AI agents practice, adapt, and improve through experience — no research lab required.",
+        "Post-training infrastructure for adaptive AI systems. Tahuna runs your training code on cloud GPUs and handles the run lifecycle around it.",
       offers: {
         "@type": "Offer",
         price: "0",

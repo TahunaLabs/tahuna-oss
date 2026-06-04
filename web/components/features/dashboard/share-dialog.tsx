@@ -161,7 +161,7 @@ export function ShareDialog({
                         </div>
                         <span className={
                           link.permission === "edit"
-                            ? "mt-1 inline-flex rounded bg-accent/20 px-1.5 py-0.5 text-ui-caption text-accent"
+                            ? "mt-1 inline-flex rounded bg-muted px-1.5 py-0.5 text-ui-caption text-foreground"
                             : "mt-1 inline-flex rounded bg-secondary px-1.5 py-0.5 text-ui-caption text-muted-foreground"
                         }>
                           {link.permission}

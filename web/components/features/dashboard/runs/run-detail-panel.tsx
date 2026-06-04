@@ -12,6 +12,7 @@ import {
 } from "@/components/features/dashboard-model"
 import { MetricSection } from "@/components/features/dashboard/runs/metric-section"
 import { RunActionsMenu } from "@/components/features/dashboard/runs/run-actions-menu"
+import { RunStatTiles } from "@/components/features/dashboard/runs/run-stat-tiles"
 import { Badge, statusVariant } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -22,6 +23,7 @@ type RunDetailPanelProps = {
   runDetail: RunDetail
   runLogs: RunLogsOnlyDetail | undefined
   runMetrics: RunMetricsOnlyDetail | undefined
+  environmentLabel?: string
   busy: boolean
   onSelectRun: (id: string | null) => void
   onCancelRun: (id: RunRow["run_id"]) => void
@@ -33,6 +35,7 @@ function RunDetailPanel({
   runDetail,
   runLogs,
   runMetrics,
+  environmentLabel,
   busy,
   onSelectRun,
   onCancelRun,
@@ -90,6 +93,11 @@ function RunDetailPanel({
           <Notice variant="error">{runDetail.error}</Notice>
         </div>
       ) : null}
+
+      {/* At-a-glance stats */}
+      <div className="px-6 pt-4">
+        <RunStatTiles run={runDetail} environmentLabel={environmentLabel} />
+      </div>
 
       {/* Context toggle */}
       <div className="px-6 py-4">

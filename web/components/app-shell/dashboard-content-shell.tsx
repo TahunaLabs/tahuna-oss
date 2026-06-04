@@ -9,7 +9,7 @@ function DashboardContentShell({
   return (
     <div
       className={cn(
-        "box-border flex w-full min-h-0 flex-col items-stretch justify-start px-4 pt-4 md:px-24 md:pt-24",
+        "box-border flex w-full min-h-0 flex-col items-stretch justify-start px-4 pb-10 pt-4 lg:px-8 lg:pt-6",
         className,
       )}
       {...props}

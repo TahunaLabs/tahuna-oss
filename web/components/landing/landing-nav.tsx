@@ -4,11 +4,12 @@ import { Moon, Sun } from "lucide-react"
 import Link from "next/link"
 
 import { CLOUD_LINKS_CONFIG } from "@/cloud/links"
-import { Logo } from "@/components/logo"
+import { BrandLockup } from "@/components/brand-lockup"
 import { Button } from "@/components/ui/button"
 import { useTheme } from "@/components/theme-provider"
 
 const NAV_LINKS = [
+  { label: "Capabilities", href: "#capabilities", external: false },
   { label: "Pricing", href: "/pricing", external: false },
   { label: "Dashboard", href: "/dashboard", external: false },
   { label: "Docs", href: CLOUD_LINKS_CONFIG.docsUrl, external: true },
@@ -18,12 +19,17 @@ const NAV_LINKS = [
 export function LandingNav() {
   const { theme, setTheme } = useTheme()
 
+  const handleAnchorClick = (event: React.MouseEvent<HTMLAnchorElement>, href: string) => {
+    if (!href.startsWith("#")) return
+    const target = document.getElementById(href.slice(1))
+    if (!target) return
+    event.preventDefault()
+    target.scrollIntoView({ behavior: "smooth", block: "start" })
+  }
+
   return (
-    <header className="flex h-14 shrink-0 items-center px-8">
-      <Link href="/" className="flex shrink-0 items-center gap-2.5">
-        <Logo className="h-6 w-auto" />
-        <span className="font-serif text-xl tracking-tight">Tahuna</span>
-      </Link>
+    <header className="sticky top-0 z-50 flex h-14 shrink-0 items-center border-b border-border bg-background/95 px-6 backdrop-blur md:px-8">
+      <BrandLockup className="shrink-0" />
 
       <div className="ml-auto flex items-center gap-1">
         {NAV_LINKS.map(({ label, href, external }) => (
@@ -33,7 +39,9 @@ export function LandingNav() {
                 {label}
               </a>
             ) : (
-              <Link href={href}>{label}</Link>
+              <Link href={href} onClick={(event) => handleAnchorClick(event, href)}>
+                {label}
+              </Link>
             )}
           </Button>
         ))}

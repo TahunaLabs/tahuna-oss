@@ -1,11 +1,11 @@
 "use client"
 
-import { Users } from "lucide-react"
-import { useRouter } from "next/navigation"
+import { ExternalLink, Users } from "lucide-react"
 
 import { relativeTime, type RunRow } from "@/components/features/dashboard-model"
 import { RunActionsMenu } from "@/components/features/dashboard/runs/run-actions-menu"
 import { TableActionsCell } from "@/components/features/dashboard/table-actions-cell"
+import { Button } from "@/components/ui/button"
 import { StatusDot, toStatusDotVariant } from "@/components/ui/status-dot"
 import { TableCell, TableRow } from "@/components/ui/table"
 import { TruncatedTooltip } from "@/components/ui/tooltip"
@@ -45,7 +45,6 @@ function RunTableRow({
   onDeleteRuns,
   onShareRun,
 }: RunTableRowProps) {
-  const router = useRouter()
   const runLabel = run.name || "Untitled run"
 
   return (
@@ -54,7 +53,7 @@ function RunTableRow({
         "group cursor-pointer align-middle hover:bg-muted",
         selected ? "bg-secondary-faint" : "",
       )}
-      onClick={() => router.push(`/dashboard/runs/${run.run_id}`)}
+      onClick={() => onSelectRun(run.run_id)}
     >
       <TableCell className="text-foreground">
         <div className="flex min-w-0 items-center gap-2">
@@ -85,6 +84,16 @@ function RunTableRow({
       </TableCell>
 
       <TableActionsCell stopRowClick>
+        <Button
+          asChild
+          variant="ghost"
+          size="icon-sm"
+          aria-label={`Open ${runLabel} in new tab`}
+        >
+          <a href={`/dashboard/runs/${run.run_id}`} target="_blank" rel="noreferrer">
+            <ExternalLink className="h-3.5 w-3.5" />
+          </a>
+        </Button>
         <RunActionsMenu
           run={run}
           busy={busy}

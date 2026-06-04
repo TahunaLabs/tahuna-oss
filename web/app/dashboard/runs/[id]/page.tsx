@@ -25,7 +25,7 @@ import {
   type StorageItem,
 } from "@/components/features/dashboard-model"
 import { MetricSection } from "@/components/features/dashboard/runs/metric-section"
-import { formatRunUptime } from "@/components/features/dashboard/runs/run-table-row"
+import { RunStatTiles } from "@/components/features/dashboard/runs/run-stat-tiles"
 import { PageLoader } from "@/components/loader"
 import { Badge, statusVariant } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -181,16 +181,7 @@ export default function RunDetailPage() {
           </TabsList>
 
           <TabsContent value="overview" className="space-y-4">
-            <section className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-              <SummaryCard label="Status" value={run.status} detail="Current lifecycle state" />
-              <SummaryCard label="Duration" value={formatRunUptime(run.uptime_ms)} detail="Compute duration" />
-              <SummaryCard label="Environment" value={environmentLabel ?? "Loading…"} detail="Training environment" />
-              <SummaryCard
-                label="Compute"
-                value={`${run.effective_gpu_type || "-"} x${run.effective_gpu_count || "-"}`}
-                detail={`${run.effective_volume_gb || "-"}GB volume`}
-              />
-            </section>
+            <RunStatTiles run={run} environmentLabel={environmentLabel} />
 
             <Card variant="surface" className="p-4">
               <MetricSection
@@ -301,16 +292,6 @@ export default function RunDetailPage() {
         </Tabs>
       </div>
     </main>
-  )
-}
-
-function SummaryCard({ label, value, detail }: { label: string; value: string; detail: string }) {
-  return (
-    <Card variant="surface" className="p-4">
-      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{label}</p>
-      <p className="mt-2 break-words text-xl font-semibold text-foreground">{value}</p>
-      <p className="mt-1 text-xs text-muted-foreground">{detail}</p>
-    </Card>
   )
 }
 

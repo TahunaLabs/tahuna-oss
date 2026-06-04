@@ -1,21 +1,23 @@
 import { siteMetadata } from "@/app/site-metadata"
 import { ConvexClientProvider } from "@/components/convex-client-provider"
+import { PostHogProvider } from "@/components/posthog-provider"
 import { ThemeProvider } from "@/components/theme-provider"
 import { Toaster } from "@/components/ui/toaster"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { getToken } from "@/lib/auth-server"
-import { Cormorant_Garamond, Geist, Geist_Mono } from "next/font/google"
+import localFont from "next/font/local"
 import { cookies } from "next/headers"
 import { NuqsAdapter } from "nuqs/adapters/next/app"
 import type React from "react"
 import "./globals.css"
 
-const geist = Geist({ subsets: ["latin"], variable: "--font-sans" })
-const geistMono = Geist_Mono({ subsets: ["latin"], variable: "--font-mono" })
-const cormorant = Cormorant_Garamond({
-  subsets: ["latin"],
-  weight: ["300", "400", "500", "600", "700"],
-  variable: "--font-serif",
+const geistMono = localFont({
+  src: [
+    { path: "../public/fonts/geist-mono-latin-ext.woff2", weight: "100 900", style: "normal" },
+    { path: "../public/fonts/geist-mono-latin.woff2",     weight: "100 900", style: "normal" },
+  ],
+  variable: "--font-mono",
+  display: "swap",
 })
 
 export const metadata = siteMetadata
@@ -30,17 +32,19 @@ export default async function RootLayout({
   const initialTheme = themeCookie === "dark" ? "dark" : "light"
 
   return (
-    <html lang="en" className={`${geist.variable} ${geistMono.variable} ${cormorant.variable} ${initialTheme}`}>
+    <html lang="en" className={`${geistMono.variable} ${initialTheme}`}>
       <body className="font-sans antialiased bg-sidebar h-svh overflow-hidden">
-        <ThemeProvider initialTheme={initialTheme}>
-            <TooltipProvider>
-              <NuqsAdapter>
-                <ConvexClientProvider initialToken={token}>{children}</ConvexClientProvider>
-              </NuqsAdapter>
-            </TooltipProvider>
-            <Toaster />
-        </ThemeProvider>
-</body>
+        <PostHogProvider>
+          <ThemeProvider initialTheme={initialTheme}>
+              <TooltipProvider>
+                <NuqsAdapter>
+                  <ConvexClientProvider initialToken={token}>{children}</ConvexClientProvider>
+                </NuqsAdapter>
+              </TooltipProvider>
+              <Toaster />
+          </ThemeProvider>
+        </PostHogProvider>
+      </body>
     </html>
   )
 }
