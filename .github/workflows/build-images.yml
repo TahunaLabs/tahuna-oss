@@ -50,6 +50,8 @@ jobs:
       contents: read
       packages: write
     env:
+      # Full image path incl. registry host, e.g. ghcr.io/tahunalabs/tahuna.
+      # Same value Convex reads, so pushed tags match the runtime catalog.
       IMAGE_REPO: ${{ vars.TAHUNA_RUNTIME_IMAGE_REPO }}
     strategy:
       fail-fast: false

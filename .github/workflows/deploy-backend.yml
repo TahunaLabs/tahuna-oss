@@ -25,14 +25,18 @@ jobs:
         working-directory: web
         run: bun install --frozen-lockfile
 
-      - name: Deploy
-        working-directory: web
-        run: bunx convex deploy
-        env:
-          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
-
+      # Must run before deploy: catalog.ts reads TAHUNA_RUNTIME_IMAGE_REPO at
+      # module top level and throws if unset. On a cold redeploy (fresh
+      # deployment, or after the backend was torn down and the var cleared),
+      # `convex deploy` would fail during analysis if the var isn't set first.
       - name: Sync runtime image repo
         working-directory: web
         run: bunx convex env set TAHUNA_RUNTIME_IMAGE_REPO "${{ vars.TAHUNA_RUNTIME_IMAGE_REPO }}"
+        env:
+          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
+
+      - name: Deploy
+        working-directory: web
+        run: bunx convex deploy
         env:
           CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
