@@ -1,6 +1,6 @@
 "use client"
 
-import { Play } from "lucide-react"
+import { Play, X } from "lucide-react"
 import { useState } from "react"
 
 import { DashboardViewLayout } from "@/components/app-shell/dashboard-view-layout"
@@ -15,10 +15,12 @@ import {
   ACTIVE_STATUSES,
   TERMINAL_STATUSES,
 } from "@/components/features/dashboard-model"
-import { RunDetailPanel } from "@/components/features/dashboard/runs/run-detail-panel"
+import { RunActionsMenu } from "@/components/features/dashboard/runs/run-actions-menu"
+import { RunDashboard } from "@/components/features/dashboard/runs/run-dashboard"
 import { RunsToolbar } from "@/components/features/dashboard/runs/runs-toolbar"
 import { RunTableRow } from "@/components/features/dashboard/runs/run-table-row"
 import { RunsEmptyState } from "@/components/features/dashboard/runs/runs-empty-state"
+import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Spinner } from "@/components/ui/spinner"
 import { TableHead } from "@/components/ui/table"
@@ -149,17 +151,36 @@ export function RunsView({
 
           {selectedRunId !== null ? (
             runDetail ? (
-              <RunDetailPanel
-                runDetail={runDetail}
-                runLogs={runLogs}
-                runMetrics={runMetrics}
-                environmentLabel={environmentNameById.get(runDetail.environment_id)}
-                busy={busy}
-                onSelectRun={onSelectRun}
-                onCancelRun={onCancelRun}
-                onDeleteRuns={onDeleteRuns}
-                onShareRun={onShareRun}
-              />
+              <Card variant="default" className="p-5">
+                <RunDashboard
+                  run={runDetail}
+                  logs={runLogs}
+                  metrics={runMetrics}
+                  environmentLabel={environmentNameById.get(runDetail.environment_id)}
+                  actions={(
+                    <>
+                      <RunActionsMenu
+                        run={runDetail}
+                        busy={busy}
+                        triggerVariant="ghost"
+                        onSelectRun={onSelectRun}
+                        onCancelRun={onCancelRun}
+                        onDeleteRuns={onDeleteRuns}
+                        onShareRun={onShareRun}
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-control"
+                        aria-label="Close run details"
+                        onClick={() => onSelectRun(null)}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </>
+                  )}
+                />
+              </Card>
             ) : (
               <Card variant="surface" className="px-6 py-10">
                 <p className="text-sm text-muted-foreground">Loading run details…</p>
