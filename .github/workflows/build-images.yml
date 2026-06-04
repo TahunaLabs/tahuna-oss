@@ -50,8 +50,7 @@ jobs:
       contents: read
       packages: write
     env:
-      REGISTRY: ghcr.io/tahunalabs
-      IMAGE_REPO: ${{ github.ref_name == 'main' && 'tahuna' || 'tahuna-dev' }}
+      IMAGE_REPO: ${{ vars.TAHUNA_RUNTIME_IMAGE_REPO }}
     strategy:
       fail-fast: false
       max-parallel: 2
@@ -92,7 +91,7 @@ jobs:
           file: runtime/images/Dockerfile
           pull: true
           push: true
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_REPO }}:${{ matrix.tag }}
+          tags: ${{ env.IMAGE_REPO }}:${{ matrix.tag }}
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
@@ -102,5 +101,5 @@ jobs:
             PREBAKE_VERSION=${{ matrix.version }}
             PREBAKE_PYTHON_VERSION=${{ matrix.python_version }}
             PREBAKE_PROTECTED_PACKAGES=${{ matrix.protected_packages }}
-          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_REPO }}:cache-${{ matrix.tag }}
-          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_REPO }}:cache-${{ matrix.tag }},mode=max
+          cache-from: type=registry,ref=${{ env.IMAGE_REPO }}:cache-${{ matrix.tag }}
+          cache-to: type=registry,ref=${{ env.IMAGE_REPO }}:cache-${{ matrix.tag }},mode=max
