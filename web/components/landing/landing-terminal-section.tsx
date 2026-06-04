@@ -4,7 +4,6 @@ import { Check, Copy } from "lucide-react"
 import { useState } from "react"
 
 import { LandingFoundersIncBadge } from "@/components/landing/landing-founders-inc-badge"
-import { TiltedChip } from "@/components/landing/section-decorations"
 import { TerminalMock } from "@/components/landing/terminal-mock"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"

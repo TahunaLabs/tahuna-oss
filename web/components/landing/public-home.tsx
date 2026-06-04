@@ -20,11 +20,11 @@ export function PublicHome() {
         <LandingNav />
         <main>
           <LandingHero />
-          <FrameworksBar />
           <LandingCapabilitiesSection />
           <LandingWhySection />
           <LandingTerminalSection />
           <LandingLayersSection />
+          <FrameworksBar />
           <LandingFaqSection />
           <LandingCtaSection />
         </main>
