@@ -24,9 +24,12 @@ function PostHogPageView() {
 export function PostHogProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const key = process.env.NEXT_PUBLIC_POSTHOG_KEY
-    if (!key) return
+    const host = process.env.NEXT_PUBLIC_POSTHOG_HOST
+    const uiHost = process.env.NEXT_PUBLIC_POSTHOG_UI_HOST
+    if (!key || !host || !uiHost) return
     posthog.init(key, {
-      api_host: process.env.NEXT_PUBLIC_POSTHOG_HOST ?? "https://us.i.posthog.com",
+      api_host: host,
+      ui_host: uiHost,
       capture_pageview: false,
       capture_pageleave: true,
       person_profiles: "identified_only",
