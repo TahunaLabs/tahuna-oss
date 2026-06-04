@@ -40,25 +40,20 @@ export function LandingTerminalSection() {
             <Badge variant="ghost">Tahuna</Badge>
           </div>
           <h2 className="text-3xl font-semibold tracking-tight text-foreground md:text-4xl">
-            Turn iteration
+            Your training loop,
             <br />
-            into better models
+            executed cleanly
           </h2>
           <p className="mt-4 max-w-sm text-base leading-relaxed text-muted-foreground">
-            When a new eval, dataset, or hypothesis is ready, Tahuna turns it into a reproducible training run.
+            Point Tahuna at your workspace, choose the recipe, and launch on managed GPUs.
           </p>
           <p className="mt-3 max-w-sm text-base leading-relaxed text-muted-foreground">
-            Sync the workspace, provision the GPU, execute your recipe, stream metrics, and preserve the evidence
-            behind every candidate.
+            Code, data, metrics, checkpoints, and artifacts stay attached to the run that produced them.
           </p>
         </div>
 
         <div className="min-w-0 lg:-mr-12 lg:w-3/5">
           <div className="relative mb-8">
-            <TiltedChip className="absolute -left-3 -top-3 z-10 -rotate-2">
-              <span className="size-1.5 rounded-full bg-[var(--status-dot-running)]" />
-              training
-            </TiltedChip>
             <TerminalMock
               footer={
                 <div className="ml-auto flex items-center gap-4">
