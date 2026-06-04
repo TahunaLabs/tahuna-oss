@@ -54,31 +54,37 @@ export function LandingHero() {
       />
       <DotGrid className="inset-y-0 right-0 w-1/2" />
 
-      {/* Product — anchored to the viewport's right edge; the wrapper clips it
-          at the screen edge (right) and at a fixed height (bottom). */}
-      <div className="pointer-events-none absolute right-0 top-28 hidden h-[36rem] w-[42vw] overflow-hidden lg:block xl:top-32 xl:h-[40rem]">
+      {/* Product — anchored to the viewport's right edge and the section's
+          bottom edge (so its bottom lines up with the background). The wrapper
+          is a fixed-width (rem) clip window, not viewport-relative, so the
+          right-edge crop stays consistent at every screen size. */}
+      <div className="pointer-events-none absolute inset-y-0 right-0 top-28 hidden w-[39.5rem] overflow-hidden lg:block xl:top-32 xl:w-[47rem]">
         <div
           key={active}
           aria-hidden
-          className="absolute left-0 top-0 w-[44rem] animate-in fade-in duration-500 xl:w-[52rem]"
+          className="absolute bottom-0 left-0 w-[44rem] animate-in fade-in duration-500 xl:w-[52rem]"
         >
           {SLIDES[active].screen}
         </div>
       </div>
 
-      <div className="relative mx-auto max-w-7xl">
-        <div className="max-w-2xl lg:max-w-[44rem]">
+      <div className="relative">
+        {/* Text fills from the max-w-7xl left grid line out to the screenshot's
+            left edge, so it grows with the viewport instead of leaving a void.
+            Left inset matches the centered max-w-7xl sections; right inset
+            reserves the screenshot's width (kept in sync with the clip window
+            above) plus a small gap. */}
+        <div className="max-w-2xl lg:max-w-none lg:pl-[max(0px,calc(50vw_-_42rem))] lg:pr-[42.5rem] xl:pr-[50rem]">
           <div>
             <p className="mb-3 text-xs uppercase tracking-ui-eyebrow text-muted-foreground">
               Infrastructure for adaptive AI systems
             </p>
             <h1 className="font-serif text-3xl leading-[1.1] tracking-tight text-foreground md:text-4xl">
-              Own the intelligence loop
-              <br />
+              Own the intelligence loop{" "}
               <span className="italic">behind your AI systems.</span>
             </h1>
 
-            <p className="mt-5 max-w-xl text-base leading-relaxed text-muted-foreground md:text-lg">
+            <p className="mt-5 max-w-2xl text-base leading-relaxed text-muted-foreground md:text-lg">
               Move from one-off model work to a controlled improvement loop: train, serve, hillclimb, and observe.
             </p>
 
@@ -95,16 +101,6 @@ export function LandingHero() {
                   <ArrowRight />
                 </Link>
               </Button>
-            </div>
-          </div>
-
-          {/* Product — off-center; clipped on the right + bottom, top-left corner shows */}
-          <div className="relative hidden overflow-hidden lg:block">
-            <div
-              key={active}
-              className="absolute left-0 top-0 w-[42rem] animate-in fade-in duration-500 xl:w-[48rem]"
-            >
-              {SLIDES[active].screen}
             </div>
           </div>
         </div>
