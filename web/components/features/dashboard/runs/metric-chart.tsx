@@ -11,20 +11,12 @@ import {
 } from "recharts"
 
 import { type metricSeries } from "@/components/features/dashboard-model"
-import { Badge } from "@/components/ui/badge"
 
 type MetricChartProps = {
   metric: ReturnType<typeof metricSeries>[number]
 }
 
 function MetricChart({ metric }: MetricChartProps) {
-  const sourceVariant =
-    metric.category === "model"
-      ? "status-success"
-      : metric.category === "runtime"
-        ? "status-info"
-        : "status-warning"
-
   const values = metric.points.map((point) => point.value)
   const minValue = values.length > 0 ? Math.min(...values) : 0
   const maxValue = values.length > 0 ? Math.max(...values) : 0
@@ -46,12 +38,9 @@ function MetricChart({ metric }: MetricChartProps) {
       <div className="mb-3 flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="truncate text-sm font-medium text-foreground">{metric.name}</p>
-          <div className="mt-1 flex flex-wrap items-center gap-2">
-            <Badge variant={sourceVariant}>{metric.source}</Badge>
-            <span className="text-ui-caption text-muted-foreground">
-              {metric.pointCount} point{metric.pointCount === 1 ? "" : "s"}
-            </span>
-          </div>
+          <p className="mt-1 text-ui-caption text-muted-foreground">
+            {metric.pointCount} point{metric.pointCount === 1 ? "" : "s"}
+          </p>
         </div>
         <div className="text-right">
           <p className="text-ui-caption uppercase tracking-wide text-muted-foreground">Latest</p>

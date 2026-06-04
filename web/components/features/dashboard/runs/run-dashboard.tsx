@@ -19,7 +19,7 @@ import {
   type RunMetricsOnlyDetail,
   type StorageItem,
 } from "@/components/features/dashboard-model"
-import { MetricSection } from "@/components/features/dashboard/runs/metric-section"
+import { MetricChart } from "@/components/features/dashboard/runs/metric-chart"
 import { RunStatTiles } from "@/components/features/dashboard/runs/run-stat-tiles"
 import { Badge, statusVariant } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -137,14 +137,15 @@ export function RunDashboard({
         <TabsContent value="overview" className="space-y-4">
           <RunStatTiles run={run} environmentLabel={environmentLabel} />
 
-          <Card variant="surface" className="p-4">
-            <MetricSection
-              title="W&B metrics"
-              description="Training and evaluation signals streamed from Weights & Biases."
-              metrics={wandbSeries}
-              emptyMessage="No W&B metrics yet."
-            />
-          </Card>
+          {wandbSeries.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No W&B metrics yet.</p>
+          ) : (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 2xl:grid-cols-3">
+              {wandbSeries.map((metric) => (
+                <MetricChart key={`${metric.source}:${metric.name}`} metric={metric} />
+              ))}
+            </div>
+          )}
         </TabsContent>
 
         <TabsContent value="logs">
