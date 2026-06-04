@@ -86,7 +86,12 @@ export function Sidebar({
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
-            <BrandLockup aria-label="Go to home" className="px-2 py-1.5" wordmarkClassName="text-sidebar-foreground" />
+            <BrandLockup
+              aria-label="Go to home"
+              className="px-2 py-1.5 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0 group-data-[collapsible=icon]:py-0"
+              logoClassName="group-data-[collapsible=icon]:h-8"
+              wordmarkClassName="text-sidebar-foreground group-data-[collapsible=icon]:hidden"
+            />
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarHeader>
