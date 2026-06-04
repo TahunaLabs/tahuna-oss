@@ -27,10 +27,10 @@ export function LandingHero() {
   return (
     <section className="relative overflow-hidden px-6 pb-24 pt-24 md:px-8 md:pb-32 md:pt-32 lg:pb-0">
       <div aria-hidden className="pointer-events-none absolute inset-0 opacity-70 dark:hidden">
-        <Image src={heroLightGradientSrc} alt="" fill sizes="100vw" className="object-cover object-center" />
+        <Image src={heroLightGradientSrc} alt="" fill priority sizes="100vw" className="object-cover object-center" />
       </div>
       <div aria-hidden className="pointer-events-none absolute inset-0 hidden dark:block">
-        <Image src={heroDarkGradientSrc} alt="" fill sizes="100vw" className="object-cover object-center" />
+        <Image src={heroDarkGradientSrc} alt="" fill priority sizes="100vw" className="object-cover object-center" />
       </div>
       <div
         aria-hidden
