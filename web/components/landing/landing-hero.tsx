@@ -6,12 +6,12 @@ import { ArrowRight } from "lucide-react"
 import { useEffect, useState } from "react"
 
 import { HeroProduct } from "@/components/landing/hero-product"
-import { EnvironmentsScreen, MetricsScreen, OverviewScreen, RunScreen } from "@/components/landing/hero-screens"
+import { EnvironmentsScreen, OverviewScreen, RunScreen, RunsScreen } from "@/components/landing/hero-screens"
 import { DotGrid } from "@/components/landing/section-decorations"
 import { Button } from "@/components/ui/button"
 import { CDN_CONFIG } from "@/config"
 
-const SLIDES = [<MetricsScreen />, <OverviewScreen />, <RunScreen />, <EnvironmentsScreen />]
+const SLIDES = [<OverviewScreen />, <RunsScreen />, <RunScreen />, <EnvironmentsScreen />]
 
 const heroLightGradientSrc = `${CDN_CONFIG.baseUrl}${CDN_CONFIG.artefactsPath}/${CDN_CONFIG.heroGradientLight}`
 const heroDarkGradientSrc = `${CDN_CONFIG.baseUrl}${CDN_CONFIG.artefactsPath}/${CDN_CONFIG.heroGradientDark}`
