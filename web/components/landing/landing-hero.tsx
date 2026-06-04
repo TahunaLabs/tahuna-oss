@@ -75,11 +75,11 @@ export function LandingHero() {
             <h1 className="font-serif text-3xl leading-[1.1] tracking-tight text-foreground md:text-4xl">
               Own the intelligence loop
               <br />
-              <span className="italic">behind your AI product.</span>
+              <span className="italic">behind your AI systems.</span>
             </h1>
 
             <p className="mt-5 max-w-xl text-base leading-relaxed text-muted-foreground md:text-lg">
-              Start with the primitives that make continual learning possible: training, serving, and experiment search for adaptive AI products.
+              Move from one-off model work to a controlled improvement loop: train, serve, hillclimb, and observe.
             </p>
 
             <div className="mt-8 flex flex-col items-start gap-3 sm:flex-row">

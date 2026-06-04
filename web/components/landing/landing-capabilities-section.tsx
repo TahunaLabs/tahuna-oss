@@ -7,7 +7,7 @@ const capabilities = [
   {
     name: "Tahuna Hillclimb",
     label: "Hillclimb",
-    body: "Search over improvements and compare candidates against your metrics.",
+    body: "Autonomous Research for recursive model improvement",
   },
   {
     name: "Tahuna Serve",
