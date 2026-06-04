@@ -5,6 +5,7 @@ import type { SyncKind } from "@convex/syncManifest";
 import { isHostedBillingClientError } from "@convex/cloud/errors";
 import { RUN_CONFIG } from "@convex/appConfig";
 import {
+  COMPUTE_SESSION_STATUS,
   isComputeSessionHeartbeatTimedOut,
   isComputeSessionIdleTimedOut,
 } from "@convex/core/computeSessionLifecyclePlan";
@@ -186,6 +187,7 @@ const SAFE_CLIENT_ERROR_PATTERNS: RegExp[] = [
   /\bcompute session\b.*\b(not found|mismatch|required|active run|idle)\b/i,
   /\bcompute session\b.*\b(heartbeat|timed out|stale)\b/i,
   /\bno warm compute session is available\b/i,
+  /\bwarm compute\b.*\b(expired|stale|not idle)\b/i,
   /\b--keep-warm-minutes cannot be combined with warm compute session assignment\b/i,
   /\bwarm runs use an existing compatible compute session\b/i,
   /\brun\b.*\b(queued|compute session)\b/i,
@@ -244,6 +246,10 @@ function isNoGpuCapacityError(detail: string) {
     text.includes("no instances currently available") ||
     text.includes("insufficient capacity")
   );
+}
+
+function warmComputeExpiredDetail() {
+  return "warm compute expired for this environment; start a new warm session with `tahuna train --keep-warm-minutes 10`";
 }
 
 export async function createAndProvisionRunStrict(ctx: ActionCtx, args: CreateRunStrictArgs) {
@@ -308,9 +314,7 @@ export async function createAndProvisionRunStrict(ctx: ActionCtx, args: CreateRu
       environmentId: args.environmentId,
     });
     if (!active.compute_session_id) {
-      throw new Error(
-        "warm compute is stale for this environment; run `tahuna train --keep-warm-minutes 10`",
-      );
+      throw new Error(warmComputeExpiredDetail());
     }
     let session;
     try {
@@ -319,9 +323,13 @@ export async function createAndProvisionRunStrict(ctx: ActionCtx, args: CreateRu
         computeSessionId: active.compute_session_id as Id<"computeSessions">,
       });
     } catch {
-      throw new Error(
-        "warm compute is stale for this environment; run `tahuna train --keep-warm-minutes 10`",
-      );
+      throw new Error(warmComputeExpiredDetail());
+    }
+    if (
+      session.status === COMPUTE_SESSION_STATUS.TERMINATED ||
+      session.status === COMPUTE_SESSION_STATUS.FAILED
+    ) {
+      throw new Error(warmComputeExpiredDetail());
     }
     if (session.status !== "idle") {
       throw new Error("warm compute is not idle for this environment; wait for the active run to finish");
@@ -338,9 +346,7 @@ export async function createAndProvisionRunStrict(ctx: ActionCtx, args: CreateRu
         computeSessionId: session.compute_session_id as Id<"computeSessions">,
         reason: "heartbeat",
       });
-      throw new Error(
-        "warm compute is stale for this environment; run `tahuna train --keep-warm-minutes 10`",
-      );
+      throw new Error(warmComputeExpiredDetail());
     }
     if (isComputeSessionIdleTimedOut({
       lastIdleAt: session.last_idle_at,
@@ -353,9 +359,7 @@ export async function createAndProvisionRunStrict(ctx: ActionCtx, args: CreateRu
         computeSessionId: session.compute_session_id as Id<"computeSessions">,
         reason: "idle",
       });
-      throw new Error(
-        "warm compute is stale for this environment; run `tahuna train --keep-warm-minutes 10`",
-      );
+      throw new Error(warmComputeExpiredDetail());
     }
     const created = await ctx.runMutation(internal.runs.internalCreate, {
       userId: args.userId,
