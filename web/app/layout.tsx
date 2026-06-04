@@ -32,7 +32,7 @@ export default async function RootLayout({
   const initialTheme = themeCookie === "dark" ? "dark" : "light"
 
   return (
-    <html lang="en" className={`${geistMono.variable} ${initialTheme}`}>
+    <html lang="en" data-scroll-behavior="smooth" className={`${geistMono.variable} ${initialTheme}`}>
       <body className="font-sans antialiased bg-sidebar h-svh overflow-hidden">
         <PostHogProvider>
           <ThemeProvider initialTheme={initialTheme}>

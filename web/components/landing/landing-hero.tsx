@@ -6,12 +6,12 @@ import { ArrowRight } from "lucide-react"
 import { useEffect, useState } from "react"
 
 import { HeroProduct } from "@/components/landing/hero-product"
-import { EnvironmentsScreen, MetricsScreen, OverviewScreen, RunScreen } from "@/components/landing/hero-screens"
+import { EnvironmentsScreen, OverviewScreen, RunScreen, RunsScreen } from "@/components/landing/hero-screens"
 import { DotGrid } from "@/components/landing/section-decorations"
 import { Button } from "@/components/ui/button"
 import { CDN_CONFIG } from "@/config"
 
-const SLIDES = [<MetricsScreen />, <OverviewScreen />, <RunScreen />, <EnvironmentsScreen />]
+const SLIDES = [<OverviewScreen />, <RunsScreen />, <RunScreen />, <EnvironmentsScreen />]
 
 const heroLightGradientSrc = `${CDN_CONFIG.baseUrl}${CDN_CONFIG.artefactsPath}/${CDN_CONFIG.heroGradientLight}`
 const heroDarkGradientSrc = `${CDN_CONFIG.baseUrl}${CDN_CONFIG.artefactsPath}/${CDN_CONFIG.heroGradientDark}`
@@ -27,10 +27,10 @@ export function LandingHero() {
   return (
     <section className="relative overflow-hidden px-6 pb-24 pt-24 md:px-8 md:pb-32 md:pt-32 lg:pb-0">
       <div aria-hidden className="pointer-events-none absolute inset-0 opacity-70 dark:hidden">
-        <Image src={heroLightGradientSrc} alt="" fill sizes="100vw" className="object-cover object-center" />
+        <Image src={heroLightGradientSrc} alt="" fill fetchPriority="high" sizes="100vw" className="object-cover object-center" />
       </div>
       <div aria-hidden className="pointer-events-none absolute inset-0 hidden dark:block">
-        <Image src={heroDarkGradientSrc} alt="" fill sizes="100vw" className="object-cover object-center" />
+        <Image src={heroDarkGradientSrc} alt="" fill fetchPriority="high" sizes="100vw" className="object-cover object-center" />
       </div>
       <div
         aria-hidden

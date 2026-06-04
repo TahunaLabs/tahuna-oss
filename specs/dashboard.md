@@ -1,13 +1,14 @@
 # Dashboard And Web App
 
-Last reviewed: 2026-05-07
+Last reviewed: 2026-06-04
 
 ## Current Behavior
 
-The web app is a Next.js 16 / React 19 app backed by Convex. The dashboard is session-authenticated and uses query-string state for the active view.
+The web app is a Next.js 16 / React 19 app backed by Convex. The dashboard is session-authenticated and uses query-string state for the active view. The default view on load is `overview`.
 
 Dashboard views:
 
+- Overview (default)
 - Storage
 - Environments
 - Serving
@@ -17,10 +18,11 @@ Dashboard views:
 - Audit logs
 - Settings
 
-The dashboard renders an app shell with a sidebar, top bar, credits gauge, and view containers. Data access is centralized through dashboard API hooks in `web/lib/dashboard-api.ts` and cloud dashboard hooks in `web/cloud/dashboard-api.ts`.
+The dashboard renders an app shell with a sidebar, top bar, and view containers. Data access is centralized through dashboard API hooks in `web/lib/dashboard-api.ts` and cloud dashboard hooks in `web/cloud/dashboard-api.ts`.
 
 ## Main Capabilities
 
+- Overview: KPI tiles (total runs, active runs, credits balance, environments), training activity chart (14-day run count), recent runs list.
 - Storage: list, search, sort, upload, delete, rename artifacts, set visibility, share links.
 - Environments: list, show/edit synced config, bind/unbind data, create runs, delete.
 - Runs: list, filter active/completed, show details, logs, metrics, cancel, delete, share.
@@ -29,17 +31,25 @@ The dashboard renders an app shell with a sidebar, top bar, credits gauge, and v
 - Machines: list/revoke API keys used as CLI machine sessions.
 - Settings: account/profile display and API-key related controls.
 
+## Top Bar
+
+The top bar shows a breadcrumb (`Dashboard / <View>`) and a search button that opens the command menu. It also links to docs.
+
+## Command Menu (⌘K)
+
+`DashboardCommandMenu` opens via ⌘K or the search button in the top bar. It lets users navigate to any view and jump directly to recent runs or environments. Queries are only fired while the menu is open.
+
+## Sidebar
+
+The sidebar has a "New run" shortcut button (navigates to the Environments view) and a credits widget in the footer showing the current balance and an "Add credits" button. The brand lockup (`BrandLockup`) replaces the old logo + wordmark pattern.
+
+## Run Detail
+
+`RunDashboard` is a shared component used both in the inline panel (`RunsView`) and on the dedicated run page (`/dashboard/runs/[id]`). The old `RunDetailPanel` and `MetricSection` components were removed.
+
 ## Public Site
 
-The landing page is the real home page and uses these sections:
-
-- navigation
-- Founders Inc badge
-- hero
-- framework bar
-- install/terminal loop
-- core loop layers
-- footer
+The landing page is the real home page. See `specs/product/landingPage.md`.
 
 ## Invariants
 
