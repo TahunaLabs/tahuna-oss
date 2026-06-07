@@ -51,7 +51,6 @@ cover.out
 *.dylib
 **/bin/
 **/dist/
-.agents/
 # Project binaries
 cli/tahuna
 cli/tahuna-cli
