@@ -48,9 +48,10 @@ type ChartExperiment = HillclimbExperiment & {
 }
 
 const HILLCLIMB_CHART_COLORS = {
-  kept: "oklch(0.34 0.06 295)",
+  kept: "oklch(0.28 0.08 295)",
   discarded: "oklch(0.48 0.01 285)",
   inconclusive: "oklch(0.42 0.03 260)",
+  labelBackground: "oklch(0.94 0.004 285)",
 }
 
 function HillclimbView({
@@ -246,6 +247,9 @@ function HillclimbChart({
           <p className="mt-1 text-xs text-muted-foreground">
             {experiments.length} experiments, {keptImprovementCount} kept improvements
           </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {metricName ?? "metric"} ({direction === "minimize" ? "lower" : "higher"} is better)
+          </p>
         </div>
         <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
           <LegendDot color={HILLCLIMB_CHART_COLORS.kept} label="Kept" />
@@ -261,7 +265,7 @@ function HillclimbChart({
           </div>
         ) : (
           <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart data={chartData} margin={{ top: 28, right: 28, bottom: 30, left: 44 }}>
+            <ComposedChart data={chartData} margin={{ top: 36, right: 28, bottom: 30, left: 12 }}>
               <CartesianGrid stroke="var(--border)" opacity={0.5} />
               <XAxis
                 dataKey="trial_number"
@@ -277,16 +281,9 @@ function HillclimbChart({
                 }}
               />
               <YAxis
-                width={92}
+                width={76}
                 domain={yDomain}
                 tickFormatter={(value: number) => formatMetricValue(value)}
-                label={{
-                  value: `${metricName ?? "metric"} (${direction === "minimize" ? "lower" : "higher"} is better)`,
-                  angle: -90,
-                  position: "insideLeft",
-                  fill: "var(--muted-foreground)",
-                  fontSize: 12,
-                }}
               />
               <Tooltip
                 content={(props) => renderHillclimbTooltip(props, metricName)}
@@ -303,7 +300,7 @@ function HillclimbChart({
               <Scatter data={discarded} dataKey="value" name="discarded" fill={HILLCLIMB_CHART_COLORS.discarded} opacity={0.25} />
               <Scatter data={inconclusive} dataKey="value" name="inconclusive" fill={HILLCLIMB_CHART_COLORS.inconclusive} />
               <Scatter data={kept} dataKey="value" name="kept" fill={HILLCLIMB_CHART_COLORS.kept}>
-                <LabelList dataKey="shortLabel" position="top" fill={HILLCLIMB_CHART_COLORS.kept} fontSize={11} />
+                <LabelList dataKey="shortLabel" content={renderExperimentLabel} />
               </Scatter>
             </ComposedChart>
           </ResponsiveContainer>
@@ -311,6 +308,58 @@ function HillclimbChart({
       </div>
     </Card>
   )
+}
+
+function renderExperimentLabel(props: {
+  x?: number | string
+  y?: number | string
+  value?: number | string
+}) {
+  const label = String(props.value ?? "").trim()
+  const x = Number(props.x)
+  const y = Number(props.y)
+  if (!label || !Number.isFinite(x) || !Number.isFinite(y)) return null
+  const lines = splitExperimentLabel(label)
+  const width = Math.max(...lines.map((line) => line.length)) * 6 + 14
+  const height = lines.length * 12 + 8
+  const nearLeftEdge = x < 130
+  const labelX = nearLeftEdge ? x + 10 : x - width / 2
+  const labelY = Math.max(4, y - height - 10)
+
+  return (
+    <g>
+      <rect
+        x={labelX}
+        y={labelY}
+        width={width}
+        height={height}
+        rx={3}
+        fill={HILLCLIMB_CHART_COLORS.labelBackground}
+        stroke="var(--border)"
+      />
+      {lines.map((line, index) => (
+        <text
+          key={`${line}-${index}`}
+          x={nearLeftEdge ? labelX + 7 : x}
+          y={labelY + 14 + index * 12}
+          fill={HILLCLIMB_CHART_COLORS.kept}
+          fontSize={11}
+          fontFamily="var(--font-mono)"
+          textAnchor={nearLeftEdge ? "start" : "middle"}
+        >
+          {line}
+        </text>
+      ))}
+    </g>
+  )
+}
+
+function splitExperimentLabel(label: string) {
+  if (label.length <= 16) return [label]
+  const words = label.split(/\s+/)
+  if (words.length < 2) return [label]
+  const midpoint = Math.ceil(words.length / 2)
+  return [words.slice(0, midpoint).join(" "), words.slice(midpoint).join(" ")]
 }
 
 function renderHillclimbTooltip(
