@@ -79,7 +79,7 @@ function HillclimbView({
       count={sessions && sessions.length > 0 ? sessions.length : undefined}
       toolbar={(
         <div className="flex w-full min-w-0 flex-col gap-2 md:flex-row md:flex-wrap md:items-center">
-          <div className="relative min-w-0 md:min-w-52 md:max-w-80 md:grow">
+          <div className="relative min-w-0 md:basis-72">
             <Search
               className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
               aria-hidden
@@ -94,7 +94,7 @@ function HillclimbView({
           </div>
           <Select
             aria-label="Hillclimb session"
-            className="md:max-w-80"
+            className="md:min-w-96 md:max-w-none md:flex-1"
             value={selectedSessionId ?? ""}
             onChange={(event) => onSelectSession(event.target.value)}
             disabled={filteredSessions.length === 0}
@@ -200,7 +200,7 @@ function HillclimbSummary({
           ) : (
             detail.metrics.map((metric) => (
               <option key={metric.name} value={metric.name}>
-                {metric.name} ({metric.count})
+                {metric.name}
               </option>
             ))
           )}
@@ -261,7 +261,7 @@ function HillclimbChart({
           </div>
         ) : (
           <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart data={chartData} margin={{ top: 24, right: 24, bottom: 24, left: 8 }}>
+            <ComposedChart data={chartData} margin={{ top: 28, right: 28, bottom: 30, left: 44 }}>
               <CartesianGrid stroke="var(--border)" opacity={0.5} />
               <XAxis
                 dataKey="trial_number"
@@ -277,7 +277,7 @@ function HillclimbChart({
                 }}
               />
               <YAxis
-                width={68}
+                width={92}
                 domain={yDomain}
                 tickFormatter={(value: number) => formatMetricValue(value)}
                 label={{
@@ -289,14 +289,7 @@ function HillclimbChart({
                 }}
               />
               <Tooltip
-                formatter={(value: number, name: string) => [formatMetricValue(value), name === "runningBest" ? "running best" : metricName ?? "value"]}
-                labelFormatter={(_, payload) => payload?.[0]?.payload?.name ?? "Experiment"}
-                contentStyle={{
-                  backgroundColor: "var(--popover)",
-                  border: "1px solid var(--border)",
-                  borderRadius: "6px",
-                  fontSize: "12px",
-                }}
+                content={(props) => renderHillclimbTooltip(props, metricName)}
               />
               <Line
                 type="stepAfter"
@@ -317,6 +310,33 @@ function HillclimbChart({
         )}
       </div>
     </Card>
+  )
+}
+
+function renderHillclimbTooltip(
+  props: {
+    active?: boolean
+    payload?: Array<{ payload?: ChartExperiment }>
+  },
+  metricName: string | null | undefined,
+) {
+  if (!props.active) return null
+  const experiment = props.payload?.find((entry) => entry.payload)?.payload
+  if (!experiment) return null
+  return (
+    <div className="rounded border border-border bg-popover px-3 py-2 text-xs shadow-sm">
+      <div className="mb-2 font-mono font-semibold text-foreground">{experiment.name}</div>
+      <div className="grid gap-1 font-mono text-muted-foreground">
+        <div className="flex items-center justify-between gap-6">
+          <span>{metricName ?? "value"}</span>
+          <span className="text-foreground">{formatMetricValue(experiment.value)}</span>
+        </div>
+        <div className="flex items-center justify-between gap-6">
+          <span>running best</span>
+          <span className="text-foreground">{formatMetricValue(experiment.runningBest)}</span>
+        </div>
+      </div>
+    </div>
   )
 }
 
