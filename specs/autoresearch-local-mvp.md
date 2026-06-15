@@ -1,6 +1,6 @@
 # Tahuna Autoresearch Local MVP
 
-Last reviewed: 2026-05-27
+Last reviewed: 2026-06-15
 
 Linear: TAH-318
 
@@ -35,12 +35,18 @@ Implemented:
 - Warm compute support through `tahuna research run --keep-warm-minutes <minutes>`.
 - Baseline warm-session creation and trial warm-session reuse.
 - Runtime-spec pinning in research session state and resume-time runtime-spec drift rejection.
+- Optional trial labels through `tahuna research run --resume <session-id> --trial-title <title>`.
+- Best-effort backend research metadata sync after local session saves.
+- Backend `researchSessions` and `researchExperiments` tables for Dashboard Hillclimb rendering.
+- CLI-facing `POST /api/research/sessions/sync` endpoint for authenticated session snapshot sync.
+- Dashboard Hillclimb view under `?view=hillclimb`, using synced metadata when available and run-name inference as a fallback for older sessions.
 
 Still needed:
 
 - Apply the `tahuna-autoresearch-project` checklist in the external `TahunaLabs/agent-skills` repository.
 - Allocate warm-session idle/billing time into Auto-Research spend accounting.
 - Auto-Research now requires explicit `--keep-warm-minutes`; it does not inherit `train.keep_warm_after_minutes`.
+- Auto-generate trial summaries from patches when `--trial-title` is omitted.
 
 ## Implementation PR Plan
 
@@ -89,6 +95,13 @@ Implement the MVP in reviewable slices:
    - Update CLI docs for graph rendering and record the external `tahuna-autoresearch-project` agent skill checklist after the CLI harness is usable.
    - Keep Tahuna CLI as a harness only; it must not launch or configure an agent.
 
+9. **Dashboard research metadata sync**
+   - Add authenticated CLI session snapshot sync to the backend.
+   - Persist research sessions and experiments separately from ordinary run rows.
+   - Keep the local `.tahuna/research/<session-id>.json` file as the resume source of truth.
+   - Use synced titles, labels, values, and running best in Dashboard Hillclimb when available.
+   - Keep run-name parsing as a fallback for sessions created before metadata sync existed.
+
 ## Non-Goals
 
 - No cloud-hosted coding agent in the MVP.
@@ -132,6 +145,14 @@ tahuna research graph <session-id> \
   --output .tahuna/research/<session-id>/progress.svg
 ```
 
+Resume trial with a Dashboard label:
+
+```bash
+tahuna research run \
+  --resume <session-id> \
+  --trial-title "faster learning rate"
+```
+
 ## Execution Model
 
 `tahuna research run` is safe for a user agent skill to call repeatedly. It must not invoke an agent itself.
@@ -145,7 +166,7 @@ New session behavior:
 Resume behavior:
 
 - The agent skill edits allowed files.
-- The agent calls `tahuna research run --resume <session-id>`.
+- The agent calls `tahuna research run --resume <session-id> --trial-title "<short label>"`.
 - Tahuna validates the current patch, launches the next trial, records the verdict, restores or keeps the patch, and exits.
 - If more trials remain, Tahuna prints the next `--resume` command.
 - If no further trial can launch within configured budgets, Tahuna writes session status `budget_exhausted`.
@@ -247,7 +268,7 @@ The agent skill owns:
 - Proposing the next hypothesis.
 - Editing allowed files.
 - Explaining the candidate patch.
-- Calling Tahuna commands between edits.
+- Calling Tahuna commands between edits, including `--trial-title` for readable Dashboard labels.
 - Regenerating or reading `tahuna research graph` when useful.
 - Stopping when Tahuna reports that budgets are exhausted.
 
@@ -265,7 +286,7 @@ The intended skill behavior:
 - Make one coherent tracked-file candidate patch at a time.
 - Never edit outside the session editable allowlist.
 - Never add untracked files unless future CLI support exists.
-- Call `tahuna research run --resume <session-id>` for each candidate.
+- Call `tahuna research run --resume <session-id> --trial-title "<short label>"` for each candidate.
 - Regenerate or read `tahuna research graph <session-id>` after trials when useful.
 - Stop on `budget_exhausted`, no remaining wall-clock time, or repeated inconclusive failures.
 - Summarize the best accepted patch, best run id, baseline value, current best metric, trial counts, and any remaining recommended hypotheses.
@@ -336,6 +357,9 @@ Read:
 - cli/research.go
 - cli/commands_core.go
 - web/convex/schema.ts
+- web/convex/runs.ts
+- web/convex/cli/research.ts
+- web/components/features/dashboard/hillclimb-view.tsx
 - web/convex/cli/shared.ts
 - web/convex/computeSessions.ts
 - web/convex/computeSessionAssignment.ts
@@ -446,14 +470,14 @@ Final value selection:
 
 The command should treat missing final metrics as an `inconclusive` trial, not as an accepted or rejected result.
 
-### Required API Support
+### Implemented API Support
 
 The current CLI metric display reads recent metrics through the logs payload. That is acceptable for humans, but research needs a deterministic final metric lookup that cannot be truncated by a recent-metrics window.
 
-Add a narrow CLI-facing endpoint or equivalent Convex query:
+Implemented CLI-facing endpoint:
 
 ```text
-GET /runs/:run_id/metrics/final?name=val_bpb
+GET /api/runs/{run_id}/metrics/final?name=val_bpb
 ```
 
 Response:
@@ -485,9 +509,17 @@ Recommended schema support:
 
 The endpoint should query persisted `runRuntimeMetrics`, not the recent metrics window.
 
+Research metadata sync is also implemented:
+
+```text
+POST /api/research/sessions/sync
+```
+
+This endpoint authenticates with the same CLI API key path as other CLI endpoints and upserts the session snapshot into `researchSessions` and `researchExperiments`.
+
 ### External Metric Command Source
 
-For custom scoring, Tahuna invokes the metric command after the run reaches a terminal status.
+External scorer commands are future work and remain outside the local MVP. If implemented later, Tahuna should invoke the metric command after the run reaches a terminal status.
 
 Invocation:
 
@@ -604,9 +636,10 @@ Shape:
       "number": 1,
       "run_id": "run_id",
       "status": "rejected",
+      "title": "increase warmup",
       "value": 1.51,
       "running_best": 1.42,
-      "label": "increase warmup",
+      "label": "rejected",
       "reason": "metric did not improve",
       "patch_sha256": "patch_hash",
       "estimated_spend_usd": 1.25,
@@ -618,20 +651,98 @@ Shape:
 }
 ```
 
-The file should be append-friendly so an interrupted session can be inspected or resumed later.
+The file is the source of truth for local resume. Backend research metadata sync is best-effort and must not be required to resume an interrupted session.
+
+## Backend Metadata Sync
+
+The CLI syncs a compact research session snapshot to the backend after local session saves. This supports the Dashboard Hillclimb view without making the backend own the research loop.
+
+Endpoint:
+
+```text
+POST /api/research/sessions/sync
+Authorization: Bearer <TAHUNA_API_KEY>
+```
+
+Payload shape:
+
+```json
+{
+  "session_id": "research-20260615-203958",
+  "environment_id": "env_id",
+  "status": "awaiting_patch",
+  "program": "program.md",
+  "metric_name": "eval_loss",
+  "direction": "minimize",
+  "budget": {
+    "max_trials": 5,
+    "max_spend_usd": 25,
+    "max_trial_minutes": 30
+  },
+  "starting_commit": "git_sha",
+  "created_at": "2026-06-15T20:39:58Z",
+  "updated_at": "2026-06-15T21:10:00Z",
+  "experiments": [
+    {
+      "kind": "baseline",
+      "trial_number": 0,
+      "run_id": "run_id",
+      "status": "completed",
+      "title": "baseline",
+      "label": "accepted",
+      "value": 0.574,
+      "running_best": 0.574
+    },
+    {
+      "kind": "trial",
+      "trial_number": 1,
+      "run_id": "run_id",
+      "status": "accepted",
+      "title": "faster learning rate",
+      "label": "accepted",
+      "reason": "metric improved incumbent",
+      "value": 0.294,
+      "running_best": 0.294,
+      "patch_sha256": "patch_hash",
+      "estimated_spend_usd": 1.25,
+      "observed_spend_usd": 1.19,
+      "started_at": "2026-06-15T20:50:00Z",
+      "completed_at": "2026-06-15T21:03:00Z"
+    }
+  ]
+}
+```
+
+Backend storage:
+
+- `researchSessions` stores one row per user/session id.
+- `researchExperiments` stores baseline and trial rows keyed by user/session/kind/trial number.
+- Sync is idempotent: the CLI may send the full current snapshot repeatedly.
+- Existing experiment rows missing from the latest snapshot are removed, so rolled-back local attempts do not remain visible.
+- Run rows remain the source for ordinary run status, logs, artifacts, and emitted runtime metrics.
+- Research metadata rows store only research context: title, verdict label, reason, value, running best, patch hash, timestamps, and spend.
+
+Dashboard behavior:
+
+- `listResearchSessions` reads synced research metadata first.
+- `getResearchSession` reads synced experiment metadata first, then joins run rows and runtime metrics when run ids are present.
+- If no synced metadata exists, the Dashboard falls back to parsing run names like `research-<session>-baseline` and `research-<session>-trial-N`.
+- Synced `title` values are used as graph/table labels.
+- Synced `label` values map to UI states: `accepted` -> kept, `rejected` -> discarded, `inconclusive` -> inconclusive.
 
 ## Status Values
 
 Session status values:
 
 - `running`: Tahuna is currently launching, polling, or scoring a run.
+- `running_trial`: Tahuna has captured a candidate patch and is running a trial.
 - `awaiting_patch`: Tahuna is waiting for the user's agent skill to edit allowed files and resume.
 - `budget_exhausted`: no further trial can be launched within the configured budget.
-- `completed`: the trial budget is exhausted or the user stopped the session cleanly.
 - `failed`: Tahuna cannot safely continue.
 
 Trial status values:
 
+- `running`: Tahuna has created a trial record and may be syncing, launching, or monitoring a run.
 - `accepted`: terminal run produced a valid metric and improved over the incumbent.
 - `rejected`: terminal run produced a valid metric but did not improve.
 - `inconclusive`: no valid decision could be made.
@@ -644,7 +755,7 @@ Run terminal status still comes from the normal Tahuna run lifecycle: `completed
 Resume support is conservative:
 
 ```bash
-tahuna research run --resume <session-id>
+tahuna research run --resume <session-id> --trial-title "faster learning rate"
 ```
 
 Rules:
@@ -656,6 +767,7 @@ Rules:
 - Scope git status, diff, and untracked checks to the current Tahuna project tree.
 - Normalize monorepo-root git paths back to project-relative paths before matching `--editable`.
 - Capture the current tracked diff as `trial-<N>.patch`.
+- Persist the optional `--trial-title` as the trial's human-readable `title`.
 - Reject an empty candidate patch.
 - Reject untracked files before GPU spend.
 - Continue at the next trial number.
@@ -745,6 +857,33 @@ The y-axis label should be derived from the metric name and direction. For examp
 
 The graph should be regenerated after every trial so the user and agent can inspect progress without parsing JSON.
 
+## Dashboard Hillclimb View
+
+The Dashboard also renders cross-experiment research progress in the authenticated UI.
+
+Route:
+
+```text
+/dashboard?view=hillclimb
+```
+
+Data source:
+
+- Prefer synced `researchSessions` and `researchExperiments` rows.
+- Join ordinary `runs` rows when `runId` is available.
+- Read runtime metrics from `runRuntimeMetrics` for latest/final values.
+- Fall back to run-name parsing for older sessions without synced metadata.
+
+View behavior:
+
+- Sidebar nav item is `Hillclimb`.
+- Session selector uses `session_id`.
+- Objective metric selector uses the objective metric name from synced metadata when available; otherwise it falls back to inferred runtime metrics.
+- The graph plots one point per baseline/trial and a running-best step line.
+- Experiment labels use synced `title` values when present; otherwise they fall back to `baseline` or `trial N`.
+- Table rows show experiment title, run id, kept/discarded/inconclusive state, latest value, final value, and running best.
+- The chart uses a dark purple running-best/kept color and muted grey discarded points.
+
 ## Validation and Acceptance Criteria
 
 The local MVP is complete when:
@@ -759,7 +898,9 @@ The local MVP is complete when:
 - Rejected and inconclusive patches are reverted.
 - Accepted patches remain in the working tree.
 - `.tahuna/research/<session-id>.json` records baseline, trials, verdicts, metric values, and run IDs.
+- Backend metadata sync records session and experiment summaries for the Dashboard when authenticated API sync is available.
 - `tahuna research graph <session-id>` renders a progress graph with discarded trials, kept improvements, and running best.
+- `/dashboard?view=hillclimb` renders synced experiment titles, final/latest values, verdicts, and running best.
 - `--resume` can continue a session only when dirty project files are allowed by the session and the resulting accept/reject restore path is deterministic.
 
 ## Implementation Order
@@ -777,4 +918,7 @@ The local MVP is complete when:
 11. Done: record observed spend and estimated spend in session state.
 12. Done: add SVG progress graph rendering.
 13. Done: update CLI docs and record the external `tahuna-autoresearch-project` agent skill checklist.
-14. Out of MVP scope: add `--metric-cmd` scoring after terminal run status.
+14. Done: add best-effort backend research metadata sync with `researchSessions`, `researchExperiments`, and `POST /api/research/sessions/sync`.
+15. Done: add Dashboard Hillclimb rendering from synced metadata with run-name fallback.
+16. Done: add optional `--trial-title` labels for Dashboard graph/table readability.
+17. Out of MVP scope: add `--metric-cmd` scoring after terminal run status.
