@@ -99,6 +99,15 @@ tahuna run logs <run-id>
 tahuna run logs <run-id> --follow
 ```
 
+### `tahuna run watch`
+
+Watch a run's lifecycle status.
+
+```bash
+tahuna run watch <run-id-or-name>
+tahuna run watch <run-id-or-name> --interval 5
+```
+
 ## Research
 
 ### `tahuna research run`
@@ -116,6 +125,7 @@ tahuna research run \
   --editable train.py
 
 tahuna research run --resume <session-id>
+tahuna research run --resume <session-id> --trial-title "add 5% warmup"
 ```
 
 See [Auto-Research](/auto-research) for the full workflow, budget model, and session state contract.
@@ -130,6 +140,8 @@ tahuna research graph <session-id> --output .tahuna/research/<session-id>/progre
 ```
 
 When `--output` is omitted, the default path is `.tahuna/research/<session-id>/progress.svg`. The SVG shows the baseline, accepted trials, rejected trials, inconclusive trials, and running best line for the session metric.
+
+When the CLI is authenticated, `tahuna research run` also best-effort syncs compact session metadata to the backend for the Dashboard Hillclimb view. The local session JSON remains the resume source of truth.
 
 ## Data
 
