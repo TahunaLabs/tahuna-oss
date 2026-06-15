@@ -12,6 +12,10 @@ import type {
   DataBlobRow,
   EnvironmentConfigDetail,
   EnvironmentRow,
+  HillclimbExperiment,
+  HillclimbMetricOption,
+  HillclimbSessionDetail,
+  HillclimbSessionSummary,
   MetricChartSeries,
   ResourceType,
   RunDetail,
@@ -32,7 +36,7 @@ import type { ReactNode } from "react"
 
 export type MainSection = "data" | "environments" | "runs"
 
-export const DASHBOARD_VIEW_VALUES = ["overview", "storage", "environments", "serving", "runs", "machines", "audit_logs", "settings"] as const
+export const DASHBOARD_VIEW_VALUES = ["overview", "storage", "environments", "serving", "runs", "hillclimb", "machines", "audit_logs", "settings"] as const
 export type DashboardView = (typeof DASHBOARD_VIEW_VALUES)[number]
 
 export { RESOURCE_TYPE_VALUES, STORAGE_SORT_VALUES, STORAGE_SOURCE_FILTER_VALUES }
@@ -40,6 +44,10 @@ export type {
   DataBlobRow,
   EnvironmentConfigDetail,
   EnvironmentRow,
+  HillclimbExperiment,
+  HillclimbMetricOption,
+  HillclimbSessionDetail,
+  HillclimbSessionSummary,
   MetricChartSeries,
   ResourceType,
   RunDetail,

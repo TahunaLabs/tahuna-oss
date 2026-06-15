@@ -15,6 +15,7 @@ import { CloudDashboardTopBar } from "@/components/cloud/dashboard/dashboard-top
 import { CLOUD_DASHBOARD_DOCS_NAV } from "@/components/cloud/dashboard/sidebar-links"
 import { EnvironmentsContainer } from "@/components/features/dashboard/environments-container"
 import { DashboardCommandMenu } from "@/components/features/dashboard/dashboard-command-menu"
+import { HillclimbContainer } from "@/components/features/dashboard/hillclimb-container"
 import { MachinesContainer } from "@/components/features/dashboard/machines-container"
 import { OverviewContainer } from "@/components/features/dashboard/overview-container"
 import { RunsContainer } from "@/components/features/dashboard/runs-container"
@@ -53,6 +54,7 @@ const VIEW_LABELS: Record<string, string> = {
   environments: "Environments",
   serving: "Serving",
   runs: "Runs",
+  hillclimb: "Hillclimb",
   machines: "Machines",
   billing: "Billing",
   audit_logs: "Audit logs",
@@ -168,6 +170,8 @@ export default function DashboardPage() {
         return <ServingContainer shouldLoadQueries={shouldLoadQueries} />
       case "runs":
         return <RunsContainer shouldLoadQueries={shouldLoadQueries} onOpenShareDialog={openShareDialog} />
+      case "hillclimb":
+        return <HillclimbContainer shouldLoadQueries={shouldLoadQueries} />
       case "billing":
         return <BillingContainer shouldLoadQueries={shouldLoadQueries} />
       case "machines":

@@ -230,6 +230,45 @@ export type RunMetricsOnlyDetail = {
   }>
 }
 
+export type HillclimbSessionSummary = {
+  session_id: string
+  baseline_run_id: string | null
+  experiment_count: number
+  completed_count: number
+  active_count: number
+  latest_created_at: number
+  status: string
+}
+
+export type HillclimbMetricOption = {
+  name: string
+  count: number
+}
+
+export type HillclimbExperiment = {
+  run_id: string
+  name: string
+  kind: "baseline" | "trial"
+  trial_number: number
+  status: string
+  created_at: number
+  uptime_ms: number
+  latest_value: number | null
+  latest_step: number | null
+  latest_timestamp: number | null
+  final_value: number | null
+  final_step: number | null
+  final_timestamp: number | null
+}
+
+export type HillclimbSessionDetail = {
+  session_id: string
+  objective_metric_name: string | null
+  inferred_direction: "minimize" | "maximize"
+  metrics: HillclimbMetricOption[]
+  experiments: HillclimbExperiment[]
+}
+
 export type MetricChartSeries = {
   name: string
   source: string

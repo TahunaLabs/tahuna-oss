@@ -12,6 +12,8 @@ import type {
   DataBlobRow,
   EnvironmentConfigDetail,
   EnvironmentRow,
+  HillclimbSessionDetail,
+  HillclimbSessionSummary,
   ResourceType,
   RunDetail,
   RunLogsOnlyDetail,
@@ -39,6 +41,10 @@ type DashboardDataBlobListResult = {
 
 type DashboardRunListResult = {
   runs: RunRow[]
+}
+
+type DashboardHillclimbSessionListResult = {
+  sessions: HillclimbSessionSummary[]
 }
 
 type DashboardServeListResult = {
@@ -143,6 +149,25 @@ export function useDashboardRunMetrics(runIdValue: string | null, shouldLoad: bo
     api.runs.getRunMetrics,
     shouldLoad && runIdValue !== null ? { runId: toRunId(runIdValue) } : "skip",
   ) as RunMetricsOnlyDetail | undefined
+}
+
+export function useDashboardHillclimbSessions(shouldLoad: boolean) {
+  return useQuery(api.runs.listResearchSessions, shouldLoad ? {} : "skip") as
+    | DashboardHillclimbSessionListResult
+    | undefined
+}
+
+export function useDashboardHillclimbSession(
+  sessionId: string | null,
+  metricName: string | null,
+  shouldLoad: boolean,
+) {
+  return useQuery(
+    api.runs.getResearchSession,
+    shouldLoad && sessionId !== null
+      ? { sessionId, ...(metricName ? { metricName } : {}) }
+      : "skip",
+  ) as HillclimbSessionDetail | undefined
 }
 
 export function useDashboardServes(shouldLoad: boolean) {

@@ -1,7 +1,7 @@
 "use client"
 
 import type { ElementType } from "react"
-import { HardDrive, Server, Play, LogOut, Settings, ChevronsUpDown, ChevronRight, Rocket, LayoutGrid, Plus } from "lucide-react"
+import { ChartNoAxesCombined, HardDrive, Server, Play, LogOut, Settings, ChevronsUpDown, ChevronRight, Rocket, LayoutGrid, Plus } from "lucide-react"
 import {
   SidebarContent,
   SidebarFooter,
@@ -60,6 +60,7 @@ const DEFAULT_NAV_PLATFORM: DashboardNavItem[] = [
   { icon: HardDrive, label: "Storage", view: "storage" },
   { icon: Server, label: "Environments", view: "environments" },
   { icon: Play, label: "Runs", view: "runs" },
+  { icon: ChartNoAxesCombined, label: "Hillclimb", view: "hillclimb" },
   { icon: Rocket, label: "Serving", view: "serving", badge: "beta" },
 ]
 

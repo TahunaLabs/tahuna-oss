@@ -244,6 +244,41 @@ const finalMetricResponseValidator = v.object({
   timestamp: v.number(),
   source: v.string(),
 });
+const researchSessionSummaryValidator = v.object({
+  session_id: v.string(),
+  baseline_run_id: v.union(v.string(), v.null()),
+  experiment_count: v.number(),
+  completed_count: v.number(),
+  active_count: v.number(),
+  latest_created_at: v.number(),
+  status: v.string(),
+});
+const researchMetricOptionValidator = v.object({
+  name: v.string(),
+  count: v.number(),
+});
+const researchExperimentValidator = v.object({
+  run_id: v.string(),
+  name: v.string(),
+  kind: v.union(v.literal("baseline"), v.literal("trial")),
+  trial_number: v.number(),
+  status: v.string(),
+  created_at: v.number(),
+  uptime_ms: v.number(),
+  latest_value: v.union(v.number(), v.null()),
+  latest_step: v.union(v.number(), v.null()),
+  latest_timestamp: v.union(v.number(), v.null()),
+  final_value: v.union(v.number(), v.null()),
+  final_step: v.union(v.number(), v.null()),
+  final_timestamp: v.union(v.number(), v.null()),
+});
+const researchSessionDetailValidator = v.object({
+  session_id: v.string(),
+  objective_metric_name: v.union(v.string(), v.null()),
+  inferred_direction: v.union(v.literal("minimize"), v.literal("maximize")),
+  metrics: v.array(researchMetricOptionValidator),
+  experiments: v.array(researchExperimentValidator),
+});
 const provisioningPayloadValidator = v.object({
   run_id: v.string(),
   environment_id: v.string(),
@@ -269,6 +304,99 @@ const provisioningPayloadValidator = v.object({
   ),
   provider_machine_id: v.optional(v.string()),
 });
+type ResearchRunInfo = {
+  sessionId: string;
+  kind: "baseline" | "trial";
+  trialNumber: number;
+};
+
+type ResearchMetricPoint = {
+  value: number;
+  step: number | null;
+  timestamp: number;
+  source: string;
+};
+
+const RESEARCH_RUN_NAME_PATTERN = /^(research-.+)-(baseline|trial-(\d+))$/;
+const MAX_RESEARCH_SESSION_RUNS = 120;
+const OBJECTIVE_METRIC_PREFERENCES = [
+  "eval_loss",
+  "eval/loss",
+  "validation_bpb",
+  "val_bpb",
+  "eval/mean_token_accuracy",
+  "eval_accuracy",
+  "eval/accuracy",
+  "reward",
+  "score",
+  "loss",
+];
+
+function parseResearchRunName(name: string): ResearchRunInfo | null {
+  const match = name.trim().match(RESEARCH_RUN_NAME_PATTERN);
+  if (!match) return null;
+  if (match[2] === "baseline") {
+    return { sessionId: match[1], kind: "baseline", trialNumber: 0 };
+  }
+  const trialNumber = Number(match[3]);
+  if (!Number.isFinite(trialNumber) || trialNumber <= 0) return null;
+  return { sessionId: match[1], kind: "trial", trialNumber };
+}
+
+function compareMetricLatest(a: Doc<"runRuntimeMetrics">, b: Doc<"runRuntimeMetrics">) {
+  if (a.timestamp !== b.timestamp) return b.timestamp - a.timestamp;
+  if (a._creationTime !== b._creationTime) return b._creationTime - a._creationTime;
+  return String(b._id).localeCompare(String(a._id));
+}
+
+function compareMetricFinal(a: Doc<"runRuntimeMetrics">, b: Doc<"runRuntimeMetrics">) {
+  const aHasStep = typeof a.step === "number";
+  const bHasStep = typeof b.step === "number";
+  if (aHasStep !== bHasStep) return aHasStep ? -1 : 1;
+  if (aHasStep && bHasStep && a.step !== b.step) return (b.step ?? 0) - (a.step ?? 0);
+  return compareMetricLatest(a, b);
+}
+
+function toMetricPoint(row: Doc<"runRuntimeMetrics">): ResearchMetricPoint {
+  return {
+    value: row.value,
+    step: row.step ?? null,
+    timestamp: row.timestamp,
+    source: row.source,
+  };
+}
+
+function selectMetricPoint(rows: Doc<"runRuntimeMetrics">[], mode: "latest" | "final") {
+  if (rows.length === 0) return null;
+  const candidates = mode === "final" && rows.some((row) => row.source === "train")
+    ? rows.filter((row) => row.source === "train")
+    : rows;
+  candidates.sort(mode === "final" ? compareMetricFinal : compareMetricLatest);
+  return toMetricPoint(candidates[0]);
+}
+
+function inferResearchMetricName(metricCounts: Map<string, number>) {
+  if (metricCounts.size === 0) return null;
+  const names = Array.from(metricCounts.keys());
+  for (const preferred of OBJECTIVE_METRIC_PREFERENCES) {
+    const match = names.find((name) => name.toLowerCase() === preferred);
+    if (match) return match;
+  }
+  const lossLike = names.find((name) => /(^|[/_])(eval|val|validation)[/_].*(loss|bpb|error|perplexity)/i.test(name));
+  if (lossLike) return lossLike;
+  return names.sort((a, b) => {
+    const countOrder = (metricCounts.get(b) ?? 0) - (metricCounts.get(a) ?? 0);
+    if (countOrder !== 0) return countOrder;
+    return a.localeCompare(b);
+  })[0];
+}
+
+function inferResearchDirection(metricName: string | null): "minimize" | "maximize" {
+  if (!metricName) return "minimize";
+  if (/(accuracy|reward|score|win|success)/i.test(metricName)) return "maximize";
+  return "minimize";
+}
+
 const runProvisionSpecValidator = v.object({
   run_id: v.string(),
   effective_gpu_type: v.string(),
@@ -519,6 +647,134 @@ export const list = query({
   handler: async (ctx) => {
     const user = await requireUser(ctx);
     return listByUserId(ctx, String(user._id));
+  },
+});
+
+export const listResearchSessions = query({
+  args: {},
+  returns: v.object({ sessions: v.array(researchSessionSummaryValidator) }),
+  handler: async (ctx) => {
+    const user = await requireUser(ctx);
+    const { runs } = await listByUserId(ctx, String(user._id));
+    const grouped = new Map<string, {
+      sessionId: string;
+      baselineRunId: string | null;
+      experimentCount: number;
+      completedCount: number;
+      activeCount: number;
+      latestCreatedAt: number;
+      hasFailed: boolean;
+    }>();
+
+    for (const run of runs) {
+      const info = parseResearchRunName(run.name);
+      if (!info) continue;
+      const current = grouped.get(info.sessionId) || {
+        sessionId: info.sessionId,
+        baselineRunId: null,
+        experimentCount: 0,
+        completedCount: 0,
+        activeCount: 0,
+        latestCreatedAt: 0,
+        hasFailed: false,
+      };
+      current.experimentCount += 1;
+      if (info.kind === "baseline") current.baselineRunId = run.run_id;
+      if (run.status === RUN_STATUS.COMPLETED) current.completedCount += 1;
+      if (!TERMINAL_STATUSES.has(run.status as RunLifecycleStatus)) current.activeCount += 1;
+      if (run.status === RUN_STATUS.FAILED || run.status === RUN_STATUS.CANCELLED) current.hasFailed = true;
+      current.latestCreatedAt = Math.max(current.latestCreatedAt, run.created_at);
+      grouped.set(info.sessionId, current);
+    }
+
+    return {
+      sessions: Array.from(grouped.values())
+        .map((session) => ({
+          session_id: session.sessionId,
+          baseline_run_id: session.baselineRunId,
+          experiment_count: session.experimentCount,
+          completed_count: session.completedCount,
+          active_count: session.activeCount,
+          latest_created_at: session.latestCreatedAt,
+          status: session.activeCount > 0 ? "running" : session.hasFailed ? "needs_attention" : "completed",
+        }))
+        .sort((a, b) => b.latest_created_at - a.latest_created_at),
+    };
+  },
+});
+
+export const getResearchSession = query({
+  args: {
+    sessionId: v.string(),
+    metricName: v.optional(v.string()),
+  },
+  returns: researchSessionDetailValidator,
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    const { runs } = await listByUserId(ctx, String(user._id));
+    const sessionRuns = runs
+      .map((run) => ({ run, info: parseResearchRunName(run.name) }))
+      .filter((entry): entry is { run: typeof runs[number]; info: ResearchRunInfo } =>
+        entry.info !== null && entry.info.sessionId === args.sessionId,
+      )
+      .sort((a, b) => a.info.trialNumber - b.info.trialNumber)
+      .slice(0, MAX_RESEARCH_SESSION_RUNS);
+
+    const metricRowsByRunId = new Map<string, Doc<"runRuntimeMetrics">[]>();
+    const metricCounts = new Map<string, number>();
+    for (const { run } of sessionRuns) {
+      const rows = await ctx.db
+        .query("runRuntimeMetrics")
+        .withIndex("by_run", (q) => q.eq("runId", run.run_id as Id<"runs">))
+        .collect();
+      metricRowsByRunId.set(run.run_id, rows);
+      const namesForRun = new Set(rows.map((row) => row.name));
+      for (const name of namesForRun) {
+        metricCounts.set(name, (metricCounts.get(name) ?? 0) + 1);
+      }
+    }
+
+    const requestedMetricName = args.metricName?.trim();
+    const objectiveMetricName = requestedMetricName && metricCounts.has(requestedMetricName)
+      ? requestedMetricName
+      : inferResearchMetricName(metricCounts);
+
+    return {
+      session_id: args.sessionId,
+      objective_metric_name: objectiveMetricName,
+      inferred_direction: inferResearchDirection(objectiveMetricName),
+      metrics: Array.from(metricCounts.entries())
+        .map(([name, count]) => ({ name, count }))
+        .sort((a, b) => {
+          if (b.count !== a.count) return b.count - a.count;
+          return a.name.localeCompare(b.name);
+        }),
+      experiments: sessionRuns.map(({ run, info }) => {
+        const rows = metricRowsByRunId.get(run.run_id) ?? [];
+        const metricRows = objectiveMetricName
+          ? rows.filter((row) => row.name === objectiveMetricName)
+          : [];
+        const latest = selectMetricPoint(metricRows, "latest");
+        const final = TERMINAL_STATUSES.has(run.status as RunLifecycleStatus)
+          ? selectMetricPoint(metricRows, "final")
+          : null;
+        return {
+          run_id: run.run_id,
+          name: run.name,
+          kind: info.kind,
+          trial_number: info.trialNumber,
+          status: run.status,
+          created_at: run.created_at,
+          uptime_ms: run.uptime_ms,
+          latest_value: latest?.value ?? null,
+          latest_step: latest?.step ?? null,
+          latest_timestamp: latest?.timestamp ?? null,
+          final_value: final?.value ?? null,
+          final_step: final?.step ?? null,
+          final_timestamp: final?.timestamp ?? null,
+        };
+      }),
+    };
   },
 });
 
