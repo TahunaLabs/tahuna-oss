@@ -38,7 +38,6 @@ type HillclimbViewProps = {
   direction: HillclimbDirection
   onSelectSession: (sessionId: string) => void
   onSelectMetric: (metricName: string) => void
-  onSelectDirection: (direction: HillclimbDirection) => void
 }
 
 type ChartExperiment = HillclimbExperiment & {
@@ -46,6 +45,12 @@ type ChartExperiment = HillclimbExperiment & {
   runningBest: number | null
   label: "kept" | "discarded" | "inconclusive"
   shortLabel: string
+}
+
+const HILLCLIMB_CHART_COLORS = {
+  kept: "oklch(0.34 0.06 295)",
+  discarded: "oklch(0.48 0.01 285)",
+  inconclusive: "oklch(0.42 0.03 260)",
 }
 
 function HillclimbView({
@@ -56,7 +61,6 @@ function HillclimbView({
   direction,
   onSelectSession,
   onSelectMetric,
-  onSelectDirection,
 }: HillclimbViewProps) {
   const [searchQuery, setSearchQuery] = useState("")
   const query = searchQuery.trim().toLowerCase()
@@ -105,15 +109,6 @@ function HillclimbView({
               ))
             )}
           </Select>
-          <Select
-            aria-label="Objective direction"
-            className="md:max-w-48"
-            value={direction}
-            onChange={(event) => onSelectDirection(event.target.value as HillclimbDirection)}
-          >
-            <option value="minimize">Minimize</option>
-            <option value="maximize">Maximize</option>
-          </Select>
         </div>
       )}
     >
@@ -139,7 +134,6 @@ function HillclimbView({
           <HillclimbSummary
             detail={detail}
             metricName={metricName}
-            direction={direction}
             keptCount={keptCount}
             discardedCount={discardedCount}
             onSelectMetric={onSelectMetric}
@@ -159,14 +153,12 @@ function HillclimbView({
 function HillclimbSummary({
   detail,
   metricName,
-  direction,
   keptCount,
   discardedCount,
   onSelectMetric,
 }: {
   detail: HillclimbSessionDetail
   metricName: string | null | undefined
-  direction: HillclimbDirection
   keptCount: number
   discardedCount: number
   onSelectMetric: (metricName: string) => void
@@ -181,7 +173,6 @@ function HillclimbSummary({
             <p className="text-ui-caption uppercase tracking-ui-eyebrow text-muted-foreground">Session ID</p>
             <h2 className="mt-1 truncate text-lg font-semibold text-foreground">{detail.session_id}</h2>
           </div>
-          <Badge variant="default">{direction}</Badge>
         </div>
         <dl className="mt-4 grid gap-3 sm:grid-cols-4">
           <MetricTile label="Experiments" value={String(detail.experiments.length)} />
@@ -215,7 +206,7 @@ function HillclimbSummary({
           )}
         </Select>
         <p className="mt-3 text-xs text-muted-foreground">
-          Metric is inferred from emitted run metrics because local CLI session JSON is not uploaded.
+          Showing metrics reported by these runs. CLI-only research notes are not available here yet.
         </p>
       </Card>
     </div>
@@ -260,9 +251,9 @@ function HillclimbChart({
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-          <LegendDot color="var(--success)" label="Kept" />
-          <LegendDot color="color-mix(in srgb, var(--muted-foreground) 25%, transparent)" label="Discarded" />
-          <LegendDot color="var(--warning)" label="Inconclusive" />
+          <LegendDot color={HILLCLIMB_CHART_COLORS.kept} label="Kept" />
+          <LegendDot color={HILLCLIMB_CHART_COLORS.discarded} label="Discarded" />
+          <LegendDot color={HILLCLIMB_CHART_COLORS.inconclusive} label="Inconclusive" />
           <span>Running best</span>
         </div>
       </div>
@@ -314,15 +305,15 @@ function HillclimbChart({
                 type="stepAfter"
                 dataKey="runningBest"
                 name="running best"
-                stroke="var(--success)"
+                stroke={HILLCLIMB_CHART_COLORS.kept}
                 strokeWidth={2}
                 dot={false}
                 connectNulls
               />
-              <Scatter data={discarded} dataKey="value" name="discarded" fill="var(--muted-foreground)" opacity={0.25} />
-              <Scatter data={inconclusive} dataKey="value" name="inconclusive" fill="var(--warning)" />
-              <Scatter data={kept} dataKey="value" name="kept" fill="var(--success)">
-                <LabelList dataKey="shortLabel" position="top" fill="var(--success)" fontSize={11} />
+              <Scatter data={discarded} dataKey="value" name="discarded" fill={HILLCLIMB_CHART_COLORS.discarded} opacity={0.25} />
+              <Scatter data={inconclusive} dataKey="value" name="inconclusive" fill={HILLCLIMB_CHART_COLORS.inconclusive} />
+              <Scatter data={kept} dataKey="value" name="kept" fill={HILLCLIMB_CHART_COLORS.kept}>
+                <LabelList dataKey="shortLabel" position="top" fill={HILLCLIMB_CHART_COLORS.kept} fontSize={11} />
               </Scatter>
             </ComposedChart>
           </ResponsiveContainer>

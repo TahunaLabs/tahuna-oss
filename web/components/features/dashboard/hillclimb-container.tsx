@@ -1,6 +1,6 @@
 "use client"
 
-import { parseAsStringLiteral, useQueryState } from "nuqs"
+import { useQueryState } from "nuqs"
 
 import { HillclimbView } from "@/components/features/dashboard/hillclimb-view"
 import {
@@ -8,8 +8,7 @@ import {
   useDashboardHillclimbSessions,
 } from "@/lib/dashboard-api"
 
-const HILLCLIMB_DIRECTION_VALUES = ["minimize", "maximize"] as const
-type HillclimbDirection = (typeof HILLCLIMB_DIRECTION_VALUES)[number]
+type HillclimbDirection = "minimize" | "maximize"
 
 type HillclimbContainerProps = {
   shouldLoadQueries: boolean
@@ -18,10 +17,6 @@ type HillclimbContainerProps = {
 function HillclimbContainer({ shouldLoadQueries }: HillclimbContainerProps) {
   const [selectedSessionId, setSelectedSessionId] = useQueryState("hillclimb")
   const [metricName, setMetricName] = useQueryState("hillMetric")
-  const [direction, setDirection] = useQueryState(
-    "hillDirection",
-    parseAsStringLiteral(HILLCLIMB_DIRECTION_VALUES),
-  )
 
   const sessionResult = useDashboardHillclimbSessions(shouldLoadQueries)
   const sessions = sessionResult?.sessions
@@ -30,7 +25,7 @@ function HillclimbContainer({ shouldLoadQueries }: HillclimbContainerProps) {
     : sessions?.[0]?.session_id ?? null
 
   const detail = useDashboardHillclimbSession(activeSessionId, metricName, shouldLoadQueries)
-  const effectiveDirection: HillclimbDirection = direction ?? detail?.inferred_direction ?? "minimize"
+  const effectiveDirection: HillclimbDirection = detail?.inferred_direction ?? "minimize"
 
   return (
     <HillclimbView
@@ -41,7 +36,6 @@ function HillclimbContainer({ shouldLoadQueries }: HillclimbContainerProps) {
       direction={effectiveDirection}
       onSelectSession={(sessionId) => { void setSelectedSessionId(sessionId) }}
       onSelectMetric={(name) => { void setMetricName(name || null) }}
-      onSelectDirection={(value) => { void setDirection(value) }}
     />
   )
 }
