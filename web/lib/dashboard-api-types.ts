@@ -250,6 +250,9 @@ export type HillclimbExperiment = {
   name: string
   kind: "baseline" | "trial"
   trial_number: number
+  title: string | null
+  research_label: string | null
+  reason: string | null
   status: string
   created_at: number
   uptime_ms: number
@@ -259,6 +262,8 @@ export type HillclimbExperiment = {
   final_value: number | null
   final_step: number | null
   final_timestamp: number | null
+  synced_value: number | null
+  synced_running_best: number | null
 }
 
 export type HillclimbSessionDetail = {

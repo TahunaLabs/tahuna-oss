@@ -14,6 +14,7 @@ import type * as catalog from "../catalog.js";
 import type * as cli_data from "../cli/data.js";
 import type * as cli_envVars from "../cli/envVars.js";
 import type * as cli_environments from "../cli/environments.js";
+import type * as cli_research from "../cli/research.js";
 import type * as cli_runs from "../cli/runs.js";
 import type * as cli_serves from "../cli/serves.js";
 import type * as cli_shared from "../cli/shared.js";
@@ -94,6 +95,7 @@ declare const fullApi: ApiFromModules<{
   "cli/data": typeof cli_data;
   "cli/envVars": typeof cli_envVars;
   "cli/environments": typeof cli_environments;
+  "cli/research": typeof cli_research;
   "cli/runs": typeof cli_runs;
   "cli/serves": typeof cli_serves;
   "cli/shared": typeof cli_shared;

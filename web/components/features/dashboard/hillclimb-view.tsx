@@ -205,9 +205,6 @@ function HillclimbSummary({
             ))
           )}
         </Select>
-        <p className="mt-3 text-xs text-muted-foreground">
-          Showing metrics reported by these runs. CLI-only research notes are not available here yet.
-        </p>
       </Card>
     </div>
   )
@@ -354,16 +351,21 @@ function HillclimbExperimentTable({
         </TableHeader>
         <TableBody>
           {experiments.map((experiment) => (
-            <TableRow key={experiment.run_id}>
+            <TableRow key={experiment.run_id || `${experiment.kind}-${experiment.trial_number}`}>
               <TableCell className="font-medium text-foreground">
-                {experiment.kind === "baseline" ? "Baseline" : `Trial ${experiment.trial_number}`}
+                <div className="space-y-1">
+                  <div>{experiment.shortLabel}</div>
+                  {experiment.kind === "trial" && experiment.title ? (
+                    <div className="font-mono text-xs text-muted-foreground">Trial {experiment.trial_number}</div>
+                  ) : null}
+                </div>
               </TableCell>
               <TableCell className="font-mono text-xs text-muted-foreground">{experiment.run_id}</TableCell>
               <TableCell>
                 <div className="flex items-center gap-2">
                   <StatusDot variant={toStatusDotVariant(experiment.status)} />
                   <Badge variant={experiment.label === "kept" ? "status-success" : statusVariant(experiment.status)}>
-                    {experiment.kind === "baseline" ? "baseline" : experiment.label === "kept" ? "kept" : experiment.status}
+                    {experiment.kind === "baseline" ? "baseline" : experiment.label}
                   </Badge>
                 </div>
               </TableCell>
@@ -394,22 +396,31 @@ function HillclimbExperimentTable({
 function buildChartExperiments(experiments: HillclimbExperiment[], direction: HillclimbDirection) {
   let runningBest: number | null = null
   return experiments.map((experiment) => {
-    const value = experiment.final_value ?? experiment.latest_value
-    const improved = value !== null && (runningBest === null || isImprovement(value, runningBest, direction))
-    if (improved) {
+    const value = experiment.final_value ?? experiment.latest_value ?? experiment.synced_value
+    const inferredImproved = value !== null && (runningBest === null || isImprovement(value, runningBest, direction))
+    const syncedLabel = experiment.research_label
+    const label = syncedLabel === "accepted"
+      ? "kept"
+      : syncedLabel === "rejected"
+        ? "discarded"
+        : syncedLabel === "inconclusive"
+          ? "inconclusive"
+          : value === null
+            ? "inconclusive"
+            : inferredImproved
+              ? "kept"
+              : "discarded"
+    if (experiment.synced_running_best !== null) {
+      runningBest = experiment.synced_running_best
+    } else if (inferredImproved) {
       runningBest = value
     }
-    const label = value === null
-      ? "inconclusive"
-      : improved
-        ? "kept"
-        : "discarded"
     return {
       ...experiment,
       value,
       runningBest,
       label,
-      shortLabel: experiment.kind === "baseline" ? "baseline" : `trial ${experiment.trial_number}`,
+      shortLabel: experiment.title || (experiment.kind === "baseline" ? "baseline" : `trial ${experiment.trial_number}`),
     } satisfies ChartExperiment
   })
 }

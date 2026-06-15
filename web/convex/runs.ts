@@ -262,6 +262,9 @@ const researchExperimentValidator = v.object({
   name: v.string(),
   kind: v.union(v.literal("baseline"), v.literal("trial")),
   trial_number: v.number(),
+  title: v.union(v.string(), v.null()),
+  research_label: v.union(v.string(), v.null()),
+  reason: v.union(v.string(), v.null()),
   status: v.string(),
   created_at: v.number(),
   uptime_ms: v.number(),
@@ -271,6 +274,8 @@ const researchExperimentValidator = v.object({
   final_value: v.union(v.number(), v.null()),
   final_step: v.union(v.number(), v.null()),
   final_timestamp: v.union(v.number(), v.null()),
+  synced_value: v.union(v.number(), v.null()),
+  synced_running_best: v.union(v.number(), v.null()),
 });
 const researchSessionDetailValidator = v.object({
   session_id: v.string(),
@@ -278,6 +283,35 @@ const researchSessionDetailValidator = v.object({
   inferred_direction: v.union(v.literal("minimize"), v.literal("maximize")),
   metrics: v.array(researchMetricOptionValidator),
   experiments: v.array(researchExperimentValidator),
+});
+const researchSyncExperimentInputValidator = v.object({
+  run_id: v.optional(v.string()),
+  kind: v.union(v.literal("baseline"), v.literal("trial")),
+  trial_number: v.number(),
+  status: v.string(),
+  title: v.optional(v.string()),
+  label: v.optional(v.string()),
+  reason: v.optional(v.string()),
+  value: v.optional(v.number()),
+  running_best: v.optional(v.number()),
+  patch_sha256: v.optional(v.string()),
+  estimated_spend_usd: v.optional(v.number()),
+  observed_spend_usd: v.optional(v.number()),
+  started_at: v.optional(v.string()),
+  completed_at: v.optional(v.string()),
+});
+const researchSyncSessionInputValidator = v.object({
+  session_id: v.string(),
+  environment_id: v.optional(v.string()),
+  status: v.string(),
+  program: v.optional(v.string()),
+  metric_name: v.optional(v.string()),
+  direction: v.optional(v.union(v.literal("minimize"), v.literal("maximize"))),
+  budget: v.optional(v.any()),
+  starting_commit: v.optional(v.string()),
+  created_at: v.optional(v.string()),
+  updated_at: v.optional(v.string()),
+  experiments: v.array(researchSyncExperimentInputValidator),
 });
 const provisioningPayloadValidator = v.object({
   run_id: v.string(),
@@ -316,6 +350,9 @@ type ResearchMetricPoint = {
   timestamp: number;
   source: string;
 };
+
+type ResearchExperimentInput = typeof researchSyncExperimentInputValidator.type;
+type ResearchSessionInput = typeof researchSyncSessionInputValidator.type;
 
 const RESEARCH_RUN_NAME_PATTERN = /^(research-.+)-(baseline|trial-(\d+))$/;
 const MAX_RESEARCH_SESSION_RUNS = 120;
@@ -395,6 +432,52 @@ function inferResearchDirection(metricName: string | null): "minimize" | "maximi
   if (!metricName) return "minimize";
   if (/(accuracy|reward|score|win|success)/i.test(metricName)) return "maximize";
   return "minimize";
+}
+
+function researchTimestampMillis(value: string | undefined, fallback: number) {
+  if (!value) return fallback;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function researchExperimentKey(kind: "baseline" | "trial", trialNumber: number) {
+  return `${kind}:${trialNumber}`;
+}
+
+function cleanResearchString(value: string | undefined) {
+  const clean = value?.trim();
+  return clean ? clean : undefined;
+}
+
+function cleanResearchNumber(value: number | undefined) {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function toResearchExperimentPatch(
+  input: ResearchExperimentInput,
+  userId: string,
+  sessionId: string,
+  now: number,
+) {
+  return {
+    userId,
+    sessionId,
+    runId: cleanResearchString(input.run_id),
+    kind: input.kind,
+    trialNumber: input.trial_number,
+    status: cleanResearchString(input.status) ?? "unknown",
+    title: cleanResearchString(input.title),
+    label: cleanResearchString(input.label),
+    reason: cleanResearchString(input.reason),
+    value: cleanResearchNumber(input.value),
+    runningBest: cleanResearchNumber(input.running_best),
+    patchSha256: cleanResearchString(input.patch_sha256),
+    estimatedSpendUsd: cleanResearchNumber(input.estimated_spend_usd),
+    observedSpendUsd: cleanResearchNumber(input.observed_spend_usd),
+    startedAt: cleanResearchString(input.started_at),
+    completedAt: cleanResearchString(input.completed_at),
+    updatedAt: now,
+  };
 }
 
 const runProvisionSpecValidator = v.object({
@@ -639,6 +722,85 @@ function normalizeCompatibilityFingerprint(
   };
 }
 
+// ---------- internal research sync ----------
+
+export const internalSyncResearchSession = internalMutation({
+  args: {
+    userId: v.string(),
+    session: researchSyncSessionInputValidator,
+  },
+  returns: v.object({ ok: v.boolean() }),
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    const sessionInput: ResearchSessionInput = args.session;
+    const sessionId = sessionInput.session_id.trim();
+    if (!sessionId) {
+      throw new ConvexError("session_id is required");
+    }
+
+    const sessionPatch = {
+      userId: args.userId,
+      sessionId,
+      environmentId: cleanResearchString(sessionInput.environment_id),
+      status: cleanResearchString(sessionInput.status) ?? "unknown",
+      program: cleanResearchString(sessionInput.program),
+      metricName: cleanResearchString(sessionInput.metric_name),
+      direction: sessionInput.direction,
+      budget: sessionInput.budget,
+      startingCommit: cleanResearchString(sessionInput.starting_commit),
+      createdAt: researchTimestampMillis(sessionInput.created_at, now),
+      updatedAt: researchTimestampMillis(sessionInput.updated_at, now),
+    };
+
+    const existingSession = await ctx.db
+      .query("researchSessions")
+      .withIndex("by_user_and_session", (q) =>
+        q.eq("userId", args.userId).eq("sessionId", sessionId),
+      )
+      .unique();
+    if (existingSession) {
+      await ctx.db.patch(existingSession._id, sessionPatch);
+    } else {
+      await ctx.db.insert("researchSessions", sessionPatch);
+    }
+
+    const existingExperiments = await ctx.db
+      .query("researchExperiments")
+      .withIndex("by_user_and_session", (q) =>
+        q.eq("userId", args.userId).eq("sessionId", sessionId),
+      )
+      .collect();
+    const existingByKey = new Map(
+      existingExperiments.map((experiment) => [
+        researchExperimentKey(experiment.kind, experiment.trialNumber),
+        experiment,
+      ]),
+    );
+    const incomingKeys = new Set<string>();
+
+    for (const experimentInput of sessionInput.experiments) {
+      const key = researchExperimentKey(experimentInput.kind, experimentInput.trial_number);
+      incomingKeys.add(key);
+      const patch = toResearchExperimentPatch(experimentInput, args.userId, sessionId, now);
+      const existing = existingByKey.get(key);
+      if (existing) {
+        await ctx.db.patch(existing._id, patch);
+      } else {
+        await ctx.db.insert("researchExperiments", patch);
+      }
+    }
+
+    for (const experiment of existingExperiments) {
+      const key = researchExperimentKey(experiment.kind, experiment.trialNumber);
+      if (!incomingKeys.has(key)) {
+        await ctx.db.delete(experiment._id);
+      }
+    }
+
+    return { ok: true };
+  },
+});
+
 // ---------- public (auth via ctx.auth) ----------
 
 export const list = query({
@@ -655,7 +817,22 @@ export const listResearchSessions = query({
   returns: v.object({ sessions: v.array(researchSessionSummaryValidator) }),
   handler: async (ctx) => {
     const user = await requireUser(ctx);
-    const { runs } = await listByUserId(ctx, String(user._id));
+    const userId = String(user._id);
+    const { runs } = await listByUserId(ctx, userId);
+    const syncedSessions = await ctx.db
+      .query("researchSessions")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .collect();
+    const syncedExperiments = await ctx.db
+      .query("researchExperiments")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .collect();
+    const experimentsBySession = new Map<string, Doc<"researchExperiments">[]>();
+    for (const experiment of syncedExperiments) {
+      const current = experimentsBySession.get(experiment.sessionId) ?? [];
+      current.push(experiment);
+      experimentsBySession.set(experiment.sessionId, current);
+    }
     const grouped = new Map<string, {
       sessionId: string;
       baselineRunId: string | null;
@@ -664,11 +841,34 @@ export const listResearchSessions = query({
       activeCount: number;
       latestCreatedAt: number;
       hasFailed: boolean;
+      status: string | null;
     }>();
+
+    for (const session of syncedSessions) {
+      const experiments = experimentsBySession.get(session.sessionId) ?? [];
+      const baseline = experiments.find((experiment) => experiment.kind === "baseline");
+      grouped.set(session.sessionId, {
+        sessionId: session.sessionId,
+        baselineRunId: baseline?.runId ?? null,
+        experimentCount: experiments.length,
+        completedCount: experiments.filter((experiment) =>
+          ["accepted", "rejected", "inconclusive", RUN_STATUS.COMPLETED].includes(experiment.status),
+        ).length,
+        activeCount: experiments.filter((experiment) =>
+          !["accepted", "rejected", "inconclusive", RUN_STATUS.COMPLETED, RUN_STATUS.FAILED, RUN_STATUS.CANCELLED].includes(experiment.status),
+        ).length,
+        latestCreatedAt: Math.max(session.updatedAt, ...experiments.map((experiment) => experiment.updatedAt)),
+        hasFailed: experiments.some((experiment) =>
+          experiment.status === RUN_STATUS.FAILED || experiment.status === RUN_STATUS.CANCELLED,
+        ),
+        status: session.status,
+      });
+    }
 
     for (const run of runs) {
       const info = parseResearchRunName(run.name);
       if (!info) continue;
+      if (grouped.has(info.sessionId)) continue;
       const current = grouped.get(info.sessionId) || {
         sessionId: info.sessionId,
         baselineRunId: null,
@@ -677,6 +877,7 @@ export const listResearchSessions = query({
         activeCount: 0,
         latestCreatedAt: 0,
         hasFailed: false,
+        status: null,
       };
       current.experimentCount += 1;
       if (info.kind === "baseline") current.baselineRunId = run.run_id;
@@ -696,7 +897,7 @@ export const listResearchSessions = query({
           completed_count: session.completedCount,
           active_count: session.activeCount,
           latest_created_at: session.latestCreatedAt,
-          status: session.activeCount > 0 ? "running" : session.hasFailed ? "needs_attention" : "completed",
+          status: session.status ?? (session.activeCount > 0 ? "running" : session.hasFailed ? "needs_attention" : "completed"),
         }))
         .sort((a, b) => b.latest_created_at - a.latest_created_at),
     };
@@ -711,18 +912,47 @@ export const getResearchSession = query({
   returns: researchSessionDetailValidator,
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
-    const { runs } = await listByUserId(ctx, String(user._id));
-    const sessionRuns = runs
-      .map((run) => ({ run, info: parseResearchRunName(run.name) }))
-      .filter((entry): entry is { run: typeof runs[number]; info: ResearchRunInfo } =>
+    const userId = String(user._id);
+    const { runs } = await listByUserId(ctx, userId);
+    const runById = new Map(runs.map((run) => [run.run_id, run]));
+    const syncedSession = await ctx.db
+      .query("researchSessions")
+      .withIndex("by_user_and_session", (q) =>
+        q.eq("userId", userId).eq("sessionId", args.sessionId),
+      )
+      .unique();
+    const syncedExperiments = await ctx.db
+      .query("researchExperiments")
+      .withIndex("by_user_and_session", (q) =>
+        q.eq("userId", userId).eq("sessionId", args.sessionId),
+      )
+      .collect();
+    const sortedSyncedExperiments = syncedExperiments
+      .sort((a, b) => a.trialNumber - b.trialNumber)
+      .slice(0, MAX_RESEARCH_SESSION_RUNS);
+    const fallbackSessionRuns = runs
+      .map((run) => ({ run, info: parseResearchRunName(run.name), metadata: null }))
+      .filter((entry): entry is { run: typeof runs[number]; info: ResearchRunInfo; metadata: null } =>
         entry.info !== null && entry.info.sessionId === args.sessionId,
       )
       .sort((a, b) => a.info.trialNumber - b.info.trialNumber)
       .slice(0, MAX_RESEARCH_SESSION_RUNS);
+    const sessionRuns = sortedSyncedExperiments.length > 0
+      ? sortedSyncedExperiments.map((metadata) => ({
+        run: metadata.runId ? runById.get(metadata.runId) ?? null : null,
+        info: {
+          sessionId: args.sessionId,
+          kind: metadata.kind,
+          trialNumber: metadata.trialNumber,
+        },
+        metadata,
+      }))
+      : fallbackSessionRuns;
 
     const metricRowsByRunId = new Map<string, Doc<"runRuntimeMetrics">[]>();
     const metricCounts = new Map<string, number>();
     for (const { run } of sessionRuns) {
+      if (!run) continue;
       const rows = await ctx.db
         .query("runRuntimeMetrics")
         .withIndex("by_run", (q) => q.eq("runId", run.run_id as Id<"runs">))
@@ -733,45 +963,60 @@ export const getResearchSession = query({
         metricCounts.set(name, (metricCounts.get(name) ?? 0) + 1);
       }
     }
+    if (syncedSession?.metricName) {
+      const syncedMetricCount = sortedSyncedExperiments.filter((experiment) => typeof experiment.value === "number").length;
+      metricCounts.set(syncedSession.metricName, Math.max(metricCounts.get(syncedSession.metricName) ?? 0, syncedMetricCount));
+    }
 
     const requestedMetricName = args.metricName?.trim();
-    const objectiveMetricName = requestedMetricName && metricCounts.has(requestedMetricName)
+    const objectiveMetricName = requestedMetricName && (metricCounts.has(requestedMetricName) || requestedMetricName === syncedSession?.metricName)
       ? requestedMetricName
-      : inferResearchMetricName(metricCounts);
+      : syncedSession?.metricName ?? inferResearchMetricName(metricCounts);
 
     return {
       session_id: args.sessionId,
       objective_metric_name: objectiveMetricName,
-      inferred_direction: inferResearchDirection(objectiveMetricName),
+      inferred_direction: syncedSession?.direction ?? inferResearchDirection(objectiveMetricName),
       metrics: Array.from(metricCounts.entries())
         .map(([name, count]) => ({ name, count }))
         .sort((a, b) => {
           if (b.count !== a.count) return b.count - a.count;
           return a.name.localeCompare(b.name);
         }),
-      experiments: sessionRuns.map(({ run, info }) => {
-        const rows = metricRowsByRunId.get(run.run_id) ?? [];
+      experiments: sessionRuns.map(({ run, info, metadata }) => {
+        const runId = run?.run_id ?? metadata?.runId ?? "";
+        const rows = runId ? metricRowsByRunId.get(runId) ?? [] : [];
         const metricRows = objectiveMetricName
           ? rows.filter((row) => row.name === objectiveMetricName)
           : [];
         const latest = selectMetricPoint(metricRows, "latest");
-        const final = TERMINAL_STATUSES.has(run.status as RunLifecycleStatus)
+        const status = run?.status ?? metadata?.status ?? "unknown";
+        const syncedValue = typeof metadata?.value === "number" ? metadata.value : null;
+        const syncedRunningBest = typeof metadata?.runningBest === "number" ? metadata.runningBest : null;
+        const final = TERMINAL_STATUSES.has(status as RunLifecycleStatus) || syncedValue !== null
           ? selectMetricPoint(metricRows, "final")
           : null;
+        const createdAt = run?.created_at ??
+          researchTimestampMillis(metadata?.startedAt ?? metadata?.completedAt, metadata?.updatedAt ?? 0);
         return {
-          run_id: run.run_id,
-          name: run.name,
+          run_id: runId,
+          name: run?.name ?? (info.kind === "baseline" ? `${args.sessionId}-baseline` : `${args.sessionId}-trial-${info.trialNumber}`),
           kind: info.kind,
           trial_number: info.trialNumber,
-          status: run.status,
-          created_at: run.created_at,
-          uptime_ms: run.uptime_ms,
-          latest_value: latest?.value ?? null,
+          title: metadata?.title ?? null,
+          research_label: metadata?.label ?? null,
+          reason: metadata?.reason ?? null,
+          status,
+          created_at: createdAt,
+          uptime_ms: run?.uptime_ms ?? 0,
+          latest_value: latest?.value ?? syncedValue,
           latest_step: latest?.step ?? null,
-          latest_timestamp: latest?.timestamp ?? null,
-          final_value: final?.value ?? null,
+          latest_timestamp: latest?.timestamp ?? metadata?.updatedAt ?? null,
+          final_value: final?.value ?? syncedValue,
           final_step: final?.step ?? null,
-          final_timestamp: final?.timestamp ?? null,
+          final_timestamp: final?.timestamp ?? metadata?.updatedAt ?? null,
+          synced_value: syncedValue,
+          synced_running_best: syncedRunningBest,
         };
       }),
     };

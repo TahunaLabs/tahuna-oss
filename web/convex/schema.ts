@@ -320,6 +320,44 @@ export default defineSchema({
     .index("by_run", ["runId"])
     .index("by_run_and_name", ["runId", "name"]),
 
+  researchSessions: defineTable({
+    userId: v.string(),
+    sessionId: v.string(),
+    environmentId: v.optional(v.string()),
+    status: v.string(),
+    program: v.optional(v.string()),
+    metricName: v.optional(v.string()),
+    direction: v.optional(v.union(v.literal("minimize"), v.literal("maximize"))),
+    budget: v.optional(v.any()),
+    startingCommit: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_user_and_session", ["userId", "sessionId"]),
+
+  researchExperiments: defineTable({
+    userId: v.string(),
+    sessionId: v.string(),
+    runId: v.optional(v.string()),
+    kind: v.union(v.literal("baseline"), v.literal("trial")),
+    trialNumber: v.number(),
+    status: v.string(),
+    title: v.optional(v.string()),
+    label: v.optional(v.string()),
+    reason: v.optional(v.string()),
+    value: v.optional(v.number()),
+    runningBest: v.optional(v.number()),
+    patchSha256: v.optional(v.string()),
+    estimatedSpendUsd: v.optional(v.number()),
+    observedSpendUsd: v.optional(v.number()),
+    startedAt: v.optional(v.string()),
+    completedAt: v.optional(v.string()),
+    updatedAt: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_user_and_session", ["userId", "sessionId"]),
+
   shareLinks: defineTable({
     resourceType: v.union(v.literal("environment"), v.literal("run"), v.literal("data")),
     resourceId: v.string(),

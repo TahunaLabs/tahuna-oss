@@ -101,6 +101,7 @@ type researchIncumbent struct {
 type researchTrial struct {
 	Number            int      `json:"number"`
 	RunID             string   `json:"run_id,omitempty"`
+	Title             string   `json:"title,omitempty"`
 	Status            string   `json:"status"`
 	Value             *float64 `json:"value,omitempty"`
 	RunningBest       *float64 `json:"running_best,omitempty"`
@@ -161,6 +162,7 @@ type researchRunOptions struct {
 	editable               []string
 	allowDirty             bool
 	resume                 string
+	trialTitle             string
 	verbose                bool
 }
 
@@ -189,7 +191,7 @@ func researchUsage() {
 	fmt.Print(`Research commands:
   tahuna research help
   tahuna research run --program <program.md> --metric final:<name> --minimize|--maximize --max-trials <N> --max-spend-usd <USD> --max-trial-minutes <N> [--keep-warm-minutes <n>] --editable <path>
-  tahuna research run --resume <session-id> [--verbose|-v]
+  tahuna research run --resume <session-id> [--trial-title <title>] [--verbose|-v]
   tahuna research graph <session-id> [--output <path>]
 `)
 }
@@ -221,6 +223,7 @@ func parseResearchRunOptions(args []string) researchRunOptions {
 	fs.Var(&editable, "editable", "Editable path or glob, repeatable")
 	fs.BoolVar(&opts.allowDirty, "allow-dirty", false, "Allow dirty working tree state")
 	fs.StringVar(&opts.resume, "resume", "", "Resume an existing research session")
+	fs.StringVar(&opts.trialTitle, "trial-title", "", "Short label for this trial")
 	fs.BoolVar(&opts.verbose, "verbose", false, "Show session JSON")
 	fs.BoolVar(&opts.verbose, "v", false, "Show session JSON")
 	mustParseFlags(fs, args)
@@ -287,7 +290,7 @@ func createResearchSession(opts researchRunOptions) error {
 	if err := writeResearchPatchSnapshot(session.SessionID, "starting.patch", startingSnapshot.Diff); err != nil {
 		return err
 	}
-	if err := saveResearchSession(session); err != nil {
+	if err := saveAndSyncResearchSession(session); err != nil {
 		return err
 	}
 	if err := ensureResearchBudgetForNextRun(&session, true); err != nil {
@@ -295,7 +298,7 @@ func createResearchSession(opts researchRunOptions) error {
 	}
 	if err := runResearchBaseline(&session); err != nil {
 		session.Status = "failed"
-		_ = saveResearchSession(session)
+		_ = saveAndSyncResearchSession(session)
 		return err
 	}
 	printResearchSessionCreated(session, opts.verbose)
@@ -321,12 +324,15 @@ func resumeResearchSession(opts researchRunOptions) error {
 		printJSON(session)
 		return nil
 	}
-	return runResearchTrial(&session)
+	return runResearchTrial(&session, opts.trialTitle)
 }
 
 func validateResearchRunConfig(opts researchRunOptions) (researchMetricConfig, string, error) {
 	if strings.TrimSpace(opts.resume) != "" {
 		return researchMetricConfig{}, "", errors.New("--resume cannot be combined with new session flags")
+	}
+	if strings.TrimSpace(opts.trialTitle) != "" {
+		return researchMetricConfig{}, "", errors.New("--trial-title requires --resume")
 	}
 	if strings.TrimSpace(opts.program) == "" {
 		return researchMetricConfig{}, "", errors.New("--program is required")
@@ -653,6 +659,77 @@ func saveResearchSession(session researchSession) error {
 	return os.WriteFile(researchSessionPath(session.SessionID), append(raw, '\n'), 0o600)
 }
 
+func saveAndSyncResearchSession(session researchSession) error {
+	if err := saveResearchSession(session); err != nil {
+		return err
+	}
+	syncResearchSessionBestEffort(session)
+	return nil
+}
+
+func syncResearchSessionBestEffort(session researchSession) {
+	if strings.TrimSpace(cfg.apiKey) == "" {
+		return
+	}
+	_, _ = doJSON(http.MethodPost, "/research/sessions/sync", researchSyncPayload(session))
+}
+
+func researchSyncPayload(session researchSession) map[string]any {
+	payload := map[string]any{
+		"session_id":      session.SessionID,
+		"environment_id":  session.EnvironmentID,
+		"status":          session.Status,
+		"program":         session.Program,
+		"metric_name":     session.Metric.Name,
+		"direction":       session.Direction,
+		"budget":          session.Budget,
+		"starting_commit": session.StartingCommit,
+		"created_at":      session.CreatedAt,
+		"updated_at":      time.Now().UTC().Format(time.RFC3339),
+	}
+	experiments := make([]map[string]any, 0, len(session.Trials)+1)
+	if session.Baseline != nil {
+		baseline := map[string]any{
+			"run_id":       session.Baseline.RunID,
+			"kind":         "baseline",
+			"trial_number": 0,
+			"status":       session.Baseline.Status,
+			"title":        "baseline",
+			"label":        researchTrialLabelAccepted,
+		}
+		if session.Baseline.Value != nil {
+			baseline["value"] = *session.Baseline.Value
+			baseline["running_best"] = *session.Baseline.Value
+		}
+		experiments = append(experiments, baseline)
+	}
+	for _, trial := range session.Trials {
+		experiment := map[string]any{
+			"run_id":              trial.RunID,
+			"kind":                "trial",
+			"trial_number":        trial.Number,
+			"status":              trial.Status,
+			"title":               trial.Title,
+			"label":               trial.Label,
+			"reason":              trial.Reason,
+			"patch_sha256":        trial.PatchSHA256,
+			"estimated_spend_usd": trial.EstimatedSpendUSD,
+			"observed_spend_usd":  trial.ObservedSpendUSD,
+			"started_at":          trial.StartedAt,
+			"completed_at":        trial.CompletedAt,
+		}
+		if trial.Value != nil {
+			experiment["value"] = *trial.Value
+		}
+		if trial.RunningBest != nil {
+			experiment["running_best"] = *trial.RunningBest
+		}
+		experiments = append(experiments, experiment)
+	}
+	payload["experiments"] = experiments
+	return payload
+}
+
 func loadResearchSession(sessionID string) (researchSession, error) {
 	cleanID := strings.TrimSpace(sessionID)
 	if cleanID == "" {
@@ -720,6 +797,13 @@ func runResearchBaseline(session *researchSession) error {
 		return errors.New("baseline run create response did not include run_id")
 	}
 	fmt.Printf("%s✓%s baseline run created: %s (%s)\n", cAmpGreen, cReset, runID, runDashboardURL(runID))
+	session.Baseline = &researchRunResult{
+		RunID:  runID,
+		Status: researchTrialStatusRunning,
+	}
+	if err := saveAndSyncResearchSession(*session); err != nil {
+		return err
+	}
 
 	if err := monitorRunWithLogs(runID, 5); err != nil {
 		return err
@@ -729,12 +813,9 @@ func runResearchBaseline(session *researchSession) error {
 		return err
 	}
 	recordResearchRunSpend(session, terminalRun)
-	session.Baseline = &researchRunResult{
-		RunID:  runID,
-		Status: terminalRun.Status,
-	}
+	session.Baseline.Status = terminalRun.Status
 	if !strings.EqualFold(terminalRun.Status, "completed") {
-		if err := saveResearchSession(*session); err != nil {
+		if err := saveAndSyncResearchSession(*session); err != nil {
 			return err
 		}
 		return fmt.Errorf("baseline run ended with status %s", terminalRun.Status)
@@ -742,7 +823,7 @@ func runResearchBaseline(session *researchSession) error {
 
 	metric, err := fetchResearchFinalMetric(runID, session.Metric.Name)
 	if err != nil {
-		if err := saveResearchSession(*session); err != nil {
+		if err := saveAndSyncResearchSession(*session); err != nil {
 			return err
 		}
 		return err
@@ -768,10 +849,10 @@ func runResearchBaseline(session *researchSession) error {
 	if researchBudgetExhausted(*session) {
 		session.Status = researchSessionStatusBudgetExhaust
 	}
-	return saveResearchSession(*session)
+	return saveAndSyncResearchSession(*session)
 }
 
-func runResearchTrial(session *researchSession) error {
+func runResearchTrial(session *researchSession, title string) error {
 	if session.Status != researchSessionStatusAwaitingPatch {
 		return fmt.Errorf("research session must be %s, got %s", researchSessionStatusAwaitingPatch, session.Status)
 	}
@@ -807,6 +888,7 @@ func runResearchTrial(session *researchSession) error {
 
 	trial := researchTrial{
 		Number:            trialNumber,
+		Title:             strings.TrimSpace(title),
 		Status:            researchTrialStatusRunning,
 		PatchSHA256:       candidate.SHA256,
 		EstimatedSpendUSD: estimateResearchNextRunSpend(*session),
@@ -814,7 +896,7 @@ func runResearchTrial(session *researchSession) error {
 	}
 	session.Status = researchSessionStatusRunningTrial
 	session.Trials = append(session.Trials, trial)
-	if err := saveResearchSession(*session); err != nil {
+	if err := saveAndSyncResearchSession(*session); err != nil {
 		return err
 	}
 
@@ -835,7 +917,7 @@ func runResearchTrial(session *researchSession) error {
 		if researchWarmComputeEnabled(*session) && isWarmComputeUnavailableError(err) {
 			session.Status = researchSessionStatusAwaitingPatch
 			session.Trials = session.Trials[:len(session.Trials)-1]
-			_ = saveResearchSession(*session)
+			_ = saveAndSyncResearchSession(*session)
 			return err
 		}
 		return finishInconclusiveResearchTrial(session, trialNumber, "", fmt.Sprintf("run create failed: %v", err))
@@ -846,7 +928,7 @@ func runResearchTrial(session *researchSession) error {
 	}
 	fmt.Printf("%s✓%s trial run created: %s (%s)\n", cAmpGreen, cReset, runID, runDashboardURL(runID))
 	session.Trials[len(session.Trials)-1].RunID = runID
-	if err := saveResearchSession(*session); err != nil {
+	if err := saveAndSyncResearchSession(*session); err != nil {
 		return err
 	}
 
@@ -861,7 +943,7 @@ func runResearchTrial(session *researchSession) error {
 		return finishInconclusiveResearchTrial(session, trialNumber, runID, fmt.Sprintf("run status lookup failed: %v", err))
 	}
 	recordResearchTrialSpend(session, trialNumber, terminalRun)
-	if err := saveResearchSession(*session); err != nil {
+	if err := saveAndSyncResearchSession(*session); err != nil {
 		return err
 	}
 	if !strings.EqualFold(terminalRun.Status, "completed") {
@@ -931,7 +1013,7 @@ func finishResearchTrial(session *researchSession, trialNumber int, label, runID
 	if researchBudgetExhausted(*session) {
 		session.Status = researchSessionStatusBudgetExhaust
 	}
-	if err := saveResearchSession(*session); err != nil {
+	if err := saveAndSyncResearchSession(*session); err != nil {
 		return err
 	}
 	printResearchTrialResult(*session, *trial)
@@ -1128,7 +1210,7 @@ func ensureResearchBudgetForNextRun(session *researchSession, baseline bool) err
 
 func markResearchBudgetExhausted(session *researchSession, reason string) error {
 	session.Status = researchSessionStatusBudgetExhaust
-	if err := saveResearchSession(*session); err != nil {
+	if err := saveAndSyncResearchSession(*session); err != nil {
 		return err
 	}
 	return errors.New(reason)

@@ -18,6 +18,7 @@ import {
 } from "@convex/cli/environments";
 import { getEnvVar, listEnvVars, removeEnvVar, setEnvVars } from "@convex/cli/envVars";
 import { createRun, getRunOrLogs, listRuns, postRunRuntime, removeRun, renameRun } from "@convex/cli/runs";
+import { syncResearchSession } from "@convex/cli/research";
 import { createServe, getServeOrLogs, listServes, postServeAction } from "@convex/cli/serves";
 import {
   getComputeSessionRuntime,
@@ -68,6 +69,9 @@ http.route({ pathPrefix: "/api/runs/", method: "GET", handler: getRunOrLogs });
 http.route({ pathPrefix: "/api/runs/", method: "PATCH", handler: renameRun });
 // Route prefix for deleting runs by ID /api/runs/{run_id}
 http.route({ pathPrefix: "/api/runs/", method: "DELETE", handler: removeRun });
+
+// Research (REST)
+http.route({ path: "/api/research/sessions/sync", method: "POST", handler: syncResearchSession });
 
 // Compute session runtime callbacks: /api/compute_sessions/{compute_session_id}/runtime/{action}
 http.route({ pathPrefix: "/api/compute_sessions/", method: "GET", handler: getComputeSessionRuntime });
