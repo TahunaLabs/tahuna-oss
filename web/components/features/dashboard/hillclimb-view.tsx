@@ -68,7 +68,8 @@ function HillclimbView({
   const filteredSessions = (sessions ?? []).filter((session) =>
     query ? session.session_id.toLowerCase().includes(query) : true,
   )
-  const chartExperiments = buildChartExperiments(detail?.experiments ?? [], direction)
+  const sortedExperiments = sortHillclimbExperiments(detail?.experiments ?? [])
+  const chartExperiments = buildChartExperiments(sortedExperiments, direction)
   const keptCount = chartExperiments.filter((experiment) => experiment.kind === "trial" && experiment.label === "kept").length
   const discardedCount = chartExperiments.filter((experiment) => experiment.kind === "trial" && experiment.label === "discarded").length
 
@@ -95,7 +96,7 @@ function HillclimbView({
           </div>
           <Select
             aria-label="Hillclimb session"
-            className="md:min-w-96 md:max-w-none md:flex-1"
+            className="h-10 text-base md:min-w-96 md:max-w-none md:flex-1"
             value={selectedSessionId ?? ""}
             onChange={(event) => onSelectSession(event.target.value)}
             disabled={filteredSessions.length === 0}
@@ -134,6 +135,7 @@ function HillclimbView({
         <div className="space-y-4">
           <HillclimbSummary
             detail={detail}
+            experiments={sortedExperiments}
             metricName={metricName}
             keptCount={keptCount}
             discardedCount={discardedCount}
@@ -153,18 +155,20 @@ function HillclimbView({
 
 function HillclimbSummary({
   detail,
+  experiments,
   metricName,
   keptCount,
   discardedCount,
   onSelectMetric,
 }: {
   detail: HillclimbSessionDetail
+  experiments: HillclimbExperiment[]
   metricName: string | null | undefined
   keptCount: number
   discardedCount: number
   onSelectMetric: (metricName: string) => void
 }) {
-  const latestExperiment = detail.experiments[detail.experiments.length - 1]
+  const latestExperiment = experiments[experiments.length - 1]
 
   return (
     <div className="grid gap-3 lg:grid-cols-3">
@@ -191,7 +195,7 @@ function HillclimbSummary({
         </label>
         <Select
           id="hillclimb-metric"
-          className="mt-2"
+          className="mt-3 h-10 text-base"
           value={metricName ?? ""}
           onChange={(event) => onSelectMetric(event.target.value)}
           disabled={detail.metrics.length === 0}
@@ -236,6 +240,7 @@ function HillclimbChart({
   const inconclusive = chartData.filter((experiment) => experiment.label === "inconclusive")
   const values = chartData.flatMap((experiment) => [experiment.value, experiment.runningBest]).filter((value): value is number => value !== null)
   const yDomain = metricDomain(values)
+  const xTicks = Array.from(new Set(chartData.map((experiment) => experiment.trial_number)))
 
   return (
     <Card variant="surface" className="p-4">
@@ -271,6 +276,10 @@ function HillclimbChart({
                 dataKey="trial_number"
                 type="number"
                 domain={["dataMin", "dataMax"]}
+                ticks={xTicks}
+                interval={0}
+                allowDecimals={false}
+                tickMargin={8}
                 tickFormatter={(value: number) => (value === 0 ? "baseline" : String(value))}
                 label={{
                   value: "Experiment #",
@@ -286,7 +295,7 @@ function HillclimbChart({
                 tickFormatter={(value: number) => formatMetricValue(value)}
               />
               <Tooltip
-                content={(props) => renderHillclimbTooltip(props, metricName)}
+                content={(props) => renderHillclimbTooltip(props, metricName, chartData)}
               />
               <Line
                 type="stepAfter"
@@ -365,12 +374,18 @@ function splitExperimentLabel(label: string) {
 function renderHillclimbTooltip(
   props: {
     active?: boolean
-    payload?: Array<{ payload?: ChartExperiment }>
+    label?: number | string
+    payload?: Array<{ dataKey?: string | number; payload?: ChartExperiment }>
   },
   metricName: string | null | undefined,
+  experiments: ChartExperiment[],
 ) {
   if (!props.active) return null
-  const experiment = props.payload?.find((entry) => entry.payload)?.payload
+  const activeTrialNumber = Number(props.label)
+  const experiment = Number.isFinite(activeTrialNumber)
+    ? experiments.find((candidate) => candidate.trial_number === activeTrialNumber)
+    : props.payload?.find((entry) => entry.dataKey === "value" && entry.payload)?.payload ??
+      props.payload?.find((entry) => entry.payload)?.payload
   if (!experiment) return null
   return (
     <div className="rounded border border-border bg-popover px-3 py-2 text-xs shadow-sm">
@@ -492,6 +507,17 @@ function buildChartExperiments(experiments: HillclimbExperiment[], direction: Hi
       shortLabel: experiment.title || (experiment.kind === "baseline" ? "baseline" : `trial ${experiment.trial_number}`),
     } satisfies ChartExperiment
   })
+}
+
+function sortHillclimbExperiments(experiments: HillclimbExperiment[]) {
+  return [...experiments].sort(compareHillclimbExperiments)
+}
+
+function compareHillclimbExperiments(a: HillclimbExperiment, b: HillclimbExperiment) {
+  if (a.trial_number !== b.trial_number) return a.trial_number - b.trial_number
+  if (a.kind !== b.kind) return a.kind === "baseline" ? -1 : 1
+  if (a.created_at !== b.created_at) return a.created_at - b.created_at
+  return a.name.localeCompare(b.name)
 }
 
 function isImprovement(candidate: number, incumbent: number, direction: HillclimbDirection) {

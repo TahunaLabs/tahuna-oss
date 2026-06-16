@@ -369,6 +369,12 @@ const OBJECTIVE_METRIC_PREFERENCES = [
   "loss",
 ];
 
+function compareResearchRunInfo(a: ResearchRunInfo, b: ResearchRunInfo) {
+  if (a.trialNumber !== b.trialNumber) return a.trialNumber - b.trialNumber;
+  if (a.kind !== b.kind) return a.kind === "baseline" ? -1 : 1;
+  return a.sessionId.localeCompare(b.sessionId);
+}
+
 function parseResearchRunName(name: string): ResearchRunInfo | null {
   const match = name.trim().match(RESEARCH_RUN_NAME_PATTERN);
   if (!match) return null;
@@ -928,14 +934,17 @@ export const getResearchSession = query({
       )
       .collect();
     const sortedSyncedExperiments = syncedExperiments
-      .sort((a, b) => a.trialNumber - b.trialNumber)
+      .sort((a, b) => compareResearchRunInfo(
+        { sessionId: a.sessionId, kind: a.kind, trialNumber: a.trialNumber },
+        { sessionId: b.sessionId, kind: b.kind, trialNumber: b.trialNumber },
+      ))
       .slice(0, MAX_RESEARCH_SESSION_RUNS);
     const fallbackSessionRuns = runs
       .map((run) => ({ run, info: parseResearchRunName(run.name), metadata: null }))
       .filter((entry): entry is { run: typeof runs[number]; info: ResearchRunInfo; metadata: null } =>
         entry.info !== null && entry.info.sessionId === args.sessionId,
       )
-      .sort((a, b) => a.info.trialNumber - b.info.trialNumber)
+      .sort((a, b) => compareResearchRunInfo(a.info, b.info))
       .slice(0, MAX_RESEARCH_SESSION_RUNS);
     const sessionRuns = sortedSyncedExperiments.length > 0
       ? sortedSyncedExperiments.map((metadata) => ({
