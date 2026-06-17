@@ -11,7 +11,15 @@ curl -fsSL https://tahuna.app/install.sh | bash
 
 For manual tarball installation and version pinning, see [Installation](/installation).
 
-## Authentication
+## Help and output conventions
+
+Every command group supports `help`, `-h`, and `--help`.
+
+Default output is human-readable. Subcommands that expose raw API payloads use `--verbose` or `-v` for JSON. `--verbose` is not a global flag; pass it only to subcommands that document it.
+
+Most run commands accept either a run id or an exact run name. When a name is ambiguous, use the run id.
+
+## Authentication and shell
 
 ### `tahuna login`
 
@@ -19,6 +27,14 @@ Authenticate with your Tahuna account. Opens a browser window for OAuth.
 
 ```bash
 tahuna login
+```
+
+### `tahuna shell`
+
+Start an interactive Tahuna command shell.
+
+```bash
+tahuna shell
 ```
 
 ### `tahuna version`
@@ -29,15 +45,49 @@ Print the installed CLI version.
 tahuna version
 ```
 
-## Environments
+Environment overrides:
+
+| Variable | Purpose |
+| --- | --- |
+| `TAHUNA_API_URL` | API base URL override |
+| `TAHUNA_BROWSER_URL` | Browser auth URL base override |
+| `TAHUNA_CONFIG_DIR` | CLI credential/config directory override |
+| `TAHUNA_API_KEY` | Auth token, normally written by `tahuna login` |
+
+## Project setup and sync
 
 ### `tahuna init`
 
-Initialize an environment in the current directory. Writes local project state to `.tahuna/tahuna.toml` and scaffolds missing project files such as `pyproject.toml`, `uv.lock`, and `train.py`.
+Initialize a Tahuna project and linked environment. `tahuna init .` initializes the current directory; `tahuna init <project-name>` creates or initializes a named project directory.
+
+The command writes root `tahuna.toml` as the local project contract and stores link/cache state under `.tahuna/`. It may scaffold missing project files such as `pyproject.toml`, `uv.lock`, `train.py`, `inference.py`, `data/`, and `outputs/`, depending on the interactive choices and existing files.
 
 ```bash
 tahuna init .
+tahuna init my-project
 ```
+
+### `tahuna up`
+
+Shortcut for initializing the current directory.
+
+```bash
+tahuna up
+```
+
+### `tahuna sync`
+
+Sync the linked project's code and data snapshots without launching a run.
+
+```bash
+tahuna sync
+tahuna sync code
+tahuna sync data
+```
+
+Runs and serves perform their own required sync before launch. Use `tahuna sync` directly when you want to validate snapshotting or pre-upload changes.
+
+## Environments
 
 ### `tahuna env list`
 
@@ -45,6 +95,27 @@ List all environments in your workspace.
 
 ```bash
 tahuna env list
+tahuna env list --verbose
+```
+
+### `tahuna env show`
+
+Inspect one environment.
+
+```bash
+tahuna env show <environment-id>
+tahuna env show --id <environment-id> --verbose
+```
+
+### `tahuna env update`
+
+Update local environment settings in `tahuna.toml` and sync the linked environment when possible.
+
+```bash
+tahuna env update --gpu-type L4 --gpu-count 1 --volume-gb 20
+tahuna env update --entrypoint-command "uv run --active --no-sync python -u train.py"
+tahuna env update --serve-entrypoint-command "uv run --active --no-sync python -u inference.py"
+tahuna env update --serve-gpu-type L4 --serve-gpu-count 1 --serve-volume-gb 20
 ```
 
 ### `tahuna env rm`
@@ -53,24 +124,120 @@ Delete an environment and all its associated runs, logs, and artifacts.
 
 ```bash
 tahuna env rm <environment-id>
+tahuna env rm --id <environment-id>
+tahuna env rm --all
+```
+
+### `tahuna env data bind`
+
+Bind one or more data items to an environment. From a linked project, the environment id can be omitted.
+
+```bash
+tahuna env data bind <environment-id> <data-id...>
+tahuna env data bind <data-id...>
+```
+
+### `tahuna env data unbind`
+
+Remove one or more data bindings from an environment.
+
+```bash
+tahuna env data unbind <environment-id> <data-id...>
+tahuna env data unbind <data-id...>
+```
+
+Removed command: `tahuna env create` is intentionally not part of the current surface. Use `tahuna init .` or `tahuna init <project-name>`.
+
+## Runtime env vars
+
+`env_vars` uses an underscore in the command name. These commands target the linked environment in the current project.
+
+### `tahuna env_vars list`
+
+List environment variable names. Secret values are not printed by `list`.
+
+```bash
+tahuna env_vars list
+tahuna env_vars list --verbose
+```
+
+### `tahuna env_vars get`
+
+Print one environment variable as `NAME=value`.
+
+```bash
+tahuna env_vars get HF_TOKEN
+tahuna env_vars get HF_TOKEN --verbose
+```
+
+### `tahuna env_vars set`
+
+Set one variable, pass a value separately, load a file, or load `.env.local` / `.env` from the current directory when no input is provided.
+
+```bash
+tahuna env_vars set HF_TOKEN=hf_example
+tahuna env_vars set WANDB_BASE_URL --value https://tahuna.app/api/monitoring/wandb
+tahuna env_vars set --from-file .env.local
+tahuna env_vars set
+```
+
+### `tahuna env_vars rm`
+
+Remove one environment variable from the linked environment.
+
+```bash
+tahuna env_vars rm HF_TOKEN
 ```
 
 ## Runs
 
 ### `tahuna train`
 
-Launch training in the current environment. Uses managed Tahuna billing by default.
+Sync code/data, create a training run for the linked environment, and monitor logs until the run reaches a terminal status.
 
 ```bash
 tahuna train
+tahuna train -d
+tahuna train --gpu-type L4 --gpu-count 1 --volume-gb 20
+```
+
+Warm compute flags:
+
+```bash
+tahuna train --keep-warm-minutes 10
+tahuna train --warm
+tahuna train --no-keep-warm
+```
+
+`--keep-warm-minutes` keeps compute alive after this run. `--warm` attaches the run to an existing compatible warm compute session. `--no-keep-warm` disables the project keep-warm default for this run.
+
+### `tahuna run create`
+
+Create a run through the explicit run command. Like `tahuna train`, this syncs code/data first and monitors by default unless detached.
+
+```bash
+tahuna run create
+tahuna run create --name baseline-l4
+tahuna run create -n baseline-l4 -d
+tahuna run create --gpu-type L4 --gpu-count 1 --volume-gb 20
+```
+
+### `tahuna run rename`
+
+Rename a run by id or exact name.
+
+```bash
+tahuna run rename <run-id-or-name> --name <new-name>
 ```
 
 ### `tahuna run list`
 
-List runs in your workspace.
+List runs. By default this shows the last 5 runs in tail order, with the newest at the bottom.
 
 ```bash
 tahuna run list
+tahuna run list -n 20
+tahuna run list --all
 tahuna run list --verbose
 ```
 
@@ -80,14 +247,16 @@ Inspect a specific run.
 
 ```bash
 tahuna run show <run-id>
+tahuna run show <run-id-or-name> --verbose
 ```
 
-### `tahuna run cancel`
+### `tahuna run watch`
 
-Cancel a running or queued run.
+Watch lifecycle status for a run.
 
 ```bash
-tahuna run cancel <run-id>
+tahuna run watch <run-id-or-name>
+tahuna run watch <run-id-or-name> --interval 5
 ```
 
 ### `tahuna run logs`
@@ -96,23 +265,98 @@ Stream logs from a run.
 
 ```bash
 tahuna run logs <run-id>
-tahuna run logs <run-id> --follow
+tahuna run logs <run-id-or-name> --tail 100
+tahuna run logs <run-id-or-name> --follow
+tahuna run logs <run-id-or-name> --verbose
 ```
 
-### `tahuna run watch`
+### `tahuna run metrics`
 
-Watch a run's lifecycle status.
+Compare one or more metrics across one or more runs.
 
 ```bash
-tahuna run watch <run-id-or-name>
-tahuna run watch <run-id-or-name> --interval 5
+tahuna run metrics <run-id-or-name> --metric eval_loss
+tahuna run metrics <run-a> <run-b> -m eval_loss -m train_loss
+tahuna run metrics <run-a> <run-b> --metric eval_loss --follow --interval 5
 ```
 
-## Research
+### `tahuna run cancel`
+
+Cancel a running or queued run.
+
+```bash
+tahuna run cancel <run-id-or-name>
+tahuna run cancel <run-id-or-name> --force
+```
+
+### `tahuna run rm`
+
+Delete runs and their associated data. `run rm` accepts ids, exact names, and quoted shell-style glob patterns. Use `--cancel` for active runs and `--force` to skip prompts where supported.
+
+```bash
+tahuna run rm <run-id-or-name>
+tahuna run rm 'research-*' --cancel
+tahuna run rm --all --force
+```
+
+## Serve
+
+Serves are long-running inference deployments. A serve uses the linked project's serve configuration from `tahuna.toml`, materializes synced code/data, pins a model snapshot, and exposes authenticated inference through Tahuna.
+
+### `tahuna serve create`
+
+Create a serve from a completed run's model output or from a storage prefix. Choose exactly one source.
+
+```bash
+tahuna serve create --from-run <run-id>
+tahuna serve create --from-run <run-id> --model-path outputs/model
+tahuna serve create --from-storage-prefix <prefix>
+```
+
+`--model-path` is valid only with `--from-run`.
+
+### `tahuna serve list`
+
+List serves.
+
+```bash
+tahuna serve list
+tahuna serve list --verbose
+```
+
+### `tahuna serve show`
+
+Inspect a serve.
+
+```bash
+tahuna serve show <serve-id>
+tahuna serve show --id <serve-id> --verbose
+```
+
+### `tahuna serve logs`
+
+Show recent serve logs.
+
+```bash
+tahuna serve logs <serve-id>
+tahuna serve logs <serve-id> --tail 100
+tahuna serve logs <serve-id> --verbose
+```
+
+### `tahuna serve stop`
+
+Stop a serve.
+
+```bash
+tahuna serve stop <serve-id>
+tahuna serve stop <serve-id> --force
+```
+
+## Auto-Research
 
 ### `tahuna research run`
 
-Create or resume a local Auto-Research session. New sessions launch and score a baseline run. Resume calls validate one candidate patch, launch one trial, score it, and accept, reject, or mark it inconclusive.
+Create or resume a local Auto-Research session. New sessions launch and score a baseline run. Resume calls validate one tracked-file candidate patch, launch one trial, score it, and accept, reject, or mark it inconclusive.
 
 ```bash
 tahuna research run \
@@ -124,9 +368,27 @@ tahuna research run \
   --max-trial-minutes 30 \
   --editable train.py
 
+tahuna research run \
+  --program program.md \
+  --metric final:eval_loss \
+  --minimize \
+  --max-trials 5 \
+  --max-spend-usd 5 \
+  --max-trial-minutes 30 \
+  --keep-warm-minutes 10 \
+  --editable train.py
+
 tahuna research run --resume <session-id>
 tahuna research run --resume <session-id> --trial-title "add 5% warmup"
 ```
+
+Important contract:
+
+- Tahuna is the harness; it does not launch or manage the coding agent.
+- The objective must be `--metric final:<name>`.
+- `--metric-cmd` is not supported in the local MVP.
+- Each `--resume` call evaluates one candidate patch.
+- Candidate patches must be tracked-file diffs inside the `--editable` allowlist.
 
 See [Auto-Research](/auto-research) for the full workflow, budget model, and session state contract.
 
@@ -143,7 +405,16 @@ When `--output` is omitted, the default path is `.tahuna/research/<session-id>/p
 
 When the CLI is authenticated, `tahuna research run` also best-effort syncs compact session metadata to the backend for the Dashboard Hillclimb view. The local session JSON remains the resume source of truth.
 
-## Data
+## GPU catalog and storage
+
+### `tahuna gpus list`
+
+List available GPU types, maximum counts, and memory.
+
+```bash
+tahuna gpus list
+tahuna gpus list --verbose
+```
 
 ### `tahuna data list`
 
@@ -162,22 +433,12 @@ Inspect a specific data item.
 tahuna data show <data-id>
 ```
 
-### `tahuna env data bind`
-
-Bind a data file to an environment. Bound data is mounted when runs start.
-
-```bash
-tahuna env data bind <environment-id> <data-id>
-```
-
-### `tahuna env data unbind`
-
-Remove a data binding from an environment.
-
-```bash
-tahuna env data unbind <environment-id> <data-id>
-```
-
 ## Notes
 
-`--help` is available on the top-level command and command groups. `--verbose` is supported on specific subcommands such as `tahuna run list`, `tahuna run show`, `tahuna run logs`, `tahuna data list`, and `tahuna data show`.
+Current command names to keep canonical:
+
+- Use `tahuna version`, not `tahuna --version`.
+- Use `tahuna run rm`, not `tahuna run delete`.
+- Use `tahuna env rm`, not `tahuna env delete`.
+- Use `tahuna env_vars ...`, not `tahuna env vars ...`.
+- Use `tahuna init .` for project/environment creation; `tahuna env create` is removed.

@@ -15,6 +15,23 @@ The current workflow is intentionally local. Tahuna does not launch or configure
 4. Accept, reject, or mark the trial inconclusive.
 5. Stop when the configured budgets are exhausted.
 
+## Human and agent contract
+
+Auto-Research is split deliberately:
+
+- The human chooses the objective, budget, editable scope, and whether an agent is allowed to iterate.
+- The coding agent proposes one focused tracked-file patch at a time.
+- Tahuna syncs the project, launches GPU work, scores the final metric, records the session, and restores rejected or inconclusive patches.
+- Tahuna never edits code, chooses research ideas, starts an agent, or manages an agent process.
+
+For agents, the safe loop is:
+
+1. Read `program.md`, `tahuna.toml`, and the current `.tahuna/research/<session-id>.json` when resuming.
+2. Change only tracked files covered by `--editable`.
+3. Keep the objective metric print intact.
+4. Run `tahuna research run --resume <session-id> --trial-title "<short label>"`.
+5. Stop or ask the human when the session reaches `budget_exhausted`, repeated inconclusive trials, a runtime-spec error, or a change outside the approved scope.
+
 ## When to use it
 
 Use Auto-Research when you have a Tahuna project that already launches normal training runs and you want a bounded loop for improving one objective metric.
@@ -39,6 +56,7 @@ Before starting:
 - Make sure `tahuna train` can complete normally.
 - Run inside a Git worktree.
 - Commit or stash unrelated changes before starting.
+- Review root `tahuna.toml`; it is the synced runtime contract for train and serve commands.
 - Add a `program.md` file describing the research objective.
 - Make your training code print a stable final metric line, such as `eval_loss=0.300734`.
 
@@ -94,6 +112,8 @@ print(f"eval_loss={eval_metrics['eval_loss']:.6f}", flush=True)
 Tahuna persists runtime metrics and resolves the final value after the run reaches a terminal status. For a metric name, the final lookup prefers training metrics when available, then the highest numeric step, then the newest timestamp.
 
 External scorer commands through `--metric-cmd` are not part of the local MVP. Training code should emit the objective as a stable Tahuna metric.
+
+Do not depend on progress-only metrics for acceptance. Auto-Research may stream logs and metrics while a run executes, but accepted/rejected/inconclusive decisions use only the resolved final objective metric after the run is terminal.
 
 ## Start a session
 
@@ -168,6 +188,8 @@ The resume command:
 - writes the result to session state
 
 If the trial improves the incumbent by at least `--min-improvement`, Tahuna marks it `accepted` and keeps the patch. Otherwise, Tahuna marks it `rejected` and restores the incumbent tracked-file patch. If the run fails, times out, is cancelled, or has no final metric, Tahuna marks it `inconclusive` and restores the incumbent patch.
+
+Each resume evaluates exactly one candidate patch. Do not stack multiple unrelated ideas before a single resume call; that makes the result hard to interpret and weakens the patch restore model.
 
 ## Budgets
 
@@ -267,6 +289,35 @@ An accepted trial resets the count because it becomes the new incumbent.
 
 For `--minimize`, the candidate must be at least `0.01` lower than the incumbent. For `--maximize`, it must be at least `0.01` higher.
 
+## Warm compute
+
+Auto-Research can keep the baseline machine warm and reuse it for sequential trials:
+
+```bash
+tahuna research run \
+  --program program.md \
+  --metric final:eval_loss \
+  --minimize \
+  --max-trials 5 \
+  --max-spend-usd 5 \
+  --max-trial-minutes 30 \
+  --keep-warm-minutes 10 \
+  --editable train.py
+```
+
+This is opt-in on the research command. Auto-Research does not inherit `train.keep_warm_after_minutes` from `tahuna.toml`.
+
+When warm compute is enabled:
+
+- the baseline run starts the warm compute session with `keep_warm_after_minutes`
+- each trial resume uses `warm=true` and attaches to the environment's active compatible warm compute session
+- the baseline and each trial are still separate runs with separate manifests, logs, metrics, artifacts, and terminal statuses
+- Tahuna records the starting runtime spec and rejects runtime-spec drift on resume
+
+Do not edit runtime fields during a warm research session. That includes framework, framework version, Python version, GPU type, GPU count, and volume size in `tahuna.toml`. If those need to change, start a new research session.
+
+If warm compute is stale or busy, the resume command returns that error without silently launching cold compute and without counting the candidate as an inconclusive trial.
+
 ## Editable allowlist and Git safety
 
 `--editable` limits candidate patches to approved project-relative paths:
@@ -279,6 +330,8 @@ For `--minimize`, the candidate must be at least `0.01` lower than the incumbent
 Tahuna checks the Git worktree before GPU work. It refuses to launch if there are dirty files outside the editable allowlist, unless `--allow-dirty` is passed for the session start or resume command.
 
 Candidate patches must be tracked-file diffs. Current MVP behavior intentionally rejects untracked files before GPU spend so rejected and inconclusive trials can restore the previous incumbent deterministically.
+
+For agents, treat `--allow-dirty` as an escape hatch for a human-approved local state, not as a normal loop flag. The deterministic path is a clean worktree plus one allowed tracked-file candidate patch.
 
 ## Session state
 

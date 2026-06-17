@@ -13,26 +13,33 @@ Navigate to your ML project directory and run:
 tahuna init .
 ```
 
-This initializes the project locally, walks you through the configuration interactively, and writes `.tahuna/tahuna.toml`. It also scaffolds the project files Tahuna needs, including `pyproject.toml`, `uv.lock`, and `train.py` when they do not already exist.
+This initializes the project locally, walks you through the configuration interactively, writes root `tahuna.toml`, and stores link/cache state under `.tahuna/`. It also scaffolds the project files Tahuna needs, including `pyproject.toml`, `uv.lock`, `train.py`, and optionally `inference.py` when they do not already exist.
 
 ## 2. Review the configuration
 
-Tahuna keeps local project bindings in `.tahuna/tahuna.toml`:
+Tahuna keeps local project bindings in root `tahuna.toml`:
 
 ```toml
+# Generated from local Tahuna project state.
 [project]
-entrypoint = "train.py"
 data_dir = "data"
 output_dir = "outputs"
-python_project_file = "pyproject.toml"
-uv_lock_file = "uv.lock"
 
 [environment]
 framework = "pt"
+version = "2.10.0-cu128"
 python_version = "3.11"
+gpu_type = "L4"
+gpu_count = 1
+volume_gb = 10
+
+[train]
+command = ["uv", "run", "--active", "--no-sync", "python", "-u", "train.py"]
+dependency_group = "train"
+output_model_path = "outputs/model"
 ```
 
-You can also review the scaffolded project files directly, especially `train.py` for your entrypoint and `pyproject.toml` for your runtime dependencies.
+You can also review the scaffolded project files directly, especially `train.py` for the training command and `pyproject.toml` / `uv.lock` for runtime dependencies.
 
 ## 3. Add Tahuna credits
 
@@ -70,5 +77,5 @@ Open the [Tahuna dashboard](/dashboard) to see your run in the Runs view. Click 
 
 - [Environments](/environments) — learn about environment configuration in detail
 - [Runs](/runs) — understand run lifecycle and monitoring
-- [Storage](/storage) — manage data uploads and run artifacts
+- [Storage](/storage) — inspect stored data and run artifacts
 - [CLI Reference](/cli) — full list of CLI commands
