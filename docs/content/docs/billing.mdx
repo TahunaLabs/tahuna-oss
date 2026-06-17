@@ -19,7 +19,7 @@ Payment history shows fulfilled Stripe Checkout payments. Ledger history shows b
 
 ## Compute charges
 
-Before a run or serve launches, Tahuna checks that your balance can cover the configured launch estimate. If your balance is too low, the launch fails before provisioning and asks you to add credits.
+Before a run or [serve](/serving) launches, Tahuna checks that your balance can cover the configured launch estimate. If your balance is too low, the launch fails before provisioning and asks you to add credits.
 
 While compute is active, Tahuna accrues charges from the GPU type, GPU count, volume size, and runtime duration. When a run or serve reaches a terminal state, Tahuna reconciles the final compute charge against the actual runtime duration.
 

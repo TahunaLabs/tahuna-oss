@@ -1,0 +1,198 @@
+---
+title: Serving
+description: Deploy a trained model as a long-running Tahuna inference serve.
+---
+
+A serve is a long-running inference deployment for a trained model snapshot. It uses the same Tahuna project contract as training: code and data are synced from the local project, dependencies are installed from `pyproject.toml` / `uv.lock`, and runtime settings come from root `tahuna.toml`.
+
+Unlike a training run, a serve stays active until you stop it or it fails. Tahuna provisions compute, materializes code/data/model files, starts your configured inference command, health-checks it, streams logs, and exposes authenticated inference through Tahuna.
+
+## Prerequisites
+
+Before creating a serve:
+
+- Install and authenticate the CLI.
+- Run from an initialized Tahuna project directory.
+- Make sure root `tahuna.toml` has a `[serve]` section or an `inference.py` file is present.
+- Make sure the serve dependency group exists in `pyproject.toml`, unless serving should use base project dependencies.
+- Have a completed run with model artifacts, or know the storage prefix of an existing model snapshot.
+- Add enough Tahuna credits for a long-running hosted serve.
+
+## Serve configuration
+
+The serve contract lives in `tahuna.toml`:
+
+```toml
+[serve]
+command = ["uv", "run", "--active", "--no-sync", "python", "-u", "inference.py"]
+dependency_group = "serve"
+python_version = "3.11"
+gpu_type = "L4"
+gpu_count = 1
+volume_gb = 10
+port = 8000
+health_path = "/health"
+default_model_path = "outputs/model"
+startup_timeout_seconds = 900
+health_interval_seconds = 5
+health_timeout_seconds = 2
+health_failure_threshold = 3
+graceful_shutdown_seconds = 30
+```
+
+Use `tahuna env update` for common changes:
+
+```bash
+tahuna env update --serve-entrypoint-command "uv run --active --no-sync python -u inference.py"
+tahuna env update --serve-gpu-type L4 --serve-gpu-count 1 --serve-volume-gb 20
+```
+
+The inference process must listen on `port` and return a successful response on `health_path` before the startup timeout expires.
+
+## Runtime environment
+
+Tahuna starts the serve command from the workspace root and injects these runtime variables:
+
+| Variable | Meaning |
+| --- | --- |
+| `TAHUNA_SERVE_ID` | Current serve id |
+| `TAHUNA_WORKSPACE_ROOT` | Materialized project workspace |
+| `TAHUNA_DATA_DIR` | Materialized data directory |
+| `TAHUNA_OUTPUT_DIR` | Output directory for serve-local files |
+| `TAHUNA_MODEL_ROOT` | Materialized pinned model snapshot |
+| `TAHUNA_SERVE_PORT` | Port your inference server must listen on |
+| `TAHUNA_SERVE_HEALTH_PATH` | Health path Tahuna probes |
+
+Use `TAHUNA_MODEL_ROOT` in inference code instead of reading directly from the training output directory. A serve snapshots model files at creation time, then mounts that immutable snapshot for the runtime.
+
+## Model sources
+
+Create a serve from exactly one model source.
+
+### From a completed run
+
+Use this when the model was produced by a Tahuna training run:
+
+```bash
+tahuna serve create --from-run <run-id>
+```
+
+By default, Tahuna uses `serve.default_model_path` from `tahuna.toml`. Override it with `--model-path` when the model lives under a different path inside the run output tree:
+
+```bash
+tahuna serve create --from-run <run-id> --model-path outputs/adapter
+```
+
+The selected model path must be inside the run output directory and must contain artifacts.
+
+### From a storage prefix
+
+Use this when you already have a model object prefix:
+
+```bash
+tahuna serve create --from-storage-prefix <prefix>
+```
+
+`--model-path` is only valid with `--from-run`; storage-prefix serves already point at the model object prefix directly.
+
+## Lifecycle
+
+Serve statuses:
+
+| Status | Meaning |
+| --- | --- |
+| `queued` | Serve record exists and provisioning is pending |
+| `provisioning` | GPU machine is being allocated and bootstrapped |
+| `starting` | Inference command has started and health checks are running |
+| `serving` | Health checks pass and inference traffic can be proxied |
+| `stopping` | Stop has been requested and machine termination is in progress |
+| `stopped` | Serve stopped cleanly |
+| `failed` | Provisioning, startup, health, runtime, or termination failed |
+
+The baseline flow:
+
+1. CLI validates the project and serve model source.
+2. Backend snapshots the selected model files into serve-owned storage.
+3. Tahuna provisions compute using the serve GPU/volume settings.
+4. Warden materializes code, data, and the pinned model snapshot.
+5. Warden installs dependencies and starts `serve.command`.
+6. Tahuna marks the serve `serving` only after health checks pass.
+
+## Inspect and call a serve
+
+List serves:
+
+```bash
+tahuna serve list
+```
+
+Inspect one serve:
+
+```bash
+tahuna serve show <serve-id>
+```
+
+`serve show` prints the inference URL when one is available. Use that URL with your normal HTTP client and your Tahuna authentication context.
+
+Show logs:
+
+```bash
+tahuna serve logs <serve-id>
+tahuna serve logs <serve-id> --tail 100
+```
+
+Use `--verbose` on `list`, `show`, or `logs` when an agent needs the raw JSON payload.
+
+## Stop a serve
+
+Stop a serve when you are done with it:
+
+```bash
+tahuna serve stop <serve-id>
+```
+
+Use `--force` when immediate termination is needed:
+
+```bash
+tahuna serve stop <serve-id> --force
+```
+
+Hosted serves accrue compute charges while active. Stop test serves when they are no longer needed.
+
+## Troubleshooting
+
+### `project has no serving entrypoint configured`
+
+Rerun `tahuna init .` with serving enabled, add `inference.py`, or add a `[serve]` section to `tahuna.toml`.
+
+### `serve_snapshot must include command, runtime, device, port, health, and model fields`
+
+The linked environment is missing a complete serve snapshot. Check `tahuna.toml`, then run:
+
+```bash
+tahuna sync
+```
+
+### `source run has no artifacts under the selected model path`
+
+The completed run did not upload files below the selected model path. Check `train.output_model_path`, `serve.default_model_path`, and the run's output artifacts. If needed, pass the correct path with `--model-path`.
+
+### Serve stays in `starting`
+
+The inference command started, but health checks are not passing yet. Check:
+
+- the process listens on `TAHUNA_SERVE_PORT`
+- the configured `health_path` returns success
+- model loading finishes before `startup_timeout_seconds`
+- logs from `tahuna serve logs <serve-id>`
+
+### Serve becomes `failed`
+
+Inspect the serve and logs:
+
+```bash
+tahuna serve show <serve-id>
+tahuna serve logs <serve-id> --tail 200
+```
+
+Common causes are missing dependencies in the serve dependency group, model files missing from `TAHUNA_MODEL_ROOT`, a command that exits early, or a health endpoint that never becomes healthy.

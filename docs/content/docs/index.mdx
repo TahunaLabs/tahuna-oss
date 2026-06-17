@@ -3,7 +3,7 @@ title: Introduction
 description: Tahuna is the control plane between your training code and cloud GPUs.
 ---
 
-Tahuna is a training orchestration platform for teams that want full control over their training code without taking on the infrastructure work around it. You keep your Python training loop. Tahuna handles code and data sync, dependency installation, run execution, metrics capture, and artifact persistence, while managed billing handles hosted compute by default.
+Tahuna is a training and serving orchestration platform for teams that want full control over their Python code without taking on the infrastructure work around it. You keep your training loop and inference server. Tahuna handles code and data sync, dependency installation, run execution, model serving, metrics capture, and artifact persistence, while managed billing handles hosted compute by default.
 
 ## Why Tahuna exists
 
@@ -11,12 +11,12 @@ Most ML training workflows still force a bad tradeoff. You can rent raw GPU comp
 
 ## What Tahuna does - A gentle control plane
 
-Tahuna turns a local project into a reproducible remote run:
+Tahuna turns a local project into reproducible remote execution:
 
 - You define an environment for your project.
 - Tahuna syncs your code and data into pinned snapshots.
-- Tahuna provisions compute, materializes the workspace, and executes your entrypoint.
-- Logs, metrics, and output artifacts are captured automatically.
+- Tahuna provisions compute, materializes the workspace, and executes training or serving commands.
+- Logs, metrics, output artifacts, and serve model snapshots are captured automatically.
 
 ### Ephemeral compute 
 
@@ -33,7 +33,8 @@ See [Syncing](/syncing) for the full model.
 ## Key Concepts
 
 - **Environments** - Isolated compute configurations that define the framework, GPU type, GPU count, and volume size for a project.
-- **Runs** - A single remote execution of your code in a Tahuna-managed environment, with logs, metrics, and artifacts captured as the run progresses.
+- **Runs** - A single remote training execution of your code in a Tahuna-managed environment, with logs, metrics, and artifacts captured as the run progresses.
+- **Serves** - A long-running inference deployment from a completed run artifact or storage prefix, with health checks, logs, and authenticated inference proxying.
 - **Storage** - The object storage layer that holds uploaded data, pinned manifests, and run-produced artifacts.
 
 ## Quick Start
