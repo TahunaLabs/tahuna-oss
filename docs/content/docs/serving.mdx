@@ -3,7 +3,7 @@ title: Serving
 description: Deploy a trained model as a long-running Tahuna inference serve.
 ---
 
-A serve is a long-running inference deployment for a trained model snapshot. It uses the same Tahuna project contract as training: code and data are synced from the local project, dependencies are installed from `pyproject.toml` / `uv.lock`, and runtime settings come from root `tahuna.toml`.
+A serve is a long-running inference deployment for a trained model snapshot. It uses the same Tahuna project configuration as training: code and data are synced from the local project, dependencies are installed from `pyproject.toml` / `uv.lock`, and runtime settings come from root `tahuna.toml`.
 
 Unlike a training run, a serve stays active until you stop it or it fails. Tahuna provisions compute, materializes code/data/model files, starts your configured inference command, health-checks it, streams logs, and exposes authenticated inference through Tahuna.
 
@@ -20,7 +20,7 @@ Before creating a serve:
 
 ## Serve configuration
 
-The serve contract lives in `tahuna.toml`:
+The serve configuration lives in `tahuna.toml`:
 
 ```toml
 [serve]

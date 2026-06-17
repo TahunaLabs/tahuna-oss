@@ -60,7 +60,7 @@ Environment overrides:
 
 Initialize a Tahuna project and linked environment. `tahuna init .` initializes the current directory; `tahuna init <project-name>` creates or initializes a named project directory.
 
-The command writes root `tahuna.toml` as the local project contract and stores link/cache state under `.tahuna/`. It may scaffold missing project files such as `pyproject.toml`, `uv.lock`, `train.py`, `inference.py`, `data/`, and `outputs/`, depending on the interactive choices and existing files.
+The command writes root `tahuna.toml` as the local project configuration and stores link/cache state under `.tahuna/`. It may scaffold missing project files such as `pyproject.toml`, `uv.lock`, `train.py`, `inference.py`, `data/`, and `outputs/`, depending on the interactive choices and existing files.
 
 ```bash
 tahuna init .
@@ -384,7 +384,7 @@ tahuna research run --resume <session-id>
 tahuna research run --resume <session-id> --trial-title "add 5% warmup"
 ```
 
-Important contract:
+Important behavior:
 
 - Tahuna is the harness; it does not launch or manage the coding agent.
 - The objective must be `--metric final:<name>`.
@@ -392,7 +392,7 @@ Important contract:
 - Each `--resume` call evaluates one candidate patch.
 - Candidate patches must be tracked-file diffs inside the `--editable` allowlist.
 
-See [Auto-Research](/auto-research) for the full workflow, budget model, and session state contract.
+See [Auto-Research](/auto-research) for the full workflow, budget model, and session state details.
 
 ### `tahuna research graph`
 

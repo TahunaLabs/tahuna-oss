@@ -15,7 +15,7 @@ The current workflow is intentionally local. Tahuna does not launch or configure
 4. Accept, reject, or mark the trial inconclusive.
 5. Stop when the configured budgets are exhausted.
 
-## Human and agent contract
+## Who does what
 
 Auto-Research is split deliberately:
 
@@ -56,7 +56,7 @@ Before starting:
 - Make sure `tahuna train` can complete normally.
 - Run inside a Git worktree.
 - Commit or stash unrelated changes before starting.
-- Review root `tahuna.toml`; it is the synced runtime contract for train and serve commands.
+- Review root `tahuna.toml`; it is the synced runtime configuration for train and serve commands.
 - Add a `program.md` file describing the research objective.
 - Make your training code print a stable final metric line, such as `eval_loss=0.300734`.
 
