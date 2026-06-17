@@ -13,11 +13,12 @@
     "tracking",
     "---Serving---",
     "serving",
+    "---Storage---",
     "storage",
     "---Research---",
     "auto-research",
-    "agent-skills",
     "---Account and Reference---",
+    "agent-skills",
     "billing",
     "cli"
   ]

@@ -37,7 +37,7 @@ export const baseOptions: BaseLayoutProps = {
           active: "nested-url",
         },
         {
-          text: "Auto-Research",
+          text: "Auto-Research / Hillclimb",
           description: "Run bounded local research loops.",
           url: "/auto-research",
           active: "nested-url",
