@@ -6,12 +6,25 @@ Tahuna separates **run lifetime** from **compute lifetime**.
 
 A **run** is one immutable training execution. It owns the run ID, status, logs, metrics, artifacts, terminal result, and the pinned code/data manifests used for that execution.
 
-A **compute session** is a warm machine lease for one environment. It can run multiple runs sequentially while it stays alive, but it never owns the user's code/data truth. It is only a reusable machine plus cache.
+A **compute session** is the billable provider-machine lifetime for training. It owns provider machine provisioning, runtime spec snapshot, runtime token, liveness, idle policy, provider termination, and compute billing. It can execute one run and terminate immediately, or stay warm and execute multiple runs sequentially while it remains alive.
+
+A compute session never owns the user's code/data truth, run logs, run metrics, artifacts, or terminal result. Those remain owned by runs. The compute session is the machine lease plus cache; runs are immutable workload records assigned to that lease.
+
+The target refactor is that every training run uses a compute session:
+
+- a normal run creates a compute session with no warm idle window and terminates after the run finishes
+- a keep-warm run creates a compute session with a user-selected idle window and terminates after the session has been idle for that window
+- a warm run attaches to the environment's current idle compute session
+
+Serving is out of scope for this refactor phase. Serve lifecycle and inference routing stay on the current serve-specific path until serving is redesigned separately.
 
 The normal user surface stays run-first:
 
 ```bash
 tahuna init .
+tahuna train
+
+# or keep the training machine warm
 tahuna train --keep-warm-minutes 10
 
 # edit code or data
@@ -20,6 +33,8 @@ tahuna train --warm
 ```
 
 There is no automatic fallback from warm compute to another machine. If warm compute is stale, busy, expired, or dead, the command fails clearly and the user starts a new keep-warm run.
+
+The run lifecycle stays unchanged from the user's perspective. A normal run still appears as one run with one terminal result. A warm run still appears as a separate run with its own pinned manifests, logs, metrics, and artifacts. The compute-session refactor changes the internal machine and billing grain, not the run contract.
 
 ## Canonical Link
 
@@ -31,14 +46,37 @@ environments.activeComputeSessionId?: Id<"computeSessions">
 
 That field is the only canonical current warm-session link. `tahuna train --warm` and Auto-Research trial runs attach only through that exact session. The backend must not search for an arbitrary compatible idle session.
 
+Normal one-shot training sessions do not become the active warm session. They create a compute session for billing and provider lifecycle, execute one run, then terminate.
+
+## Training Compute Lifetime Modes
+
+The same compute-session lifecycle supports two training lifetime modes.
+
+### One-Shot Training
+
+Plain `tahuna train` and `tahuna run create` create a compute session with a one-shot idle policy:
+
+1. Tahuna creates a `computeSessions` row.
+2. Tahuna stores the requested runtime spec snapshot on the session.
+3. Tahuna creates the run as a normal run with `executionMode = "ephemeral"` and `computeSessionId`.
+4. The session machine starts Warden in session mode and executes the run.
+5. When the run reaches a terminal state, Warden marks the session idle.
+6. Because the idle policy is one-shot, Tahuna immediately schedules provider termination.
+7. The run remains terminal and inspectable after the compute session terminates.
+
+The user should not see this as a new mode. It is still just a normal training run.
+
+### Keep-Warm Training
+
 When a keep-warm run creates a session:
 
 1. Tahuna creates a `computeSessions` row.
 2. Tahuna stores the requested runtime spec snapshot on the session.
-3. Tahuna sets `environments.activeComputeSessionId` to the new session.
-4. If the environment already had an active session, Tahuna schedules the old one for termination.
-5. Tahuna creates the baseline run as a normal run with `executionMode = "session"`.
-6. The session machine starts Warden in session mode and executes the run.
+3. Tahuna stores the requested warm idle policy on the session.
+4. Tahuna sets `environments.activeComputeSessionId` to the new session.
+5. If the environment already had an active session, Tahuna schedules the old one for termination.
+6. Tahuna creates the baseline run as a normal run with `executionMode = "session"` and `computeSessionId`.
+7. The session machine starts Warden in session mode and executes the run.
 
 When a warm run is requested:
 
@@ -52,21 +90,28 @@ When a warm run is requested:
 
 ```mermaid
 flowchart TD
-  TrainWarm["tahuna train --keep-warm-minutes 10"] --> CreateSession["create compute session"]
-  CreateSession --> Link["environment.activeComputeSessionId = session"]
-  Link --> BaselineRun["create run A with pinned manifests"]
-  BaselineRun --> Warden["Warden session mode"]
-  Warden --> ExecuteA["execute run A"]
-  ExecuteA --> Idle["mark session idle; set lastIdleAt"]
+  Train["tahuna train"] --> OneShotSession["create one-shot compute session"]
+  OneShotSession --> RunA["create run A with pinned manifests"]
+  RunA --> WardenA["Warden session mode"]
+  WardenA --> ExecuteA["execute run A"]
+  ExecuteA --> OneShotIdle["mark session idle"]
+  OneShotIdle --> TerminateA["terminate provider machine"]
+
+  TrainWarm["tahuna train --keep-warm-minutes 10"] --> WarmSession["create warm compute session"]
+  WarmSession --> Link["environment.activeComputeSessionId = session"]
+  Link --> BaselineRun["create run B with pinned manifests"]
+  BaselineRun --> WardenB["Warden session mode"]
+  WardenB --> ExecuteB["execute run B"]
+  ExecuteB --> Idle["mark session idle; set lastIdleAt"]
 
   Idle --> Edit["edit code/data"]
   Edit --> Sync["tahuna sync"]
   Sync --> TrainReuse["tahuna train --warm"]
   TrainReuse --> Resolve["read activeComputeSessionId"]
-  Resolve --> RunB["create run B with new pinned manifests"]
-  RunB --> Assign["session idle -> running; run queued -> provisioning"]
-  Assign --> ExecuteB["Warden executes run B"]
-  ExecuteB --> Idle
+  Resolve --> RunC["create run C with new pinned manifests"]
+  RunC --> Assign["session idle -> running; run queued -> provisioning"]
+  Assign --> ExecuteC["Warden executes run C"]
+  ExecuteC --> Idle
 
   RuntimeChange["runtime spec changes"] --> Clear["clear activeComputeSessionId"]
   Clear --> Stop["terminate stale session"]
@@ -76,6 +121,8 @@ flowchart TD
 ## Keep-Warm Timer
 
 `--keep-warm-minutes <minutes>` asks Tahuna to keep the machine after the run finishes. The CLI sends `keep_warm_after_minutes`; the backend converts it to `idleTimeoutSeconds = ceil(minutes * 60)` and stores it on the compute session.
+
+One-shot training uses the same idle transition, but with an immediate termination policy. It must not become reusable warm compute and must not set `environments.activeComputeSessionId`.
 
 The timer starts only when the session becomes `idle`. It is based on:
 
@@ -203,9 +250,17 @@ Warden does not choose runs and does not decide what code is current. The backen
 | `frameworkVersion` | Runtime framework version snapshot. |
 | `pythonVersion` | Python version snapshot. |
 | `imageName` | Resolved runtime image snapshot. |
-| `idleTimeoutSeconds` | Keep-warm idle lifetime. |
+| `idleTimeoutSeconds` | Warm idle lifetime. One-shot sessions use an immediate termination policy. |
 | `lastHeartbeatAt` | Last Warden liveness heartbeat. |
 | `lastIdleAt` | Most recent idle transition. |
+| `computeStartedAt` | Billing start, set when provider machine provisioning succeeds. |
+| `computeEndedAt` | Billing end, set when provider termination succeeds or is finalized. |
+| `computeHourlyRateCents` | Price snapshot for this compute session. |
+| `computeChargeCents` | Current or final compute charge. |
+| `computeCollectedCents` | Credits collected for this compute session. |
+| `computeOutstandingCents` | Uncollected compute charge, if credits are insufficient. |
+| `computeChargeStatus` | `pending`, `charged`, or `owed`. |
+| `computeChargeError` | Failure detail for pricing or collection errors. |
 | `terminatedAt` | Terminal timestamp. |
 | `error` | Failure detail. |
 
@@ -213,8 +268,8 @@ Warden does not choose runs and does not decide what code is current. The backen
 
 | Field | Purpose |
 | --- | --- |
-| `executionMode` | `ephemeral` for one-shot machines, `session` for warm compute. |
-| `computeSessionId` | Session used by the run when `executionMode = "session"`. |
+| `executionMode` | User-facing run mode: `ephemeral` for one-shot training, `session` for warm compute reuse. |
+| `computeSessionId` | Compute session used by the run. After this refactor, every training run has one. |
 
 Run responses expose `execution_mode`, `compute_session_id`, and `compute_session_idle_expires_at` when applicable.
 
@@ -236,7 +291,7 @@ queued -> provisioning -> running -> completed
                           |       -> cancelling -> cancelled
 ```
 
-For session-mode runs, `provisioning` means "assigned to a ready warm session and preparing this run snapshot", not "creating a provider machine".
+For compute-session-assigned runs, `provisioning` means "assigned to a provider machine and preparing this run snapshot." Provider machine creation belongs to the compute session, not the run lifecycle.
 
 ## CLI Rules
 
@@ -311,9 +366,38 @@ The backend guarantee is "do not assign more work and request provider terminati
 
 ## Billing And Spend
 
-Compute billing accrues while the provider machine is alive, including idle warm time. The remaining gap is attribution: idle warm-session spend is not yet cleanly allocated across Auto-Research trials or displayed as research idle spend.
+Compute billing accrues on the compute session while the provider machine is alive. This includes provider startup, runtime bootstrap, active run execution, and warm idle time.
+
+The compute session is the canonical billing reference for training compute:
+
+- live debit idempotency keys are keyed by `computeSessionId`
+- pricing fields live on the compute session runtime spec snapshot
+- `computeStartedAt` is set when the provider machine is provisioned
+- `computeEndedAt` is set when provider termination succeeds or when termination failure is finalized
+- the final training compute charge is settled against the compute session
+
+Runs may expose derived billing fields for user-facing summaries, but they must not be the source of truth for provider-machine spend. This avoids double billing and makes idle warm time auditable.
+
+For one-shot training, attribution is simple: the compute session has exactly one assigned run, so the full charge can be displayed on that run.
+
+For keep-warm training, the compute session may execute multiple runs. Active execution time can be attributed to the active run, while idle time belongs to the compute session. Auto-Research and dashboard spend summaries should display that idle spend explicitly rather than silently spreading it across trials.
 
 Until that exists, Auto-Research requires explicit `--keep-warm-minutes` so idle spend is never inherited silently from project training defaults.
+
+## Serve Out Of Scope
+
+Serving remains separate during this refactor phase.
+
+The training compute-session refactor must not change:
+
+- serve creation
+- serve status transitions
+- serve runtime callbacks
+- serve inference proxying
+- serve stop/termination behavior
+- existing serve billing behavior
+
+Serving can later move to the same billable compute-lifetime model, but that requires a separate design because inference has long-lived health, readiness, routing, and proxy concerns that are not part of training runs.
 
 ## Current Status
 
@@ -338,13 +422,17 @@ Implemented:
 Still pending:
 
 - user-facing compute session inspect/stop controls
+- make one-shot training runs provision through compute sessions
+- move training compute billing source of truth from runs to compute sessions
 - better warm-session billing allocation and display for Auto-Research idle time
 - operational guardrail that all deployed runtime images include Warden session mode
 
 ## Acceptance Criteria
 
+- Plain `tahuna train` creates a one-shot compute session, creates one run assigned to that session, executes it, and terminates the provider machine after the run reaches a terminal state.
 - `tahuna train --keep-warm-minutes 10` creates a run, provisions one session-mode machine, executes the run, and leaves the session idle.
 - `tahuna train --warm` creates a new run and attaches only through `environments.activeComputeSessionId`.
+- One-shot compute sessions never set `environments.activeComputeSessionId`.
 - Reused runs keep distinct run IDs, logs, metrics, artifacts, manifest hashes, and terminal statuses.
 - Provider machine ID is reused across warm runs.
 - Code/data sync does not invalidate warm compute.
@@ -352,3 +440,6 @@ Still pending:
 - Heartbeat-stale sessions cannot accept new assignments.
 - Idle-expired sessions cannot accept new assignments.
 - Warm failure never silently provisions a replacement ephemeral machine.
+- Training compute billing is keyed by compute session, with no duplicate billing on the attached run.
+- Existing run lifecycle states and user-facing run responses remain backward compatible.
+- Existing serve lifecycle and inference behavior remain unchanged by the training refactor.
