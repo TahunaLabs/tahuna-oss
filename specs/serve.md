@@ -10,7 +10,7 @@ The canonical contract is `specs/python-inference-app-contract.md`.
 
 Serving currently owns its provider-machine lifetime and billing on the `serves` row. It does not use `computeSessions` yet.
 
-Tahuna should later migrate serving onto compute sessions. In that future model, the compute session owns provider-machine lifetime, runtime spec snapshot, reservation, termination, and compute billing, while the serve owns serving identity, readiness/health, routing, inference proxying, model snapshot, logs, and user-facing status. That migration is intentionally separate from the training compute-session billing work.
+Tahuna must migrate serving onto compute sessions. In that target model, the compute session owns provider-machine lifetime, runtime token, runtime spec snapshot, reservation, 5-minute billing, termination, and final settlement, while the serve owns serving identity, readiness/health, routing, inference proxying, model snapshot, logs, and user-facing status. That migration is intentionally separate from the training compute-session billing work.
 
 This spec defines the MVP serving contract for a small Tahuna-managed engine matrix:
 
@@ -70,10 +70,18 @@ Current serving billing is serve-scoped:
 - ledger references use `referenceType = "serve"`
 - serve runtime callbacks and inference proxying do not depend on compute sessions
 
-Future serving billing should become compute-session-scoped:
+Target serving billing is compute-session-scoped:
 
+- every serve has a backing `computeSessionId`
 - provider-machine uptime and idle/active serving spend belong to the compute session
+- serve launch creates and reserves the backing compute session before provider provisioning
+- available credits must cover one hour of the selected serving runtime before the provider machine is created
+- live serving compute billing is polled every 5 minutes through the compute session
+- ledger live debit idempotency keys use `compute_session:<computeSessionId>:live_debit`
+- ledger references use `referenceType = "compute_session"` and the compute session ID
+- insufficient credits terminate the compute session with reason `insufficient_credits`
 - request routing, health, model snapshot, and serve API compatibility remain on the serve
+- insufficient-credit termination stops accepting inference work, clears readiness/routing, and moves the serve to a terminal/unavailable user-facing state with a billing error
 - the migration must preserve existing inference URLs and serve lifecycle semantics
 
 ### Serve Record Schema
@@ -419,4 +427,4 @@ The runtime launches one canonical server process per engine and health-checks i
 - A serve is not healthy until readiness succeeds.
 - A serve stops being healthy when the process exits or health checks fail beyond threshold.
 - Serving contract semantics remain separate from training contract semantics.
-- Serving does not use compute sessions yet; that migration is future work and must not be bundled into training billing enforcement.
+- Serving does not use compute sessions yet; the next serving migration must put provider-machine lifetime, reservation, 5-minute billing, and insufficient-credit termination on `computeSessions` without changing serve-owned routing, health, and inference semantics.

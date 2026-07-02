@@ -6,7 +6,7 @@ Tahuna separates **run lifetime** from **compute lifetime**.
 
 A **run** is one immutable training execution. It owns the run ID, status, logs, metrics, artifacts, terminal result, and the pinned code/data manifests used for that execution.
 
-A **compute session** is the billable provider-machine lifetime for training. It owns provider machine provisioning, runtime spec snapshot, runtime token, liveness, idle policy, provider termination, and compute billing. It can execute one run and terminate immediately, or stay warm and execute multiple runs sequentially while it remains alive.
+A **compute session** is the billable provider-machine lifetime. It owns provider machine provisioning, runtime spec snapshot, runtime token, liveness, reservation, provider termination, and compute billing. For training, it can execute one run and terminate immediately, or stay warm and execute multiple runs sequentially while it remains alive. For serving, the next migration should put the long-lived serving machine on top of a compute session while keeping serving identity and routing on the serve.
 
 A compute session never owns the user's code/data truth, run logs, run metrics, artifacts, or terminal result. Those remain owned by runs. The compute session is the machine lease plus cache; runs are immutable workload records assigned to that lease.
 
@@ -16,7 +16,7 @@ The target refactor is that every training run uses a compute session:
 - a keep-warm run creates a compute session with a user-selected idle window and terminates after the session has been idle for that window
 - a warm run attaches to the environment's current idle compute session
 
-Serving is out of scope for this refactor phase. Serve lifecycle and inference routing stay on the current serve-specific path until serving is redesigned separately.
+Serving was out of scope for the training refactor phase. The target architecture is still that serving also runs on top of compute sessions; serve lifecycle and inference routing stay serve-owned while compute lifetime, billing, reservation, and termination move to `computeSessions`.
 
 The normal user surface stays run-first:
 
@@ -391,11 +391,11 @@ For keep-warm training, the compute session may execute multiple runs. Active ex
 
 Until that exists, Auto-Research requires explicit `--keep-warm-minutes` so idle spend is never inherited silently from project training defaults.
 
-## Serve Out Of Scope
+## Serving Compute-Session Migration
 
-Serving remains separate during this refactor phase.
+Serving remains separate in the current implementation, but it must move to the same billable compute-lifetime model.
 
-The training compute-session refactor must not change:
+The training compute-session refactor did not change:
 
 - serve creation
 - serve status transitions
@@ -404,7 +404,19 @@ The training compute-session refactor must not change:
 - serve stop/termination behavior
 - existing serve billing behavior
 
-Serving should later move to the same billable compute-lifetime model, but that requires a separate design because inference has long-lived health, readiness, routing, and proxy concerns that are not part of training runs. In that later model, the compute session should own provider-machine lifetime, reservation, and compute billing while the serve owns serving identity, health, routing, inference proxying, model snapshot, logs, and user-facing status.
+The serving migration target:
+
+- every serve has a backing `computeSessionId`
+- the compute session owns provider-machine lifetime, runtime token, runtime spec snapshot, reservation, 5-minute live billing, final settlement, and provider termination
+- the serve owns serving identity, health/readiness, routing, inference proxying, model snapshot, logs, and user-facing status
+- serve launch creates and reserves the backing compute session before provider provisioning
+- available credits must cover the selected serving runtime's one-hour reserve before the provider machine is created
+- live serving compute billing is polled every 5 minutes through compute-session billing, not serve billing
+- insufficient credits terminate the compute session with reason `insufficient_credits`
+- insufficient-credit termination stops accepting inference work, clears routing/readiness, and moves the serve to a terminal/unavailable state with a user-readable billing error
+- existing serve API compatibility and inference URLs must be preserved
+
+That migration requires a separate design because inference has long-lived health, readiness, routing, and proxy concerns that are not part of training runs.
 
 ## Current Status
 
@@ -436,7 +448,7 @@ Still pending:
 
 - user-facing compute session inspect/stop controls
 - better warm-session billing display for Auto-Research idle time
-- serving compute-session migration
+- serving compute-session migration: move serving provider-machine lifetime, reservation, billing, 5-minute polling, and insufficient-credit termination to `computeSessions`
 - operational guardrail that all deployed runtime images include Warden session mode
 
 ## Acceptance Criteria

@@ -19,7 +19,7 @@ This is prepaid credits accounting with Stripe funding:
 - One ledger balance per Better Auth user (`userCredits`).
 - Ledger events in `usageEvents`.
 - Training compute debits keyed to `computeSessions`.
-- Serving compute debits keyed to `serves` until serving migrates to compute sessions.
+- Serving compute debits are currently keyed to `serves`, but the target serving migration moves provider-machine billing to `computeSessions`.
 - Storage growth debits.
 - Prepaid Stripe Checkout top-ups.
 - Billing UI reads balance + ledger history from Convex.
@@ -58,7 +58,8 @@ Stripe payment records:
 Compute reservations:
 
 - Active compute reservations reduce available credits but do not debit the ledger upfront.
-- The canonical reservation owner for training is the `computeSessions` row.
+- The canonical reservation owner for provider compute is the `computeSessions` row.
+- This is implemented for training compute sessions now; serving must use the same reservation owner when it migrates.
 - A reservation is released when the compute session reaches a terminal state and final settlement has run.
 - Ledger debits still represent collected usage, not held funds.
 
@@ -168,11 +169,19 @@ Current serve billing rules:
 - Ledger references remain `referenceType = "serve"`.
 - Serve lifecycle, inference proxying, runtime callbacks, and serve billing are not changed by the training compute-session model.
 
-Future serving migration:
+Target serving migration:
 
-- A serve should eventually run on top of a compute session.
-- The compute session should own provider-machine lifetime, reservation, and compute billing.
+- Every serve runs on top of a compute session.
+- The compute session owns provider-machine lifetime, runtime token, runtime spec snapshot, reservation, termination, and compute billing.
 - The serve should own serving identity, health/readiness, routing, inference proxying, model snapshot, logs, and user-facing serve status.
+- Serve compute-session launch uses the same available-balance gate as training:
+  - compute the one-hour reserve from the selected serving runtime
+  - subtract active reservation remainder from `userCredits.balanceCents`
+  - reject before provider provisioning when available credits are insufficient
+- Serving compute sessions are live-billed every 5 minutes from exact provider-machine uptime.
+- The serving live debit ledger row is keyed by `compute_session:<computeSessionId>:live_debit`.
+- Serving compute ledger references use `referenceType = "compute_session"` and the compute session ID, not the serve ID.
+- If the ledger cannot collect the full target charge, the compute session must terminate with reason `insufficient_credits`; the serve should stop routing work and transition to a terminal/unavailable user-facing state with a billing error.
 - That migration requires a separate design because serving is long-lived and request-addressable.
 
 ## Storage Billing (Implemented Now)
@@ -208,7 +217,7 @@ MVP policy:
 - No automatic refund or dispute reversal handling.
 - Custom top-ups are bounded by `minimumTopUpAmountCents` and `maximumTopUpAmountCents`.
 - Training compute session launch requires a one-hour runtime reserve before provider provisioning.
-- Serve launch still uses the existing serve launch estimate until serving migrates to compute sessions.
+- Serve launch still uses the existing serve launch estimate until serving migrates to compute sessions; after migration, serve launch must reserve one hour on the backing compute session before provider provisioning.
 
 ## What Users See Today
 
@@ -226,6 +235,7 @@ Users should not choose a compute billing mode in Tahuna Cloud. Billing UX shoul
 - Real-time balance is ledger-backed (`userCredits.balanceCents`).
 - Training compute live debit uses one mutable ledger row per active compute session, not one row per billing tick.
 - Serving compute live debit uses one mutable ledger row per active serve until serving migrates to compute sessions.
+- After serving migrates, serving compute live debit uses one mutable ledger row per active compute session and is polled every 5 minutes like training compute.
 - Settlement/refund/owed logic still exists for terminal reconciliation.
 - Active compute reservations reduce available balance but do not change ledger balance until usage is actually collected.
 

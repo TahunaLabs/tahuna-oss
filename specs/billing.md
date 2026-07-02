@@ -14,7 +14,7 @@ The ledger accounting model lives in `specs/ledger.md`. This document defines th
 4. Active compute must never continue intentionally after credits are exhausted.
 5. Warm-session idle time is real provider spend and remains charged to the compute session.
 6. Ledger debits represent collected usage. Reservations are holds against available credits, not charges.
-7. Serving remains on its current serve-specific billing path until serving migrates to compute sessions in a separate project.
+7. The target architecture is that all provider compute runs on top of `computeSessions`; serving is the next migration after training.
 
 ## Billing Subjects
 
@@ -49,16 +49,21 @@ Warm training creates one compute session that can execute multiple runs sequent
 
 ### Serving
 
-Serving currently remains separate:
+Serving currently remains separate in the implementation:
 
 - `serves` owns provider machine lifetime.
 - serve billing is keyed to `serveId`.
 - serve lifecycle, inference proxying, runtime callbacks, and serve billing are not changed by this model yet.
 
-Serving should later migrate to compute sessions. In that future model:
+Serving must migrate to compute sessions in the next serving compute project. In that target model:
 
-- the compute session owns provider-machine lifetime, reservation, and compute billing
+- the compute session owns provider-machine lifetime, runtime token, runtime spec snapshot, reservation, termination, and compute billing
 - the serve owns serving identity, health/readiness, routing, inference proxying, model snapshot, logs, and user-facing status
+- serve launch is rejected before provider provisioning unless available credits cover the one-hour compute-session reserve
+- serving compute sessions are billed every 5 minutes from exact provider-machine uptime
+- live debit idempotency keys use `compute_session:<computeSessionId>:live_debit`
+- ledger references use `referenceType = "compute_session"` and `referenceId = <computeSessionId>`
+- if credits are no longer sufficient during live billing, the compute session terminates with reason `insufficient_credits` and the serve transitions to a terminal/unavailable state with a user-readable billing error
 
 That migration requires a separate design because serving has request routing and long-lived health semantics that training does not.
 
@@ -269,9 +274,12 @@ Required training implementation changes:
 Required future serving project:
 
 1. Introduce compute sessions for serving.
-2. Move provider-machine lifetime and billing from `serves` to `computeSessions`.
-3. Keep inference proxying, health, readiness, routing, and model snapshot ownership on `serves`.
-4. Preserve existing serve API compatibility.
+2. Move provider-machine lifetime, runtime token, reservation, billing, and termination from `serves` to `computeSessions`.
+3. Gate serve compute-session creation on the same one-hour available-credit reserve used by training.
+4. Bill serving compute sessions every 5 minutes with compute-session live debit idempotency keys and ledger references.
+5. Terminate serving compute sessions with reason `insufficient_credits` when live billing cannot collect the full target charge.
+6. Keep inference proxying, health, readiness, routing, and model snapshot ownership on `serves`.
+7. Preserve existing serve API compatibility and inference URLs.
 
 ## Non-Goals
 
@@ -291,4 +299,5 @@ Required future serving project:
 - Warm sessions keep billing while idle until timeout or termination.
 - Warm idle spend stays on the compute session.
 - Run summaries may display derived charges, but run ledger debits are not the source of truth for training compute.
-- Serving behavior remains unchanged until its compute-session migration.
+- Current serving behavior remains unchanged until its compute-session migration.
+- After serving migration, serving provider-machine lifetime, billing, reservations, 5-minute live polling, and insufficient-credit termination are compute-session-owned.
