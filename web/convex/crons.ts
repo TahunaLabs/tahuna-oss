@@ -1,13 +1,13 @@
 import { cronJobs } from "convex/server";
 import { internal } from "@convex/_generated/api";
-import { TRAINING_COMPUTE_BILLING_INTERVAL_MINUTES } from "@convex/cloud/billing";
+import { COMPUTE_SESSION_BILLING_INTERVAL_MINUTES } from "@convex/cloud/billing";
 
 const crons = cronJobs();
 
 crons.interval(
-  "bill training compute sessions every five minutes",
-  { minutes: TRAINING_COMPUTE_BILLING_INTERVAL_MINUTES },
-  internal.cloud.billing.billTrainingComputeSessionsFiveMinutes,
+  "bill compute sessions every five minutes",
+  { minutes: COMPUTE_SESSION_BILLING_INTERVAL_MINUTES },
+  internal.cloud.billing.billComputeSessionsFiveMinutes,
   {},
 );
 

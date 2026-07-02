@@ -23,11 +23,12 @@ vi.mock("@convex/cloud/credits", () => creditMocks);
 
 import {
   BILLABLE_COMPUTE_SESSION_STATUSES,
-  TRAINING_COMPUTE_BILLING_INTERVAL_MINUTES,
-  applyTrainingComputeSessionLiveBillingResult,
+  COMPUTE_SESSION_BILLING_INTERVAL_MINUTES,
+  applyComputeSessionLiveBillingResult,
   billLiveComputeSubject,
   initialHostedComputeSessionBillingFields,
   settleHostedComputeSessionUsage,
+  shouldBillServeScopedCompute,
   validateHostedComputeSessionCreate,
 } from "@convex/cloud/billing";
 
@@ -66,8 +67,13 @@ describe("hosted billing session reservations", () => {
     vi.restoreAllMocks();
   });
 
-  it("bills training compute sessions every five minutes", () => {
-    expect(TRAINING_COMPUTE_BILLING_INTERVAL_MINUTES).toBe(5);
+  it("bills compute sessions every five minutes", () => {
+    expect(COMPUTE_SESSION_BILLING_INTERVAL_MINUTES).toBe(5);
+  });
+
+  it("does not serve-bill serves backed by compute sessions", () => {
+    expect(shouldBillServeScopedCompute({ computeSessionId: "session_1" })).toBe(false);
+    expect(shouldBillServeScopedCompute({})).toBe(true);
   });
 
   it("initializes compute sessions with a one-hour reservation hold", () => {
@@ -195,7 +201,7 @@ describe("hosted billing session reservations", () => {
       },
     };
 
-    await applyTrainingComputeSessionLiveBillingResult(ctx as never, {
+    await applyComputeSessionLiveBillingResult(ctx as never, {
       _id: "session_1",
       userId: "user_1",
       environmentId: "env_1",

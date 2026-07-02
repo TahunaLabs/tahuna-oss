@@ -32,7 +32,7 @@ import { SERVE_STATUS } from "@convex/servesConstants";
 export { validateHostedComputeSessionCreate } from "@convex/cloud/computeSessionReservations";
 
 const STRIPE_CHECKOUT_PAYMENT_STATUSES = new Set(["paid", "no_payment_required"]);
-export const TRAINING_COMPUTE_BILLING_INTERVAL_MINUTES = 5;
+export const COMPUTE_SESSION_BILLING_INTERVAL_MINUTES = 5;
 
 const HOSTED_BILLING_CLIENT_ERROR_PATTERNS: RegExp[] = [
   /\binsufficient credits\b/i,
@@ -407,7 +407,7 @@ export async function billLiveComputeSubject(
   };
 }
 
-export async function applyTrainingComputeSessionLiveBillingResult(
+export async function applyComputeSessionLiveBillingResult(
   ctx: MutationCtx,
   row: Doc<"computeSessions">,
   result: LiveComputeBillingResult,
@@ -448,6 +448,10 @@ export async function applyTrainingComputeSessionLiveBillingResult(
     owed: result.owed,
     skipped: false,
   };
+}
+
+export function shouldBillServeScopedCompute(row: { computeSessionId?: unknown }) {
+  return !row.computeSessionId;
 }
 
 export const getMyCredits = query({
@@ -875,7 +879,7 @@ export const BILLABLE_COMPUTE_SESSION_STATUSES = [
   COMPUTE_SESSION_STATUS.TERMINATING,
 ] as const;
 
-export const billTrainingComputeSessionsFiveMinutes = internalMutation({
+export const billComputeSessionsFiveMinutes = internalMutation({
   args: {},
   returns: v.object({
     processed_compute_sessions: v.number(),
@@ -923,7 +927,7 @@ export const billTrainingComputeSessionsFiveMinutes = internalMutation({
           computeReservationRemainingCents: row.computeReservationRemainingCents,
         },
       });
-      const applied = await applyTrainingComputeSessionLiveBillingResult(ctx, row, result);
+      const applied = await applyComputeSessionLiveBillingResult(ctx, row, result);
       if (applied.skipped) {
         skippedComputeSessions += 1;
         continue;
@@ -968,6 +972,10 @@ export const billServingComputeMinute = internalMutation({
     let skippedServes = 0;
 
     for (const row of servingRows) {
+      if (!shouldBillServeScopedCompute(row)) {
+        skippedServes += 1;
+        continue;
+      }
       const result = await billLiveComputeSubject(ctx, {
         subject: {
           userId: row.userId,
