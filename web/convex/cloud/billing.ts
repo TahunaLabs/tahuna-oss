@@ -14,6 +14,7 @@ import {
   USAGE_EVENT_TYPE,
 } from "@convex/cloud/credits";
 import {
+  computeLiveDebitEventType,
   estimateRunUsageFromHourlyRateCents,
   computeLiveDebitIdempotencyKey,
   resolveComputeSubjectHourlyRateCents,
@@ -317,7 +318,7 @@ async function billLiveComputeSubject(
     const appliedDebit = await upsertLedgerDebitTotal(ctx, {
       userId: args.subject.userId,
       targetDebitCents: targetChargeCents,
-      eventType: USAGE_EVENT_TYPE.RUN_COMPUTE_SETTLEMENT_DEBIT,
+      eventType: computeLiveDebitEventType(args.subject.referenceType),
       idempotencyKey: computeLiveDebitIdempotencyKey(args.subject.referenceType, args.subject.referenceId),
       referenceType: args.subject.referenceType,
       referenceId: args.subject.referenceId,

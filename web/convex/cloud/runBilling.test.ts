@@ -17,6 +17,7 @@ const creditMocks = vi.hoisted(() => ({
 vi.mock("@convex/cloud/credits", () => creditMocks);
 
 import {
+  computeLiveDebitEventType,
   computeLiveDebitIdempotencyKey,
   computeSessionLiveDebitIdempotencyKey,
   estimateRunUsageFromHourlyRateCents,
@@ -37,6 +38,9 @@ describe("hosted compute billing helpers", () => {
     expect(runLiveDebitIdempotencyKey("run_1")).toBe("run:run_1:live_debit");
     expect(serveLiveDebitIdempotencyKey("serve_1")).toBe("serve:serve_1:live_debit");
     expect(computeSessionLiveDebitIdempotencyKey("session_1")).toBe("compute_session:session_1:live_debit");
+    expect(computeLiveDebitEventType("run")).toBe("run_compute_settlement_debit");
+    expect(computeLiveDebitEventType("serve")).toBe("run_compute_settlement_debit");
+    expect(computeLiveDebitEventType("compute_session")).toBe("training_compute_settlement_debit");
     expect(toMinuteBucketUnixMs(119_999.9)).toBe(60_000);
     expect(toMinuteBucketUnixMs(-1)).toBe(0);
   });

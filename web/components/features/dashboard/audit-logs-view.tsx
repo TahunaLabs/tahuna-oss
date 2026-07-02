@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input"
 import { Select } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 
-type UsageEventRow = {
+export type UsageEventRow = {
   event_type: string
   credits_delta_cents: number
   balance_after_cents: number
@@ -26,7 +26,7 @@ type AuditLogsViewProps = {
   environmentNameById: ReadonlyMap<string, string>
 }
 
-type AuditRow = {
+export type AuditRow = {
   id: string
   action: Exclude<AuditActionFilter, "all">
   title: string
@@ -92,6 +92,68 @@ function eventLabel(value: string) {
     .replace(/\b\w/g, (match) => match.toUpperCase())
 }
 
+const COMPUTE_SESSION_BILLING_EVENT_LABELS: Record<string, string> = {
+  run_compute_settlement_debit: "Training Compute Settlement Debit",
+  run_compute_settlement_refund: "Training Compute Settlement Refund",
+  run_compute_settlement_owed: "Training Compute Settlement Owed",
+  training_compute_settlement_debit: "Training Compute Settlement Debit",
+  training_compute_settlement_refund: "Training Compute Settlement Refund",
+  training_compute_settlement_owed: "Training Compute Settlement Owed",
+}
+
+function billingEventTitle(event: UsageEventRow) {
+  if (event.reference_type === "compute_session") {
+    return COMPUTE_SESSION_BILLING_EVENT_LABELS[event.event_type] ?? eventLabel(event.event_type)
+  }
+  return eventLabel(event.event_type)
+}
+
+function metadataNumber(metadata: unknown, key: string) {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
+    return undefined
+  }
+  const value = (metadata as Record<string, unknown>)[key]
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined
+}
+
+function shortReferenceId(referenceId: string) {
+  if (referenceId.length <= 12) {
+    return referenceId
+  }
+  return `${referenceId.slice(0, 8)}...`
+}
+
+function attachedRunsDetail(runs: readonly RunRow[]) {
+  if (runs.length === 0) {
+    return undefined
+  }
+  const runCountLabel = `${runs.length} ${runs.length === 1 ? "run" : "runs"}`
+  const runNames = runs.map((run) => run.name).slice(0, 2).join(", ")
+  const remainingCount = runs.length - 2
+  if (!runNames) {
+    return runCountLabel
+  }
+  return `${runCountLabel}: ${runNames}${remainingCount > 0 ? ` +${remainingCount} more` : ""}`
+}
+
+function billingEventDetail(event: UsageEventRow, runsByComputeSession: ReadonlyMap<string, readonly RunRow[]>) {
+  const baseDetail = `Balance after ${formatMoney(event.balance_after_cents)}`
+  if (event.reference_type !== "compute_session" || !event.reference_id) {
+    return baseDetail
+  }
+
+  const detailParts = [`compute session ${shortReferenceId(event.reference_id)}`]
+  const durationMs = metadataNumber(event.metadata, "duration_ms")
+  if (durationMs && durationMs > 0) {
+    detailParts.push(`uptime ${formatRunUptime(durationMs)}`)
+  }
+  const attachedRuns = attachedRunsDetail(runsByComputeSession.get(event.reference_id) ?? [])
+  if (attachedRuns) {
+    detailParts.push(attachedRuns)
+  }
+  return `${baseDetail} · ${detailParts.join(" · ")}`
+}
+
 function runAuditRows(runs: RunRow[], environmentNameById: ReadonlyMap<string, string>): AuditRow[] {
   return runs.map((run) => {
     const action = toAuditAction(run.status)
@@ -110,12 +172,15 @@ function runAuditRows(runs: RunRow[], environmentNameById: ReadonlyMap<string, s
   })
 }
 
-function billingAuditRows(usageEvents: UsageEventRow[]): AuditRow[] {
+export function billingAuditRows(
+  usageEvents: UsageEventRow[],
+  runsByComputeSession: ReadonlyMap<string, readonly RunRow[]> = new Map(),
+): AuditRow[] {
   return usageEvents.map((event, index) => ({
     id: `billing:${event.updated_at}:${index}`,
     action: "billing",
-    title: eventLabel(event.event_type),
-    detail: `Balance after ${formatMoney(event.balance_after_cents)}`,
+    title: billingEventTitle(event),
+    detail: billingEventDetail(event, runsByComputeSession),
     amount: `${event.credits_delta_cents < 0 ? "-" : "+"}${formatMoney(event.credits_delta_cents)}`,
     timestamp: event.updated_at,
     tone: "billing",
@@ -133,10 +198,18 @@ export function AuditLogsView({ runs, usageEvents, environmentNameById }: AuditL
   const [search, setSearch] = useState("")
   const [actionFilter, setActionFilter] = useState<AuditActionFilter>("all")
   const [dateFilter, setDateFilter] = useState("")
+  const runsByComputeSession = new Map<string, RunRow[]>()
+  for (const run of runs) {
+    const computeSessionId = run.compute_session_id.trim()
+    if (!computeSessionId) continue
+    const existing = runsByComputeSession.get(computeSessionId) ?? []
+    existing.push(run)
+    runsByComputeSession.set(computeSessionId, existing)
+  }
 
   const rows = [
     ...runAuditRows(runs, environmentNameById),
-    ...billingAuditRows(usageEvents),
+    ...billingAuditRows(usageEvents, runsByComputeSession),
   ].sort((a, b) => b.timestamp - a.timestamp)
 
   const searchTerm = search.trim().toLowerCase()

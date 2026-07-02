@@ -87,6 +87,10 @@ function computeSettlementEventTypes(referenceType: ComputeBillingSubject["refer
   };
 }
 
+export function computeLiveDebitEventType(referenceType: ComputeBillingSubject["referenceType"]) {
+  return computeSettlementEventTypes(referenceType).debit;
+}
+
 export function toMinuteBucketUnixMs(value: number) {
   return Math.floor(toCoreUnixMillis(value) / MS_PER_MINUTE) * MS_PER_MINUTE;
 }
