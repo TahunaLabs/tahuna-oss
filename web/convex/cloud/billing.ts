@@ -946,7 +946,7 @@ export const BILLABLE_COMPUTE_SESSION_STATUSES = [
   COMPUTE_SESSION_STATUS.TERMINATING,
 ] as const;
 
-export const billTrainingComputeSessionsMinute = internalMutation({
+export const billTrainingComputeSessionsFiveMinutes = internalMutation({
   args: {},
   returns: v.object({
     processed_compute_sessions: v.number(),
