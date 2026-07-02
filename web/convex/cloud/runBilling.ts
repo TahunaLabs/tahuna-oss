@@ -108,6 +108,34 @@ export function estimateRunUsageFromHourlyRateCents(args: {
   return Math.max(CLOUD_BILLING_CONFIG.minimumChargeCents, usageCents);
 }
 
+export function computeSessionRequiredReservationCents(args: {
+  hourlyRateCents: number;
+}) {
+  const hourlyRateCents = toOptionalPositiveNumber(args.hourlyRateCents);
+  if (hourlyRateCents === undefined || hourlyRateCents <= 0) {
+    return 0;
+  }
+  return Math.max(CLOUD_BILLING_CONFIG.minimumChargeCents, Math.ceil(hourlyRateCents));
+}
+
+export function computeSessionReservationRemainingCents(args: {
+  requiredReservationCents: number | undefined;
+  collectedCents: number | undefined;
+}) {
+  const requiredReservationCents = Math.max(0, Math.floor(args.requiredReservationCents || 0));
+  const collectedCents = Math.max(0, Math.floor(args.collectedCents || 0));
+  return Math.max(0, requiredReservationCents - collectedCents);
+}
+
+export function computeAvailableBalanceCents(args: {
+  ledgerBalanceCents: number;
+  activeReservationCents: number;
+}) {
+  const ledgerBalanceCents = Math.max(0, Math.floor(args.ledgerBalanceCents || 0));
+  const activeReservationCents = Math.max(0, Math.floor(args.activeReservationCents || 0));
+  return Math.max(0, ledgerBalanceCents - activeReservationCents);
+}
+
 export function resolveRunHourlyRateCents(run: {
   computeHourlyRateCents?: number;
   effectiveGpuType?: string;

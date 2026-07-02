@@ -5,7 +5,7 @@ import type { ActionCtx, MutationCtx } from "@convex/_generated/server";
 import { action, httpAction, internalMutation, mutation, query } from "@convex/_generated/server";
 import Stripe from "stripe";
 import { CLOUD_BILLING_CONFIG } from "@/cloud/config";
-import { estimateRunLaunchCents, resolveRunComputePricing } from "@/cloud/billing/run-compute-pricing";
+import { resolveRunComputePricing } from "@/cloud/billing/run-compute-pricing";
 import { authComponent, requireUser } from "@convex/auth";
 import {
   ensureUserLedger,
@@ -15,6 +15,9 @@ import {
 } from "@convex/cloud/credits";
 import {
   computeLiveDebitEventType,
+  computeAvailableBalanceCents,
+  computeSessionRequiredReservationCents,
+  computeSessionReservationRemainingCents,
   estimateRunUsageFromHourlyRateCents,
   computeLiveDebitIdempotencyKey,
   resolveComputeSubjectHourlyRateCents,
@@ -178,13 +181,54 @@ export type HostedComputeSessionUsageSettlement = {
 };
 
 export function initialHostedComputeSessionBillingFields(hourlyRateCents: number) {
+  const reservationCents = computeSessionRequiredReservationCents({ hourlyRateCents });
   return {
     computeHourlyRateCents: hourlyRateCents,
+    computeReservationRequiredCents: reservationCents,
+    computeReservationRemainingCents: reservationCents,
     computeChargeCents: 0,
     computeCollectedCents: 0,
     computeOutstandingCents: 0,
     computeChargeStatus: "pending" as const,
   };
+}
+
+const ACTIVE_COMPUTE_RESERVATION_STATUSES = [
+  COMPUTE_SESSION_STATUS.PROVISIONING,
+  COMPUTE_SESSION_STATUS.IDLE,
+  COMPUTE_SESSION_STATUS.RUNNING,
+  COMPUTE_SESSION_STATUS.TERMINATING,
+] as const;
+
+function normalizeReservationCents(value: number | undefined) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return undefined;
+  }
+  return Math.max(0, Math.floor(value));
+}
+
+async function sumActiveComputeSessionReservationCents(ctx: MutationCtx, userId: string) {
+  const activeRows = (
+    await Promise.all(
+      ACTIVE_COMPUTE_RESERVATION_STATUSES.map((status) =>
+        ctx.db
+          .query("computeSessions")
+          .withIndex("by_status", (q) => q.eq("status", status))
+          .collect(),
+      ),
+    )
+  ).flat();
+
+  return activeRows
+    .filter((row) => row.userId === userId)
+    .reduce((total, row) => {
+      const storedRemainingCents = normalizeReservationCents(row.computeReservationRemainingCents);
+      const remainingCents = storedRemainingCents ?? computeSessionReservationRemainingCents({
+        requiredReservationCents: row.computeReservationRequiredCents,
+        collectedCents: row.computeCollectedCents,
+      });
+      return total + remainingCents;
+    }, 0);
 }
 
 export async function validateHostedComputeSessionCreate(
@@ -196,21 +240,29 @@ export async function validateHostedComputeSessionCreate(
     volumeGb: number;
   },
 ) {
-  const estimateCents = estimateRunLaunchCents({
+  const pricing = resolveRunComputePricing({
     gpuType: args.gpuType,
     gpuCount: args.gpuCount,
     volumeGb: args.volumeGb,
   });
-  if (estimateCents <= 0) {
+  const requiredReservationCents = computeSessionRequiredReservationCents({
+    hourlyRateCents: pricing.hourlyRateCents,
+  });
+  if (requiredReservationCents <= 0) {
     return;
   }
   const credits = await ensureUserLedger(ctx, {
     userId: args.userId,
     source: "compute_session_launch",
   });
-  if (credits.balanceCents < estimateCents) {
+  const activeReservationCents = await sumActiveComputeSessionReservationCents(ctx, args.userId);
+  const availableBalanceCents = computeAvailableBalanceCents({
+    ledgerBalanceCents: credits.balanceCents,
+    activeReservationCents,
+  });
+  if (availableBalanceCents < requiredReservationCents) {
     throw new ConvexError(
-      `insufficient credits: add at least ${formatUsdCents(estimateCents - credits.balanceCents)} before launching this run`,
+      `insufficient credits: add at least ${formatUsdCents(requiredReservationCents - availableBalanceCents)} before launching this run`,
     );
   }
 }

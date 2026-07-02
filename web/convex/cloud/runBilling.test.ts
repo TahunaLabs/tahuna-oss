@@ -17,8 +17,11 @@ const creditMocks = vi.hoisted(() => ({
 vi.mock("@convex/cloud/credits", () => creditMocks);
 
 import {
+  computeAvailableBalanceCents,
   computeLiveDebitEventType,
   computeLiveDebitIdempotencyKey,
+  computeSessionRequiredReservationCents,
+  computeSessionReservationRemainingCents,
   computeSessionLiveDebitIdempotencyKey,
   estimateRunUsageFromHourlyRateCents,
   resolveComputeSubjectHourlyRateCents,
@@ -50,6 +53,23 @@ describe("hosted compute billing helpers", () => {
     expect(estimateRunUsageFromHourlyRateCents({ hourlyRateCents: 120, durationMs: 1 })).toBe(1);
     expect(estimateRunUsageFromHourlyRateCents({ hourlyRateCents: 120, durationMs: 0 })).toBe(0);
     expect(estimateRunUsageFromHourlyRateCents({ hourlyRateCents: -120, durationMs: 60 * 60 * 1000 })).toBe(0);
+  });
+
+  it("computes one-hour compute-session reservations and available balance", () => {
+    expect(computeSessionRequiredReservationCents({ hourlyRateCents: 120 })).toBe(120);
+    expect(computeSessionRequiredReservationCents({ hourlyRateCents: 0.4 })).toBe(1);
+    expect(computeSessionReservationRemainingCents({
+      requiredReservationCents: 120,
+      collectedCents: 45,
+    })).toBe(75);
+    expect(computeSessionReservationRemainingCents({
+      requiredReservationCents: 120,
+      collectedCents: 130,
+    })).toBe(0);
+    expect(computeAvailableBalanceCents({
+      ledgerBalanceCents: 150,
+      activeReservationCents: 90,
+    })).toBe(60);
   });
 
   it("prefers stored compute hourly rate over catalog pricing", () => {
