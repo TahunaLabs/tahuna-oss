@@ -97,6 +97,7 @@ type ServeResponse = {
   serve_id: string
   created_at: number
   environment_id: string
+  compute_session_id: string
   inference_path: string
   command: string[]
   output_dir: string
@@ -284,6 +285,7 @@ const serveResponseValidator = v.object({
   serve_id: v.string(),
   created_at: v.number(),
   environment_id: v.string(),
+  compute_session_id: v.string(),
   inference_path: v.string(),
   command: v.array(v.string()),
   output_dir: v.string(),
@@ -332,6 +334,7 @@ const serveSummaryResponseValidator = v.object({
   serve_id: v.string(),
   created_at: v.number(),
   environment_id: v.string(),
+  compute_session_id: v.string(),
   inference_path: v.string(),
   status: v.string(),
   error: v.string(),

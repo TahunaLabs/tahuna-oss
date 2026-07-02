@@ -57,6 +57,7 @@ const computeSessionResponseValidator = v.object({
   compute_session_id: v.string(),
   created_at: v.number(),
   environment_id: v.string(),
+  serve_id: v.string(),
   status: v.string(),
   error: v.string(),
   provider_machine_id: v.string(),

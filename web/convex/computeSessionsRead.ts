@@ -6,6 +6,7 @@ export function toComputeSessionResponse(row: Doc<"computeSessions">) {
     compute_session_id: String(row._id),
     created_at: row.createdAt,
     environment_id: String(row.environmentId),
+    serve_id: row.serveId ? String(row.serveId) : "",
     status: row.status,
     error: row.error || "",
     provider_machine_id: row.providerMachineId || "",

@@ -93,6 +93,7 @@ export default defineSchema({
   computeSessions: defineTable({
     userId: v.string(),
     environmentId: v.id("environments"),
+    serveId: v.optional(v.id("serves")),
     status: v.string(),
     error: v.optional(v.string()),
     providerMachineId: v.optional(v.string()),
@@ -128,6 +129,7 @@ export default defineSchema({
   })
     .index("by_user", ["userId"])
     .index("by_user_and_environment", ["userId", "environmentId"])
+    .index("by_serve", ["serveId"])
     .index("by_status", ["status"])
     .index("by_runtime_token_hash", ["runtimeTokenHash"]),
 
@@ -171,6 +173,7 @@ export default defineSchema({
   serves: defineTable({
     userId: v.string(),
     environmentId: v.id("environments"),
+    computeSessionId: v.optional(v.id("computeSessions")),
     command: v.array(v.string()),
     outputDir: v.string(),
     logs: v.string(),
