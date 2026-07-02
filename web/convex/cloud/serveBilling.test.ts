@@ -14,6 +14,32 @@ import {
   validateHostedServeCreate,
 } from "@convex/cloud/serveBilling";
 
+function fakeReservationCtx(
+  rows: Array<{ userId: string; status: string; computeReservationRemainingCents?: number }>,
+) {
+  return {
+    db: {
+      query: (table: string) => {
+        expect(table).toBe("computeSessions");
+        return {
+          withIndex: (_index: string, callback: (q: { eq: (_field: string, value: string) => unknown }) => unknown) => {
+            let status = "";
+            callback({
+              eq: (_field: string, value: string) => {
+                status = value;
+                return {};
+              },
+            });
+            return {
+              collect: async () => rows.filter((row) => row.status === status),
+            };
+          },
+        };
+      },
+    },
+  };
+}
+
 describe("hosted serve billing helpers", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -50,18 +76,41 @@ describe("hosted serve billing helpers", () => {
 
   it("rejects serve launch when hosted credits cannot cover launch estimate", async () => {
     creditMocks.ensureUserLedger.mockResolvedValue({ balanceCents: 5 });
+    const ctx = fakeReservationCtx([]);
 
     await expect(
-      validateHostedServeCreate({} as never, {
+      validateHostedServeCreate(ctx as never, {
         userId: "user_1",
         gpuType: "",
         gpuCount: 0,
         volumeGb: 730,
       }),
     ).rejects.toThrow(new ConvexError("insufficient credits: add at least $0.07 before launching this serve"));
-    expect(creditMocks.ensureUserLedger).toHaveBeenCalledWith({}, {
+    expect(creditMocks.ensureUserLedger).toHaveBeenCalledWith(ctx, {
       userId: "user_1",
-      source: "serve_launch",
+      source: "compute_session_launch",
     });
+  });
+
+  it("rejects serve launch when active compute-session reservations consume available credits", async () => {
+    creditMocks.ensureUserLedger.mockResolvedValue({ balanceCents: 12 });
+
+    await expect(
+      validateHostedServeCreate(
+        fakeReservationCtx([
+          {
+            userId: "user_1",
+            status: "running",
+            computeReservationRemainingCents: 12,
+          },
+        ]) as never,
+        {
+          userId: "user_1",
+          gpuType: "",
+          gpuCount: 0,
+          volumeGb: 730,
+        },
+      ),
+    ).rejects.toThrow(new ConvexError("insufficient credits: add at least $0.12 before launching this serve"));
   });
 });

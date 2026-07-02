@@ -15,7 +15,6 @@ import {
 } from "@convex/cloud/credits";
 import {
   computeLiveDebitEventType,
-  computeAvailableBalanceCents,
   computeSessionRequiredReservationCents,
   computeSessionReservationRemainingCents,
   estimateRunUsageFromHourlyRateCents,
@@ -30,6 +29,7 @@ import {
 } from "@convex/cloud/runBilling";
 import { COMPUTE_SESSION_STATUS } from "@convex/core/computeSessionLifecyclePlan";
 import { SERVE_STATUS } from "@convex/servesConstants";
+export { validateHostedComputeSessionCreate } from "@convex/cloud/computeSessionReservations";
 
 const STRIPE_CHECKOUT_PAYMENT_STATUSES = new Set(["paid", "no_payment_required"]);
 export const TRAINING_COMPUTE_BILLING_INTERVAL_MINUTES = 5;
@@ -37,10 +37,6 @@ export const TRAINING_COMPUTE_BILLING_INTERVAL_MINUTES = 5;
 const HOSTED_BILLING_CLIENT_ERROR_PATTERNS: RegExp[] = [
   /\binsufficient credits\b/i,
 ];
-
-function formatUsdCents(cents: number) {
-  return `$${(Math.max(0, cents) / 100).toFixed(2)}`;
-}
 
 export function isHostedBillingClientError(value: string) {
   return HOSTED_BILLING_CLIENT_ERROR_PATTERNS.some((pattern) => pattern.test(value));
@@ -203,42 +199,11 @@ function normalizeOptionalUnixMillis(value: number | undefined) {
   return Math.max(0, Math.floor(value));
 }
 
-const ACTIVE_COMPUTE_RESERVATION_STATUSES = [
-  COMPUTE_SESSION_STATUS.PROVISIONING,
-  COMPUTE_SESSION_STATUS.IDLE,
-  COMPUTE_SESSION_STATUS.RUNNING,
-  COMPUTE_SESSION_STATUS.TERMINATING,
-] as const;
-
 function normalizeReservationCents(value: number | undefined) {
   if (typeof value !== "number" || !Number.isFinite(value)) {
     return undefined;
   }
   return Math.max(0, Math.floor(value));
-}
-
-async function sumActiveComputeSessionReservationCents(ctx: MutationCtx, userId: string) {
-  const activeRows = (
-    await Promise.all(
-      ACTIVE_COMPUTE_RESERVATION_STATUSES.map((status) =>
-        ctx.db
-          .query("computeSessions")
-          .withIndex("by_status", (q) => q.eq("status", status))
-          .collect(),
-      ),
-    )
-  ).flat();
-
-  return activeRows
-    .filter((row) => row.userId === userId)
-    .reduce((total, row) => {
-      const storedRemainingCents = normalizeReservationCents(row.computeReservationRemainingCents);
-      const remainingCents = storedRemainingCents ?? computeSessionReservationRemainingCents({
-        requiredReservationCents: row.computeReservationRequiredCents,
-        collectedCents: row.computeCollectedCents,
-      });
-      return total + remainingCents;
-    }, 0);
 }
 
 function computeTerminalReservationReleasePatch(
@@ -261,42 +226,6 @@ function computeTerminalReservationReleasePatch(
       terminalTiming.computeEndedAt ??
       Date.now(),
   };
-}
-
-export async function validateHostedComputeSessionCreate(
-  ctx: MutationCtx,
-  args: {
-    userId: string;
-    gpuType: string;
-    gpuCount: number;
-    volumeGb: number;
-  },
-) {
-  const pricing = resolveRunComputePricing({
-    gpuType: args.gpuType,
-    gpuCount: args.gpuCount,
-    volumeGb: args.volumeGb,
-  });
-  const requiredReservationCents = computeSessionRequiredReservationCents({
-    hourlyRateCents: pricing.hourlyRateCents,
-  });
-  if (requiredReservationCents <= 0) {
-    return;
-  }
-  const credits = await ensureUserLedger(ctx, {
-    userId: args.userId,
-    source: "compute_session_launch",
-  });
-  const activeReservationCents = await sumActiveComputeSessionReservationCents(ctx, args.userId);
-  const availableBalanceCents = computeAvailableBalanceCents({
-    ledgerBalanceCents: credits.balanceCents,
-    activeReservationCents,
-  });
-  if (availableBalanceCents < requiredReservationCents) {
-    throw new ConvexError(
-      `insufficient credits: add at least ${formatUsdCents(requiredReservationCents - availableBalanceCents)} before launching this run`,
-    );
-  }
 }
 
 export function initialHostedComputeSessionBillingFieldsForSpec(args: {

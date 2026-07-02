@@ -1,8 +1,7 @@
-import { ConvexError } from "convex/values";
 import type { Doc } from "@convex/_generated/dataModel";
 import type { MutationCtx } from "@convex/_generated/server";
-import { estimateRunLaunchCents, resolveRunComputePricing } from "@/cloud/billing/run-compute-pricing";
-import { ensureUserLedger } from "@convex/cloud/credits";
+import { resolveRunComputePricing } from "@/cloud/billing/run-compute-pricing";
+import { validateHostedComputeSessionCreate } from "@convex/cloud/computeSessionReservations";
 import {
   resolveTerminalRunTiming,
   settleServeComputeCharge,
@@ -25,10 +24,6 @@ export type HostedServeUsageSettlement = {
   settlement: ComputeSettlementResult;
 };
 
-function formatUsdCents(cents: number) {
-  return `$${(Math.max(0, cents) / 100).toFixed(2)}`;
-}
-
 export async function validateHostedServeCreate(
   ctx: MutationCtx,
   args: {
@@ -38,19 +33,7 @@ export async function validateHostedServeCreate(
     volumeGb: number;
   },
 ) {
-  const estimateCents = estimateRunLaunchCents(args);
-  if (estimateCents <= 0) {
-    return;
-  }
-  const credits = await ensureUserLedger(ctx, {
-    userId: args.userId,
-    source: "serve_launch",
-  });
-  if (credits.balanceCents < estimateCents) {
-    throw new ConvexError(
-      `insufficient credits: add at least ${formatUsdCents(estimateCents - credits.balanceCents)} before launching this serve`,
-    );
-  }
+  await validateHostedComputeSessionCreate(ctx, { ...args, launchKind: "serve" });
 }
 
 export function initialHostedServeBillingFields(args: {

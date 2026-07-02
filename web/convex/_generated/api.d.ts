@@ -22,6 +22,7 @@ import type * as cli_sync from "../cli/sync.js";
 import type * as cli_system from "../cli/system.js";
 import type * as cloud_authConfig from "../cloud/authConfig.js";
 import type * as cloud_billing from "../cloud/billing.js";
+import type * as cloud_computeSessionReservations from "../cloud/computeSessionReservations.js";
 import type * as cloud_credits from "../cloud/credits.js";
 import type * as cloud_errors from "../cloud/errors.js";
 import type * as cloud_resend from "../cloud/resend.js";
@@ -104,6 +105,7 @@ declare const fullApi: ApiFromModules<{
   "cli/system": typeof cli_system;
   "cloud/authConfig": typeof cloud_authConfig;
   "cloud/billing": typeof cloud_billing;
+  "cloud/computeSessionReservations": typeof cloud_computeSessionReservations;
   "cloud/credits": typeof cloud_credits;
   "cloud/errors": typeof cloud_errors;
   "cloud/resend": typeof cloud_resend;
