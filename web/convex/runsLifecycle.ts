@@ -51,6 +51,7 @@ export type RunLifecycleComposition = {
       gpuType: string;
       gpuCount: number;
       volumeGb: number;
+      computeSessionId?: Id<"computeSessions">;
     },
   ) => Promise<void>;
   createRun?: (args: {
@@ -58,6 +59,8 @@ export type RunLifecycleComposition = {
     gpuType: string;
     gpuCount: number;
     volumeGb: number;
+    computeSessionId?: Id<"computeSessions">;
+    executionMode: "ephemeral" | "session";
   }) => RunCreationComposition;
   settleTerminalRunUsage?: (
     ctx: MutationCtx,
@@ -87,6 +90,7 @@ export function toRunLifecycleState(row: Doc<"runs">): RunLifecycleRunState {
   return {
     runId: String(row._id),
     status: row.status,
+    computeSessionId: row.computeSessionId ? String(row.computeSessionId) : undefined,
     cancellationRequested: row.cancellationRequested,
     providerMachineId: row.providerMachineId,
     computeStartedAt: row.computeStartedAt,
@@ -162,6 +166,7 @@ export async function createRunForUserId(
     volume_gb?: number;
     enqueue_provisioning?: boolean;
     computeSessionId?: Id<"computeSessions">;
+    executionMode?: "ephemeral" | "session";
   },
   composition?: RunLifecycleComposition,
 ) {
@@ -226,12 +231,16 @@ export async function createRunForUserId(
     gpuType: effectiveGpuType,
     gpuCount: effectiveGpuCount,
     volumeGb: effectiveVolumeGb,
+    computeSessionId: args.computeSessionId,
   });
+  const executionMode = args.executionMode ?? (args.computeSessionId ? "session" : "ephemeral");
   const creationComposition = composition?.createRun?.({
     userId: args.userId,
     gpuType: effectiveGpuType,
     gpuCount: effectiveGpuCount,
     volumeGb: effectiveVolumeGb,
+    computeSessionId: args.computeSessionId,
+    executionMode,
   });
 
   const creation = planRunCreation({
@@ -269,7 +278,7 @@ export async function createRunForUserId(
     codeManifestHash: creation.run.codeManifestHash,
     dataManifestHash: creation.run.dataManifestHash,
     dependencyGroup: creation.run.dependencyGroup,
-    executionMode: args.computeSessionId ? "session" : "ephemeral",
+    executionMode,
     ...(args.computeSessionId ? { computeSessionId: args.computeSessionId } : {}),
     ...(creationComposition?.runFields || {}),
   });
@@ -280,7 +289,7 @@ export async function createRunForUserId(
     message: creation.event.message,
     metadata: {
       ...creation.event.metadata,
-      execution_mode: args.computeSessionId ? "session" : "ephemeral",
+      execution_mode: executionMode,
       ...(args.computeSessionId ? { compute_session_id: String(args.computeSessionId) } : {}),
       ...(creationComposition?.eventMetadata || {}),
     },

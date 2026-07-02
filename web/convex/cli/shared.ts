@@ -391,18 +391,44 @@ export async function createAndProvisionRunStrict(ctx: ActionCtx, args: CreateRu
     });
   }
 
-  const created = await ctx.runMutation(internal.runs.internalCreate, {
+  const session = await ctx.runMutation(internal.computeSessions.internalCreate, {
     userId: args.userId,
     environmentId: args.environmentId,
-    name: args.name,
-    gpu_type: args.gpu_type,
-    gpu_count: args.gpu_count,
-    volume_gb: args.volume_gb,
-    enqueue_provisioning: false,
+    idleTimeoutSeconds: 0,
+    gpuType: args.gpu_type,
+    gpuCount: args.gpu_count,
+    volumeGb: args.volume_gb,
+    activateEnvironment: false,
   });
-  const runId = created.run_id as Id<"runs">;
+  const computeSessionId = session.compute_session_id as Id<"computeSessions">;
+  let runId: Id<"runs">;
+  try {
+    const created = await ctx.runMutation(internal.runs.internalCreate, {
+      userId: args.userId,
+      environmentId: args.environmentId,
+      name: args.name,
+      gpu_type: args.gpu_type,
+      gpu_count: args.gpu_count,
+      volume_gb: args.volume_gb,
+      enqueue_provisioning: false,
+      computeSessionId,
+      executionMode: "ephemeral",
+      assignComputeSession: false,
+    });
+    runId = created.run_id as Id<"runs">;
+  } catch (error) {
+    await ctx.runMutation(internal.computeSessions.internalRemoveUnprovisioned, {
+      userId: args.userId,
+      computeSessionId,
+    });
+    throw error;
+  }
 
-  await ctx.runAction(internal.runs.provisionRun, { runId });
+  await ctx.runAction(internal.computeSessions.provisionComputeSession, {
+    userId: args.userId,
+    computeSessionId,
+    initialRunId: runId,
+  });
 
   const resolved = await ctx.runQuery(internal.runs.internalGet, {
     userId: args.userId,
@@ -417,6 +443,10 @@ export async function createAndProvisionRunStrict(ctx: ActionCtx, args: CreateRu
     await ctx.runMutation(internal.runs.internalRemove, {
       userId: args.userId,
       runId,
+    });
+    await ctx.runMutation(internal.computeSessions.internalRemoveUnprovisioned, {
+      userId: args.userId,
+      computeSessionId,
     });
     throw new Error("no GPU capacity currently available; run was not created");
   }

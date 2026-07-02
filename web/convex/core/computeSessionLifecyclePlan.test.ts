@@ -6,6 +6,7 @@ import {
   isComputeSessionIdleTimedOut,
   planComputeSessionCreation,
   planComputeSessionFailure,
+  planComputeSessionTerminated,
   planComputeSessionMachineProvisioned,
   planComputeSessionRunAssigned,
   planComputeSessionStop,
@@ -57,6 +58,7 @@ describe("compute session lifecycle planning", () => {
     expect(isComputeSessionIdleTimedOut({ lastIdleAt: null, idleTimeoutSeconds: 10, nowMs: 100_000 })).toBe(false);
     expect(isComputeSessionIdleTimedOut({ lastIdleAt: 1_000, idleTimeoutSeconds: 10, nowMs: 10_999 })).toBe(false);
     expect(isComputeSessionIdleTimedOut({ lastIdleAt: 1_000, idleTimeoutSeconds: 10, nowMs: 11_000 })).toBe(true);
+    expect(isComputeSessionIdleTimedOut({ lastIdleAt: 1_000, idleTimeoutSeconds: 0, nowMs: 1_000 })).toBe(true);
   });
 
   it("plans compute session creation with provisioning event metadata", () => {
@@ -112,6 +114,7 @@ describe("compute session lifecycle planning", () => {
         providerMachineId: "machine_1",
         runtimeTokenHash: "token_hash",
         providerCreationTime: 123,
+        computeStartedAt: 123,
       },
       events: [
         {
@@ -198,7 +201,13 @@ describe("compute session lifecycle planning", () => {
 
     expect(
       planComputeSessionFailure({
-        session: { computeSessionId: "session_1", status: COMPUTE_SESSION_STATUS.RUNNING, activeRunId: "run_1" },
+        session: {
+          computeSessionId: "session_1",
+          status: COMPUTE_SESSION_STATUS.RUNNING,
+          activeRunId: "run_1",
+          providerMachineId: "machine_1",
+          computeStartedAt: 1_000,
+        },
         error: "  provider unavailable  ",
         nowMs: 6_000,
       }),
@@ -209,6 +218,7 @@ describe("compute session lifecycle planning", () => {
         runtimeTokenHash: "revoked",
         activeRunId: undefined,
         terminatedAt: 6_000,
+        computeEndedAt: 6_000,
       },
       events: [
         {
@@ -216,6 +226,25 @@ describe("compute session lifecycle planning", () => {
           message: "provider unavailable",
         },
       ],
+    });
+  });
+
+  it("sets compute billing end when provisioned sessions terminate", () => {
+    expect(
+      planComputeSessionTerminated({
+        session: {
+          computeSessionId: "session_1",
+          status: COMPUTE_SESSION_STATUS.TERMINATING,
+          providerMachineId: "machine_1",
+          computeStartedAt: 2_000,
+        },
+        nowMs: 8_000,
+      }),
+    ).toMatchObject({
+      patch: {
+        status: COMPUTE_SESSION_STATUS.TERMINATED,
+        computeEndedAt: 8_000,
+      },
     });
   });
 });

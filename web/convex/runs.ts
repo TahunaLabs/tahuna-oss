@@ -63,6 +63,10 @@ import {
 } from "@convex/core/runLifecyclePlan";
 import { getAccessibleRun } from "@convex/runsAccess";
 import {
+  createComputeSessionForUserId,
+  removeUnprovisionedComputeSessionForUserId,
+} from "@convex/computeSessionsLifecycle";
+import {
   listByUserId,
   resolveFinalRuntimeMetric,
   toRunLogsOnlyResponse,
@@ -1109,14 +1113,39 @@ export const create = mutation({
   returns: runResponseValidator,
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
-    return createRunForUserId(ctx, {
-      userId: String(user._id),
+    const userId = String(user._id);
+    const session = await createComputeSessionForUserId(ctx, {
+      userId,
       environmentId: args.environmentId,
-      name: args.name,
-      gpu_type: args.gpu_type,
-      gpu_count: args.gpu_count,
-      volume_gb: args.volume_gb,
+      idleTimeoutSeconds: 0,
+      gpuType: args.gpu_type,
+      gpuCount: args.gpu_count,
+      volumeGb: args.volume_gb,
+      activateEnvironment: false,
     });
+    const computeSessionId = session.compute_session_id as Id<"computeSessions">;
+    try {
+      const created = await createRunForUserId(ctx, {
+        userId,
+        environmentId: args.environmentId,
+        name: args.name,
+        gpu_type: args.gpu_type,
+        gpu_count: args.gpu_count,
+        volume_gb: args.volume_gb,
+        enqueue_provisioning: false,
+        computeSessionId,
+        executionMode: "ephemeral",
+      });
+      await ctx.scheduler.runAfter(0, internal.computeSessions.provisionComputeSession, {
+        userId,
+        computeSessionId,
+        initialRunId: created.run_id as Id<"runs">,
+      });
+      return created;
+    } catch (error) {
+      await removeUnprovisionedComputeSessionForUserId(ctx, userId, computeSessionId);
+      throw error;
+    }
   },
 });
 
@@ -1198,6 +1227,7 @@ export const internalCreate = internalMutation({
     volume_gb: v.optional(v.number()),
     enqueue_provisioning: v.optional(v.boolean()),
     computeSessionId: v.optional(v.id("computeSessions")),
+    executionMode: v.optional(v.union(v.literal("ephemeral"), v.literal("session"))),
     assignComputeSession: v.optional(v.boolean()),
   },
   returns: runResponseValidator,
@@ -1926,7 +1956,7 @@ export const ingestRuntimeStatus = internalMutation({
       message: args.message,
       error: args.error,
       nowMs: Date.now(),
-      terminateMachine: row.executionMode !== "session",
+      terminateMachine: !row.computeSessionId && row.executionMode !== "session",
     });
     await applyRunLifecyclePlan(ctx, args.runId, row, plan);
     return { status: plan.resultStatus };

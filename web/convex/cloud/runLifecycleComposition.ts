@@ -7,6 +7,7 @@ import {
   settleHostedRunUsage,
 } from "@convex/cloud/billing";
 import { ensureUserLedger } from "@convex/cloud/credits";
+import { resolveTerminalRunTiming } from "@convex/cloud/runBilling";
 import {
   applyRunLifecyclePlan,
   cancelRunForUserId,
@@ -22,6 +23,9 @@ function formatUsdCents(cents: number) {
 
 export const hostedRunLifecycleComposition: RunLifecycleComposition = {
   async validateCreateRun(ctx, args) {
+    if (args.computeSessionId) {
+      return;
+    }
     const estimateCents = estimateRunLaunchCents({
       gpuType: args.gpuType,
       gpuCount: args.gpuCount,
@@ -41,6 +45,14 @@ export const hostedRunLifecycleComposition: RunLifecycleComposition = {
     }
   },
   createRun(args) {
+    if (args.computeSessionId) {
+      return {
+        eventMetadata: {
+          billing_reference_type: "compute_session",
+          billing_reference_id: String(args.computeSessionId),
+        },
+      };
+    }
     const pricing = resolveRunComputePricing({
       gpuType: args.gpuType,
       gpuCount: args.gpuCount,
@@ -54,6 +66,19 @@ export const hostedRunLifecycleComposition: RunLifecycleComposition = {
     };
   },
   async settleTerminalRunUsage(ctx, row) {
+    if (row.computeSessionId) {
+      const terminalTiming = resolveTerminalRunTiming(row);
+      return {
+        patch: {
+          computeEndedAt: terminalTiming.computeEndedAt,
+        },
+        eventMetadata: {
+          duration_ms: terminalTiming.durationMs,
+          billing_reference_type: "compute_session",
+          billing_reference_id: String(row.computeSessionId),
+        },
+      };
+    }
     return await settleHostedRunUsage(ctx, row);
   },
 };

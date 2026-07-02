@@ -25,6 +25,9 @@ export type ComputeSessionState = {
   computeSessionId: string;
   status: string;
   providerMachineId?: string;
+  providerCreationTime?: number;
+  computeStartedAt?: number;
+  computeEndedAt?: number;
   runtimeTokenHash?: string;
   activeRunId?: string;
 };
@@ -34,6 +37,8 @@ export type ComputeSessionPatch = {
   error?: string;
   providerMachineId?: string;
   providerCreationTime?: number;
+  computeStartedAt?: number;
+  computeEndedAt?: number;
   runtimeTokenHash?: string;
   activeRunId?: string;
   lastHeartbeatAt?: number;
@@ -62,6 +67,20 @@ function isTerminalComputeSessionStatus(status: string) {
 
 function normalizeMachineId(providerMachineId: string | undefined) {
   return providerMachineId?.trim() || "";
+}
+
+function normalizeTimestamp(value: number | undefined) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return undefined;
+  }
+  return Math.max(0, Math.floor(value));
+}
+
+function terminalComputeEndedAt(session: ComputeSessionState, nowMs: number) {
+  if (normalizeTimestamp(session.computeStartedAt) === undefined && !session.providerMachineId) {
+    return undefined;
+  }
+  return session.computeEndedAt ?? Math.max(normalizeTimestamp(session.computeStartedAt) ?? 0, nowMs);
 }
 
 function sanitizeDetail(value: string | undefined) {
@@ -165,6 +184,7 @@ export function planComputeSessionMachineProvisioned(args: {
       providerMachineId,
       runtimeTokenHash: args.runtimeTokenHash,
       ...(args.providerCreationTime ? { providerCreationTime: args.providerCreationTime } : {}),
+      computeStartedAt: args.session.computeStartedAt ?? normalizeTimestamp(args.providerCreationTime) ?? args.nowMs,
     },
     events: [
       sessionEvent(COMPUTE_SESSION_STATUS.PROVISIONING, "compute session machine provisioned", {
@@ -245,12 +265,14 @@ export function planComputeSessionStop(args: {
   }
   const providerMachineId = normalizeMachineId(args.session.providerMachineId);
   if (!providerMachineId) {
+    const computeEndedAt = terminalComputeEndedAt(args.session, args.nowMs);
     return {
       patch: {
         status: COMPUTE_SESSION_STATUS.TERMINATED,
         runtimeTokenHash: "revoked",
         activeRunId: undefined,
         terminatedAt: args.nowMs,
+        ...(computeEndedAt === undefined ? {} : { computeEndedAt }),
       },
       events: [
         sessionEvent(COMPUTE_SESSION_STATUS.TERMINATED, "compute session stopped before machine provisioning"),
@@ -278,12 +300,14 @@ export function planComputeSessionTerminated(args: {
   if (args.session.status === COMPUTE_SESSION_STATUS.TERMINATED) {
     return {};
   }
+  const computeEndedAt = terminalComputeEndedAt(args.session, args.nowMs);
   return {
     patch: {
       status: COMPUTE_SESSION_STATUS.TERMINATED,
       runtimeTokenHash: "revoked",
       activeRunId: undefined,
       terminatedAt: args.nowMs,
+      ...(computeEndedAt === undefined ? {} : { computeEndedAt }),
     },
     events: [
       sessionEvent(COMPUTE_SESSION_STATUS.TERMINATED, "compute session terminated"),
@@ -300,6 +324,7 @@ export function planComputeSessionFailure(args: {
     return {};
   }
   const errorText = sanitizeDetail(args.error) || "compute session failed";
+  const computeEndedAt = terminalComputeEndedAt(args.session, args.nowMs);
   return {
     patch: {
       status: COMPUTE_SESSION_STATUS.FAILED,
@@ -307,6 +332,7 @@ export function planComputeSessionFailure(args: {
       runtimeTokenHash: "revoked",
       activeRunId: undefined,
       terminatedAt: args.nowMs,
+      ...(computeEndedAt === undefined ? {} : { computeEndedAt }),
     },
     events: [
       sessionEvent(COMPUTE_SESSION_STATUS.FAILED, errorText),

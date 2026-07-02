@@ -187,6 +187,25 @@ describe("run lifecycle planning", () => {
     expect(plan.resultStatus).toBe(RUN_LIFECYCLE_STATUS.FAILED);
   });
 
+  it("does not schedule run-owned machine termination for compute-session runs", () => {
+    const plan = planRuntimeStatusIngestion({
+      run: {
+        runId: "run_1",
+        computeSessionId: "session_1",
+        status: RUN_LIFECYCLE_STATUS.RUNNING,
+        providerMachineId: "machine_1",
+      },
+      status: RUN_LIFECYCLE_STATUS.COMPLETED,
+      nowMs: 10_000,
+    });
+
+    expect(plan.patch).toMatchObject({
+      status: RUN_LIFECYCLE_STATUS.COMPLETED,
+      runtimeTokenHash: "revoked",
+    });
+    expect(plan.jobs).toEqual([]);
+  });
+
   it("commits only artifact keys under the run output path and deduplicates existing keys", () => {
     const plan = planRuntimeArtifactCommit({
       outputPath: "runs/env_1/1234/output",

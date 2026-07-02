@@ -128,7 +128,7 @@ export async function assignQueuedRunToComputeSession(
   if (session.activeRunId) {
     assignmentError("compute session already has an active run");
   }
-  if (run.executionMode !== "session" || run.computeSessionId !== args.computeSessionId) {
+  if (run.computeSessionId !== args.computeSessionId) {
     assignmentError("run is not queued for this compute session");
   }
   if (!session.providerMachineId) {

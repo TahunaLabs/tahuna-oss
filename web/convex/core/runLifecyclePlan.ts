@@ -28,6 +28,7 @@ export const TERMINAL_RUN_STATUSES: ReadonlySet<string> = new Set([
 export type RunLifecycleRunState = {
   runId: string;
   status: string;
+  computeSessionId?: string;
   cancellationRequested?: boolean;
   providerMachineId?: string;
   computeStartedAt?: number;
@@ -230,14 +231,16 @@ export function planRunCancellation(args: {
           : `cancellation requested (grace period ${Math.floor(args.terminationGraceMs / 1000)}s before termination)`,
       ),
     ],
-    jobs: [
-      createTerminateMachineJob({
-        runId: args.run.runId,
-        delayMs: args.force ? 0 : args.terminationGraceMs,
-        providerMachineId,
-        force: args.force,
-      }),
-    ],
+    jobs: args.run.computeSessionId
+      ? []
+      : [
+          createTerminateMachineJob({
+            runId: args.run.runId,
+            delayMs: args.force ? 0 : args.terminationGraceMs,
+            providerMachineId,
+            force: args.force,
+          }),
+        ],
   };
 }
 
@@ -279,10 +282,12 @@ export function planRunDeletion(args: {
   }
 
   return {
-    jobs: planForcedMachineTermination({
-      runId: args.run.runId,
-      providerMachineId: args.run.providerMachineId,
-    }),
+    jobs: args.run.computeSessionId
+      ? []
+      : planForcedMachineTermination({
+          runId: args.run.runId,
+          providerMachineId: args.run.providerMachineId,
+        }),
     storageOperations: [
       {
         type: "delete_indexed_storage_keys",
@@ -451,10 +456,12 @@ export function planRunFailure(args: {
             },
       ),
     ],
-    jobs: planForcedMachineTermination({
-      runId: args.run.runId,
-      providerMachineId: args.run.providerMachineId,
-    }),
+    jobs: args.run.computeSessionId
+      ? []
+      : planForcedMachineTermination({
+          runId: args.run.runId,
+          providerMachineId: args.run.providerMachineId,
+        }),
   };
 }
 
@@ -604,7 +611,7 @@ export function planRuntimeStatusIngestion(args: {
           source: "machine-runtime",
         }),
       ],
-      jobs: args.terminateMachine === false
+      jobs: args.terminateMachine === false || args.run.computeSessionId
         ? []
         : planForcedMachineTermination({
             runId: args.run.runId,
@@ -635,7 +642,7 @@ export function planRuntimeStatusIngestion(args: {
         source: "machine-runtime",
       }),
     ],
-    jobs: isTerminalStatus && args.terminateMachine !== false
+    jobs: isTerminalStatus && args.terminateMachine !== false && !args.run.computeSessionId
       ? planForcedMachineTermination({
           runId: args.run.runId,
           providerMachineId: args.run.providerMachineId,

@@ -10,23 +10,26 @@ import {
   type MutationCtx,
 } from "@convex/_generated/server";
 import { requireUser } from "@convex/auth";
-import { RUN_CONFIG, PYTHON_CONFIG } from "@convex/appConfig";
+import { RUN_CONFIG } from "@convex/appConfig";
 import { assignQueuedRunToComputeSession } from "@convex/computeSessionAssignment";
+import {
+  clearEnvironmentActiveComputeSession,
+  createComputeSessionForUserId,
+  insertComputeSessionEvents,
+  removeUnprovisionedComputeSessionForUserId,
+} from "@convex/computeSessionsLifecycle";
 import {
   buildProvisionedRuntimeEnv,
   resolveEnvironmentEnvVarsForEnvironmentId,
 } from "@convex/envVars";
-import { getAccessibleEnvironment } from "@convex/runsAccess";
 import {
   provisionRuntimeMachine,
-  resolveImageName,
   resolveWandbBaseURL,
   terminateRuntimeMachine,
   terminateRuntimeMachineWithRetry,
 } from "@convex/runtimeProvisioning";
 import { fetchSyncManifest } from "@convex/runtimeBootstrap";
 import {
-  planComputeSessionCreation,
   planComputeSessionFailure,
   planComputeSessionHeartbeat,
   planComputeSessionIdle,
@@ -35,9 +38,14 @@ import {
   planComputeSessionTerminated,
   isComputeSessionHeartbeatTimedOut,
   isComputeSessionIdleTimedOut,
+  TERMINAL_COMPUTE_SESSION_STATUSES,
   type ComputeSessionEvent,
   type ComputeSessionPatch,
 } from "@convex/core/computeSessionLifecyclePlan";
+import {
+  settleHostedComputeSessionUsage,
+  type HostedComputeSessionUsageSettlement,
+} from "@convex/cloud/billing";
 import {
   listComputeSessionEvents,
   listComputeSessionsByUserId,
@@ -91,42 +99,43 @@ const timedOutComputeSessionValidator = v.object({
   reason: v.union(v.literal("heartbeat"), v.literal("idle")),
 });
 
-function normalizeIdleTimeoutSeconds(value: number | undefined) {
-  const resolved = value ?? RUN_CONFIG.computeSessionDefaultIdleTimeoutSeconds;
-  if (!Number.isInteger(resolved) || resolved <= 0) {
-    throw new ConvexError("idle_timeout_seconds must be a positive integer");
-  }
-  if (resolved > RUN_CONFIG.computeSessionMaxIdleTimeoutSeconds) {
-    throw new ConvexError(
-      `idle_timeout_seconds must be <= ${RUN_CONFIG.computeSessionMaxIdleTimeoutSeconds}`,
-    );
-  }
-  return resolved;
-}
-
 function toComputeSessionState(row: Doc<"computeSessions">) {
   return {
     computeSessionId: String(row._id),
     status: row.status,
     providerMachineId: row.providerMachineId,
+    providerCreationTime: row.providerCreationTime,
+    computeStartedAt: row.computeStartedAt,
+    computeEndedAt: row.computeEndedAt,
     runtimeTokenHash: row.runtimeTokenHash,
     activeRunId: row.activeRunId ? String(row.activeRunId) : undefined,
   };
 }
 
-async function insertComputeSessionEvents(
+async function mirrorOneShotSessionBillingToRun(
   ctx: MutationCtx,
   computeSessionId: Id<"computeSessions">,
-  events: ComputeSessionEvent[] | undefined,
+  session: Doc<"computeSessions">,
+  settlement: HostedComputeSessionUsageSettlement | undefined,
 ) {
-  for (const event of events ?? []) {
-    await ctx.db.insert("computeSessionEvents", {
-      computeSessionId,
-      status: event.status,
-      message: event.message,
-      ...(event.metadata ? { metadata: event.metadata } : {}),
-    });
+  if (!settlement) {
+    return;
   }
+  const runs = await ctx.db
+    .query("runs")
+    .withIndex("by_compute_session", (q) => q.eq("computeSessionId", computeSessionId))
+    .collect();
+  if (runs.length !== 1 || runs[0].executionMode !== "ephemeral") {
+    return;
+  }
+  await ctx.db.patch("runs", runs[0]._id, {
+    computeHourlyRateCents: session.computeHourlyRateCents,
+    computeChargeCents: settlement.patch.computeChargeCents,
+    computeCollectedCents: settlement.patch.computeCollectedCents,
+    computeOutstandingCents: settlement.patch.computeOutstandingCents,
+    computeChargeStatus: settlement.patch.computeChargeStatus,
+    computeChargeError: settlement.patch.computeChargeError,
+  });
 }
 
 async function applyComputeSessionPlan(
@@ -134,25 +143,45 @@ async function applyComputeSessionPlan(
   computeSessionId: Id<"computeSessions">,
   plan: { patch?: ComputeSessionPatch; events?: ComputeSessionEvent[] },
 ) {
+  let settlement: HostedComputeSessionUsageSettlement | undefined;
+  let settlementSession: Doc<"computeSessions"> | undefined;
   if (plan.patch) {
     const { activeRunId, ...patch } = plan.patch;
     const nextPatch: Partial<Doc<"computeSessions">> = { ...patch };
     if ("activeRunId" in plan.patch) {
       nextPatch.activeRunId = activeRunId ? (activeRunId as Id<"runs">) : undefined;
     }
+    if (nextPatch.status && TERMINAL_COMPUTE_SESSION_STATUSES.has(nextPatch.status)) {
+      const current = await ctx.db.get("computeSessions", computeSessionId);
+      if (current) {
+        settlementSession = {
+          ...current,
+          ...nextPatch,
+        };
+        settlement = await settleHostedComputeSessionUsage(ctx, settlementSession);
+        Object.assign(nextPatch, settlement.patch);
+      }
+    }
     await ctx.db.patch("computeSessions", computeSessionId, nextPatch);
   }
-  await insertComputeSessionEvents(ctx, computeSessionId, plan.events);
+  await insertComputeSessionEvents(ctx, computeSessionId, plan.events, settlement?.eventMetadata);
+  if (settlementSession) {
+    await mirrorOneShotSessionBillingToRun(ctx, computeSessionId, settlementSession, settlement);
+  }
 }
 
-async function clearEnvironmentActiveComputeSession(
+async function scheduleImmediateOneShotTermination(
   ctx: MutationCtx,
   row: Doc<"computeSessions">,
 ) {
-  const env = await ctx.db.get(row.environmentId);
-  if (env?.activeComputeSessionId === row._id) {
-    await ctx.db.patch(row.environmentId, { activeComputeSessionId: undefined });
+  if (row.idleTimeoutSeconds !== 0) {
+    return;
   }
+  await ctx.scheduler.runAfter(0, internal.computeSessions.internalTerminateStaleEnvironmentSession, {
+    userId: row.userId,
+    environmentId: row.environmentId,
+    computeSessionId: row._id,
+  });
 }
 
 async function getAccessibleComputeSession(
@@ -165,58 +194,6 @@ async function getAccessibleComputeSession(
     throw new ConvexError("compute session not found");
   }
   return row;
-}
-
-async function createComputeSessionForUserId(
-  ctx: MutationCtx,
-  args: {
-    userId: string;
-    environmentId: Id<"environments">;
-    idleTimeoutSeconds?: number;
-    gpuType?: string;
-    gpuCount?: number;
-    volumeGb?: number;
-  },
-) {
-  const env = await getAccessibleEnvironment(ctx, args.userId, args.environmentId);
-  const pythonVersion = env.pythonVersion || PYTHON_CONFIG.defaultVersion;
-  const idleTimeoutSeconds = normalizeIdleTimeoutSeconds(args.idleTimeoutSeconds);
-  const imageName = resolveImageName(env.framework, env.version, pythonVersion);
-  const effectiveGpuType = args.gpuType ?? env.gpuType;
-  const effectiveGpuCount = args.gpuCount ?? env.gpuCount;
-  const effectiveVolumeGb = args.volumeGb ?? env.volumeGb;
-  const now = Date.now();
-  const plan = planComputeSessionCreation({
-    nowMs: now,
-    userId: args.userId,
-    environmentId: String(args.environmentId),
-    effectiveGpuType,
-    effectiveGpuCount,
-    effectiveVolumeGb,
-    framework: env.framework,
-    frameworkVersion: env.version,
-    pythonVersion,
-    imageName,
-    idleTimeoutSeconds,
-  });
-  const computeSessionId = await ctx.db.insert("computeSessions", {
-    ...plan.session,
-    environmentId: args.environmentId,
-  });
-  if (env.activeComputeSessionId && env.activeComputeSessionId !== computeSessionId) {
-    await ctx.scheduler.runAfter(0, internal.computeSessions.internalTerminateStaleEnvironmentSession, {
-      userId: args.userId,
-      environmentId: args.environmentId,
-      computeSessionId: env.activeComputeSessionId,
-    });
-  }
-  await ctx.db.patch(args.environmentId, { activeComputeSessionId: computeSessionId });
-  await insertComputeSessionEvents(ctx, computeSessionId, [plan.event]);
-  const row = await ctx.db.get("computeSessions", computeSessionId);
-  if (!row) {
-    throw new ConvexError("failed to create compute session");
-  }
-  return toComputeSessionResponse(row);
 }
 
 export const list = query({
@@ -356,6 +333,7 @@ export const internalMarkIdleIfActiveRunTerminal = internalMutation({
       args.computeSessionId,
       planComputeSessionIdle({ session: toComputeSessionState(row), nowMs: Date.now() }),
     );
+    await scheduleImmediateOneShotTermination(ctx, row);
     return null;
   },
 });
@@ -376,6 +354,7 @@ export const internalCreate = internalMutation({
     gpuType: v.optional(v.string()),
     gpuCount: v.optional(v.number()),
     volumeGb: v.optional(v.number()),
+    activateEnvironment: v.optional(v.boolean()),
   },
   returns: computeSessionResponseValidator,
   handler: async (ctx, args) => {
@@ -598,6 +577,7 @@ export const internalMarkIdleAfterRun = internalMutation({
       args.computeSessionId,
       planComputeSessionIdle({ session: toComputeSessionState(row), nowMs: Date.now() }),
     );
+    await scheduleImmediateOneShotTermination(ctx, row);
     return null;
   },
 });
@@ -753,19 +733,7 @@ export const internalRemoveUnprovisioned = internalMutation({
   args: { userId: v.string(), computeSessionId: v.id("computeSessions") },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const row = await ctx.db.get("computeSessions", args.computeSessionId);
-    if (!row || row.userId !== args.userId || row.providerMachineId) {
-      return null;
-    }
-    await clearEnvironmentActiveComputeSession(ctx, row);
-    const events = await ctx.db
-      .query("computeSessionEvents")
-      .withIndex("by_compute_session", (q) => q.eq("computeSessionId", args.computeSessionId))
-      .collect();
-    for (const event of events) {
-      await ctx.db.delete(event._id);
-    }
-    await ctx.db.delete(args.computeSessionId);
+    await removeUnprovisionedComputeSessionForUserId(ctx, args.userId, args.computeSessionId);
     return null;
   },
 });
