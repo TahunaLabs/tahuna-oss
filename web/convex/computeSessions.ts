@@ -782,6 +782,7 @@ export const internalTerminateStaleEnvironmentSession = internalAction({
     userId: v.string(),
     environmentId: v.id("environments"),
     computeSessionId: v.id("computeSessions"),
+    serveId: v.optional(v.id("serves")),
     attempt: v.optional(v.number()),
     reason: v.optional(v.string()),
   },
@@ -812,6 +813,13 @@ export const internalTerminateStaleEnvironmentSession = internalAction({
       await ctx.runMutation(internal.computeSessions.internalMarkTerminated, {
         computeSessionId: args.computeSessionId,
       });
+      if (args.serveId) {
+        await ctx.runMutation(internal.serves.markStoppedAfterComputeSessionTermination, {
+          serveId: args.serveId,
+          computeSessionId: args.computeSessionId,
+          force: true,
+        });
+      }
       return null;
     }
 
@@ -839,6 +847,13 @@ export const internalTerminateStaleEnvironmentSession = internalAction({
         await ctx.runMutation(internal.computeSessions.internalMarkTerminated, {
           computeSessionId: args.computeSessionId,
         });
+        if (args.serveId) {
+          await ctx.runMutation(internal.serves.markStoppedAfterComputeSessionTermination, {
+            serveId: args.serveId,
+            computeSessionId: args.computeSessionId,
+            force: true,
+          });
+        }
       },
       onRetry: async ({ nextAttempt, error }) => {
         if (nextAttempt < RUN_CONFIG.terminationRetryMaxAttempts) {
@@ -849,6 +864,7 @@ export const internalTerminateStaleEnvironmentSession = internalAction({
               userId: args.userId,
               environmentId: args.environmentId,
               computeSessionId: args.computeSessionId,
+              serveId: args.serveId,
               attempt: nextAttempt,
               reason: args.reason,
             },

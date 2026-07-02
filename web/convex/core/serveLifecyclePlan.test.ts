@@ -5,6 +5,7 @@ import {
   canTransitionServeStatus,
   defaultServeStatusMessage,
   planServeComputeSessionBillingFailure,
+  planServeComputeSessionStop,
   planServeRuntimeStatusIngestion,
   planServeStop,
   shouldEnforceServeStartupTimeout,
@@ -78,6 +79,39 @@ describe("serve lifecycle planning", () => {
         idempotencyKey: "serve:serve_1:terminate_serve_machine:machine_1:true:none",
       },
     ]);
+  });
+
+  it("stops compute-session-backed serves without serve machine termination jobs", () => {
+    const plan = planServeComputeSessionStop({
+      serve: {
+        serveId: "serve_1",
+        status: SERVE_LIFECYCLE_STATUS.SERVING,
+        providerMachineId: "machine_1",
+        runtimeTokenHash: "token",
+      },
+      computeSessionId: "session_1",
+      force: false,
+    });
+
+    expect(plan).toEqual({
+      resultStatus: SERVE_LIFECYCLE_STATUS.STOPPING,
+      patch: {
+        status: SERVE_LIFECYCLE_STATUS.STOPPING,
+        runtimeTokenHash: "token",
+      },
+      events: [
+        {
+          status: SERVE_LIFECYCLE_STATUS.STOPPING,
+          message: "stop requested",
+          metadata: {
+            source: "control-plane",
+            forced: false,
+            compute_session_id: "session_1",
+          },
+        },
+      ],
+      jobs: [],
+    });
   });
 
   it("enforces startup timeout only for matching provisioning machines", () => {

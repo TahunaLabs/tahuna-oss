@@ -157,6 +157,9 @@ type CreateServePreparation = {
 
 type ServeRemovalPayload = {
   serve_id: string
+  user_id: string
+  environment_id: string
+  compute_session_id: string | null
   object_prefix: string
   manifest_key: string
   manifest_hash: string
@@ -319,6 +322,9 @@ const serveResponseValidator = v.object({
 
 const serveRemovalPayloadValidator = v.object({
   serve_id: v.string(),
+  user_id: v.string(),
+  environment_id: v.string(),
+  compute_session_id: v.union(v.string(), v.null()),
   object_prefix: v.string(),
   manifest_key: v.string(),
   manifest_hash: v.string(),
@@ -846,6 +852,9 @@ export const internalGetRemovalPayload = internalQuery({
     const row = await getAccessibleServe(ctx, args.userId, args.serveId)
     return {
       serve_id: String(row._id),
+      user_id: row.userId,
+      environment_id: String(row.environmentId),
+      compute_session_id: row.computeSessionId ? String(row.computeSessionId) : null,
       object_prefix: row.modelSnapshot.objectPrefix,
       manifest_key: row.modelSnapshot.manifestKey,
       manifest_hash: row.modelSnapshot.manifestHash,
@@ -1124,6 +1133,14 @@ export const internalRemove = internalAction({
   handler: async (ctx, args): Promise<{ deleted: boolean; serve_id: string }> => {
     const payload: ServeRemovalPayload = await ctx.runQuery(internal.serves.internalGetRemovalPayload, args)
     await deleteServeSnapshotObjects(ctx, payload)
+    if (payload.compute_session_id) {
+      await ctx.runAction(internal.computeSessions.internalTerminateStaleEnvironmentSession, {
+        userId: payload.user_id,
+        environmentId: payload.environment_id as Id<"environments">,
+        computeSessionId: payload.compute_session_id as Id<"computeSessions">,
+        reason: "serve_delete",
+      })
+    }
     await ctx.runMutation(internal.serves.internalDeleteRemovedServeRecords, {
       serveId: args.serveId,
     })
@@ -1672,6 +1689,26 @@ export const markStoppedAfterTermination = internalMutation({
       return null
     }
     await applyServeLifecyclePlan(ctx, args.serveId, row, planServeStoppedAfterTermination({
+      serve: toServeLifecycleState(row),
+      force: args.force === true,
+    }))
+    return null
+  },
+})
+
+export const markStoppedAfterComputeSessionTermination = internalMutation({
+  args: {
+    serveId: v.id("serves"),
+    computeSessionId: v.id("computeSessions"),
+    force: v.optional(v.boolean()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const row = await ctx.db.get("serves", args.serveId)
+    if (!row || row.computeSessionId !== args.computeSessionId) {
+      return null
+    }
+    await applyBareServeLifecyclePlan(ctx, args.serveId, row, planServeStoppedAfterTermination({
       serve: toServeLifecycleState(row),
       force: args.force === true,
     }))

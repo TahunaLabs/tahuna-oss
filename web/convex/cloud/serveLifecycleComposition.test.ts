@@ -79,4 +79,29 @@ describe("hosted serve lifecycle composition", () => {
       serveId: "serve_1",
     });
   });
+
+  it("schedules backing compute session termination for stopped serves", async () => {
+    const ctx = {
+      scheduler: {
+        runAfter: vi.fn(),
+      },
+    };
+
+    await hostedServeLifecycleComposition.stopComputeSession?.(ctx as never, {
+      userId: "user_1",
+      environmentId: "env_1" as never,
+      serveId: "serve_1" as never,
+      computeSessionId: "session_1" as never,
+      force: false,
+    });
+
+    expect(ctx.scheduler.runAfter.mock.calls[0]?.[0]).toBe(0);
+    expect(ctx.scheduler.runAfter.mock.calls[0]?.[2]).toEqual({
+      userId: "user_1",
+      environmentId: "env_1",
+      computeSessionId: "session_1",
+      serveId: "serve_1",
+      reason: "user_stop",
+    });
+  });
 });

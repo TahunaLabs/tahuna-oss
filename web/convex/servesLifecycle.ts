@@ -8,6 +8,7 @@ import {
 import {
   mergeServeEventMetadata,
   planForcedServeMachineTermination,
+  planServeComputeSessionStop,
   planServeProvisioningJobs,
   planServeStop,
   type ServeLifecycleEvent,
@@ -83,6 +84,16 @@ export type ServeLifecycleComposition = {
     args: {
       computeSessionId: Id<"computeSessions">;
       serveId: Id<"serves">;
+    },
+  ) => Promise<void>;
+  stopComputeSession?: (
+    ctx: MutationCtx,
+    args: {
+      userId: string;
+      environmentId: Id<"environments">;
+      serveId: Id<"serves">;
+      computeSessionId: Id<"computeSessions">;
+      force: boolean;
     },
   ) => Promise<void>;
   settleTerminalServeUsage?: (
@@ -256,6 +267,22 @@ export async function stopServeForUserId(
   composition?: ServeLifecycleComposition,
 ) {
   const row = await getAccessibleServe(ctx, userId, serveId)
+  if (row.computeSessionId && composition?.stopComputeSession) {
+    const plan = planServeComputeSessionStop({
+      serve: toServeLifecycleState(row),
+      computeSessionId: String(row.computeSessionId),
+      force,
+    })
+    await applyServeLifecyclePlan(ctx, serveId, row, plan)
+    await composition.stopComputeSession(ctx, {
+      userId,
+      environmentId: row.environmentId,
+      serveId,
+      computeSessionId: row.computeSessionId,
+      force,
+    })
+    return { serve_id: String(serveId), stop_requested: true, forced: force, status: plan.resultStatus }
+  }
   const plan = planServeStop({
     serve: toServeLifecycleState(row),
     force,

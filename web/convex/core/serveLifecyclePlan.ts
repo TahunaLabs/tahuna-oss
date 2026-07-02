@@ -212,6 +212,34 @@ export function planServeStop(args: {
   };
 }
 
+export function planServeComputeSessionStop(args: {
+  serve: ServeLifecycleServeState;
+  computeSessionId: string;
+  force: boolean;
+}): ServeLifecyclePlan & { resultStatus: string } {
+  if (args.serve.status === SERVE_LIFECYCLE_STATUS.STOPPING) {
+    return { resultStatus: SERVE_LIFECYCLE_STATUS.STOPPING };
+  }
+  if (TERMINAL_SERVE_LIFECYCLE_STATUSES.has(args.serve.status)) {
+    return { resultStatus: args.serve.status };
+  }
+  return {
+    resultStatus: SERVE_LIFECYCLE_STATUS.STOPPING,
+    patch: {
+      status: SERVE_LIFECYCLE_STATUS.STOPPING,
+      runtimeTokenHash: args.serve.runtimeTokenHash,
+    },
+    events: [
+      serveEvent(SERVE_LIFECYCLE_STATUS.STOPPING, args.force ? "force stop requested" : "stop requested", {
+        source: "control-plane",
+        forced: args.force,
+        compute_session_id: args.computeSessionId,
+      }),
+    ],
+    jobs: [],
+  };
+}
+
 export function planServeMachineProvisioned(args: {
   serve: ServeLifecycleServeState;
   providerMachineId: string;

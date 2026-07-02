@@ -11,7 +11,10 @@ const jobQueueMocks = vi.hoisted(() => ({
 vi.mock("@convex/computeProvider", () => computeProviderMocks);
 vi.mock("@convex/convexJobQueue", () => jobQueueMocks);
 
-import { createServeForUserId } from "@convex/servesLifecycle";
+import {
+  createServeForUserId,
+  stopServeForUserId,
+} from "@convex/servesLifecycle";
 
 function createServeCtx() {
   const inserts: Array<{ table: string; document: Record<string, unknown> }> = [];
@@ -30,6 +33,28 @@ function createServeCtx() {
         const serve = inserts.find((insert) => insert.table === "serves")?.document;
         return serve ? { _id: "serve_1", _creationTime: 1_000, ...serve } : null;
       }),
+    },
+  };
+}
+
+function stopServeCtx() {
+  return {
+    db: {
+      get: vi.fn(async (table: string, id: string) => {
+        if (table !== "serves" || id !== "serve_1") return null;
+        return {
+          _id: "serve_1",
+          _creationTime: 1_000,
+          userId: "user_1",
+          environmentId: "env_1",
+          computeSessionId: "session_1",
+          status: "serving",
+          providerMachineId: "machine_1",
+          runtimeTokenHash: "token",
+        };
+      }),
+      patch: vi.fn(),
+      insert: vi.fn(),
     },
   };
 }
@@ -105,5 +130,34 @@ describe("serve lifecycle helpers", () => {
       computeSessionId: "session_1",
       serveId: "serve_1",
     });
+  });
+
+  it("stops compute-session-backed serves through the backing session", async () => {
+    const ctx = stopServeCtx();
+    const stopComputeSession = vi.fn();
+
+    await expect(
+      stopServeForUserId(ctx as never, "user_1", "serve_1" as never, false, {
+        stopComputeSession,
+      }),
+    ).resolves.toEqual({
+      serve_id: "serve_1",
+      stop_requested: true,
+      forced: false,
+      status: "stopping",
+    });
+
+    expect(ctx.db.patch).toHaveBeenCalledWith("serves", "serve_1", {
+      status: "stopping",
+      runtimeTokenHash: "token",
+    });
+    expect(stopComputeSession).toHaveBeenCalledWith(ctx, {
+      userId: "user_1",
+      environmentId: "env_1",
+      serveId: "serve_1",
+      computeSessionId: "session_1",
+      force: false,
+    });
+    expect(jobQueueMocks.enqueueServeLifecycleJobs).toHaveBeenCalledWith(ctx, []);
   });
 });

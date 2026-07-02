@@ -1,4 +1,5 @@
 import type { Doc, Id } from "@convex/_generated/dataModel";
+import { internal } from "@convex/_generated/api";
 import type { MutationCtx } from "@convex/_generated/server";
 import {
   initialHostedServeBillingFields,
@@ -48,6 +49,15 @@ export const hostedServeLifecycleComposition: ServeLifecycleComposition = {
   async linkComputeSessionToServe(ctx, args) {
     await ctx.db.patch("computeSessions", args.computeSessionId, {
       serveId: args.serveId,
+    });
+  },
+  async stopComputeSession(ctx, args) {
+    await ctx.scheduler.runAfter(0, internal.computeSessions.internalTerminateStaleEnvironmentSession, {
+      userId: args.userId,
+      environmentId: args.environmentId,
+      computeSessionId: args.computeSessionId,
+      serveId: args.serveId,
+      reason: "user_stop",
     });
   },
   async settleTerminalServeUsage(ctx, row) {
