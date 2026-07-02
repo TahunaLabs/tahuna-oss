@@ -79,11 +79,12 @@ export async function createComputeSessionForUserId(
     gpuType?: string;
     gpuCount?: number;
     volumeGb?: number;
+    pythonVersion?: string;
     activateEnvironment?: boolean;
   },
 ) {
   const env = await getAccessibleEnvironment(ctx, args.userId, args.environmentId);
-  const pythonVersion = env.pythonVersion || PYTHON_CONFIG.defaultVersion;
+  const pythonVersion = args.pythonVersion || env.pythonVersion || PYTHON_CONFIG.defaultVersion;
   const idleTimeoutSeconds = normalizeIdleTimeoutSeconds(args.idleTimeoutSeconds);
   const imageName = resolveImageName(env.framework, env.version, pythonVersion);
   const effectiveGpuType = args.gpuType ?? env.gpuType;

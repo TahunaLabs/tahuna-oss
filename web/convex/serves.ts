@@ -25,6 +25,10 @@ import {
 import { buildProvisionedRuntimeEnv, resolveEnvironmentEnvVarsForEnvironmentId } from "@convex/envVars"
 import { RUN_STATUS } from "@convex/runsConstants"
 import { storageKeys, storagePrefixUpperBound } from "@convex/core/storage"
+import {
+  buildServeProvisioningSystemEnv,
+  serveProviderMachineName,
+} from "@convex/serveProvisioning"
 import { objectStore } from "@convex/objectStore"
 import { resolveConfiguredDependencyGroup } from "@/lib/dependency-selection"
 import {
@@ -158,6 +162,7 @@ type ServeRemovalPayload = {
 
 type ServeProvisioningPayload = {
   serve_id: string
+  compute_session_id: string
   environment_id: string
   environment_data_id: string
   user_id: string
@@ -460,6 +465,7 @@ const createServePreparationValidator = v.object({
 
 const serveProvisioningPayloadValidator = v.object({
   serve_id: v.string(),
+  compute_session_id: v.string(),
   environment_id: v.string(),
   environment_data_id: v.string(),
   user_id: v.string(),
@@ -1156,8 +1162,12 @@ export const internalGetProvisioningPayload = internalQuery({
     if (dependencyGroup === null) {
       throw new ConvexError("serve dependency selection is missing")
     }
+    if (!row.computeSessionId) {
+      throw new ConvexError("serve compute session is required")
+    }
     return {
       serve_id: String(row._id),
+      compute_session_id: String(row.computeSessionId),
       environment_id: String(row.environmentId),
       environment_data_id: environment.dataId,
       user_id: row.userId,
@@ -1186,18 +1196,21 @@ export const internalGetServeProvisionSpec = internalQuery({
     if (!row) {
       throw new ConvexError("serve not found")
     }
-    const environment = await ctx.db.get(row.environmentId)
-    if (!environment) {
-      throw new ConvexError("environment not found")
+    if (!row.computeSessionId) {
+      throw new ConvexError("serve compute session is required")
+    }
+    const session = await ctx.db.get(row.computeSessionId)
+    if (!session) {
+      throw new ConvexError("serve compute session not found")
     }
     return {
       serve_id: String(row._id),
-      effective_gpu_type: row.gpuType,
-      effective_gpu_count: row.gpuCount,
-      effective_volume_gb: row.volumeGb,
-      framework: environment.framework,
-      version: environment.version,
-      python_version: row.pythonVersion,
+      effective_gpu_type: session.effectiveGpuType,
+      effective_gpu_count: session.effectiveGpuCount,
+      effective_volume_gb: session.effectiveVolumeGb,
+      framework: session.framework,
+      version: session.frameworkVersion,
+      python_version: session.pythonVersion,
       port: row.port,
       startup_timeout_seconds: row.startupTimeoutSeconds,
     }
@@ -1239,10 +1252,10 @@ export const setRuntimeTokenHash = internalMutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const row = await ctx.db.get("serves", args.serveId)
-    if (!row || row.status === SERVE_STATUS.STOPPING || TERMINAL_SERVE_STATUSES.has(row.status)) {
+    if (!row || !row.computeSessionId || row.status === SERVE_STATUS.STOPPING || TERMINAL_SERVE_STATUSES.has(row.status)) {
       return null
     }
-    await ctx.db.patch("serves", args.serveId, { runtimeTokenHash: args.runtimeTokenHash })
+    await ctx.db.patch("computeSessions", row.computeSessionId, { runtimeTokenHash: args.runtimeTokenHash })
     return null
   },
 })
@@ -1252,7 +1265,11 @@ export const internalValidateRuntimeToken = internalQuery({
   returns: v.boolean(),
   handler: async (ctx, args) => {
     const row = await ctx.db.get("serves", args.serveId)
-    return !!row?.runtimeTokenHash && row.runtimeTokenHash === args.tokenHash
+    if (!row?.computeSessionId) {
+      return false
+    }
+    const session = await ctx.db.get(row.computeSessionId)
+    return !!session?.runtimeTokenHash && session.runtimeTokenHash === args.tokenHash
   },
 })
 
@@ -1427,6 +1444,7 @@ export const provisionServe = internalAction({
     )
 
     let provisionedProviderMachineId = ""
+    let runtimeTokenHash = ""
     try {
       if (!provisioningPayload.code_manifest_hash) {
         throw new Error("missing pinned code manifest hash on serve")
@@ -1466,14 +1484,15 @@ export const provisionServe = internalAction({
         ctx,
         shouldAbort: async () =>
           await ctx.runQuery(internal.serves.internalShouldAbortProvisioning, { serveId: args.serveId }),
-        setRuntimeTokenHash: async (runtimeTokenHash) => {
+        setRuntimeTokenHash: async (nextRuntimeTokenHash) => {
+          runtimeTokenHash = nextRuntimeTokenHash
           await ctx.runMutation(internal.serves.setRuntimeTokenHash, {
             serveId: args.serveId,
-            runtimeTokenHash,
+            runtimeTokenHash: nextRuntimeTokenHash,
           })
         },
         createMachine: {
-          name: `tahuna-${provisioningPayload.serve_id}`,
+          name: serveProviderMachineName({ computeSessionId: provisioningPayload.compute_session_id }),
           imageName: resolveImageName(serveSpec.framework, serveSpec.version, serveSpec.python_version),
           gpuType: serveSpec.effective_gpu_type,
           gpuCount: serveSpec.effective_gpu_count,
@@ -1487,23 +1506,32 @@ export const provisionServe = internalAction({
               WANDB_BASE_URL: resolveWandbBaseURL(runtimeApiBase),
             },
             environmentEnv,
-            systemEnv: {
-              TAHUNA_SERVE_ID: provisioningPayload.serve_id,
-              TAHUNA_ENVIRONMENT_ID: provisioningPayload.environment_id,
-              TAHUNA_CONTRACT_VERSION: provisioningPayload.contract_version,
-              TAHUNA_OUTPUT_DIR: provisioningPayload.output_dir,
-              TAHUNA_API_BASE: runtimeApiBase,
-              TAHUNA_RUNTIME_TOKEN: runtimeToken,
-              TAHUNA_WORKSPACE_ROOT: "/workspace",
-              TAHUNA_RUNTIME_REQUEST_TIMEOUT_SECONDS: runtimeRequestTimeoutSeconds,
-              TAHUNA_CANCELLATION_GRACE_SECONDS: String(provisioningPayload.graceful_shutdown_seconds),
-            },
+            systemEnv: buildServeProvisioningSystemEnv({
+              serveId: provisioningPayload.serve_id,
+              computeSessionId: provisioningPayload.compute_session_id,
+              environmentId: provisioningPayload.environment_id,
+              contractVersion: provisioningPayload.contract_version,
+              outputDir: provisioningPayload.output_dir,
+              runtimeApiBase,
+              runtimeToken,
+              runtimeRequestTimeoutSeconds,
+              gracefulShutdownSeconds: provisioningPayload.graceful_shutdown_seconds,
+            }),
           }),
       })
       if (!provisionResult) {
         return null
       }
       provisionedProviderMachineId = provisionResult.providerMachineId
+      if (!runtimeTokenHash) {
+        throw new Error("serve compute session runtime token hash is required")
+      }
+      await ctx.runMutation(internal.computeSessions.internalMarkMachineProvisioned, {
+        computeSessionId: provisioningPayload.compute_session_id as Id<"computeSessions">,
+        providerMachineId: provisionResult.providerMachineId,
+        providerCreationTime: provisionResult.providerCreationTime,
+        runtimeTokenHash,
+      })
       await ctx.runMutation(internal.serves.markMachineProvisioned, {
         serveId: args.serveId,
         providerMachineId: provisionResult.providerMachineId,

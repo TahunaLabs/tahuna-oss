@@ -5,6 +5,7 @@ import {
   settleHostedServeUsage,
   validateHostedServeCreate,
 } from "@convex/cloud/serveBilling";
+import { createComputeSessionForUserId } from "@convex/computeSessionsLifecycle";
 import {
   applyServeLifecyclePlan,
   createServeForUserId,
@@ -25,6 +26,29 @@ export const hostedServeLifecycleComposition: ServeLifecycleComposition = {
         hourly_rate_cents: fields.computeHourlyRateCents,
       },
     };
+  },
+  async createComputeSession(ctx, args) {
+    const session = await createComputeSessionForUserId(ctx, {
+      userId: args.userId,
+      environmentId: args.environmentId,
+      idleTimeoutSeconds: 0,
+      gpuType: args.serveConfig.gpuType,
+      gpuCount: args.serveConfig.gpuCount,
+      volumeGb: args.serveConfig.volumeGb,
+      pythonVersion: args.serveConfig.pythonVersion,
+      activateEnvironment: false,
+    });
+    return {
+      computeSessionId: session.compute_session_id as Id<"computeSessions">,
+      eventMetadata: {
+        compute_session_id: session.compute_session_id,
+      },
+    };
+  },
+  async linkComputeSessionToServe(ctx, args) {
+    await ctx.db.patch("computeSessions", args.computeSessionId, {
+      serveId: args.serveId,
+    });
   },
   async settleTerminalServeUsage(ctx, row) {
     return await settleHostedServeUsage(ctx, row);

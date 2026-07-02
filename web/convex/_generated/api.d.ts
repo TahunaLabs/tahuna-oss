@@ -72,6 +72,7 @@ import type * as runsRead from "../runsRead.js";
 import type * as runtimeBootstrap from "../runtimeBootstrap.js";
 import type * as runtimeProvisioning from "../runtimeProvisioning.js";
 import type * as secretTokens from "../secretTokens.js";
+import type * as serveProvisioning from "../serveProvisioning.js";
 import type * as serves from "../serves.js";
 import type * as servesAccess from "../servesAccess.js";
 import type * as servesConstants from "../servesConstants.js";
@@ -155,6 +156,7 @@ declare const fullApi: ApiFromModules<{
   runtimeBootstrap: typeof runtimeBootstrap;
   runtimeProvisioning: typeof runtimeProvisioning;
   secretTokens: typeof secretTokens;
+  serveProvisioning: typeof serveProvisioning;
   serves: typeof serves;
   servesAccess: typeof servesAccess;
   servesConstants: typeof servesConstants;

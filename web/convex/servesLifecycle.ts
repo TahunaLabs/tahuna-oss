@@ -31,6 +31,26 @@ export type ServeCreationComposition = {
   eventMetadata?: Record<string, unknown>
 }
 
+type ServeCreationConfig = {
+  command: string[];
+  outputDir: string;
+  codeManifestHash: string;
+  dataManifestHash: string | null;
+  dependencyGroup: string;
+  pythonVersion: string;
+  gpuType: string;
+  gpuCount: number;
+  volumeGb: number;
+  port: number;
+  healthPath: string;
+  defaultModelPath: string;
+  startupTimeoutSeconds: number;
+  healthIntervalSeconds: number;
+  healthTimeoutSeconds: number;
+  healthFailureThreshold: number;
+  gracefulShutdownSeconds: number;
+};
+
 export type ServeLifecycleComposition = {
   validateCreateServe?: (
     ctx: MutationCtx,
@@ -47,6 +67,24 @@ export type ServeLifecycleComposition = {
     gpuCount: number;
     volumeGb: number;
   }) => ServeCreationComposition;
+  createComputeSession?: (
+    ctx: MutationCtx,
+    args: {
+      userId: string;
+      environmentId: Id<"environments">;
+      serveConfig: ServeCreationConfig;
+    },
+  ) => Promise<{
+    computeSessionId: Id<"computeSessions">;
+    eventMetadata?: Record<string, unknown>;
+  }>;
+  linkComputeSessionToServe?: (
+    ctx: MutationCtx,
+    args: {
+      computeSessionId: Id<"computeSessions">;
+      serveId: Id<"serves">;
+    },
+  ) => Promise<void>;
   settleTerminalServeUsage?: (
     ctx: MutationCtx,
     row: Doc<"serves">,
@@ -112,25 +150,7 @@ export async function createServeForUserId(
   args: {
     userId: string;
     environmentId: Id<"environments">;
-    serveConfig: {
-      command: string[];
-      outputDir: string;
-      codeManifestHash: string;
-      dataManifestHash: string | null;
-      dependencyGroup: string;
-      pythonVersion: string;
-      gpuType: string;
-      gpuCount: number;
-      volumeGb: number;
-      port: number;
-      healthPath: string;
-      defaultModelPath: string;
-      startupTimeoutSeconds: number;
-      healthIntervalSeconds: number;
-      healthTimeoutSeconds: number;
-      healthFailureThreshold: number;
-      gracefulShutdownSeconds: number;
-    };
+    serveConfig: ServeCreationConfig;
     modelSnapshot: {
       sourceType: "run" | "storage";
       sourceRunId?: Id<"runs">;
@@ -159,12 +179,18 @@ export async function createServeForUserId(
     gpuCount: args.serveConfig.gpuCount,
     volumeGb: args.serveConfig.volumeGb,
   })
+  const computeSession = await composition?.createComputeSession?.(ctx, {
+    userId: args.userId,
+    environmentId: args.environmentId,
+    serveConfig: args.serveConfig,
+  })
 
   const now = Date.now()
   const servePrefix = storageKeys.serveExecutionPrefix(String(args.environmentId), now)
   const serveId = await ctx.db.insert("serves", {
     userId: args.userId,
     environmentId: args.environmentId,
+    ...(computeSession ? { computeSessionId: computeSession.computeSessionId } : {}),
     ...args.serveConfig,
     dataManifestHash: args.serveConfig.dataManifestHash || undefined,
     logs: `${servePrefix}/logs`,
@@ -198,9 +224,17 @@ export async function createServeForUserId(
       volume_gb: args.serveConfig.volumeGb,
       port: args.serveConfig.port,
       health_path: args.serveConfig.healthPath,
+      ...(computeSession?.eventMetadata || {}),
       ...(creationComposition?.eventMetadata || {}),
     },
   })
+
+  if (computeSession) {
+    await composition?.linkComputeSessionToServe?.(ctx, {
+      computeSessionId: computeSession.computeSessionId,
+      serveId,
+    })
+  }
 
   await enqueueServeLifecycleJobs(ctx, planServeProvisioningJobs({
     serveId: String(serveId),
