@@ -7,7 +7,7 @@ output_dir = "outputs"
 framework = "pt"
 version = "2.10.0-cu128"
 python_version = "3.11"
-gpu_type = "L4"
+gpu_type = "RTX A6000"
 gpu_count = 1
 volume_gb = 10
 
@@ -15,12 +15,13 @@ volume_gb = 10
 command = ["uv", "run", "--active", "--no-sync", "python", "-u", "train.py"]
 dependency_group = "train"
 output_model_path = "outputs/model"
+keep_warm_after_minutes = 3
 
 [serve]
 command = ["uv", "run", "--active", "--no-sync", "python", "-u", "inference.py"]
 dependency_group = "serve"
 python_version = "3.11"
-gpu_type = "L4"
+gpu_type = "RTX 3090"
 gpu_count = 1
 volume_gb = 10
 port = 8000
