@@ -9,6 +9,9 @@ export const USAGE_EVENT_TYPE = {
   RUN_COMPUTE_SETTLEMENT_DEBIT: "run_compute_settlement_debit",
   RUN_COMPUTE_SETTLEMENT_REFUND: "run_compute_settlement_refund",
   RUN_COMPUTE_SETTLEMENT_OWED: "run_compute_settlement_owed",
+  TRAINING_COMPUTE_SETTLEMENT_DEBIT: "training_compute_settlement_debit",
+  TRAINING_COMPUTE_SETTLEMENT_REFUND: "training_compute_settlement_refund",
+  TRAINING_COMPUTE_SETTLEMENT_OWED: "training_compute_settlement_owed",
   STRIPE_TOP_UP: "stripe_top_up",
 } as const;
 

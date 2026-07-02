@@ -43,7 +43,7 @@ export type ComputeSettlementResult = {
 
 export type ComputeBillingSubject = {
   userId: string;
-  referenceType: "run" | "serve";
+  referenceType: "run" | "serve" | "compute_session";
   referenceId: string;
   gpuType?: string;
   gpuCount?: number;
@@ -66,6 +66,25 @@ export function runLiveDebitIdempotencyKey(runId: string) {
 
 export function serveLiveDebitIdempotencyKey(serveId: string) {
   return computeLiveDebitIdempotencyKey("serve", serveId);
+}
+
+export function computeSessionLiveDebitIdempotencyKey(computeSessionId: string) {
+  return computeLiveDebitIdempotencyKey("compute_session", computeSessionId);
+}
+
+function computeSettlementEventTypes(referenceType: ComputeBillingSubject["referenceType"]) {
+  if (referenceType === "compute_session") {
+    return {
+      debit: USAGE_EVENT_TYPE.TRAINING_COMPUTE_SETTLEMENT_DEBIT,
+      refund: USAGE_EVENT_TYPE.TRAINING_COMPUTE_SETTLEMENT_REFUND,
+      owed: USAGE_EVENT_TYPE.TRAINING_COMPUTE_SETTLEMENT_OWED,
+    };
+  }
+  return {
+    debit: USAGE_EVENT_TYPE.RUN_COMPUTE_SETTLEMENT_DEBIT,
+    refund: USAGE_EVENT_TYPE.RUN_COMPUTE_SETTLEMENT_REFUND,
+    owed: USAGE_EVENT_TYPE.RUN_COMPUTE_SETTLEMENT_OWED,
+  };
 }
 
 export function toMinuteBucketUnixMs(value: number) {
@@ -134,12 +153,13 @@ export async function settleComputeCharge(
   });
   const collectedCents = Math.max(0, Math.floor(subject.computeCollectedCents || 0));
   const chargeDeltaCents = chargeCents - collectedCents;
+  const eventTypes = computeSettlementEventTypes(subject.referenceType);
 
   if (chargeDeltaCents > 0) {
     const debited = await upsertLedgerDebitTotal(ctx, {
       userId: subject.userId,
       targetDebitCents: chargeCents,
-      eventType: USAGE_EVENT_TYPE.RUN_COMPUTE_SETTLEMENT_DEBIT,
+      eventType: eventTypes.debit,
       idempotencyKey: computeLiveDebitIdempotencyKey(subject.referenceType, subject.referenceId),
       referenceType: subject.referenceType,
       referenceId: subject.referenceId,
@@ -158,7 +178,7 @@ export async function settleComputeCharge(
     if (outstandingCents > 0) {
       await recordLedgerEvent(ctx, {
         userId: subject.userId,
-        eventType: USAGE_EVENT_TYPE.RUN_COMPUTE_SETTLEMENT_OWED,
+        eventType: eventTypes.owed,
         idempotencyKey: computeSettlementIdempotencyKey(subject.referenceType, subject.referenceId, "owed"),
         referenceType: subject.referenceType,
         referenceId: subject.referenceId,
@@ -202,7 +222,7 @@ export async function settleComputeCharge(
     const refunded = await grantUserCredits(ctx, {
       userId: subject.userId,
       amountCents: refundCents,
-      eventType: USAGE_EVENT_TYPE.RUN_COMPUTE_SETTLEMENT_REFUND,
+      eventType: eventTypes.refund,
       idempotencyKey: computeSettlementIdempotencyKey(subject.referenceType, subject.referenceId, "refund"),
       referenceType: subject.referenceType,
       referenceId: subject.referenceId,
@@ -273,5 +293,22 @@ export async function settleServeComputeCharge(
     volumeGb: serve.volumeGb,
     computeHourlyRateCents: serve.computeHourlyRateCents,
     computeCollectedCents: serve.computeCollectedCents,
+  }, timing);
+}
+
+export async function settleComputeSessionComputeCharge(
+  ctx: MutationCtx,
+  session: Doc<"computeSessions">,
+  timing: { durationMs: number },
+): Promise<ComputeSettlementResult> {
+  return settleComputeCharge(ctx, {
+    userId: session.userId,
+    referenceType: "compute_session",
+    referenceId: String(session._id),
+    gpuType: session.effectiveGpuType,
+    gpuCount: session.effectiveGpuCount,
+    volumeGb: session.effectiveVolumeGb,
+    computeHourlyRateCents: session.computeHourlyRateCents,
+    computeCollectedCents: session.computeCollectedCents,
   }, timing);
 }

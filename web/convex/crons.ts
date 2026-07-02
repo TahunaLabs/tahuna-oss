@@ -4,9 +4,9 @@ import { internal } from "@convex/_generated/api";
 const crons = cronJobs();
 
 crons.interval(
-  "bill running compute each minute",
+  "bill training compute sessions each minute",
   { minutes: 1 },
-  internal.cloud.billing.billRunningComputeMinute,
+  internal.cloud.billing.billTrainingComputeSessionsMinute,
   {},
 );
 

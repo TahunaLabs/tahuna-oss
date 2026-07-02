@@ -109,6 +109,16 @@ export default defineSchema({
     idleTimeoutSeconds: v.number(),
     lastHeartbeatAt: v.optional(v.number()),
     lastIdleAt: v.optional(v.number()),
+    computeStartedAt: v.optional(v.number()),
+    computeEndedAt: v.optional(v.number()),
+    computeHourlyRateCents: v.optional(v.number()),
+    computeChargeCents: v.optional(v.number()),
+    computeCollectedCents: v.optional(v.number()),
+    computeOutstandingCents: v.optional(v.number()),
+    computeChargeStatus: v.optional(
+      v.union(v.literal("pending"), v.literal("charged"), v.literal("owed")),
+    ),
+    computeChargeError: v.optional(v.string()),
     createdAt: v.number(),
     terminatedAt: v.optional(v.number()),
   })

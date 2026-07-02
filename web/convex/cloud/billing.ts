@@ -5,6 +5,7 @@ import type { ActionCtx, MutationCtx } from "@convex/_generated/server";
 import { action, httpAction, internalMutation, mutation, query } from "@convex/_generated/server";
 import Stripe from "stripe";
 import { CLOUD_BILLING_CONFIG } from "@/cloud/config";
+import { estimateRunLaunchCents, resolveRunComputePricing } from "@/cloud/billing/run-compute-pricing";
 import { authComponent, requireUser } from "@convex/auth";
 import {
   ensureUserLedger,
@@ -17,12 +18,13 @@ import {
   computeLiveDebitIdempotencyKey,
   resolveComputeSubjectHourlyRateCents,
   resolveTerminalRunTiming,
+  settleComputeSessionComputeCharge,
   settleRunComputeCharge,
   toUnixMillis,
   type ComputeBillingSubject,
   type ComputeSettlementResult,
 } from "@convex/cloud/runBilling";
-import { RUN_STATUS } from "@convex/runsConstants";
+import { COMPUTE_SESSION_STATUS } from "@convex/core/computeSessionLifecyclePlan";
 import { SERVE_STATUS } from "@convex/servesConstants";
 
 const STRIPE_CHECKOUT_PAYMENT_STATUSES = new Set(["paid", "no_payment_required"]);
@@ -30,6 +32,10 @@ const STRIPE_CHECKOUT_PAYMENT_STATUSES = new Set(["paid", "no_payment_required"]
 const HOSTED_BILLING_CLIENT_ERROR_PATTERNS: RegExp[] = [
   /\binsufficient credits\b/i,
 ];
+
+function formatUsdCents(cents: number) {
+  return `$${(Math.max(0, cents) / 100).toFixed(2)}`;
+}
 
 export function isHostedBillingClientError(value: string) {
   return HOSTED_BILLING_CLIENT_ERROR_PATTERNS.some((pattern) => pattern.test(value));
@@ -132,6 +138,101 @@ export async function settleHostedRunUsage(
 ): Promise<HostedRunUsageSettlement> {
   const terminalTiming = resolveTerminalRunTiming(row);
   const settlement = await settleRunComputeCharge(ctx, row, terminalTiming);
+  return {
+    patch: {
+      computeEndedAt: terminalTiming.computeEndedAt,
+      computeChargeCents: settlement.chargeCents,
+      computeCollectedCents: settlement.collectedCents,
+      computeOutstandingCents: settlement.outstandingCents,
+      computeChargeStatus: settlement.chargeStatus,
+      computeChargeError: settlement.chargeError,
+    },
+    eventMetadata: {
+      duration_ms: terminalTiming.durationMs,
+      compute_charge_cents: settlement.chargeCents,
+      compute_charge_delta_cents: settlement.chargeDeltaCents,
+      compute_charge_status: settlement.chargeStatus,
+      compute_charge_error: settlement.chargeError,
+      balance_after_cents: settlement.balanceAfterCents,
+    },
+    terminalTiming,
+    settlement,
+  };
+}
+
+export type HostedComputeSessionBillingPatch = {
+  computeEndedAt?: number;
+  computeChargeCents: number;
+  computeCollectedCents: number;
+  computeOutstandingCents: number;
+  computeChargeStatus: "charged" | "owed";
+  computeChargeError?: string;
+};
+
+export type HostedComputeSessionUsageSettlement = {
+  patch: HostedComputeSessionBillingPatch;
+  eventMetadata: Record<string, number | string | undefined>;
+  terminalTiming: { computeEndedAt?: number; durationMs: number };
+  settlement: ComputeSettlementResult;
+};
+
+export function initialHostedComputeSessionBillingFields(hourlyRateCents: number) {
+  return {
+    computeHourlyRateCents: hourlyRateCents,
+    computeChargeCents: 0,
+    computeCollectedCents: 0,
+    computeOutstandingCents: 0,
+    computeChargeStatus: "pending" as const,
+  };
+}
+
+export async function validateHostedComputeSessionCreate(
+  ctx: MutationCtx,
+  args: {
+    userId: string;
+    gpuType: string;
+    gpuCount: number;
+    volumeGb: number;
+  },
+) {
+  const estimateCents = estimateRunLaunchCents({
+    gpuType: args.gpuType,
+    gpuCount: args.gpuCount,
+    volumeGb: args.volumeGb,
+  });
+  if (estimateCents <= 0) {
+    return;
+  }
+  const credits = await ensureUserLedger(ctx, {
+    userId: args.userId,
+    source: "compute_session_launch",
+  });
+  if (credits.balanceCents < estimateCents) {
+    throw new ConvexError(
+      `insufficient credits: add at least ${formatUsdCents(estimateCents - credits.balanceCents)} before launching this run`,
+    );
+  }
+}
+
+export function initialHostedComputeSessionBillingFieldsForSpec(args: {
+  gpuType: string;
+  gpuCount: number;
+  volumeGb: number;
+}) {
+  const pricing = resolveRunComputePricing({
+    gpuType: args.gpuType,
+    gpuCount: args.gpuCount,
+    volumeGb: args.volumeGb,
+  });
+  return initialHostedComputeSessionBillingFields(pricing.hourlyRateCents);
+}
+
+export async function settleHostedComputeSessionUsage(
+  ctx: MutationCtx,
+  row: Doc<"computeSessions">,
+): Promise<HostedComputeSessionUsageSettlement> {
+  const terminalTiming = resolveTerminalRunTiming(row);
+  const settlement = await settleComputeSessionComputeCharge(ctx, row, terminalTiming);
   return {
     patch: {
       computeEndedAt: terminalTiming.computeEndedAt,
@@ -690,30 +791,43 @@ export const stripeWebhook = httpAction(async (ctx, request) => {
   }
 });
 
-export const billRunningComputeMinute = internalMutation({
+const BILLABLE_COMPUTE_SESSION_STATUSES = [
+  COMPUTE_SESSION_STATUS.PROVISIONING,
+  COMPUTE_SESSION_STATUS.IDLE,
+  COMPUTE_SESSION_STATUS.RUNNING,
+  COMPUTE_SESSION_STATUS.TERMINATING,
+] as const;
+
+export const billTrainingComputeSessionsMinute = internalMutation({
   args: {},
   returns: v.object({
-    processed_runs: v.number(),
-    charged_runs: v.number(),
-    owed_runs: v.number(),
-    skipped_runs: v.number(),
+    processed_compute_sessions: v.number(),
+    charged_compute_sessions: v.number(),
+    owed_compute_sessions: v.number(),
+    skipped_compute_sessions: v.number(),
   }),
   handler: async (ctx) => {
-    const runningRuns = await ctx.db
-      .query("runs")
-      .withIndex("by_status", (q) => q.eq("status", RUN_STATUS.RUNNING))
-      .collect();
+    const activeRows = (
+      await Promise.all(
+        BILLABLE_COMPUTE_SESSION_STATUSES.map((status) =>
+          ctx.db
+            .query("computeSessions")
+            .withIndex("by_status", (q) => q.eq("status", status))
+            .collect(),
+        ),
+      )
+    ).flat();
 
-    let processedRuns = 0;
-    let chargedRuns = 0;
-    let owedRuns = 0;
-    let skippedRuns = 0;
+    let processedComputeSessions = 0;
+    let chargedComputeSessions = 0;
+    let owedComputeSessions = 0;
+    let skippedComputeSessions = 0;
 
-    for (const row of runningRuns) {
+    for (const row of activeRows) {
       const result = await billLiveComputeSubject(ctx, {
         subject: {
           userId: row.userId,
-          referenceType: "run",
+          referenceType: "compute_session",
           referenceId: String(row._id),
           gpuType: row.effectiveGpuType,
           gpuCount: row.effectiveGpuCount,
@@ -721,7 +835,7 @@ export const billRunningComputeMinute = internalMutation({
           computeHourlyRateCents: row.computeHourlyRateCents,
           computeCollectedCents: row.computeCollectedCents,
         },
-        startedAt: row.computeStartedAt ?? 0,
+        startedAt: row.computeStartedAt ?? row.providerCreationTime ?? 0,
         previous: {
           computeChargeCents: row.computeChargeCents,
           computeCollectedCents: row.computeCollectedCents,
@@ -731,32 +845,32 @@ export const billRunningComputeMinute = internalMutation({
         },
       });
       if (result.kind === "skipped") {
-        skippedRuns += 1;
+        skippedComputeSessions += 1;
         continue;
       }
       if (result.kind === "owed") {
-        await ctx.db.patch("runs", row._id, {
+        await ctx.db.patch("computeSessions", row._id, {
           computeChargeStatus: result.patch.computeChargeStatus,
           computeChargeError: result.patch.computeChargeError,
         });
-        owedRuns += 1;
+        owedComputeSessions += 1;
         continue;
       }
-      await ctx.db.patch("runs", row._id, result.patch);
-      processedRuns += 1;
+      await ctx.db.patch("computeSessions", row._id, result.patch);
+      processedComputeSessions += 1;
       if (result.charged) {
-        chargedRuns += 1;
+        chargedComputeSessions += 1;
       }
       if (result.owed) {
-        owedRuns += 1;
+        owedComputeSessions += 1;
       }
     }
 
     return {
-      processed_runs: processedRuns,
-      charged_runs: chargedRuns,
-      owed_runs: owedRuns,
-      skipped_runs: skippedRuns,
+      processed_compute_sessions: processedComputeSessions,
+      charged_compute_sessions: chargedComputeSessions,
+      owed_compute_sessions: owedComputeSessions,
+      skipped_compute_sessions: skippedComputeSessions,
     };
   },
 });
