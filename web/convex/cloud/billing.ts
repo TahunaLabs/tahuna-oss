@@ -167,6 +167,8 @@ export async function settleHostedRunUsage(
 
 export type HostedComputeSessionBillingPatch = {
   computeEndedAt?: number;
+  computeReservationRemainingCents?: number;
+  computeReservationReleasedAt?: number;
   computeChargeCents: number;
   computeCollectedCents: number;
   computeOutstandingCents: number;
@@ -192,6 +194,13 @@ export function initialHostedComputeSessionBillingFields(hourlyRateCents: number
     computeOutstandingCents: 0,
     computeChargeStatus: "pending" as const,
   };
+}
+
+function normalizeOptionalUnixMillis(value: number | undefined) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return undefined;
+  }
+  return Math.max(0, Math.floor(value));
 }
 
 const ACTIVE_COMPUTE_RESERVATION_STATUSES = [
@@ -230,6 +239,28 @@ async function sumActiveComputeSessionReservationCents(ctx: MutationCtx, userId:
       });
       return total + remainingCents;
     }, 0);
+}
+
+function computeTerminalReservationReleasePatch(
+  row: Doc<"computeSessions">,
+  terminalTiming: { computeEndedAt?: number },
+) {
+  const requiredReservationCents = normalizeReservationCents(row.computeReservationRequiredCents) ?? 0;
+  const storedRemainingCents = normalizeReservationCents(row.computeReservationRemainingCents);
+  const remainingReservationCents = storedRemainingCents ?? computeSessionReservationRemainingCents({
+    requiredReservationCents: row.computeReservationRequiredCents,
+    collectedCents: row.computeCollectedCents,
+  });
+  const existingReleasedAt = normalizeOptionalUnixMillis(row.computeReservationReleasedAt);
+  if (requiredReservationCents <= 0 && remainingReservationCents <= 0 && existingReleasedAt === undefined) {
+    return {};
+  }
+  return {
+    computeReservationRemainingCents: 0,
+    computeReservationReleasedAt: existingReleasedAt ??
+      terminalTiming.computeEndedAt ??
+      Date.now(),
+  };
 }
 
 export async function validateHostedComputeSessionCreate(
@@ -290,6 +321,7 @@ export async function settleHostedComputeSessionUsage(
   return {
     patch: {
       computeEndedAt: terminalTiming.computeEndedAt,
+      ...computeTerminalReservationReleasePatch(row, terminalTiming),
       computeChargeCents: settlement.chargeCents,
       computeCollectedCents: settlement.collectedCents,
       computeOutstandingCents: settlement.outstandingCents,
@@ -907,7 +939,7 @@ export const stripeWebhook = httpAction(async (ctx, request) => {
   }
 });
 
-const BILLABLE_COMPUTE_SESSION_STATUSES = [
+export const BILLABLE_COMPUTE_SESSION_STATUSES = [
   COMPUTE_SESSION_STATUS.PROVISIONING,
   COMPUTE_SESSION_STATUS.IDLE,
   COMPUTE_SESSION_STATUS.RUNNING,

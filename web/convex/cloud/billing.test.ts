@@ -22,10 +22,12 @@ vi.mock("@convex/auth", () => ({
 vi.mock("@convex/cloud/credits", () => creditMocks);
 
 import {
+  BILLABLE_COMPUTE_SESSION_STATUSES,
   TRAINING_COMPUTE_BILLING_INTERVAL_MINUTES,
   applyTrainingComputeSessionLiveBillingResult,
   billLiveComputeSubject,
   initialHostedComputeSessionBillingFields,
+  settleHostedComputeSessionUsage,
   validateHostedComputeSessionCreate,
 } from "@convex/cloud/billing";
 
@@ -143,6 +145,46 @@ describe("hosted billing session reservations", () => {
     });
   });
 
+  it("bills warm idle compute-session uptime against the session ledger reference", async () => {
+    expect(BILLABLE_COMPUTE_SESSION_STATUSES).toContain("idle");
+    vi.spyOn(Date, "now").mockReturnValue(601_000);
+    creditMocks.upsertLedgerDebitTotal.mockResolvedValue({
+      balanceCents: 980,
+      debitedCents: 20,
+      appliedCents: 20,
+    });
+
+    const result = await billLiveComputeSubject({} as never, {
+      subject: {
+        userId: "user_1",
+        referenceType: "compute_session",
+        referenceId: "session_1",
+        computeHourlyRateCents: 120,
+        computeCollectedCents: 0,
+      },
+      startedAt: 1_000,
+      previous: {
+        computeChargeStatus: "pending",
+        computeReservationRequiredCents: 120,
+        computeReservationRemainingCents: 120,
+      },
+    });
+
+    expect(result).toMatchObject({
+      kind: "patched",
+      patch: {
+        computeChargeCents: 20,
+        computeCollectedCents: 20,
+        computeReservationRemainingCents: 100,
+      },
+    });
+    expect(creditMocks.upsertLedgerDebitTotal).toHaveBeenCalledWith({}, expect.objectContaining({
+      idempotencyKey: "compute_session:session_1:live_debit",
+      referenceType: "compute_session",
+      referenceId: "session_1",
+    }));
+  });
+
   it("schedules insufficient-credit termination when live billing cannot collect the target", async () => {
     const ctx = {
       db: {
@@ -181,6 +223,53 @@ describe("hosted billing session reservations", () => {
       environmentId: "env_1",
       computeSessionId: "session_1",
       activeRunId: "run_1",
+    });
+  });
+
+  it("releases unused compute-session reservations during terminal settlement", async () => {
+    await expect(
+      settleHostedComputeSessionUsage({} as never, {
+        _id: "session_1",
+        userId: "user_1",
+        providerCreationTime: 1_000,
+        computeStartedAt: 1_000,
+        computeEndedAt: 481_000,
+        computeHourlyRateCents: 120,
+        computeReservationRequiredCents: 120,
+        computeReservationRemainingCents: 104,
+        computeCollectedCents: 16,
+      } as never),
+    ).resolves.toMatchObject({
+      patch: {
+        computeChargeCents: 16,
+        computeCollectedCents: 16,
+        computeReservationRemainingCents: 0,
+        computeReservationReleasedAt: 481_000,
+        computeChargeStatus: "charged",
+      },
+    });
+    expect(creditMocks.grantUserCredits).not.toHaveBeenCalled();
+  });
+
+  it("does not move the reservation release timestamp when terminal settlement is retried", async () => {
+    await expect(
+      settleHostedComputeSessionUsage({} as never, {
+        _id: "session_1",
+        userId: "user_1",
+        providerCreationTime: 1_000,
+        computeStartedAt: 1_000,
+        computeEndedAt: 481_000,
+        computeHourlyRateCents: 120,
+        computeReservationRequiredCents: 120,
+        computeReservationRemainingCents: 0,
+        computeReservationReleasedAt: 400_000,
+        computeCollectedCents: 16,
+      } as never),
+    ).resolves.toMatchObject({
+      patch: {
+        computeReservationRemainingCents: 0,
+        computeReservationReleasedAt: 400_000,
+      },
     });
   });
 });
