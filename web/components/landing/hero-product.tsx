@@ -12,7 +12,7 @@ interface HeroProductProps {
 // Hidden below lg, where the hero is text-only.
 export function HeroProduct({ slideKey, children }: HeroProductProps) {
   return (
-    <div className="pointer-events-none hidden h-[42rem] w-[40rem] shrink-0 overflow-hidden lg:block xl:w-[47rem]">
+    <div className="pointer-events-none hidden h-[42rem] w-[40rem] shrink-0 overflow-hidden lg:-mr-16 lg:block xl:-mr-24 xl:w-[47rem]">
       <div key={slideKey} aria-hidden className="animate-in fade-in duration-500">
         {children}
       </div>

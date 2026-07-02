@@ -48,8 +48,8 @@ export function LandingHero() {
             Infrastructure for adaptive AI systems
           </p>
           <h1 className="font-serif text-3xl tracking-tight text-foreground md:text-4xl">
-            Own the intelligence loop{" "}
-            <span className="italic">behind your AI systems.</span>
+            <span className="lg:block">Own the intelligence loop</span>{" "}
+            <span className="italic lg:block lg:whitespace-nowrap">behind your AI systems.</span>
           </h1>
 
           <p className="mt-5 max-w-2xl text-base leading-relaxed text-muted-foreground md:text-lg">
