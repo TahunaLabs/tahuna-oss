@@ -26,7 +26,6 @@ import {
   estimateRunUsageFromHourlyRateCents,
   resolveComputeSubjectHourlyRateCents,
   runLiveDebitIdempotencyKey,
-  serveLiveDebitIdempotencyKey,
   settleComputeCharge,
   toMinuteBucketUnixMs,
 } from "@convex/cloud/runBilling";
@@ -39,10 +38,8 @@ describe("hosted compute billing helpers", () => {
   it("builds stable live debit idempotency keys and minute buckets", () => {
     expect(computeLiveDebitIdempotencyKey("run", "run_1")).toBe("run:run_1:live_debit");
     expect(runLiveDebitIdempotencyKey("run_1")).toBe("run:run_1:live_debit");
-    expect(serveLiveDebitIdempotencyKey("serve_1")).toBe("serve:serve_1:live_debit");
     expect(computeSessionLiveDebitIdempotencyKey("session_1")).toBe("compute_session:session_1:live_debit");
     expect(computeLiveDebitEventType("run")).toBe("run_compute_settlement_debit");
-    expect(computeLiveDebitEventType("serve")).toBe("run_compute_settlement_debit");
     expect(computeLiveDebitEventType("compute_session")).toBe("training_compute_settlement_debit");
     expect(toMinuteBucketUnixMs(119_999.9)).toBe(60_000);
     expect(toMinuteBucketUnixMs(-1)).toBe(0);
@@ -166,8 +163,8 @@ describe("hosted compute billing helpers", () => {
         {} as never,
         {
           userId: "user_1",
-          referenceType: "serve",
-          referenceId: "serve_1",
+          referenceType: "run",
+          referenceId: "run_1",
           computeHourlyRateCents: 120,
           computeCollectedCents: 20,
         },
@@ -184,9 +181,9 @@ describe("hosted compute billing helpers", () => {
     expect(creditMocks.recordLedgerEvent).toHaveBeenCalledWith({}, expect.objectContaining({
       userId: "user_1",
       eventType: "run_compute_settlement_owed",
-      idempotencyKey: "serve:serve_1:settlement:owed",
-      referenceType: "serve",
-      referenceId: "serve_1",
+      idempotencyKey: "run:run_1:settlement:owed",
+      referenceType: "run",
+      referenceId: "run_1",
     }));
   });
 

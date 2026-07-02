@@ -13,7 +13,7 @@ This is the hosted managed-billing path. Users pay Tahuna, Tahuna credits fund h
 - Custom top-up amounts are supported within configured bounds.
 - `$1 paid = $1 Tahuna credit`.
 - Training compute-session launch requires a one-hour credit reserve before provider provisioning.
-- Serve launch uses the existing serve launch estimate until serving migrates to compute sessions.
+- Serve launch requires a one-hour backing compute-session credit reserve before provider provisioning.
 - Hosted training compute sessions and serves are managed by Tahuna only; users do not choose a compute billing mode.
 - No Stripe Billing Portal for MVP.
 - No refund, dispute, or chargeback automation for MVP.
@@ -122,7 +122,7 @@ Open or pending checkout sessions are not payments and must not appear as paymen
 
 Stripe credits are Tahuna account credits. They do not add funds to a user's external provider account.
 
-For hosted training compute sessions, Tahuna must enforce its own one-hour reservation check before provider provisioning and must use Tahuna-owned provider credentials. For hosted serves, Tahuna must enforce the existing serve launch estimate until serving migrates to compute sessions. Provider-side failures should surface as managed compute operational failures.
+For hosted training and serving compute sessions, Tahuna must enforce its own one-hour reservation check before provider provisioning and must use Tahuna-owned provider credentials. Provider-side failures should surface as managed compute operational failures.
 
 ## Not In MVP
 

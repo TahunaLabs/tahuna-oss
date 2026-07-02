@@ -49,13 +49,7 @@ Warm training creates one compute session that can execute multiple runs sequent
 
 ### Serving
 
-Serving currently remains separate in the implementation:
-
-- `serves` owns provider machine lifetime.
-- serve billing is keyed to `serveId`.
-- serve lifecycle, inference proxying, runtime callbacks, and serve billing are not changed by this model yet.
-
-Serving must migrate to compute sessions in the next serving compute project. In that target model:
+Serving runs on top of compute sessions:
 
 - the compute session owns provider-machine lifetime, runtime token, runtime spec snapshot, reservation, termination, and compute billing
 - the serve owns serving identity, health/readiness, routing, inference proxying, model snapshot, logs, and user-facing status
@@ -64,8 +58,6 @@ Serving must migrate to compute sessions in the next serving compute project. In
 - live debit idempotency keys use `compute_session:<computeSessionId>:live_debit`
 - ledger references use `referenceType = "compute_session"` and `referenceId = <computeSessionId>`
 - if credits are no longer sufficient during live billing, the compute session terminates with reason `insufficient_credits` and the serve transitions to a terminal/unavailable state with a user-readable billing error
-
-That migration requires a separate design because serving has request routing and long-lived health semantics that training does not.
 
 ## Credit Balance Terms
 
@@ -271,15 +263,15 @@ Required training implementation changes:
 7. Mark active runs terminal when their session terminates for insufficient credits.
 8. Release unused reservation during terminal settlement.
 
-Required future serving project:
+Serving compute-session migration is complete:
 
-1. Introduce compute sessions for serving.
-2. Move provider-machine lifetime, runtime token, reservation, billing, and termination from `serves` to `computeSessions`.
-3. Gate serve compute-session creation on the same one-hour available-credit reserve used by training.
-4. Bill serving compute sessions every 5 minutes with compute-session live debit idempotency keys and ledger references.
-5. Terminate serving compute sessions with reason `insufficient_credits` when live billing cannot collect the full target charge.
-6. Keep inference proxying, health, readiness, routing, and model snapshot ownership on `serves`.
-7. Preserve existing serve API compatibility and inference URLs.
+1. Serves have backing compute sessions.
+2. Provider-machine lifetime, runtime token, reservation, billing, and termination live on `computeSessions`.
+3. Serve compute-session creation uses the same one-hour available-credit reserve as training.
+4. Serving compute sessions bill every 5 minutes with compute-session live debit idempotency keys and ledger references.
+5. Insufficient credits terminate serving compute sessions with reason `insufficient_credits`.
+6. Inference proxying, health, readiness, routing, and model snapshot ownership remain on `serves`.
+7. Existing serve API compatibility and inference URLs are preserved.
 
 ## Non-Goals
 

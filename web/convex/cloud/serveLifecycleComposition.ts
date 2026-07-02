@@ -1,11 +1,7 @@
 import type { Doc, Id } from "@convex/_generated/dataModel";
 import { internal } from "@convex/_generated/api";
 import type { MutationCtx } from "@convex/_generated/server";
-import {
-  initialHostedServeBillingFields,
-  settleHostedServeUsage,
-  validateHostedServeCreate,
-} from "@convex/cloud/serveBilling";
+import { validateHostedComputeSessionCreate } from "@convex/cloud/computeSessionReservations";
 import { createComputeSessionForUserId } from "@convex/computeSessionsLifecycle";
 import {
   applyServeLifecyclePlan,
@@ -17,16 +13,7 @@ import type { ServeLifecyclePlan } from "@convex/core/serveLifecyclePlan";
 
 export const hostedServeLifecycleComposition: ServeLifecycleComposition = {
   async validateCreateServe(ctx, args) {
-    await validateHostedServeCreate(ctx, args);
-  },
-  createServe(args) {
-    const fields = initialHostedServeBillingFields(args);
-    return {
-      serveFields: fields,
-      eventMetadata: {
-        hourly_rate_cents: fields.computeHourlyRateCents,
-      },
-    };
+    await validateHostedComputeSessionCreate(ctx, { ...args, launchKind: "serve" });
   },
   async createComputeSession(ctx, args) {
     const session = await createComputeSessionForUserId(ctx, {
@@ -59,9 +46,6 @@ export const hostedServeLifecycleComposition: ServeLifecycleComposition = {
       serveId: args.serveId,
       reason: "user_stop",
     });
-  },
-  async settleTerminalServeUsage(ctx, row) {
-    return await settleHostedServeUsage(ctx, row);
   },
 };
 

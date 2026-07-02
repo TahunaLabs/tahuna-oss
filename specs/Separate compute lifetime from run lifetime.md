@@ -395,23 +395,14 @@ Until that exists, Auto-Research requires explicit `--keep-warm-minutes` so idle
 
 Serving remains separate in the current implementation, but it must move to the same billable compute-lifetime model.
 
-The training compute-session refactor did not change:
-
-- serve creation
-- serve status transitions
-- serve runtime callbacks
-- serve inference proxying
-- serve stop/termination behavior
-- existing serve billing behavior
-
-The serving migration target:
+Serving now uses the compute-session model:
 
 - every serve has a backing `computeSessionId`
 - the compute session owns provider-machine lifetime, runtime token, runtime spec snapshot, reservation, 5-minute live billing, final settlement, and provider termination
 - the serve owns serving identity, health/readiness, routing, inference proxying, model snapshot, logs, and user-facing status
 - serve launch creates and reserves the backing compute session before provider provisioning
 - available credits must cover the selected serving runtime's one-hour reserve before the provider machine is created
-- live serving compute billing is polled every 5 minutes through compute-session billing, not serve billing
+- live serving compute billing is polled every 5 minutes through the compute-session path
 - insufficient credits terminate the compute session with reason `insufficient_credits`
 - insufficient-credit termination stops accepting inference work, clears routing/readiness, and moves the serve to a terminal/unavailable state with a user-readable billing error
 - existing serve API compatibility and inference URLs must be preserved

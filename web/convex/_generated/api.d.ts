@@ -29,7 +29,6 @@ import type * as cloud_resend from "../cloud/resend.js";
 import type * as cloud_runBilling from "../cloud/runBilling.js";
 import type * as cloud_runLifecycleComposition from "../cloud/runLifecycleComposition.js";
 import type * as cloud_runpodComputeComposition from "../cloud/runpodComputeComposition.js";
-import type * as cloud_serveBilling from "../cloud/serveBilling.js";
 import type * as cloud_serveLifecycleComposition from "../cloud/serveLifecycleComposition.js";
 import type * as computeProvider from "../computeProvider.js";
 import type * as computeSessionAssignment from "../computeSessionAssignment.js";
@@ -113,7 +112,6 @@ declare const fullApi: ApiFromModules<{
   "cloud/runBilling": typeof cloud_runBilling;
   "cloud/runLifecycleComposition": typeof cloud_runLifecycleComposition;
   "cloud/runpodComputeComposition": typeof cloud_runpodComputeComposition;
-  "cloud/serveBilling": typeof cloud_serveBilling;
   "cloud/serveLifecycleComposition": typeof cloud_serveLifecycleComposition;
   computeProvider: typeof computeProvider;
   computeSessionAssignment: typeof computeSessionAssignment;

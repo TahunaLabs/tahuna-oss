@@ -43,7 +43,7 @@ export type ComputeSettlementResult = {
 
 export type ComputeBillingSubject = {
   userId: string;
-  referenceType: "run" | "serve" | "compute_session";
+  referenceType: "run" | "compute_session";
   referenceId: string;
   gpuType?: string;
   gpuCount?: number;
@@ -62,10 +62,6 @@ export function computeLiveDebitIdempotencyKey(referenceType: string, referenceI
 
 export function runLiveDebitIdempotencyKey(runId: string) {
   return computeLiveDebitIdempotencyKey("run", runId);
-}
-
-export function serveLiveDebitIdempotencyKey(serveId: string) {
-  return computeLiveDebitIdempotencyKey("serve", serveId);
 }
 
 export function computeSessionLiveDebitIdempotencyKey(computeSessionId: string) {
@@ -308,23 +304,6 @@ export async function settleRunComputeCharge(
     volumeGb: run.effectiveVolumeGb,
     computeHourlyRateCents: run.computeHourlyRateCents,
     computeCollectedCents: run.computeCollectedCents,
-  }, timing);
-}
-
-export async function settleServeComputeCharge(
-  ctx: MutationCtx,
-  serve: Doc<"serves">,
-  timing: { durationMs: number },
-): Promise<ComputeSettlementResult> {
-  return settleComputeCharge(ctx, {
-    userId: serve.userId,
-    referenceType: "serve",
-    referenceId: String(serve._id),
-    gpuType: serve.gpuType,
-    gpuCount: serve.gpuCount,
-    volumeGb: serve.volumeGb,
-    computeHourlyRateCents: serve.computeHourlyRateCents,
-    computeCollectedCents: serve.computeCollectedCents,
   }, timing);
 }
 

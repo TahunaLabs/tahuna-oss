@@ -28,7 +28,6 @@ import {
   billLiveComputeSubject,
   initialHostedComputeSessionBillingFields,
   settleHostedComputeSessionUsage,
-  shouldBillServeScopedCompute,
   validateHostedComputeSessionCreate,
 } from "@convex/cloud/billing";
 
@@ -69,11 +68,6 @@ describe("hosted billing session reservations", () => {
 
   it("bills compute sessions every five minutes", () => {
     expect(COMPUTE_SESSION_BILLING_INTERVAL_MINUTES).toBe(5);
-  });
-
-  it("does not serve-bill serves backed by compute sessions", () => {
-    expect(shouldBillServeScopedCompute({ computeSessionId: "session_1" })).toBe(false);
-    expect(shouldBillServeScopedCompute({})).toBe(true);
   });
 
   it("initializes compute sessions with a one-hour reservation hold", () => {

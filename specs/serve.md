@@ -8,9 +8,7 @@ The canonical contract is `specs/python-inference-app-contract.md`.
 
 `tahuna serve` provisions long-lived inference compute for a model and keeps a serving process healthy until the user stops it or the process fails.
 
-Serving currently owns its provider-machine lifetime and billing on the `serves` row. It does not use `computeSessions` yet.
-
-Tahuna must migrate serving onto compute sessions. In that target model, the compute session owns provider-machine lifetime, runtime token, runtime spec snapshot, reservation, 5-minute billing, termination, and final settlement, while the serve owns serving identity, readiness/health, routing, inference proxying, model snapshot, logs, and user-facing status. That migration is intentionally separate from the training compute-session billing work.
+Serving runs on top of compute sessions. The compute session owns provider-machine lifetime, runtime token, runtime spec snapshot, reservation, 5-minute billing, termination, and final settlement, while the serve owns serving identity, readiness/health, routing, inference proxying, model snapshot, logs, and user-facing status.
 
 This spec defines the MVP serving contract for a small Tahuna-managed engine matrix:
 
@@ -64,13 +62,7 @@ The design intentionally differs from training semantically:
 
 ### Billing Ownership
 
-Current serving billing is serve-scoped:
-
-- ledger live debit idempotency keys are keyed by `serveId`
-- ledger references use `referenceType = "serve"`
-- serve runtime callbacks and inference proxying do not depend on compute sessions
-
-Target serving billing is compute-session-scoped:
+Serving billing is compute-session-scoped:
 
 - every serve has a backing `computeSessionId`
 - provider-machine uptime and idle/active serving spend belong to the compute session
@@ -427,4 +419,4 @@ The runtime launches one canonical server process per engine and health-checks i
 - A serve is not healthy until readiness succeeds.
 - A serve stops being healthy when the process exits or health checks fail beyond threshold.
 - Serving contract semantics remain separate from training contract semantics.
-- Serving does not use compute sessions yet; the next serving migration must put provider-machine lifetime, reservation, 5-minute billing, and insufficient-credit termination on `computeSessions` without changing serve-owned routing, health, and inference semantics.
+- Serving uses compute sessions for provider-machine lifetime, reservation, 5-minute billing, and insufficient-credit termination without changing serve-owned routing, health, and inference semantics.

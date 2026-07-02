@@ -50,7 +50,7 @@ Training compute billing is displayed at the compute-session grain. One-shot run
 
 Warm-session idle spend should be visible as compute-session spend. The UI must not silently smear idle spend across the runs attached to that warm session.
 
-Serving billing remains serve-scoped until serving migrates to compute sessions.
+Serving compute billing is displayed at the compute-session grain while serve lifecycle, health, routing, and logs remain serve-owned.
 
 ## Run Detail
 

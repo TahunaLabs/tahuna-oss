@@ -12,13 +12,6 @@ crons.interval(
 );
 
 crons.interval(
-  "bill serving compute each minute",
-  { minutes: 1 },
-  internal.cloud.billing.billServingComputeMinute,
-  {},
-);
-
-crons.interval(
   "enforce compute session heartbeat timeouts",
   { minutes: 1 },
   internal.computeSessions.enforceComputeSessionHeartbeatTimeouts,

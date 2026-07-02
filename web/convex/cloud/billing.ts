@@ -28,7 +28,6 @@ import {
   type ComputeSettlementResult,
 } from "@convex/cloud/runBilling";
 import { COMPUTE_SESSION_STATUS } from "@convex/core/computeSessionLifecyclePlan";
-import { SERVE_STATUS } from "@convex/servesConstants";
 export { validateHostedComputeSessionCreate } from "@convex/cloud/computeSessionReservations";
 
 const STRIPE_CHECKOUT_PAYMENT_STATUSES = new Set(["paid", "no_payment_required"]);
@@ -449,10 +448,6 @@ export async function applyComputeSessionLiveBillingResult(
     owed: result.owed,
     skipped: false,
   };
-}
-
-export function shouldBillServeScopedCompute(row: { computeSessionId?: unknown }) {
-  return !row.computeSessionId;
 }
 
 export const getMyCredits = query({
@@ -949,81 +944,6 @@ export const billComputeSessionsFiveMinutes = internalMutation({
       charged_compute_sessions: chargedComputeSessions,
       owed_compute_sessions: owedComputeSessions,
       skipped_compute_sessions: skippedComputeSessions,
-    };
-  },
-});
-
-export const billServingComputeMinute = internalMutation({
-  args: {},
-  returns: v.object({
-    processed_serves: v.number(),
-    charged_serves: v.number(),
-    owed_serves: v.number(),
-    skipped_serves: v.number(),
-  }),
-  handler: async (ctx) => {
-    const servingRows = await ctx.db
-      .query("serves")
-      .withIndex("by_status", (q) => q.eq("status", SERVE_STATUS.SERVING))
-      .collect();
-
-    let processedServes = 0;
-    let chargedServes = 0;
-    let owedServes = 0;
-    let skippedServes = 0;
-
-    for (const row of servingRows) {
-      if (!shouldBillServeScopedCompute(row)) {
-        skippedServes += 1;
-        continue;
-      }
-      const result = await billLiveComputeSubject(ctx, {
-        subject: {
-          userId: row.userId,
-          referenceType: "serve",
-          referenceId: String(row._id),
-          gpuType: row.gpuType,
-          gpuCount: row.gpuCount,
-          volumeGb: row.volumeGb,
-          computeHourlyRateCents: row.computeHourlyRateCents,
-          computeCollectedCents: row.computeCollectedCents,
-        },
-        startedAt: row.computeStartedAt ?? 0,
-        previous: {
-          computeChargeCents: row.computeChargeCents,
-          computeCollectedCents: row.computeCollectedCents,
-          computeOutstandingCents: row.computeOutstandingCents,
-          computeChargeStatus: row.computeChargeStatus,
-          computeChargeError: row.computeChargeError,
-        },
-      });
-      if (result.kind === "skipped") {
-        skippedServes += 1;
-        continue;
-      }
-      if (result.kind === "owed") {
-        await ctx.db.patch("serves", row._id, {
-          computeChargeStatus: result.patch.computeChargeStatus,
-          computeChargeError: result.patch.computeChargeError,
-        });
-        owedServes += 1;
-        continue;
-      }
-      await ctx.db.patch("serves", row._id, result.patch);
-      processedServes += 1;
-      if (result.charged) {
-        chargedServes += 1;
-      }
-      if (result.owed) {
-        owedServes += 1;
-      }
-    }
-
-    return {
-      processed_serves: processedServes,
-      charged_serves: chargedServes,
-      owed_serves: owedServes,
-      skipped_serves: skippedServes,
     };
   },
 });

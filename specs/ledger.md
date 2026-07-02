@@ -160,16 +160,7 @@ For one-shot training, the final compute-session charge may be mirrored onto the
 
 ## Serving Compute Billing
 
-Serving remains on the existing serve-specific lifecycle and billing path until the serving compute-session migration.
-
-Current serve billing rules:
-
-- Serve launch uses the configured launch estimate gate.
-- Live serving compute debits are keyed by `serve:<serveId>:live_debit`.
-- Ledger references remain `referenceType = "serve"`.
-- Serve lifecycle, inference proxying, runtime callbacks, and serve billing are not changed by the training compute-session model.
-
-Target serving migration:
+Serving runs on the compute-session billing path.
 
 - Every serve runs on top of a compute session.
 - The compute session owns provider-machine lifetime, runtime token, runtime spec snapshot, reservation, termination, and compute billing.
@@ -217,7 +208,7 @@ MVP policy:
 - No automatic refund or dispute reversal handling.
 - Custom top-ups are bounded by `minimumTopUpAmountCents` and `maximumTopUpAmountCents`.
 - Training compute session launch requires a one-hour runtime reserve before provider provisioning.
-- Serve launch still uses the existing serve launch estimate until serving migrates to compute sessions; after migration, serve launch must reserve one hour on the backing compute session before provider provisioning.
+- Serve launch reserves one hour on the backing compute session before provider provisioning.
 
 ## What Users See Today
 
@@ -234,8 +225,7 @@ Users should not choose a compute billing mode in Tahuna Cloud. Billing UX shoul
 - Balance is integer cents.
 - Real-time balance is ledger-backed (`userCredits.balanceCents`).
 - Training compute live debit uses one mutable ledger row per active compute session, not one row per billing tick.
-- Serving compute live debit uses one mutable ledger row per active serve until serving migrates to compute sessions.
-- After serving migrates, serving compute live debit uses one mutable ledger row per active compute session and is polled every 5 minutes like training compute.
+- Serving compute live debit uses one mutable ledger row per active compute session and is polled every 5 minutes like training compute.
 - Settlement/refund/owed logic still exists for terminal reconciliation.
 - Active compute reservations reduce available balance but do not change ledger balance until usage is actually collected.
 
