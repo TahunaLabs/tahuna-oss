@@ -41,9 +41,9 @@ describe("audit log billing rows", () => {
 
     expect(rows[0].title).toBe("Training Compute Settlement Debit")
     expect(rows[0].amount).toContain("0.14")
+    expect(rows[0].amountDetail).toBe("uptime 15m 40s")
     expect(rows[0].detail).toContain("Balance after")
     expect(rows[0].detail).toContain("compute session session_1")
-    expect(rows[0].detail).toContain("uptime 15m 40s")
     expect(rows[0].detail).toContain("2 runs: baseline, sweep")
   })
 
@@ -57,6 +57,7 @@ describe("audit log billing rows", () => {
     ])
 
     expect(rows[0].title).toBe("Run Compute Settlement Debit")
+    expect(rows[0].amountDetail).toBeUndefined()
     expect(rows[0].detail).not.toContain("compute session")
   })
 })

@@ -32,6 +32,7 @@ export type AuditRow = {
   title: string
   detail: string
   amount: string
+  amountDetail?: string
   timestamp: number
   tone: "success" | "danger" | "active" | "billing"
 }
@@ -143,15 +144,19 @@ function billingEventDetail(event: UsageEventRow, runsByComputeSession: Readonly
   }
 
   const detailParts = [`compute session ${shortReferenceId(event.reference_id)}`]
-  const durationMs = metadataNumber(event.metadata, "duration_ms")
-  if (durationMs && durationMs > 0) {
-    detailParts.push(`uptime ${formatRunUptime(durationMs)}`)
-  }
   const attachedRuns = attachedRunsDetail(runsByComputeSession.get(event.reference_id) ?? [])
   if (attachedRuns) {
     detailParts.push(attachedRuns)
   }
   return `${baseDetail} · ${detailParts.join(" · ")}`
+}
+
+function billingEventAmountDetail(event: UsageEventRow) {
+  if (event.reference_type !== "compute_session") {
+    return undefined
+  }
+  const durationMs = metadataNumber(event.metadata, "duration_ms")
+  return durationMs && durationMs > 0 ? `uptime ${formatRunUptime(durationMs)}` : undefined
 }
 
 function runAuditRows(runs: RunRow[], environmentNameById: ReadonlyMap<string, string>): AuditRow[] {
@@ -182,6 +187,7 @@ export function billingAuditRows(
     title: billingEventTitle(event),
     detail: billingEventDetail(event, runsByComputeSession),
     amount: `${event.credits_delta_cents < 0 ? "-" : "+"}${formatMoney(event.credits_delta_cents)}`,
+    amountDetail: billingEventAmountDetail(event),
     timestamp: event.updated_at,
     tone: "billing",
   }))
@@ -217,7 +223,7 @@ export function AuditLogsView({ runs, usageEvents, environmentNameById }: AuditL
     if (actionFilter !== "all" && actionFilter !== row.action) return false
     if (dateFilter && toLocalDateInputValue(row.timestamp) !== dateFilter) return false
     if (!searchTerm) return true
-    return [row.title, row.detail, row.amount, row.action]
+    return [row.title, row.detail, row.amount, row.amountDetail ?? "", row.action]
       .join(" ")
       .toLowerCase()
       .includes(searchTerm)
@@ -268,9 +274,9 @@ export function AuditLogsView({ runs, usageEvents, environmentNameById }: AuditL
             <Table className="table-fixed">
               <TableHeader>
                 <TableRow variant="head">
-                  <TableHead>Event</TableHead>
-                  <TableHead className="text-right">Amount</TableHead>
-                  <TableHead>Timestamp</TableHead>
+                  <TableHead className="w-7/12">Event</TableHead>
+                  <TableHead className="w-1/6 text-right">Amount</TableHead>
+                  <TableHead className="w-1/4">Timestamp</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -281,12 +287,19 @@ export function AuditLogsView({ runs, usageEvents, environmentNameById }: AuditL
                         <AuditIcon row={row} />
                         <div className="min-w-0">
                           <p className="truncate text-sm text-foreground">{row.title}</p>
-                          <p className="truncate text-xs text-muted-foreground">{row.detail}</p>
+                          <p className="break-words text-xs text-muted-foreground">{row.detail}</p>
                         </div>
                       </div>
                     </TableCell>
-                    <TableCell className="text-right text-sm">{row.amount}</TableCell>
-                    <TableCell className="text-xs text-muted-foreground">
+                    <TableCell className="whitespace-nowrap text-right text-sm">
+                      <div>
+                        <p>{row.amount}</p>
+                        {row.amountDetail ? (
+                          <p className="text-xs text-muted-foreground">{row.amountDetail}</p>
+                        ) : null}
+                      </div>
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
                       {formatAuditTimestamp(row.timestamp)}
                     </TableCell>
                   </TableRow>
