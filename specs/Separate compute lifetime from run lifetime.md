@@ -428,13 +428,13 @@ Implemented:
 - one-shot training runs provision through compute sessions
 - training compute billing source of truth moved from runs to compute sessions
 - one-shot attached run summaries expose derived compute-session charges for compatibility
+- one-hour compute-session reservation model
+- 5-minute training compute billing cadence
+- insufficient-credit compute-session termination enforcement
 
 Still pending:
 
 - user-facing compute session inspect/stop controls
-- one-hour compute-session reservation model
-- 5-minute training compute billing cadence
-- insufficient-credit compute-session termination enforcement
 - better warm-session billing display for Auto-Research idle time
 - serving compute-session migration
 - operational guardrail that all deployed runtime images include Warden session mode

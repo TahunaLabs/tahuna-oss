@@ -10,7 +10,7 @@
 
 ## Status
 
-This document describes the accepted ledger model for hosted billing. Current implementation gaps are listed in **Not Handled Yet**. The one-hour compute-session reservation and insufficient-credit termination rules are target policy until those gaps are implemented.
+This document describes the accepted ledger model for hosted billing. Current implementation gaps are listed in **Not Handled Yet**.
 
 ## Current Scope
 
@@ -240,22 +240,16 @@ Users should not choose a compute billing mode in Tahuna Cloud. Billing UX shoul
 3. Pre-run cost quote UX:
 - Backend launch gating uses the configured estimate, but there is no explicit pre-launch quote/acceptance flow with locked pricing version.
 
-4. Compute reservation implementation:
-- The target policy requires one-hour compute-session reservations, but the reservation data model and available-balance calculation still need to be implemented.
-
-5. Insufficient-credit termination enforcement:
-- The target policy requires immediate compute-session termination with reason `insufficient_credits` when live billing cannot collect the full target charge.
-
-6. Stripe refund/dispute handling:
+4. Stripe refund/dispute handling:
 - No automated credit reversal or debt handling for refunds, chargebacks, or disputes.
 
-7. Reconciliation tooling:
+5. Reconciliation tooling:
 - No dedicated periodic reconciliation job/report that verifies `userCredits` against ledger totals and run charges.
 
-8. Billing artifacts:
+6. Billing artifacts:
 - Stripe receipts may exist externally, but Tahuna has no in-app invoices/receipts exports for accounting workflows.
 
-9. Ledger UX v2:
+7. Ledger UX v2:
 - No filters by reference/event type, no export, no long-history pagination UX.
 
 ## Design Tradeoff (Explicit)
