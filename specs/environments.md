@@ -35,6 +35,7 @@ An environment is a named, user-scoped container that holds runtime configuratio
 | `command` | string[] | Pinned entrypoint command (set at init, updated by sync commit) |
 | `outputDir` | string | Output directory name relative to workspace root (default: `"outputs"`) |
 | `serveSnapshot` | object? | Optional serving launch spec, present only when serving is enabled |
+| `activeComputeSessionId` | string? | Current warm training compute session for this environment |
 | `artifacts` | string? | Legacy field (R2 artifact prefix) |
 | `dataId` | string? | Legacy field (data blob ID) |
 
@@ -71,6 +72,7 @@ An environment is a named, user-scoped container that holds runtime configuratio
 - Manifest pointers (`latestCodeManifestHash`, `latestDataManifestHash`) are updated only by the sync commit endpoint, never by direct user commands.
 - `command`, `trainDependencyGroup`, `outputDir`, and optional `serveSnapshot` are set from local project config and updated on sync commit. They are the single source of truth for run/serve execution config — creation reads them from the environment, not from CLI payload.
 - Additional data bindings are metadata links only (no blob copy).
+- Runtime spec changes clear `activeComputeSessionId` and schedule the previous warm compute session for termination, because warm sessions are valid only for the exact runtime spec snapshot they were created with.
 
 ### Deletion
 
@@ -97,11 +99,11 @@ Environment specs (gpu_type, gpu_count, volume_gb)
        |
        | used as defaults
        v
-   Run creation (tahuna train / tahuna run create)
+   Compute session creation (tahuna train / tahuna run create)
        |
        | can override with --gpu-type, --gpu-count, --volume-gb
        v
-   Effective run specs (stored on run record)
+   Effective runtime specs (stored on compute session and attached run)
        |
        | validated against GPU catalog guardrails
        v
@@ -110,7 +112,7 @@ Environment specs (gpu_type, gpu_count, volume_gb)
 
 - Environment specs are **defaults**, not hard constraints.
 - Per-run overrides are validated against catalog limits (available GPU types, max count per type).
-- Effective specs are stored on the run record for reproducibility.
+- Effective specs are stored on the compute session for provider-machine lifetime and on the run record for reproducibility.
 - New runs can mount multiple bound data items from the environment.
 
 ## Invariants
@@ -122,6 +124,7 @@ Environment specs (gpu_type, gpu_count, volume_gb)
 - The environment stores the resolved training dependency selection. `""` means base `[project.dependencies]`.
 - `serveSnapshot` exists only when serving is enabled for the project.
 - Framework and Python version are detected from uv files (`pyproject.toml`, `uv.lock`) and determine runtime image selection.
+- `activeComputeSessionId` is the only canonical current warm-session link. One-shot training sessions must not set it.
 
 ## Error States
 

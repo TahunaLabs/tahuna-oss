@@ -8,6 +8,10 @@ The canonical contract is `specs/python-inference-app-contract.md`.
 
 `tahuna serve` provisions long-lived inference compute for a model and keeps a serving process healthy until the user stops it or the process fails.
 
+Serving currently owns its provider-machine lifetime and billing on the `serves` row. It does not use `computeSessions` yet.
+
+Tahuna should later migrate serving onto compute sessions. In that future model, the compute session owns provider-machine lifetime, runtime spec snapshot, reservation, termination, and compute billing, while the serve owns serving identity, readiness/health, routing, inference proxying, model snapshot, logs, and user-facing status. That migration is intentionally separate from the training compute-session billing work.
+
 This spec defines the MVP serving contract for a small Tahuna-managed engine matrix:
 
 - `vllm`
@@ -57,6 +61,20 @@ The design intentionally differs from training semantically:
 | Machine | Compute resource | Long-lived compute instance running the serving engine |
 | Model manifest | Manifest | Pinned model files to materialize into the machine |
 | Serve catalog | Backend response | Supported engines, versions, Python versions, image names, and compatibility rules |
+
+### Billing Ownership
+
+Current serving billing is serve-scoped:
+
+- ledger live debit idempotency keys are keyed by `serveId`
+- ledger references use `referenceType = "serve"`
+- serve runtime callbacks and inference proxying do not depend on compute sessions
+
+Future serving billing should become compute-session-scoped:
+
+- provider-machine uptime and idle/active serving spend belong to the compute session
+- request routing, health, model snapshot, and serve API compatibility remain on the serve
+- the migration must preserve existing inference URLs and serve lifecycle semantics
 
 ### Serve Record Schema
 
@@ -401,3 +419,4 @@ The runtime launches one canonical server process per engine and health-checks i
 - A serve is not healthy until readiness succeeds.
 - A serve stops being healthy when the process exits or health checks fail beyond threshold.
 - Serving contract semantics remain separate from training contract semantics.
+- Serving does not use compute sessions yet; that migration is future work and must not be bundled into training billing enforcement.

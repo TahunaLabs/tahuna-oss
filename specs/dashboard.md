@@ -1,6 +1,6 @@
 # Dashboard And Web App
 
-Last reviewed: 2026-06-04
+Last reviewed: 2026-07-02
 
 ## Current Behavior
 
@@ -27,7 +27,8 @@ The dashboard renders an app shell with a sidebar, top bar, and view containers.
 - Environments: list, show/edit synced config, bind/unbind data, create runs, delete.
 - Runs: list, filter active/completed, show details, logs, metrics, cancel, delete, share.
 - Serving: list serves, show details/logs, stop serves, expose inference path.
-- Billing: initialize user ledger, show balance and usage events.
+- Billing: initialize user ledger, show credit balance and usage events.
+- Audit logs: show run/serve lifecycle events and credit ledger events, including compute-session-level training billing.
 - Machines: list/revoke API keys used as CLI machine sessions.
 - Settings: account/profile display and API-key related controls.
 
@@ -42,6 +43,14 @@ The top bar shows a breadcrumb (`Dashboard / <View>`) and a search button that o
 ## Sidebar
 
 The sidebar has a "New run" shortcut button (navigates to the Environments view) and a credits widget in the footer showing the current balance and an "Add credits" button. The brand lockup (`BrandLockup`) replaces the old logo + wordmark pattern.
+
+## Billing And Audit Logs
+
+Training compute billing is displayed at the compute-session grain. One-shot runs may show the attached compute-session charge for compatibility, but the audit log should identify training compute settlement debits as compute-session events and show total compute-session uptime.
+
+Warm-session idle spend should be visible as compute-session spend. The UI must not silently smear idle spend across the runs attached to that warm session.
+
+Serving billing remains serve-scoped until serving migrates to compute sessions.
 
 ## Run Detail
 

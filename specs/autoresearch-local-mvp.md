@@ -82,7 +82,7 @@ Implement the MVP in reviewable slices:
 
 6. **Budgets and cancellation**
    - Enforce `--max-trials`, `--max-spend-usd`, `--max-trial-minutes`, `--stop-after-no-improvement`, and `--min-improvement`.
-   - Estimate spend from GPU catalog, effective run compute, observed baseline duration, and current elapsed run time.
+   - Estimate spend from GPU catalog, effective compute-session pricing, observed baseline duration, and current elapsed run time.
    - Cancel or mark trials inconclusive when `--max-trial-minutes` is exceeded.
    - Validate with `make validate-cli`.
 
@@ -339,9 +339,8 @@ Rules:
 ### Known Gaps
 
 - Warm-session idle/billing time is not allocated into Auto-Research spend accounting.
-- Backend idle timeout enforcement for compute sessions is still pending.
-- Backend heartbeat timeout enforcement for compute sessions is still pending.
-- Stale-session termination uses direct scheduling; retry/backoff semantics should be audited against existing run machine termination behavior.
+- Stale-session termination retry/backoff should stay aligned with compute-session termination behavior.
+- One-hour compute-session reservations and insufficient-credit termination need to be reflected in Auto-Research spend/budget handling after the billing model is implemented.
 - There is no user-facing compute session inspect/stop surface yet.
 
 ### Audit Prompt For The Next Agent
@@ -381,10 +380,9 @@ Audit against this intended model:
 Pay special attention to:
 - Auto-Research requires explicit --keep-warm-minutes and must not inherit train.keep_warm_after_minutes.
 - whether remote environment changes can bypass the local runtime-spec guard.
-- missing idle timeout enforcement.
-- missing heartbeat timeout enforcement.
 - warm-session billing/idle spend not allocated to Auto-Research.
 - stale-session termination retry/backoff robustness.
+- interaction between Auto-Research budgets and one-hour compute-session reservations.
 - lack of user-facing compute session inspect/stop controls.
 
 Produce findings first, ordered by severity, with file/line references and concrete reproduction or failure scenarios. Then list any tests that should be added.

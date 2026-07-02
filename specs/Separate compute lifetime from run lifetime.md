@@ -368,6 +368,13 @@ The backend guarantee is "do not assign more work and request provider terminati
 
 Compute billing accrues on the compute session while the provider machine is alive. This includes provider startup, runtime bootstrap, active run execution, and warm idle time.
 
+The credit enforcement policy is defined in `specs/billing.md`. The short version:
+
+- training compute-session launch requires enough available credits for one hour of the selected runtime before provider provisioning
+- live training compute debits run every 5 minutes and recompute exact cumulative uptime
+- if the ledger cannot collect the full target charge, the compute session terminates with reason `insufficient_credits`
+- reservations are holds against available credits, not upfront ledger debits
+
 The compute session is the canonical billing reference for training compute:
 
 - live debit idempotency keys are keyed by `computeSessionId`
@@ -397,7 +404,7 @@ The training compute-session refactor must not change:
 - serve stop/termination behavior
 - existing serve billing behavior
 
-Serving can later move to the same billable compute-lifetime model, but that requires a separate design because inference has long-lived health, readiness, routing, and proxy concerns that are not part of training runs.
+Serving should later move to the same billable compute-lifetime model, but that requires a separate design because inference has long-lived health, readiness, routing, and proxy concerns that are not part of training runs. In that later model, the compute session should own provider-machine lifetime, reservation, and compute billing while the serve owns serving identity, health, routing, inference proxying, model snapshot, logs, and user-facing status.
 
 ## Current Status
 
@@ -418,13 +425,18 @@ Implemented:
 - stale-session provider termination retry/backoff
 - Auto-Research explicit warm baseline and warm trial reuse
 - Auto-Research runtime-spec pinning across resumes
+- one-shot training runs provision through compute sessions
+- training compute billing source of truth moved from runs to compute sessions
+- one-shot attached run summaries expose derived compute-session charges for compatibility
 
 Still pending:
 
 - user-facing compute session inspect/stop controls
-- make one-shot training runs provision through compute sessions
-- move training compute billing source of truth from runs to compute sessions
-- better warm-session billing allocation and display for Auto-Research idle time
+- one-hour compute-session reservation model
+- 5-minute training compute billing cadence
+- insufficient-credit compute-session termination enforcement
+- better warm-session billing display for Auto-Research idle time
+- serving compute-session migration
 - operational guardrail that all deployed runtime images include Warden session mode
 
 ## Acceptance Criteria
@@ -433,6 +445,9 @@ Still pending:
 - `tahuna train --keep-warm-minutes 10` creates a run, provisions one session-mode machine, executes the run, and leaves the session idle.
 - `tahuna train --warm` creates a new run and attaches only through `environments.activeComputeSessionId`.
 - One-shot compute sessions never set `environments.activeComputeSessionId`.
+- Training compute-session launch is rejected before provider provisioning unless the user has enough available credits for one hour of the selected runtime.
+- Active training compute sessions are billed every 5 minutes from exact uptime.
+- A training compute session terminates with reason `insufficient_credits` if the billing tick cannot collect the full target charge.
 - Reused runs keep distinct run IDs, logs, metrics, artifacts, manifest hashes, and terminal statuses.
 - Provider machine ID is reused across warm runs.
 - Code/data sync does not invalidate warm compute.

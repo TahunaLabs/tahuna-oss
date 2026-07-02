@@ -1,6 +1,6 @@
 # Tahuna Codebase Mental Model
 
-Last reviewed: 2026-06-12
+Last reviewed: 2026-07-02
 
 This document is a codebase-level mental model for Tahuna. It is written for someone who wants to understand the system deeply enough to debug lifecycle problems, reason about CLI/backend/runtime boundaries, and know where each concern lives.
 
@@ -30,8 +30,8 @@ Tahuna is a local CLI plus Convex/Next.js control plane plus Go runtime agent. T
 | Code manifest | R2 object under environment manifest prefix, hash on environment/run/serve | Immutable list of code files by path, hash, size, mode |
 | Data manifest | R2 object under data manifest prefix, hash on environment/run/serve | Immutable data bundle manifest; current CLI stores data as one deterministic tar.gz blob |
 | Blob | R2 `blobs/{sha256}` | Content-addressed file body used by manifests |
-| Run | `runs` table | One training execution, either ephemeral machine or assigned to a warm compute session |
-| Compute session | `computeSessions` table | Keep-warm machine that can execute multiple separate run records sequentially |
+| Run | `runs` table | One training execution with its own status, logs, metrics, artifacts, terminal result, and pinned manifests |
+| Compute session | `computeSessions` table | Training provider-machine lifetime; owns runtime spec snapshot, liveness, idle policy, termination, and compute billing |
 | Serve | `serves` table | Long-lived inference process pinned to code/data plus immutable model snapshot |
 | Runtime token | SHA256 stored on run/serve/session, raw token injected into container | Per-machine bearer token for runtime callback endpoints |
 | Job | `jobs` table and Convex scheduler/Workpool | Idempotent provisioning, timeout, termination, cleanup work |
@@ -519,12 +519,14 @@ It still creates a normal run record. The backend does not have a separate `trai
 
 `createAndProvisionRunStrict()` in `web/convex/cli/shared.ts` coordinates HTTP run creation.
 
-Cold ephemeral run:
+One-shot run:
 
-1. `internal.runs.internalCreate`
-2. Insert run row in `queued`.
-3. Call `internal.runs.provisionRun`.
-4. If provisioning fails due to capacity, remove run and return 409.
+1. Create compute session with immediate idle termination policy.
+2. Create one run with `computeSessionId` and `executionMode = "ephemeral"`.
+3. Provision the compute session machine.
+4. Warden session mode executes the attached run.
+5. When the run reaches terminal state, the session terminates immediately.
+6. If provisioning fails due to capacity, remove the unprovisioned session/run state and return 409.
 
 Keep-warm baseline run:
 
@@ -563,9 +565,9 @@ Warm run:
 10. Insert `runEvents` row.
 11. Enqueue provision job if needed.
 
-### Provisioning
+### Direct Run Provisioning
 
-`provisionRun()` in `web/convex/runs.ts`:
+`provisionRun()` in `web/convex/runs.ts` is the direct run-machine provisioning path. It exists for legacy/direct run mode, but new hosted training creation should provision through `computeSessions`.
 
 1. Load provisioning payload and provision spec.
 2. Mark run `provisioning`.
@@ -583,7 +585,7 @@ Warm run:
 
 ### Warden Run Mode
 
-`runtime/warden/internal/bootstrap/run.go`:
+`runtime/warden/internal/bootstrap/run.go` runs one training execution for a direct `TAHUNA_RUN_ID` machine. New hosted training normally reaches the same training execution path through Warden session mode, where the session runtime receives an assignment and then executes the assigned run.
 
 1. Emit `provisioning` status.
 2. `GET /api/runs/{runId}/runtime/bootstrap`.
@@ -694,19 +696,23 @@ failed
 
 Flow:
 
-1. User starts a run with keep-warm.
-2. Backend creates `computeSessions` row.
-3. Backend creates initial run with `computeSessionId`.
+1. User starts a one-shot or keep-warm training run.
+2. Backend creates a `computeSessions` row.
+3. Backend creates the run with `computeSessionId`.
 4. Backend provisions one machine in session mode.
 5. Warden session mode emits heartbeat every 15 seconds.
 6. Warden polls `/assignment` every 5 seconds.
 7. Backend assigns an active run.
 8. Warden creates a run runtime client with the same runtime token and runs normal training flow.
 9. Warden marks session idle after run completion.
-10. Later `tahuna train --warm` creates another run assigned to the active idle session.
-11. Crons terminate timed-out heartbeat or idle sessions.
+10. One-shot sessions terminate immediately after the assigned run reaches terminal state.
+11. Keep-warm sessions remain idle until another run attaches or the idle timeout expires.
+12. Later `tahuna train --warm` creates another run assigned to the active idle session.
+13. Crons terminate timed-out heartbeat or idle sessions.
 
 Warm runs are still separate run records. Each run has its own pinned manifests, logs, metrics, artifacts, and terminal state.
+
+Compute sessions are the canonical training billing subject. They accrue provider-machine uptime, including startup, active execution, and warm idle time. Runs may display derived charge summaries, but the ledger reference for training compute is the compute session.
 
 ## Serve Lifecycle
 
@@ -909,8 +915,8 @@ Behavior:
 | Dimension | Run / Train | Serve | Auto-Research |
 |---|---|---|---|
 | User command | `tahuna train`, `tahuna run create` | `tahuna serve create` | `tahuna research run` |
-| Backend durable object | `runs` | `serves` | Local `.tahuna/research/*.json` plus normal runs |
-| Runtime mode | Warden run mode or session mode | Warden serve mode | No special runtime mode |
+| Backend durable object | `runs` plus `computeSessions` | `serves` | Local `.tahuna/research/*.json` plus normal runs |
+| Runtime mode | Warden compute-session mode for hosted training; direct run mode is legacy | Warden serve mode | No special runtime mode |
 | Lifetime | Terminal execution | Long-lived service | Local loop over many terminal runs |
 | Input code | Latest synced code manifest pinned on run | Latest synced code manifest pinned on serve | Each baseline/trial syncs and creates a normal pinned run |
 | Input data | Latest synced data manifest pinned on run | Latest synced data manifest pinned on serve | Same as run |
@@ -1086,7 +1092,9 @@ Run runtime `failed`:
 - Set status `failed`.
 - Revoke runtime token.
 - Insert terminal event with timing metadata.
-- Force terminate provider machine.
+- If the run is on a one-shot compute session, terminate the session.
+- If the run is on a warm compute session, return the session to idle or terminate it according to session policy and failure handling.
+- Direct run mode force terminates the provider machine.
 
 Serve runtime `failed`:
 

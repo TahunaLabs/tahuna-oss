@@ -1,5 +1,7 @@
 # Billing Audit — 17 May 2026
 
+Historical note: this audit predates the training compute-session billing model. It documents why provider-machine lifetime must be billed from provider provisioning time. Current training billing should use `computeSessions` as the ledger reference, not run-level compute settlement events.
+
 ## 1. Initial Comparison (May 16)
 
 Only one `run_compute_settlement_debit` existed for May 16:
