@@ -232,6 +232,43 @@ describe("hosted billing session reservations", () => {
     });
   });
 
+  it("includes the backing serve when serving compute billing cannot collect the target", async () => {
+    const ctx = {
+      db: {
+        patch: vi.fn(),
+      },
+      scheduler: {
+        runAfter: vi.fn(),
+      },
+    };
+
+    await applyComputeSessionLiveBillingResult(ctx as never, {
+      _id: "session_1",
+      userId: "user_1",
+      environmentId: "env_1",
+      serveId: "serve_1",
+    } as never, {
+      kind: "patched",
+      charged: true,
+      owed: true,
+      patch: {
+        computeChargeCents: 60,
+        computeCollectedCents: 20,
+        computeOutstandingCents: 40,
+        computeChargeStatus: "owed",
+        computeChargeError: "insufficient credits",
+        computeReservationRemainingCents: 100,
+      },
+    });
+
+    expect(ctx.scheduler.runAfter.mock.calls[0]?.[2]).toEqual({
+      userId: "user_1",
+      environmentId: "env_1",
+      computeSessionId: "session_1",
+      serveId: "serve_1",
+    });
+  });
+
   it("releases unused compute-session reservations during terminal settlement", async () => {
     await expect(
       settleHostedComputeSessionUsage({} as never, {

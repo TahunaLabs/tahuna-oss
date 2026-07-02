@@ -439,7 +439,8 @@ export async function applyComputeSessionLiveBillingResult(
       userId: row.userId,
       environmentId: row.environmentId,
       computeSessionId: row._id,
-      activeRunId: row.activeRunId,
+      ...(row.activeRunId ? { activeRunId: row.activeRunId } : {}),
+      ...(row.serveId ? { serveId: row.serveId } : {}),
     });
   }
   return {

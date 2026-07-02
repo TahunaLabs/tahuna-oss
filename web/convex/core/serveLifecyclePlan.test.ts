@@ -4,6 +4,7 @@ import {
   SERVE_LIFECYCLE_STATUS,
   canTransitionServeStatus,
   defaultServeStatusMessage,
+  planServeComputeSessionBillingFailure,
   planServeRuntimeStatusIngestion,
   planServeStop,
   shouldEnforceServeStartupTimeout,
@@ -141,6 +142,38 @@ describe("serve lifecycle planning", () => {
       serveId: "serve_1",
       providerMachineId: "machine_1",
       force: true,
+    });
+  });
+
+  it("marks a serve unavailable when its compute session is terminated for billing", () => {
+    const plan = planServeComputeSessionBillingFailure({
+      serve: {
+        serveId: "serve_1",
+        status: SERVE_LIFECYCLE_STATUS.SERVING,
+        providerMachineId: "machine_1",
+      },
+      computeSessionId: "session_1",
+    });
+
+    expect(plan).toEqual({
+      patch: {
+        status: SERVE_LIFECYCLE_STATUS.FAILED,
+        error: "serve compute terminated because credits are exhausted",
+        runtimeTokenHash: "revoked",
+        providerMachineId: undefined,
+      },
+      events: [
+        {
+          status: SERVE_LIFECYCLE_STATUS.FAILED,
+          message: "serve compute terminated because credits are exhausted",
+          metadata: {
+            source: "compute-session-billing",
+            compute_session_id: "session_1",
+          },
+          includeTerminalTiming: true,
+        },
+      ],
+      jobs: [],
     });
   });
 });

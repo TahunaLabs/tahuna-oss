@@ -355,6 +355,31 @@ export function planServeStopTerminationFailed(args: {
   };
 }
 
+export function planServeComputeSessionBillingFailure(args: {
+  serve: ServeLifecycleServeState;
+  computeSessionId: string;
+}): ServeLifecyclePlan {
+  if (TERMINAL_SERVE_LIFECYCLE_STATUSES.has(args.serve.status)) {
+    return {};
+  }
+  const message = "serve compute terminated because credits are exhausted";
+  return {
+    patch: {
+      status: SERVE_LIFECYCLE_STATUS.FAILED,
+      error: message,
+      runtimeTokenHash: "revoked",
+      providerMachineId: undefined,
+    },
+    events: [
+      terminalServeEvent(SERVE_LIFECYCLE_STATUS.FAILED, message, {
+        source: "compute-session-billing",
+        compute_session_id: args.computeSessionId,
+      }),
+    ],
+    jobs: [],
+  };
+}
+
 export function planServeTerminationRetry(args: {
   serve: ServeLifecycleServeState;
   providerMachineId: string;

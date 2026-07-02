@@ -700,6 +700,7 @@ export const internalTerminateInsufficientCreditsSession = internalAction({
     environmentId: v.id("environments"),
     computeSessionId: v.id("computeSessions"),
     activeRunId: v.optional(v.id("runs")),
+    serveId: v.optional(v.id("serves")),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -707,6 +708,12 @@ export const internalTerminateInsufficientCreditsSession = internalAction({
       await ctx.runMutation(internal.runs.markFailed, {
         runId: args.activeRunId,
         error: "compute session terminated because credits are exhausted",
+      });
+    }
+    if (args.serveId) {
+      await ctx.runMutation(internal.serves.markComputeSessionBillingFailed, {
+        serveId: args.serveId,
+        computeSessionId: args.computeSessionId,
       });
     }
     await ctx.runAction(internal.computeSessions.internalTerminateStaleEnvironmentSession, {

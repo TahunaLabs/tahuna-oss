@@ -13,6 +13,7 @@ import {
 } from "@convex/core/jobQueue"
 import {
   planServeFailure,
+  planServeComputeSessionBillingFailure,
   planServeMachineProvisioned,
   planServeRuntimeStatusIngestion,
   planServeStoppedAfterTermination,
@@ -53,6 +54,7 @@ import {
   stopHostedServeForUserId as stopServeForUserId,
 } from "@convex/cloud/serveLifecycleComposition"
 import {
+  applyServeLifecyclePlan as applyBareServeLifecyclePlan,
   toServeLifecycleState,
 } from "@convex/servesLifecycle"
 import {
@@ -1634,6 +1636,25 @@ export const markFailed = internalMutation({
       serve: toServeLifecycleState(row),
       error: args.error,
       provisioningPayload: args.provisioningPayload,
+    }))
+    return null
+  },
+})
+
+export const markComputeSessionBillingFailed = internalMutation({
+  args: {
+    serveId: v.id("serves"),
+    computeSessionId: v.id("computeSessions"),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const row = await ctx.db.get("serves", args.serveId)
+    if (!row || row.computeSessionId !== args.computeSessionId) {
+      return null
+    }
+    await applyBareServeLifecyclePlan(ctx, args.serveId, row, planServeComputeSessionBillingFailure({
+      serve: toServeLifecycleState(row),
+      computeSessionId: String(args.computeSessionId),
     }))
     return null
   },
