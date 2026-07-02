@@ -32,6 +32,7 @@ import { COMPUTE_SESSION_STATUS } from "@convex/core/computeSessionLifecyclePlan
 import { SERVE_STATUS } from "@convex/servesConstants";
 
 const STRIPE_CHECKOUT_PAYMENT_STATUSES = new Set(["paid", "no_payment_required"]);
+export const TRAINING_COMPUTE_BILLING_INTERVAL_MINUTES = 5;
 
 const HOSTED_BILLING_CLIENT_ERROR_PATTERNS: RegExp[] = [
   /\binsufficient credits\b/i,
@@ -314,9 +315,15 @@ type LiveComputeBillingPatch = {
   computeOutstandingCents: number;
   computeChargeStatus: "pending" | "charged" | "owed";
   computeChargeError?: string;
+  computeReservationRemainingCents?: number;
 };
 
-async function billLiveComputeSubject(
+export type LiveComputeBillingResult =
+  | { kind: "patched"; patch: LiveComputeBillingPatch; charged: boolean; owed: boolean }
+  | { kind: "skipped" }
+  | { kind: "owed"; patch: Pick<LiveComputeBillingPatch, "computeChargeStatus" | "computeChargeError"> };
+
+export async function billLiveComputeSubject(
   ctx: MutationCtx,
   args: {
     subject: ComputeBillingSubject;
@@ -327,13 +334,11 @@ async function billLiveComputeSubject(
       computeOutstandingCents?: number;
       computeChargeStatus?: "pending" | "charged" | "owed";
       computeChargeError?: string;
+      computeReservationRequiredCents?: number;
+      computeReservationRemainingCents?: number;
     };
   },
-): Promise<
-  | { kind: "patched"; patch: LiveComputeBillingPatch; charged: boolean; owed: boolean }
-  | { kind: "skipped" }
-  | { kind: "owed"; patch: Pick<LiveComputeBillingPatch, "computeChargeStatus" | "computeChargeError"> }
-> {
+): Promise<LiveComputeBillingResult> {
   const startedAt = toUnixMillis(args.startedAt);
   if (startedAt <= 0) {
     return { kind: "skipped" };
@@ -390,7 +395,9 @@ async function billLiveComputeSubject(
   nextOutstandingCents = Math.max(0, targetChargeCents - nextCollectedCents);
   if (nextOutstandingCents > 0) {
     nextChargeStatus = "owed";
-    nextChargeError = "outstanding compute settlement";
+    nextChargeError = args.subject.referenceType === "compute_session"
+      ? "insufficient credits"
+      : "outstanding compute settlement";
   } else if (targetChargeCents > 0) {
     nextChargeStatus = "charged";
   } else {
@@ -402,12 +409,24 @@ async function billLiveComputeSubject(
   const previousOutstandingCents = Math.max(0, Math.floor(args.previous.computeOutstandingCents || 0));
   const previousChargeStatus = args.previous.computeChargeStatus || "pending";
   const previousChargeError = args.previous.computeChargeError;
+  const previousReservationRemainingCents = normalizeReservationCents(
+    args.previous.computeReservationRemainingCents,
+  );
+  const hasReservation = normalizeReservationCents(args.previous.computeReservationRequiredCents) !== undefined ||
+    previousReservationRemainingCents !== undefined;
+  const nextReservationRemainingCents = hasReservation
+    ? computeSessionReservationRemainingCents({
+      requiredReservationCents: args.previous.computeReservationRequiredCents,
+      collectedCents: nextCollectedCents,
+    })
+    : undefined;
   if (
     previousChargeCents === targetChargeCents &&
     previousCollectedCents === nextCollectedCents &&
     previousOutstandingCents === nextOutstandingCents &&
     previousChargeStatus === nextChargeStatus &&
-    previousChargeError === nextChargeError
+    previousChargeError === nextChargeError &&
+    (!hasReservation || previousReservationRemainingCents === nextReservationRemainingCents)
   ) {
     return { kind: "skipped" };
   }
@@ -422,7 +441,51 @@ async function billLiveComputeSubject(
       computeOutstandingCents: nextOutstandingCents,
       computeChargeStatus: nextChargeStatus,
       computeChargeError: nextChargeError,
+      ...(hasReservation ? { computeReservationRemainingCents: nextReservationRemainingCents } : {}),
     },
+  };
+}
+
+export async function applyTrainingComputeSessionLiveBillingResult(
+  ctx: MutationCtx,
+  row: Doc<"computeSessions">,
+  result: LiveComputeBillingResult,
+) {
+  if (result.kind === "skipped") {
+    return {
+      processed: false,
+      charged: false,
+      owed: false,
+      skipped: true,
+    };
+  }
+  if (result.kind === "owed") {
+    await ctx.db.patch("computeSessions", row._id, {
+      computeChargeStatus: result.patch.computeChargeStatus,
+      computeChargeError: result.patch.computeChargeError,
+    });
+    return {
+      processed: false,
+      charged: false,
+      owed: true,
+      skipped: false,
+    };
+  }
+
+  await ctx.db.patch("computeSessions", row._id, result.patch);
+  if (result.owed && row.status !== COMPUTE_SESSION_STATUS.TERMINATING) {
+    await ctx.scheduler.runAfter(0, internal.computeSessions.internalTerminateInsufficientCreditsSession, {
+      userId: row.userId,
+      environmentId: row.environmentId,
+      computeSessionId: row._id,
+      activeRunId: row.activeRunId,
+    });
+  }
+  return {
+    processed: true,
+    charged: result.charged,
+    owed: result.owed,
+    skipped: false,
   };
 }
 
@@ -895,26 +958,22 @@ export const billTrainingComputeSessionsMinute = internalMutation({
           computeOutstandingCents: row.computeOutstandingCents,
           computeChargeStatus: row.computeChargeStatus,
           computeChargeError: row.computeChargeError,
+          computeReservationRequiredCents: row.computeReservationRequiredCents,
+          computeReservationRemainingCents: row.computeReservationRemainingCents,
         },
       });
-      if (result.kind === "skipped") {
+      const applied = await applyTrainingComputeSessionLiveBillingResult(ctx, row, result);
+      if (applied.skipped) {
         skippedComputeSessions += 1;
         continue;
       }
-      if (result.kind === "owed") {
-        await ctx.db.patch("computeSessions", row._id, {
-          computeChargeStatus: result.patch.computeChargeStatus,
-          computeChargeError: result.patch.computeChargeError,
-        });
-        owedComputeSessions += 1;
-        continue;
+      if (applied.processed) {
+        processedComputeSessions += 1;
       }
-      await ctx.db.patch("computeSessions", row._id, result.patch);
-      processedComputeSessions += 1;
-      if (result.charged) {
+      if (applied.charged) {
         chargedComputeSessions += 1;
       }
-      if (result.owed) {
+      if (applied.owed) {
         owedComputeSessions += 1;
       }
     }

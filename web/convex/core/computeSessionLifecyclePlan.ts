@@ -43,6 +43,7 @@ export type ComputeSessionPatch = {
   activeRunId?: string;
   lastHeartbeatAt?: number;
   lastIdleAt?: number;
+  terminationReason?: string;
   terminatedAt?: number;
 };
 
@@ -258,11 +259,13 @@ export function planComputeSessionRunAssigned(args: {
 export function planComputeSessionStop(args: {
   session: ComputeSessionState;
   force: boolean;
+  reason?: string;
   nowMs: number;
 }): ComputeSessionPlan & { error?: string } {
   if (isTerminalComputeSessionStatus(args.session.status)) {
     return { error: `compute session is already ${args.session.status}` };
   }
+  const reason = sanitizeDetail(args.reason) || undefined;
   const providerMachineId = normalizeMachineId(args.session.providerMachineId);
   if (!providerMachineId) {
     const computeEndedAt = terminalComputeEndedAt(args.session, args.nowMs);
@@ -272,22 +275,28 @@ export function planComputeSessionStop(args: {
         runtimeTokenHash: "revoked",
         activeRunId: undefined,
         terminatedAt: args.nowMs,
+        ...(reason ? { terminationReason: reason } : {}),
         ...(computeEndedAt === undefined ? {} : { computeEndedAt }),
       },
       events: [
-        sessionEvent(COMPUTE_SESSION_STATUS.TERMINATED, "compute session stopped before machine provisioning"),
+        sessionEvent(
+          COMPUTE_SESSION_STATUS.TERMINATED,
+          "compute session stopped before machine provisioning",
+          reason ? { reason } : undefined,
+        ),
       ],
     };
   }
   return {
     patch: {
       status: COMPUTE_SESSION_STATUS.TERMINATING,
+      ...(reason ? { terminationReason: reason } : {}),
     },
     events: [
       sessionEvent(
         COMPUTE_SESSION_STATUS.TERMINATING,
         args.force ? "force stop requested" : "stop requested",
-        { provider_machine_id: providerMachineId },
+        { provider_machine_id: providerMachineId, ...(reason ? { reason } : {}) },
       ),
     ],
   };

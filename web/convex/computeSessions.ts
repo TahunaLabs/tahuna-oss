@@ -592,13 +592,19 @@ export const internalAssignRun = internalMutation({
 });
 
 export const internalStop = internalMutation({
-  args: { userId: v.string(), computeSessionId: v.id("computeSessions"), force: v.optional(v.boolean()) },
+  args: {
+    userId: v.string(),
+    computeSessionId: v.id("computeSessions"),
+    force: v.optional(v.boolean()),
+    reason: v.optional(v.string()),
+  },
   returns: v.null(),
   handler: async (ctx, args) => {
     const row = await getAccessibleComputeSession(ctx, args.userId, args.computeSessionId);
     const plan = planComputeSessionStop({
       session: toComputeSessionState(row),
       force: args.force === true,
+      reason: args.reason,
       nowMs: Date.now(),
     });
     if (plan.error) {
@@ -687,6 +693,31 @@ export const internalTerminateTimedOutSession = internalAction({
   },
 });
 
+export const internalTerminateInsufficientCreditsSession = internalAction({
+  args: {
+    userId: v.string(),
+    environmentId: v.id("environments"),
+    computeSessionId: v.id("computeSessions"),
+    activeRunId: v.optional(v.id("runs")),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    if (args.activeRunId) {
+      await ctx.runMutation(internal.runs.markFailed, {
+        runId: args.activeRunId,
+        error: "compute session terminated because credits are exhausted",
+      });
+    }
+    await ctx.runAction(internal.computeSessions.internalTerminateStaleEnvironmentSession, {
+      userId: args.userId,
+      environmentId: args.environmentId,
+      computeSessionId: args.computeSessionId,
+      reason: "insufficient_credits",
+    });
+    return null;
+  },
+});
+
 export const enforceComputeSessionHeartbeatTimeouts = internalAction({
   args: {},
   returns: v.null(),
@@ -744,6 +775,7 @@ export const internalTerminateStaleEnvironmentSession = internalAction({
     environmentId: v.id("environments"),
     computeSessionId: v.id("computeSessions"),
     attempt: v.optional(v.number()),
+    reason: v.optional(v.string()),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -766,6 +798,7 @@ export const internalTerminateStaleEnvironmentSession = internalAction({
       userId: args.userId,
       computeSessionId: args.computeSessionId,
       force: true,
+      reason: args.reason,
     });
     if (!session.provider_machine_id) {
       await ctx.runMutation(internal.computeSessions.internalMarkTerminated, {
@@ -809,6 +842,7 @@ export const internalTerminateStaleEnvironmentSession = internalAction({
               environmentId: args.environmentId,
               computeSessionId: args.computeSessionId,
               attempt: nextAttempt,
+              reason: args.reason,
             },
           );
           return;

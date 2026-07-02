@@ -122,6 +122,7 @@ export default defineSchema({
       v.union(v.literal("pending"), v.literal("charged"), v.literal("owed")),
     ),
     computeChargeError: v.optional(v.string()),
+    terminationReason: v.optional(v.string()),
     createdAt: v.number(),
     terminatedAt: v.optional(v.number()),
   })

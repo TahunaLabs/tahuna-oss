@@ -229,6 +229,37 @@ describe("compute session lifecycle planning", () => {
     });
   });
 
+  it("records insufficient-credit termination reason when stopping provisioned sessions", () => {
+    expect(
+      planComputeSessionStop({
+        session: {
+          computeSessionId: "session_1",
+          status: COMPUTE_SESSION_STATUS.RUNNING,
+          providerMachineId: "machine_1",
+          computeStartedAt: 1_000,
+        },
+        force: true,
+        reason: "insufficient_credits",
+        nowMs: 6_000,
+      }),
+    ).toEqual({
+      patch: {
+        status: COMPUTE_SESSION_STATUS.TERMINATING,
+        terminationReason: "insufficient_credits",
+      },
+      events: [
+        {
+          status: COMPUTE_SESSION_STATUS.TERMINATING,
+          message: "force stop requested",
+          metadata: {
+            provider_machine_id: "machine_1",
+            reason: "insufficient_credits",
+          },
+        },
+      ],
+    });
+  });
+
   it("sets compute billing end when provisioned sessions terminate", () => {
     expect(
       planComputeSessionTerminated({
