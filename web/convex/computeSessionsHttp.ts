@@ -32,10 +32,14 @@ async function authenticateComputeSessionRuntimeRequest(
     return false;
   }
   const tokenHash = await sha256Hex(token);
-  return await ctx.runQuery(internal.computeSessions.internalValidateRuntimeToken, {
-    computeSessionId,
-    tokenHash,
-  });
+  try {
+    return await ctx.runQuery(internal.computeSessions.internalValidateRuntimeToken, {
+      computeSessionId,
+      tokenHash,
+    });
+  } catch {
+    return false;
+  }
 }
 
 export async function handleComputeSessionRuntimeGet(

@@ -43,10 +43,14 @@ async function authenticateRuntimeRequest(
     return false
   }
   const tokenHash = await sha256Hex(token)
-  return await ctx.runQuery(internal.serves.internalValidateRuntimeToken, {
-    serveId,
-    tokenHash,
-  })
+  try {
+    return await ctx.runQuery(internal.serves.internalValidateRuntimeToken, {
+      serveId,
+      tokenHash,
+    })
+  } catch {
+    return false
+  }
 }
 
 export async function handleServeRuntimeGet(ctx: ActionCtx, request: Request, route: ServeRuntimeRoute) {
