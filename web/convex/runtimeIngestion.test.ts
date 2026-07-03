@@ -36,6 +36,7 @@ vi.mock("@convex/convexJobQueue", () => ({
   completeActionJob: vi.fn(),
   enqueueCleanupFailedUploadJob: vi.fn(),
   enqueueRunDataDeletionBatch: vi.fn(),
+  enqueueTerminateServeMachineJob: vi.fn(),
   enqueueTerminateMachineJob: vi.fn(),
   failActionJob: vi.fn(),
   markCoreJobCompleted: vi.fn(),

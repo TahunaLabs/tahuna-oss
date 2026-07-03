@@ -5,6 +5,8 @@ import { action, internalAction, internalMutation, internalQuery, mutation, quer
 import { RUN_CONFIG } from "@convex/appConfig"
 import { requireUser } from "@convex/auth"
 import { computeProvider } from "@convex/computeProvider"
+import { enqueueTerminateServeMachineJob } from "@convex/convexJobQueue"
+import { createTerminateServeMachineJob } from "@convex/core/jobQueue"
 import {
   planServeFailure,
   planServeComputeSessionBillingFailure,
@@ -157,6 +159,8 @@ type ServeRemovalPayload = {
   user_id: string
   environment_id: string
   compute_session_id: string | null
+  status: string
+  provider_machine_id: string
   object_prefix: string
   manifest_key: string
   manifest_hash: string
@@ -322,6 +326,8 @@ const serveRemovalPayloadValidator = v.object({
   user_id: v.string(),
   environment_id: v.string(),
   compute_session_id: v.union(v.string(), v.null()),
+  status: v.string(),
+  provider_machine_id: v.string(),
   object_prefix: v.string(),
   manifest_key: v.string(),
   manifest_hash: v.string(),
@@ -852,6 +858,8 @@ export const internalGetRemovalPayload = internalQuery({
       user_id: row.userId,
       environment_id: String(row.environmentId),
       compute_session_id: row.computeSessionId ? String(row.computeSessionId) : null,
+      status: row.status,
+      provider_machine_id: row.providerMachineId || "",
       object_prefix: row.modelSnapshot.objectPrefix,
       manifest_key: row.modelSnapshot.manifestKey,
       manifest_hash: row.modelSnapshot.manifestHash,
@@ -1137,6 +1145,15 @@ export const internalRemove = internalAction({
         computeSessionId: payload.compute_session_id as Id<"computeSessions">,
         reason: "serve_delete",
       })
+    } else if (payload.provider_machine_id && !TERMINAL_SERVE_STATUSES.has(payload.status)) {
+      await enqueueTerminateServeMachineJob(
+        ctx,
+        createTerminateServeMachineJob({
+          serveId: payload.serve_id,
+          providerMachineId: payload.provider_machine_id,
+          force: true,
+        }),
+      )
     }
     await ctx.runMutation(internal.serves.internalDeleteRemovedServeRecords, {
       serveId: args.serveId,
