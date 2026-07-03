@@ -85,7 +85,11 @@ export function manifestLimitByKind(kind: SyncKind) {
 }
 
 export const CDN_CONFIG = {
-  baseUrl: "https://pub-558336c62f024020ac75182f00ba41b2.r2.dev",
+  get baseUrl(): string {
+    const url = process.env.NEXT_PUBLIC_CDN_BASE_URL;
+    if (!url) throw new Error("NEXT_PUBLIC_CDN_BASE_URL is required");
+    return url;
+  },
   providerIconsPath: "/assets/providers",
   frameworkIconsPath: "/assets/frameworks",
   faviconPath: "/assets/favicon",
