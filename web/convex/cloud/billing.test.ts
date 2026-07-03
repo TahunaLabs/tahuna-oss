@@ -263,6 +263,78 @@ describe("hosted billing session reservations", () => {
     });
   });
 
+  it("retries insufficient-credit termination for stale terminating sessions", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(1_000_000);
+    const ctx = {
+      db: {
+        patch: vi.fn(),
+      },
+      scheduler: {
+        runAfter: vi.fn(),
+      },
+    };
+
+    await applyComputeSessionLiveBillingResult(ctx as never, {
+      _id: "session_1",
+      userId: "user_1",
+      environmentId: "env_1",
+      status: "terminating",
+      terminatingSince: 99_999,
+    } as never, {
+      kind: "patched",
+      charged: true,
+      owed: true,
+      patch: {
+        computeChargeCents: 60,
+        computeCollectedCents: 20,
+        computeOutstandingCents: 40,
+        computeChargeStatus: "owed",
+        computeChargeError: "insufficient credits",
+        computeReservationRemainingCents: 100,
+      },
+    });
+
+    expect(ctx.scheduler.runAfter).toHaveBeenCalledWith(0, expect.anything(), {
+      userId: "user_1",
+      environmentId: "env_1",
+      computeSessionId: "session_1",
+    });
+  });
+
+  it("does not retry insufficient-credit termination for fresh terminating sessions", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(1_000_000);
+    const ctx = {
+      db: {
+        patch: vi.fn(),
+      },
+      scheduler: {
+        runAfter: vi.fn(),
+      },
+    };
+
+    await applyComputeSessionLiveBillingResult(ctx as never, {
+      _id: "session_1",
+      userId: "user_1",
+      environmentId: "env_1",
+      status: "terminating",
+      terminatingSince: 100_001,
+    } as never, {
+      kind: "patched",
+      charged: true,
+      owed: true,
+      patch: {
+        computeChargeCents: 60,
+        computeCollectedCents: 20,
+        computeOutstandingCents: 40,
+        computeChargeStatus: "owed",
+        computeChargeError: "insufficient credits",
+        computeReservationRemainingCents: 100,
+      },
+    });
+
+    expect(ctx.scheduler.runAfter).not.toHaveBeenCalled();
+  });
+
   it("releases unused compute-session reservations during terminal settlement", async () => {
     await expect(
       settleHostedComputeSessionUsage({} as never, {

@@ -7,6 +7,7 @@ import Stripe from "stripe";
 import { CLOUD_BILLING_CONFIG } from "@/cloud/config";
 import { resolveRunComputePricing } from "@/cloud/billing/run-compute-pricing";
 import { authComponent, requireUser } from "@convex/auth";
+import { RUN_CONFIG } from "@convex/appConfig";
 import {
   ensureUserLedger,
   grantUserCredits,
@@ -43,6 +44,14 @@ export function isHostedBillingClientError(value: string) {
 
 export function hostedBillingHttpStatus(value: string, fallbackStatus: number) {
   return isHostedBillingClientError(value) ? 402 : fallbackStatus;
+}
+
+function isStaleTerminatingComputeSession(row: Doc<"computeSessions">) {
+  if (row.status !== COMPUTE_SESSION_STATUS.TERMINATING) {
+    return false;
+  }
+  const since = row.terminatingSince ?? row.lastHeartbeatAt ?? row.computeStartedAt ?? row.createdAt;
+  return since + RUN_CONFIG.computeSessionTerminatingTimeoutSeconds * 1000 <= Date.now();
 }
 
 function stripeClient() {
@@ -433,7 +442,14 @@ export async function applyComputeSessionLiveBillingResult(
   }
 
   await ctx.db.patch("computeSessions", row._id, result.patch);
-  if (result.owed && row.status !== COMPUTE_SESSION_STATUS.TERMINATING) {
+  if (
+    result.owed &&
+    (
+      row.status !== COMPUTE_SESSION_STATUS.TERMINATING ||
+      isStaleTerminatingComputeSession(row)
+    )
+  ) {
+    // The termination-timeout cron owns normal recovery; billing only re-drives stale terminations.
     await ctx.scheduler.runAfter(0, internal.computeSessions.internalTerminateInsufficientCreditsSession, {
       userId: row.userId,
       environmentId: row.environmentId,
