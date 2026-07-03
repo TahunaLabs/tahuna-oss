@@ -13,6 +13,7 @@ vi.mock("@convex/convexJobQueue", () => jobQueueMocks);
 
 import {
   createServeForUserId,
+  scheduleServeComputeSessionTermination,
   stopServeForUserId,
 } from "@convex/servesLifecycle";
 
@@ -159,5 +160,31 @@ describe("serve lifecycle helpers", () => {
       force: false,
     });
     expect(jobQueueMocks.enqueueServeLifecycleJobs).toHaveBeenCalledWith(ctx, []);
+  });
+
+  it("schedules compute-session termination for linked serves", async () => {
+    const ctx = {
+      scheduler: {
+        runAfter: vi.fn(),
+      },
+    };
+
+    await expect(
+      scheduleServeComputeSessionTermination(ctx as never, {
+        _id: "serve_1",
+        userId: "user_1",
+        environmentId: "env_1",
+        computeSessionId: "session_1",
+      } as never, "serve_failure"),
+    ).resolves.toBe(true);
+
+    expect(ctx.scheduler.runAfter.mock.calls[0]?.[0]).toBe(0);
+    expect(ctx.scheduler.runAfter.mock.calls[0]?.[2]).toEqual({
+      userId: "user_1",
+      environmentId: "env_1",
+      computeSessionId: "session_1",
+      serveId: "serve_1",
+      reason: "serve_failure",
+    });
   });
 });

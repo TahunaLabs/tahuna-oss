@@ -720,6 +720,7 @@ export const internalTerminateInsufficientCreditsSession = internalAction({
       userId: args.userId,
       environmentId: args.environmentId,
       computeSessionId: args.computeSessionId,
+      serveId: args.serveId,
       reason: "insufficient_credits",
     });
     return null;
@@ -871,10 +872,18 @@ export const internalTerminateStaleEnvironmentSession = internalAction({
           );
           return;
         }
+        const failureError = `${error} (retries exhausted)`;
         await ctx.runMutation(internal.computeSessions.internalMarkFailed, {
           computeSessionId: args.computeSessionId,
-          error: `${error} (retries exhausted)`,
+          error: failureError,
         });
+        if (args.serveId) {
+          await ctx.runMutation(internal.serves.markComputeSessionTerminationFailed, {
+            serveId: args.serveId,
+            computeSessionId: args.computeSessionId,
+            error: failureError,
+          });
+        }
       },
     });
     return null;

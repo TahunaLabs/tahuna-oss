@@ -1,4 +1,5 @@
 import { ConvexError } from "convex/values"
+import { internal } from "@convex/_generated/api"
 import type { Doc, Id } from "@convex/_generated/dataModel"
 import type { MutationCtx } from "@convex/_generated/server"
 import { requireManagedComputeProvider } from "@convex/computeProvider"
@@ -107,11 +108,30 @@ export function toServeLifecycleState(row: Doc<"serves">): ServeLifecycleServeSt
     serveId: String(row._id),
     status: row.status,
     providerMachineId: row.providerMachineId,
+    computeSessionId: row.computeSessionId ? String(row.computeSessionId) : undefined,
     runtimeTokenHash: row.runtimeTokenHash,
     computeStartedAt: row.computeStartedAt,
     computeEndedAt: row.computeEndedAt,
     error: row.error,
   }
+}
+
+export async function scheduleServeComputeSessionTermination(
+  ctx: MutationCtx,
+  row: Doc<"serves">,
+  reason: string,
+) {
+  if (!row.computeSessionId) {
+    return false
+  }
+  await ctx.scheduler.runAfter(0, internal.computeSessions.internalTerminateStaleEnvironmentSession, {
+    userId: row.userId,
+    environmentId: row.environmentId,
+    computeSessionId: row.computeSessionId,
+    serveId: row._id,
+    reason,
+  })
+  return true
 }
 
 async function insertServeLifecycleEvents(

@@ -36,6 +36,7 @@ export type ServeLifecycleServeState = {
   serveId: string;
   status: string;
   providerMachineId?: string;
+  computeSessionId?: string;
   runtimeTokenHash?: string;
   computeStartedAt?: number;
   computeEndedAt?: number;
@@ -87,6 +88,11 @@ function compactMetadata(metadata: Record<string, unknown>) {
   return Object.fromEntries(
     Object.entries(metadata).filter(([, value]) => value !== undefined),
   );
+}
+
+function optionalCompactMetadata(metadata: Record<string, unknown>) {
+  const compacted = compactMetadata(metadata);
+  return Object.keys(compacted).length === 0 ? undefined : compacted;
 }
 
 function normalizeMachineId(providerMachineId: string | undefined) {
@@ -319,17 +325,18 @@ export function planServeFailure(args: {
       terminalServeEvent(
         SERVE_LIFECYCLE_STATUS.FAILED,
         errorText,
-        args.provisioningPayload === undefined
-          ? undefined
-          : {
-              provisioning_payload: args.provisioningPayload,
-            },
+        optionalCompactMetadata({
+          provisioning_payload: args.provisioningPayload,
+          compute_session_id: args.serve.computeSessionId,
+        }),
       ),
     ],
-    jobs: planForcedServeMachineTermination({
-      serveId: args.serve.serveId,
-      providerMachineId: args.serve.providerMachineId,
-    }),
+    jobs: args.serve.computeSessionId
+      ? []
+      : planForcedServeMachineTermination({
+          serveId: args.serve.serveId,
+          providerMachineId: args.serve.providerMachineId,
+        }),
   };
 }
 
@@ -402,6 +409,34 @@ export function planServeComputeSessionBillingFailure(args: {
       terminalServeEvent(SERVE_LIFECYCLE_STATUS.FAILED, message, {
         source: "compute-session-billing",
         compute_session_id: args.computeSessionId,
+      }),
+    ],
+    jobs: [],
+  };
+}
+
+export function planServeComputeSessionTerminationFailed(args: {
+  serve: ServeLifecycleServeState;
+  computeSessionId: string;
+  error: string;
+}): ServeLifecyclePlan {
+  if (TERMINAL_SERVE_LIFECYCLE_STATUSES.has(args.serve.status)) {
+    return {};
+  }
+  const errorText =
+    sanitizeServeRuntimeMessage(args.error) ||
+    "failed to terminate compute session";
+  return {
+    patch: {
+      status: SERVE_LIFECYCLE_STATUS.FAILED,
+      error: `serve compute termination failed: ${errorText}`,
+      runtimeTokenHash: "revoked",
+    },
+    events: [
+      terminalServeEvent(SERVE_LIFECYCLE_STATUS.FAILED, "serve compute termination failed", {
+        source: "compute-session",
+        compute_session_id: args.computeSessionId,
+        error: errorText,
       }),
     ],
     jobs: [],
@@ -501,13 +536,15 @@ export function planServeRuntimeStatusIngestion(args: {
             ? args.error || args.message || defaultServeStatusMessage(nextStatus)
             : args.message || defaultServeStatusMessage(nextStatus),
         ) || defaultServeStatusMessage(nextStatus),
-        {
+        compactMetadata({
           source: "serve-runtime",
-        },
+          compute_session_id: args.serve.computeSessionId,
+        }),
       ),
     ],
     jobs:
-      nextStatus === SERVE_LIFECYCLE_STATUS.FAILED || nextStatus === SERVE_LIFECYCLE_STATUS.STOPPED
+      !args.serve.computeSessionId &&
+      (nextStatus === SERVE_LIFECYCLE_STATUS.FAILED || nextStatus === SERVE_LIFECYCLE_STATUS.STOPPED)
         ? planForcedServeMachineTermination({
             serveId: args.serve.serveId,
             providerMachineId: args.serve.providerMachineId,

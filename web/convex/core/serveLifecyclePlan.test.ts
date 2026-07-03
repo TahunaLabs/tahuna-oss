@@ -6,6 +6,8 @@ import {
   defaultServeStatusMessage,
   planServeComputeSessionBillingFailure,
   planServeComputeSessionStop,
+  planServeComputeSessionTerminationFailed,
+  planServeFailure,
   planServeRuntimeStatusIngestion,
   planServeStop,
   shouldEnforceServeStartupTimeout,
@@ -179,6 +181,44 @@ describe("serve lifecycle planning", () => {
     });
   });
 
+  it("does not schedule direct serve machine termination for compute-session-backed runtime failures", () => {
+    const plan = planServeRuntimeStatusIngestion({
+      serve: {
+        serveId: "serve_1",
+        status: SERVE_LIFECYCLE_STATUS.STARTING,
+        providerMachineId: "machine_1",
+        computeSessionId: "session_1",
+      },
+      status: SERVE_LIFECYCLE_STATUS.FAILED,
+      error: "app crashed",
+      nowMs: 42,
+    });
+
+    expect(plan.patch).toMatchObject({
+      status: SERVE_LIFECYCLE_STATUS.FAILED,
+      error: "app crashed",
+    });
+    expect(plan.jobs).toEqual([]);
+  });
+
+  it("does not schedule direct serve machine termination for compute-session-backed provisioning failures", () => {
+    const plan = planServeFailure({
+      serve: {
+        serveId: "serve_1",
+        status: SERVE_LIFECYCLE_STATUS.PROVISIONING,
+        providerMachineId: "machine_1",
+        computeSessionId: "session_1",
+      },
+      error: "startup timeout",
+    });
+
+    expect(plan.patch).toMatchObject({
+      status: SERVE_LIFECYCLE_STATUS.FAILED,
+      error: "startup timeout",
+    });
+    expect(plan.jobs).toEqual([]);
+  });
+
   it("marks a serve unavailable when its compute session is terminated for billing", () => {
     const plan = planServeComputeSessionBillingFailure({
       serve: {
@@ -203,6 +243,39 @@ describe("serve lifecycle planning", () => {
           metadata: {
             source: "compute-session-billing",
             compute_session_id: "session_1",
+          },
+          includeTerminalTiming: true,
+        },
+      ],
+      jobs: [],
+    });
+  });
+
+  it("marks a stopping serve failed when compute session termination retries exhaust", () => {
+    const plan = planServeComputeSessionTerminationFailed({
+      serve: {
+        serveId: "serve_1",
+        status: SERVE_LIFECYCLE_STATUS.STOPPING,
+        providerMachineId: "machine_1",
+      },
+      computeSessionId: "session_1",
+      error: "provider unavailable (retries exhausted)",
+    });
+
+    expect(plan).toEqual({
+      patch: {
+        status: SERVE_LIFECYCLE_STATUS.FAILED,
+        error: "serve compute termination failed: provider unavailable (retries exhausted)",
+        runtimeTokenHash: "revoked",
+      },
+      events: [
+        {
+          status: SERVE_LIFECYCLE_STATUS.FAILED,
+          message: "serve compute termination failed",
+          metadata: {
+            source: "compute-session",
+            compute_session_id: "session_1",
+            error: "provider unavailable (retries exhausted)",
           },
           includeTerminalTiming: true,
         },

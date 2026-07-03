@@ -6,14 +6,9 @@ import { RUN_CONFIG } from "@convex/appConfig"
 import { requireUser } from "@convex/auth"
 import { computeProvider } from "@convex/computeProvider"
 import {
-  enqueueTerminateServeMachineJob,
-} from "@convex/convexJobQueue"
-import {
-  createTerminateServeMachineJob,
-} from "@convex/core/jobQueue"
-import {
   planServeFailure,
   planServeComputeSessionBillingFailure,
+  planServeComputeSessionTerminationFailed,
   planServeMachineProvisioned,
   planServeRuntimeStatusIngestion,
   planServeStoppedAfterTermination,
@@ -55,6 +50,7 @@ import {
 } from "@convex/cloud/serveLifecycleComposition"
 import {
   applyServeLifecyclePlan as applyBareServeLifecyclePlan,
+  scheduleServeComputeSessionTermination,
   toServeLifecycleState,
 } from "@convex/servesLifecycle"
 import {
@@ -1463,6 +1459,7 @@ export const provisionServe = internalAction({
     )
 
     let provisionedProviderMachineId = ""
+    let provisionedProviderCreationTime: number | undefined
     let runtimeTokenHash = ""
     try {
       if (!provisioningPayload.code_manifest_hash) {
@@ -1542,6 +1539,7 @@ export const provisionServe = internalAction({
         return null
       }
       provisionedProviderMachineId = provisionResult.providerMachineId
+      provisionedProviderCreationTime = provisionResult.providerCreationTime
       if (!runtimeTokenHash) {
         throw new Error("serve compute session runtime token hash is required")
       }
@@ -1558,27 +1556,30 @@ export const provisionServe = internalAction({
         providerMetadata: provisionResult.providerMetadata,
       })
       if (await ctx.runQuery(internal.serves.internalShouldAbortProvisioning, { serveId: args.serveId })) {
-        await enqueueTerminateServeMachineJob(ctx, createTerminateServeMachineJob({
+        await ctx.runAction(internal.computeSessions.internalTerminateStaleEnvironmentSession, {
+          userId: provisioningPayload.user_id,
+          environmentId: provisioningPayload.environment_id as Id<"environments">,
+          computeSessionId: provisioningPayload.compute_session_id as Id<"computeSessions">,
           serveId: args.serveId,
-          providerMachineId: provisionResult.providerMachineId,
-          force: true,
-        }))
+          reason: "serve_provisioning_abort",
+        })
         return null
       }
     } catch (error) {
       const detail = error instanceof Error ? error.message : "serve provisioning failed"
+      if (provisionedProviderMachineId) {
+        await ctx.runMutation(internal.computeSessions.internalMarkMachineProvisioned, {
+          computeSessionId: provisioningPayload.compute_session_id as Id<"computeSessions">,
+          providerMachineId: provisionedProviderMachineId,
+          providerCreationTime: provisionedProviderCreationTime,
+          runtimeTokenHash: runtimeTokenHash || "revoked",
+        })
+      }
       await ctx.runMutation(internal.serves.markFailed, {
         serveId: args.serveId,
         error: `serve provisioning failed: ${detail}`,
         provisioningPayload,
       })
-      if (provisionedProviderMachineId) {
-        await enqueueTerminateServeMachineJob(ctx, createTerminateServeMachineJob({
-          serveId: args.serveId,
-          providerMachineId: provisionedProviderMachineId,
-          force: true,
-        }))
-      }
     }
     return null
   },
@@ -1649,11 +1650,15 @@ export const markFailed = internalMutation({
     if (!row) {
       return null
     }
-    await applyServeLifecyclePlan(ctx, args.serveId, row, planServeFailure({
+    const plan = planServeFailure({
       serve: toServeLifecycleState(row),
       error: args.error,
       provisioningPayload: args.provisioningPayload,
-    }))
+    })
+    await applyServeLifecyclePlan(ctx, args.serveId, row, plan)
+    if (plan.patch?.status === SERVE_STATUS.FAILED) {
+      await scheduleServeComputeSessionTermination(ctx, row, "serve_failure")
+    }
     return null
   },
 })
@@ -1672,6 +1677,27 @@ export const markComputeSessionBillingFailed = internalMutation({
     await applyBareServeLifecyclePlan(ctx, args.serveId, row, planServeComputeSessionBillingFailure({
       serve: toServeLifecycleState(row),
       computeSessionId: String(args.computeSessionId),
+    }))
+    return null
+  },
+})
+
+export const markComputeSessionTerminationFailed = internalMutation({
+  args: {
+    serveId: v.id("serves"),
+    computeSessionId: v.id("computeSessions"),
+    error: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const row = await ctx.db.get("serves", args.serveId)
+    if (!row || row.computeSessionId !== args.computeSessionId) {
+      return null
+    }
+    await applyBareServeLifecyclePlan(ctx, args.serveId, row, planServeComputeSessionTerminationFailed({
+      serve: toServeLifecycleState(row),
+      computeSessionId: String(args.computeSessionId),
+      error: args.error,
     }))
     return null
   },
@@ -1900,6 +1926,9 @@ export const ingestRuntimeStatus = internalMutation({
       throw new ConvexError(plan.error)
     }
     await applyServeLifecyclePlan(ctx, args.serveId, row, plan)
+    if (plan.patch?.status === SERVE_STATUS.FAILED) {
+      await scheduleServeComputeSessionTermination(ctx, row, "serve_runtime_failure")
+    }
 
     return { status: plan.resultStatus }
   },
