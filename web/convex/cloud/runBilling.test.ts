@@ -17,6 +17,10 @@ const creditMocks = vi.hoisted(() => ({
 vi.mock("@convex/cloud/credits", () => creditMocks);
 
 import {
+  COMPUTE_SESSION_STATUS,
+  planComputeSessionTerminated,
+} from "@convex/core/computeSessionLifecyclePlan";
+import {
   computeAvailableBalanceCents,
   computeLiveDebitEventType,
   computeLiveDebitIdempotencyKey,
@@ -148,6 +152,44 @@ describe("hosted compute billing helpers", () => {
       referenceType: "compute_session",
       referenceId: "session_1",
     }));
+  });
+
+  it("keeps double-terminal compute-session settlement idempotent", async () => {
+    expect(
+      planComputeSessionTerminated({
+        session: {
+          computeSessionId: "session_1",
+          status: COMPUTE_SESSION_STATUS.FAILED,
+          providerMachineId: "machine_1",
+          computeStartedAt: 1_000,
+          computeEndedAt: 1_801_000,
+        },
+        nowMs: 1_900_000,
+      }),
+    ).toEqual({});
+
+    await expect(
+      settleComputeCharge(
+        {} as never,
+        {
+          userId: "user_1",
+          referenceType: "compute_session",
+          referenceId: "session_1",
+          computeHourlyRateCents: 120,
+          computeCollectedCents: 60,
+        },
+        { durationMs: 30 * 60 * 1000 },
+      ),
+    ).resolves.toMatchObject({
+      chargeCents: 60,
+      chargeDeltaCents: 0,
+      chargeStatus: "charged",
+      collectedCents: 60,
+      outstandingCents: 0,
+    });
+    expect(creditMocks.upsertLedgerDebitTotal).not.toHaveBeenCalled();
+    expect(creditMocks.recordLedgerEvent).not.toHaveBeenCalled();
+    expect(creditMocks.grantUserCredits).not.toHaveBeenCalled();
   });
 
   it("records owed settlement when ledger cannot collect the full target charge", async () => {
