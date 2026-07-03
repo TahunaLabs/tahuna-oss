@@ -23,6 +23,7 @@ import {
   internalMarkIdleAfterRun,
   internalMarkIdleIfActiveRunTerminal,
   internalMarkMachineProvisioned,
+  internalRecordOrphanedMachineTermination,
 } from "@convex/computeSessions";
 
 const NOW_MS = 123_456;
@@ -203,5 +204,25 @@ describe("compute session idle mutations", () => {
 
     expect(ctx.db.patch).not.toHaveBeenCalled();
     expect(ctx.db.insert).not.toHaveBeenCalled();
+  });
+
+  it("records orphaned provider machine terminations for audit", async () => {
+    const ctx = createMachineProvisionedCtx("terminated");
+
+    await internalMutationHandler<{ computeSessionId: string; providerMachineId: string }>(
+      internalRecordOrphanedMachineTermination,
+    )(ctx, {
+      computeSessionId: "session_1",
+      providerMachineId: "machine_1",
+    });
+
+    expect(ctx.db.insert).toHaveBeenCalledWith("computeSessionEvents", {
+      computeSessionId: "session_1",
+      status: "terminated",
+      message: "terminated machine provisioned after session termination",
+      metadata: {
+        provider_machine_id: "machine_1",
+      },
+    });
   });
 });

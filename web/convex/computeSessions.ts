@@ -347,6 +347,29 @@ export const internalGetEvents = internalQuery({
   },
 });
 
+export const internalRecordOrphanedMachineTermination = internalMutation({
+  args: {
+    computeSessionId: v.id("computeSessions"),
+    providerMachineId: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const row = await ctx.db.get("computeSessions", args.computeSessionId);
+    if (!row) {
+      return null;
+    }
+    await ctx.db.insert("computeSessionEvents", {
+      computeSessionId: args.computeSessionId,
+      status: "terminated",
+      message: "terminated machine provisioned after session termination",
+      metadata: {
+        provider_machine_id: args.providerMachineId,
+      },
+    });
+    return null;
+  },
+});
+
 export const internalCreate = internalMutation({
   args: {
     userId: v.string(),

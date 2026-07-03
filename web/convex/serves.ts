@@ -43,6 +43,7 @@ import {
   resolveWandbBaseURL,
   terminateRuntimeMachineWithRetry,
 } from "@convex/runtimeProvisioning"
+import { terminateServeMachineProvisionedAfterSessionTermination } from "@convex/serveOrphanMachines"
 import {
   applyHostedServeLifecyclePlan as applyServeLifecyclePlan,
   createHostedServeForUserId as createServeForUserId,
@@ -1550,7 +1551,12 @@ export const provisionServe = internalAction({
         runtimeTokenHash,
       })
       if (!machineProvisioning.recorded) {
-        // Follow-up WI-2 commits add caller-specific orphan-machine termination.
+        await terminateServeMachineProvisionedAfterSessionTermination(ctx, {
+          serveId: args.serveId,
+          computeSessionId: provisioningPayload.compute_session_id as Id<"computeSessions">,
+          providerMachineId: provisionResult.providerMachineId,
+        })
+        return null
       }
       await ctx.runMutation(internal.serves.markMachineProvisioned, {
         serveId: args.serveId,
@@ -1578,7 +1584,12 @@ export const provisionServe = internalAction({
           runtimeTokenHash: runtimeTokenHash || "revoked",
         })
         if (!machineProvisioning.recorded) {
-          // Follow-up WI-2 commits add caller-specific orphan-machine termination.
+          await terminateServeMachineProvisionedAfterSessionTermination(ctx, {
+            serveId: args.serveId,
+            computeSessionId: provisioningPayload.compute_session_id as Id<"computeSessions">,
+            providerMachineId: provisionedProviderMachineId,
+          })
+          return null
         }
       }
       await ctx.runMutation(internal.serves.markFailed, {
