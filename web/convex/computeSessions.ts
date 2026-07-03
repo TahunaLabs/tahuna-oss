@@ -46,12 +46,15 @@ import {
   settleHostedComputeSessionUsage,
   type HostedComputeSessionUsageSettlement,
 } from "@convex/cloud/billing";
+import { applyHostedRunLifecyclePlan } from "@convex/cloud/runLifecycleComposition";
 import {
   listComputeSessionEvents,
   listComputeSessionsByUserId,
   toComputeSessionResponse,
 } from "@convex/computeSessionsRead";
-import { TERMINAL_STATUSES } from "@convex/runsConstants";
+import { planRunFailure } from "@convex/core/runLifecyclePlan";
+import { ACTIVE_STATUSES, TERMINAL_STATUSES } from "@convex/runsConstants";
+import { toRunLifecycleState } from "@convex/runsLifecycle";
 
 const computeSessionResponseValidator = v.object({
   compute_session_id: v.string(),
@@ -183,6 +186,56 @@ async function scheduleImmediateOneShotTermination(
     environmentId: row.environmentId,
     computeSessionId: row._id,
   });
+}
+
+async function failRunForTerminatingComputeSession(
+  ctx: MutationCtx,
+  run: Doc<"runs"> | null,
+  error: string,
+  seenRunIds: Set<string>,
+) {
+  if (!run || TERMINAL_STATUSES.has(run.status)) {
+    return;
+  }
+  const runId = String(run._id);
+  if (seenRunIds.has(runId)) {
+    return;
+  }
+  seenRunIds.add(runId);
+  await applyHostedRunLifecyclePlan(
+    ctx,
+    run._id,
+    run,
+    planRunFailure({
+      run: toRunLifecycleState(run),
+      error,
+    }),
+  );
+}
+
+async function failRunsAttachedToTerminatingComputeSession(
+  ctx: MutationCtx,
+  row: Doc<"computeSessions">,
+  error: string,
+) {
+  const seenRunIds = new Set<string>();
+  if (row.activeRunId) {
+    await failRunForTerminatingComputeSession(
+      ctx,
+      await ctx.db.get(row.activeRunId),
+      error,
+      seenRunIds,
+    );
+  }
+  const runs = await ctx.db
+    .query("runs")
+    .withIndex("by_compute_session", (q) => q.eq("computeSessionId", row._id))
+    .take(10);
+  for (const run of runs) {
+    if (ACTIVE_STATUSES.has(run.status)) {
+      await failRunForTerminatingComputeSession(ctx, run, error, seenRunIds);
+    }
+  }
 }
 
 async function getAccessibleComputeSession(
@@ -657,6 +710,7 @@ export const internalMarkTerminated = internalMutation({
       return null;
     }
     await clearEnvironmentActiveComputeSession(ctx, row);
+    await failRunsAttachedToTerminatingComputeSession(ctx, row, "compute session terminated");
     await applyComputeSessionPlan(
       ctx,
       args.computeSessionId,
@@ -688,6 +742,7 @@ export const internalMarkFailed = internalMutation({
       return null;
     }
     await clearEnvironmentActiveComputeSession(ctx, row);
+    await failRunsAttachedToTerminatingComputeSession(ctx, row, `compute session failed: ${args.error}`);
     await applyComputeSessionPlan(
       ctx,
       args.computeSessionId,
