@@ -1543,12 +1543,15 @@ export const provisionServe = internalAction({
       if (!runtimeTokenHash) {
         throw new Error("serve compute session runtime token hash is required")
       }
-      await ctx.runMutation(internal.computeSessions.internalMarkMachineProvisioned, {
+      const machineProvisioning = await ctx.runMutation(internal.computeSessions.internalMarkMachineProvisioned, {
         computeSessionId: provisioningPayload.compute_session_id as Id<"computeSessions">,
         providerMachineId: provisionResult.providerMachineId,
         providerCreationTime: provisionResult.providerCreationTime,
         runtimeTokenHash,
       })
+      if (!machineProvisioning.recorded) {
+        // Follow-up WI-2 commits add caller-specific orphan-machine termination.
+      }
       await ctx.runMutation(internal.serves.markMachineProvisioned, {
         serveId: args.serveId,
         providerMachineId: provisionResult.providerMachineId,
@@ -1568,12 +1571,15 @@ export const provisionServe = internalAction({
     } catch (error) {
       const detail = error instanceof Error ? error.message : "serve provisioning failed"
       if (provisionedProviderMachineId) {
-        await ctx.runMutation(internal.computeSessions.internalMarkMachineProvisioned, {
+        const machineProvisioning = await ctx.runMutation(internal.computeSessions.internalMarkMachineProvisioned, {
           computeSessionId: provisioningPayload.compute_session_id as Id<"computeSessions">,
           providerMachineId: provisionedProviderMachineId,
           providerCreationTime: provisionedProviderCreationTime,
           runtimeTokenHash: runtimeTokenHash || "revoked",
         })
+        if (!machineProvisioning.recorded) {
+          // Follow-up WI-2 commits add caller-specific orphan-machine termination.
+        }
       }
       await ctx.runMutation(internal.serves.markFailed, {
         serveId: args.serveId,

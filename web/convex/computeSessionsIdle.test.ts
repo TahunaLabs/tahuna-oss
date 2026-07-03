@@ -22,6 +22,7 @@ vi.mock("@convex/runtimeProvisioning", () => ({
 import {
   internalMarkIdleAfterRun,
   internalMarkIdleIfActiveRunTerminal,
+  internalMarkMachineProvisioned,
 } from "@convex/computeSessions";
 
 const NOW_MS = 123_456;
@@ -62,6 +63,31 @@ function createIdleCtx(run: Record<string, unknown> | null) {
     },
     scheduler: {
       runAfter: vi.fn(),
+    },
+  };
+}
+
+function createMachineProvisionedCtx(status: string) {
+  const session = {
+    _id: "session_1",
+    _creationTime: 1_000,
+    userId: "user_1",
+    environmentId: "env_1",
+    status,
+    idleTimeoutSeconds: 600,
+    runtimeTokenHash: "token_hash",
+  };
+  return {
+    db: {
+      get: vi.fn(async (tableOrId: string, maybeId?: string) => {
+        const id = maybeId ?? tableOrId;
+        if (tableOrId === "computeSessions" && id === "session_1") {
+          return session;
+        }
+        return null;
+      }),
+      patch: vi.fn(),
+      insert: vi.fn(),
     },
   };
 }
@@ -133,5 +159,49 @@ describe("compute session idle mutations", () => {
     expect(firstCtx.db.insert).not.toHaveBeenCalled();
     expect(secondCtx.db.patch).not.toHaveBeenCalled();
     expect(secondCtx.db.insert).not.toHaveBeenCalled();
+  });
+
+  it("reports when machine provisioning is recorded", async () => {
+    const ctx = createMachineProvisionedCtx("provisioning");
+
+    await expect(
+      internalMutationHandler<{
+        computeSessionId: string;
+        providerMachineId: string;
+        providerCreationTime: number;
+        runtimeTokenHash: string;
+      }>(internalMarkMachineProvisioned)(ctx, {
+        computeSessionId: "session_1",
+        providerMachineId: "machine_1",
+        providerCreationTime: 10_000,
+        runtimeTokenHash: "token_hash",
+      }),
+    ).resolves.toEqual({ recorded: true });
+
+    expect(ctx.db.patch).toHaveBeenCalledWith("computeSessions", "session_1", expect.objectContaining({
+      providerMachineId: "machine_1",
+      runtimeTokenHash: "token_hash",
+      providerCreationTime: 10_000,
+      computeStartedAt: 10_000,
+    }));
+  });
+
+  it("reports when machine provisioning is not recorded for terminal sessions", async () => {
+    const ctx = createMachineProvisionedCtx("terminated");
+
+    await expect(
+      internalMutationHandler<{
+        computeSessionId: string;
+        providerMachineId: string;
+        runtimeTokenHash: string;
+      }>(internalMarkMachineProvisioned)(ctx, {
+        computeSessionId: "session_1",
+        providerMachineId: "machine_1",
+        runtimeTokenHash: "token_hash",
+      }),
+    ).resolves.toEqual({ recorded: false });
+
+    expect(ctx.db.patch).not.toHaveBeenCalled();
+    expect(ctx.db.insert).not.toHaveBeenCalled();
   });
 });

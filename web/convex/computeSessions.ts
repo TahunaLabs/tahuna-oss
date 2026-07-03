@@ -383,24 +383,24 @@ export const internalMarkMachineProvisioned = internalMutation({
     providerCreationTime: v.optional(v.number()),
     runtimeTokenHash: v.string(),
   },
-  returns: v.null(),
+  returns: v.object({ recorded: v.boolean() }),
   handler: async (ctx, args) => {
     const row = await ctx.db.get("computeSessions", args.computeSessionId);
     if (!row) {
-      return null;
+      return { recorded: false };
     }
-    await applyComputeSessionPlan(
-      ctx,
-      args.computeSessionId,
-      planComputeSessionMachineProvisioned({
-        session: toComputeSessionState(row),
-        providerMachineId: args.providerMachineId,
-        providerCreationTime: args.providerCreationTime,
-        runtimeTokenHash: args.runtimeTokenHash,
-        nowMs: Date.now(),
-      }),
-    );
-    return null;
+    const plan = planComputeSessionMachineProvisioned({
+      session: toComputeSessionState(row),
+      providerMachineId: args.providerMachineId,
+      providerCreationTime: args.providerCreationTime,
+      runtimeTokenHash: args.runtimeTokenHash,
+      nowMs: Date.now(),
+    });
+    if (!plan.patch) {
+      return { recorded: false };
+    }
+    await applyComputeSessionPlan(ctx, args.computeSessionId, plan);
+    return { recorded: true };
   },
 });
 
@@ -494,12 +494,15 @@ export const provisionComputeSession = internalAction({
       if (!runtimeTokenHash) {
         throw new Error("compute session runtime token hash is required");
       }
-      await ctx.runMutation(internal.computeSessions.internalMarkMachineProvisioned, {
+      const machineProvisioning = await ctx.runMutation(internal.computeSessions.internalMarkMachineProvisioned, {
         computeSessionId: args.computeSessionId,
         providerMachineId: provisionResult.providerMachineId,
         providerCreationTime: provisionResult.providerCreationTime,
         runtimeTokenHash,
       });
+      if (!machineProvisioning.recorded) {
+        // Follow-up WI-2 commits add caller-specific orphan-machine termination.
+      }
       await ctx.runMutation(internal.computeSessions.internalMarkIdle, {
         computeSessionId: args.computeSessionId,
       });
