@@ -33,6 +33,7 @@ import {
   internalListIdleTimedOut,
   internalMarkFailed,
   internalMarkTerminated,
+  internalTerminateInsufficientCreditsSession,
   internalListTerminationTimedOut,
 } from "@convex/computeSessions";
 
@@ -41,12 +42,19 @@ const NOW_MS = 200_000;
 type InternalMutation<TArgs> = {
   _handler: (ctx: unknown, args: TArgs) => Promise<unknown>;
 };
+type InternalAction<TArgs> = {
+  _handler: (ctx: unknown, args: TArgs) => Promise<unknown>;
+};
 type InternalQuery<TArgs> = {
   _handler: (ctx: unknown, args: TArgs) => Promise<unknown>;
 };
 
 function internalMutationHandler<TArgs>(mutation: unknown) {
   return (mutation as InternalMutation<TArgs>)._handler;
+}
+
+function internalActionHandler<TArgs>(action: unknown) {
+  return (action as InternalAction<TArgs>)._handler;
 }
 
 function internalQueryHandler<TArgs>(query: unknown) {
@@ -206,6 +214,43 @@ describe("compute session termination run failure sink", () => {
       activeRunId: undefined,
       terminatedAt: NOW_MS,
     }));
+  });
+
+  it("drives insufficient-credit termination through run, serve, and session actions", async () => {
+    const ctx = {
+      runMutation: vi.fn(),
+      runAction: vi.fn(),
+    };
+
+    await internalActionHandler<{
+      userId: string;
+      environmentId: string;
+      computeSessionId: string;
+      activeRunId?: string;
+      serveId?: string;
+    }>(internalTerminateInsufficientCreditsSession)(ctx, {
+      userId: "user_1",
+      environmentId: "env_1",
+      computeSessionId: "session_1",
+      activeRunId: "run_1",
+      serveId: "serve_1",
+    });
+
+    expect(ctx.runMutation).toHaveBeenCalledWith(expect.anything(), {
+      runId: "run_1",
+      error: "compute session terminated because credits are exhausted",
+    });
+    expect(ctx.runMutation).toHaveBeenCalledWith(expect.anything(), {
+      serveId: "serve_1",
+      computeSessionId: "session_1",
+    });
+    expect(ctx.runAction).toHaveBeenCalledWith(expect.anything(), {
+      userId: "user_1",
+      environmentId: "env_1",
+      computeSessionId: "session_1",
+      serveId: "serve_1",
+      reason: "insufficient_credits",
+    });
   });
 
   it("lists only terminating sessions older than the terminating timeout", async () => {
