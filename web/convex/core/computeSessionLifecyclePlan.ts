@@ -211,6 +211,25 @@ export function planComputeSessionHeartbeat(args: {
   };
 }
 
+export function planComputeSessionServing(args: {
+  session: ComputeSessionState;
+}): ComputeSessionPlan {
+  if (
+    args.session.status !== COMPUTE_SESSION_STATUS.PROVISIONING &&
+    args.session.status !== COMPUTE_SESSION_STATUS.IDLE
+  ) {
+    return {};
+  }
+  return {
+    patch: {
+      status: COMPUTE_SESSION_STATUS.RUNNING,
+    },
+    events: [
+      sessionEvent(COMPUTE_SESSION_STATUS.RUNNING, "compute session serving"),
+    ],
+  };
+}
+
 export function planComputeSessionIdle(args: {
   session: ComputeSessionState;
   nowMs: number;

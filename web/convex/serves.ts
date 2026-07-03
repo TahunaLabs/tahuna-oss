@@ -1581,6 +1581,9 @@ export const provisionServe = internalAction({
         startupTimeoutSeconds: serveSpec.startup_timeout_seconds,
         providerMetadata: provisionResult.providerMetadata,
       })
+      await ctx.runMutation(internal.computeSessions.internalMarkServingSession, {
+        computeSessionId: provisioningPayload.compute_session_id as Id<"computeSessions">,
+      })
       if (await ctx.runQuery(internal.serves.internalShouldAbortProvisioning, { serveId: args.serveId })) {
         await ctx.runAction(internal.computeSessions.internalTerminateStaleEnvironmentSession, {
           userId: provisioningPayload.user_id,

@@ -452,4 +452,54 @@ describe("compute session termination run failure sink", () => {
       },
     ]);
   });
+
+  it("finds heartbeat timed-out serve-backed sessions without active runs", async () => {
+    const staleServeSession = computeSession({
+      _id: "stale_serve_session",
+      status: "running",
+      serveId: "serve_1",
+      lastHeartbeatAt: NOW_MS - 120_000,
+      activeRunId: undefined,
+    });
+    const ctx = {
+      db: {
+        query: vi.fn(() => ({
+          withIndex: vi.fn((_index: string, callback: (q: { eq: (field: string, value: string) => unknown }) => unknown) => {
+            let status = "";
+            callback({
+              eq: (_field: string, value: string) => {
+                status = value;
+                return {};
+              },
+            });
+            return {
+              paginate: vi.fn(async () =>
+                status === "running"
+                  ? { page: [staleServeSession], isDone: true, continueCursor: "" }
+                  : { page: [], isDone: true, continueCursor: "" },
+              ),
+            };
+          }),
+        })),
+      },
+    };
+
+    await expect(
+      internalQueryHandler<{ nowMs: number; timeoutSeconds: number; limit?: number }>(
+        internalListHeartbeatTimedOut,
+      )(ctx, {
+        nowMs: NOW_MS,
+        timeoutSeconds: 120,
+        limit: 1,
+      }),
+    ).resolves.toEqual([
+      {
+        user_id: "user_1",
+        environment_id: "env_1",
+        compute_session_id: "stale_serve_session",
+        active_run_id: "",
+        reason: "heartbeat",
+      },
+    ]);
+  });
 });

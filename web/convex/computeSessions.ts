@@ -35,6 +35,7 @@ import {
   planComputeSessionHeartbeat,
   planComputeSessionIdle,
   planComputeSessionMachineProvisioned,
+  planComputeSessionServing,
   planComputeSessionStop,
   planComputeSessionTerminated,
   isComputeSessionHeartbeatTimedOut,
@@ -576,6 +577,23 @@ export const internalMarkMachineProvisioned = internalMutation({
     }
     await applyComputeSessionPlan(ctx, args.computeSessionId, plan);
     return { recorded: true };
+  },
+});
+
+export const internalMarkServingSession = internalMutation({
+  args: { computeSessionId: v.id("computeSessions") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const row = await ctx.db.get("computeSessions", args.computeSessionId);
+    if (!row) {
+      return null;
+    }
+    await applyComputeSessionPlan(
+      ctx,
+      args.computeSessionId,
+      planComputeSessionServing({ session: toComputeSessionState(row) }),
+    );
+    return null;
   },
 });
 

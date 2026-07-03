@@ -9,6 +9,7 @@ import {
   planComputeSessionTerminated,
   planComputeSessionMachineProvisioned,
   planComputeSessionRunAssigned,
+  planComputeSessionServing,
   planComputeSessionStop,
 } from "@convex/core/computeSessionLifecyclePlan";
 
@@ -175,6 +176,46 @@ describe("compute session lifecycle planning", () => {
         },
       ],
     });
+  });
+
+  it("marks serve-backed sessions running only from provisioning or idle", () => {
+    const runningPlan = {
+      patch: {
+        status: COMPUTE_SESSION_STATUS.RUNNING,
+      },
+      events: [
+        {
+          status: COMPUTE_SESSION_STATUS.RUNNING,
+          message: "compute session serving",
+        },
+      ],
+    };
+
+    expect(
+      planComputeSessionServing({
+        session: { computeSessionId: "session_1", status: COMPUTE_SESSION_STATUS.PROVISIONING },
+      }),
+    ).toEqual(runningPlan);
+    expect(
+      planComputeSessionServing({
+        session: { computeSessionId: "session_1", status: COMPUTE_SESSION_STATUS.IDLE },
+      }),
+    ).toEqual(runningPlan);
+    expect(
+      planComputeSessionServing({
+        session: { computeSessionId: "session_1", status: COMPUTE_SESSION_STATUS.RUNNING },
+      }),
+    ).toEqual({});
+    expect(
+      planComputeSessionServing({
+        session: { computeSessionId: "session_1", status: COMPUTE_SESSION_STATUS.TERMINATING },
+      }),
+    ).toEqual({});
+    expect(
+      planComputeSessionServing({
+        session: { computeSessionId: "session_1", status: COMPUTE_SESSION_STATUS.FAILED },
+      }),
+    ).toEqual({});
   });
 
   it("stops unprovisioned sessions locally and fails active sessions with sanitized detail", () => {
