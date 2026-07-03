@@ -215,8 +215,7 @@ export default defineSchema({
   })
     .index("by_user", ["userId"])
     .index("by_user_and_environment", ["userId", "environmentId"])
-    .index("by_status", ["status"])
-    .index("by_runtime_token_hash", ["runtimeTokenHash"]),
+    .index("by_status", ["status"]),
 
   envVars: defineTable({
     environmentId: v.id("environments"),
