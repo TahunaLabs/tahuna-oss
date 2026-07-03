@@ -33,14 +33,13 @@ async function sumActiveComputeSessionReservationCents(ctx: MutationCtx, userId:
       ACTIVE_COMPUTE_RESERVATION_STATUSES.map((status) =>
         ctx.db
           .query("computeSessions")
-          .withIndex("by_status", (q) => q.eq("status", status))
+          .withIndex("by_user_and_status", (q) => q.eq("userId", userId).eq("status", status))
           .collect(),
       ),
     )
   ).flat();
 
   return activeRows
-    .filter((row) => row.userId === userId)
     .reduce((total, row) => {
       const storedRemainingCents = normalizeReservationCents(row.computeReservationRemainingCents);
       const remainingCents = storedRemainingCents ?? computeSessionReservationRemainingCents({

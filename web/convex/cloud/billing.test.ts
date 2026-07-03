@@ -39,16 +39,19 @@ function fakeReservationCtx(
       query: (table: string) => {
         expect(table).toBe("computeSessions");
         return {
-          withIndex: (_index: string, callback: (q: { eq: (_field: string, value: string) => unknown }) => unknown) => {
-            let status = "";
-            callback({
-              eq: (_field: string, value: string) => {
-                status = value;
-                return {};
+          withIndex: (index: string, callback: (q: { eq: (field: string, value: string) => unknown }) => unknown) => {
+            expect(index).toBe("by_user_and_status");
+            const filters: Record<string, string> = {};
+            const q = {
+              eq: (field: string, value: string) => {
+                filters[field] = value;
+                return q;
               },
-            });
+            };
+            callback(q);
             return {
-              collect: async () => rows.filter((row) => row.status === status),
+              collect: async () =>
+                rows.filter((row) => row.userId === filters.userId && row.status === filters.status),
             };
           },
         };
@@ -95,6 +98,11 @@ describe("hosted billing session reservations", () => {
             userId: "user_1",
             status: "running",
             computeReservationRemainingCents: 169,
+          },
+          {
+            userId: "user_2",
+            status: "running",
+            computeReservationRemainingCents: 10_000,
           },
         ]) as never,
         {

@@ -132,6 +132,7 @@ export default defineSchema({
     .index("by_user_and_environment", ["userId", "environmentId"])
     .index("by_serve", ["serveId"])
     .index("by_status", ["status"])
+    .index("by_user_and_status", ["userId", "status"])
     .index("by_runtime_token_hash", ["runtimeTokenHash"]),
 
   computeSessionEvents: defineTable({
