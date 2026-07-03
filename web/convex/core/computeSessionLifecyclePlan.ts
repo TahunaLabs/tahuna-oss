@@ -308,7 +308,7 @@ export function planComputeSessionTerminated(args: {
   session: ComputeSessionState;
   nowMs: number;
 }): ComputeSessionPlan {
-  if (args.session.status === COMPUTE_SESSION_STATUS.TERMINATED) {
+  if (isTerminalComputeSessionStatus(args.session.status)) {
     return {};
   }
   const computeEndedAt = terminalComputeEndedAt(args.session, args.nowMs);

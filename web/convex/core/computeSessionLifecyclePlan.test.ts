@@ -279,4 +279,36 @@ describe("compute session lifecycle planning", () => {
       },
     });
   });
+
+  it("keeps failed sessions failed on late termination callbacks", () => {
+    expect(
+      planComputeSessionTerminated({
+        session: {
+          computeSessionId: "session_1",
+          status: COMPUTE_SESSION_STATUS.FAILED,
+          providerMachineId: "machine_1",
+          computeStartedAt: 2_000,
+          computeEndedAt: 7_000,
+        },
+        nowMs: 8_000,
+      }),
+    ).toEqual({});
+
+    expect(
+      planComputeSessionTerminated({
+        session: {
+          computeSessionId: "session_1",
+          status: COMPUTE_SESSION_STATUS.TERMINATING,
+          providerMachineId: "machine_1",
+          computeStartedAt: 2_000,
+        },
+        nowMs: 8_000,
+      }),
+    ).toMatchObject({
+      patch: {
+        status: COMPUTE_SESSION_STATUS.TERMINATED,
+        computeEndedAt: 8_000,
+      },
+    });
+  });
 });
