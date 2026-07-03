@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"testing"
 	"time"
@@ -82,6 +83,44 @@ func TestRunEntrypointTransitionsToServingAndStopped(t *testing.T) {
 	}
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Fatalf("unexpected statuses: got=%v want=%v", got, want)
+	}
+}
+
+func TestRunEntrypointEmitsSessionHeartbeatWhileServing(t *testing.T) {
+	port, healthPath, closeServer := newHealthServer(t, http.StatusOK)
+	defer closeServer()
+
+	root := t.TempDir()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var heartbeatCount atomic.Int32
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- RunEntrypoint(ctx, testServeConfig(
+			root,
+			port,
+			healthPath,
+			[]string{"sh", "-c", "trap 'exit 0' TERM INT; while :; do sleep 0.1; done"},
+			func(cfg *Config) {
+				cfg.HealthInterval = 25 * time.Millisecond
+				cfg.GracefulShutdownTimeout = time.Second
+			},
+		), Hooks{
+			EmitSessionHeartbeat: func(context.Context) error {
+				if heartbeatCount.Add(1) >= 2 {
+					cancel()
+				}
+				return nil
+			},
+		})
+	}()
+
+	if err := <-errCh; err != nil {
+		t.Fatalf("RunEntrypoint returned error: %v", err)
+	}
+	if got := heartbeatCount.Load(); got < 2 {
+		t.Fatalf("expected repeated session heartbeats, got %d", got)
 	}
 }
 

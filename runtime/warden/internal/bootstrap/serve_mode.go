@@ -62,6 +62,12 @@ func (r *Runner) runServe(ctx context.Context) error {
 			return r.api.EmitStatus(ctx, update)
 		},
 	}
+	if r.cfg.ComputeSessionID != "" {
+		sessionAPI := runtimeapi.NewSession(r.cfg.APIBase, r.cfg.ComputeSessionID, r.cfg.RuntimeToken, r.cfg.RequestTimeout())
+		serveHooks.EmitSessionHeartbeat = func(ctx context.Context) error {
+			return sessionAPI.EmitSessionHeartbeat(ctx)
+		}
+	}
 
 	dataResultCh := make(chan dataMaterializeResult, 1)
 	go func() {

@@ -67,6 +67,28 @@ func TestGetServeBootstrapPlanUsesServeRuntimePath(t *testing.T) {
 	}
 }
 
+func TestEmitSessionHeartbeatUsesComputeSessionRuntimePath(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Fatalf("expected POST, got %s", r.Method)
+		}
+		if r.URL.Path != "/api/compute_sessions/session_abc/runtime/heartbeat" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		if got := r.Header.Get("Authorization"); got != "Bearer token_123" {
+			t.Fatalf("unexpected auth header: %q", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer server.Close()
+
+	client := NewSession(server.URL, "session_abc", "token_123", 5*time.Second)
+	if err := client.EmitSessionHeartbeat(context.Background()); err != nil {
+		t.Fatalf("EmitSessionHeartbeat returned error: %v", err)
+	}
+}
+
 func TestEmitStatusReturnsErrorOnNonSuccess(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)

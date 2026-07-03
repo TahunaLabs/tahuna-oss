@@ -89,6 +89,28 @@ func TestLoadFromEnvSupportsServeMode(t *testing.T) {
 	}
 }
 
+func TestLoadFromEnvSupportsServeModeWithComputeSessionID(t *testing.T) {
+	t.Setenv("TAHUNA_RUN_ID", "")
+	t.Setenv("TAHUNA_SERVE_ID", "serve_123")
+	t.Setenv("TAHUNA_COMPUTE_SESSION_ID", "session_123")
+	t.Setenv("TAHUNA_API_BASE", "https://api.example.com")
+	t.Setenv("TAHUNA_RUNTIME_TOKEN", "secret")
+
+	cfg, err := LoadFromEnv()
+	if err != nil {
+		t.Fatalf("LoadFromEnv returned error: %v", err)
+	}
+	if cfg.Mode != ModeServe {
+		t.Fatalf("expected serve mode, got %q", cfg.Mode)
+	}
+	if cfg.ResourceID() != "serve_123" {
+		t.Fatalf("expected serve resource id, got %q", cfg.ResourceID())
+	}
+	if cfg.ComputeSessionID != "session_123" {
+		t.Fatalf("expected compute session id session_123, got %q", cfg.ComputeSessionID)
+	}
+}
+
 func TestLoadFromEnvSupportsSessionMode(t *testing.T) {
 	t.Setenv("TAHUNA_RUN_ID", "")
 	t.Setenv("TAHUNA_SERVE_ID", "")

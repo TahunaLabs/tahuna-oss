@@ -100,13 +100,10 @@ func resolveMode(runID, serveID, computeSessionID string) (Mode, error) {
 	hasRunID := runID != ""
 	hasServeID := serveID != ""
 	hasComputeSessionID := computeSessionID != ""
-	targets := 0
-	for _, present := range []bool{hasRunID, hasServeID, hasComputeSessionID} {
-		if present {
-			targets++
-		}
+	if hasRunID && (hasServeID || hasComputeSessionID) {
+		return "", fmt.Errorf("exactly one runtime target is required: TAHUNA_RUN_ID, TAHUNA_SERVE_ID, or TAHUNA_COMPUTE_SESSION_ID")
 	}
-	if targets != 1 {
+	if !hasRunID && !hasServeID && !hasComputeSessionID {
 		return "", fmt.Errorf("exactly one runtime target is required: TAHUNA_RUN_ID, TAHUNA_SERVE_ID, or TAHUNA_COMPUTE_SESSION_ID")
 	}
 	if hasServeID {

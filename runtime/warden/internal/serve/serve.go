@@ -33,8 +33,9 @@ type Config struct {
 }
 
 type Hooks struct {
-	EmitLog    func(level, source, message string)
-	EmitStatus func(update runtimeapi.StatusUpdate) error
+	EmitLog              func(level, source, message string)
+	EmitStatus           func(update runtimeapi.StatusUpdate) error
+	EmitSessionHeartbeat func(ctx context.Context) error
 }
 
 func RunEntrypoint(ctx context.Context, cfg Config, hooks Hooks) error {
@@ -158,6 +159,9 @@ func RunEntrypoint(ctx context.Context, cfg Config, hooks Hooks) error {
 			if err := probeServeHealth(ctx, healthURL, healthTimeout, startupDeadline, healthFailureThreshold, hooks, &healthy, &consecutiveFailures); err != nil {
 				return joinServeError(err, stopServeProcess(supervisor, gracefulShutdownTimeout, hooks))
 			}
+			if healthy {
+				emitSessionHeartbeat(ctx, hooks)
+			}
 		case <-healthTicker.C:
 			if stopRequested {
 				killed, err := supervisor.ForceStopIfExpired(time.Now())
@@ -171,6 +175,9 @@ func RunEntrypoint(ctx context.Context, cfg Config, hooks Hooks) error {
 			}
 			if err := probeServeHealth(ctx, healthURL, healthTimeout, startupDeadline, healthFailureThreshold, hooks, &healthy, &consecutiveFailures); err != nil {
 				return joinServeError(err, stopServeProcess(supervisor, gracefulShutdownTimeout, hooks))
+			}
+			if healthy {
+				emitSessionHeartbeat(ctx, hooks)
 			}
 		case <-ctx.Done():
 			if stopRequested {
@@ -298,6 +305,15 @@ func normalizeHealthPath(path string) string {
 func emitLog(hooks Hooks, level, source, message string) {
 	if hooks.EmitLog != nil {
 		hooks.EmitLog(level, source, message)
+	}
+}
+
+func emitSessionHeartbeat(ctx context.Context, hooks Hooks) {
+	if hooks.EmitSessionHeartbeat == nil {
+		return
+	}
+	if err := hooks.EmitSessionHeartbeat(ctx); err != nil {
+		emitLog(hooks, "warn", "serve", "compute session heartbeat failed: "+err.Error())
 	}
 }
 
