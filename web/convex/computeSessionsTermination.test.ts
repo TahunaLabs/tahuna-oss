@@ -31,6 +31,7 @@ vi.mock("@convex/runtimeProvisioning", () => ({
 import {
   internalMarkFailed,
   internalMarkTerminated,
+  internalListTerminationTimedOut,
 } from "@convex/computeSessions";
 
 const NOW_MS = 200_000;
@@ -38,9 +39,16 @@ const NOW_MS = 200_000;
 type InternalMutation<TArgs> = {
   _handler: (ctx: unknown, args: TArgs) => Promise<unknown>;
 };
+type InternalQuery<TArgs> = {
+  _handler: (ctx: unknown, args: TArgs) => Promise<unknown>;
+};
 
 function internalMutationHandler<TArgs>(mutation: unknown) {
   return (mutation as InternalMutation<TArgs>)._handler;
+}
+
+function internalQueryHandler<TArgs>(query: unknown) {
+  return (query as InternalQuery<TArgs>)._handler;
 }
 
 function computeSession(overrides: Record<string, unknown> = {}) {
@@ -196,5 +204,45 @@ describe("compute session termination run failure sink", () => {
       activeRunId: undefined,
       terminatedAt: NOW_MS,
     }));
+  });
+
+  it("lists only terminating sessions older than the terminating timeout", async () => {
+    const rows = [
+      computeSession({
+        _id: "fresh_session",
+        status: "terminating",
+        terminatingSince: NOW_MS - 899_000,
+      }),
+      computeSession({
+        _id: "stale_session",
+        status: "terminating",
+        terminatingSince: NOW_MS - 900_000,
+      }),
+    ];
+    const ctx = {
+      db: {
+        query: vi.fn(() => ({
+          withIndex: vi.fn(() => ({
+            take: vi.fn(async () => rows),
+          })),
+        })),
+      },
+    };
+
+    await expect(
+      internalQueryHandler<{ nowMs: number; timeoutSeconds: number; limit?: number }>(
+        internalListTerminationTimedOut,
+      )(ctx, {
+        nowMs: NOW_MS,
+        timeoutSeconds: 15 * 60,
+        limit: 10,
+      }),
+    ).resolves.toEqual([
+      {
+        user_id: "user_1",
+        environment_id: "env_1",
+        compute_session_id: "stale_session",
+      },
+    ]);
   });
 });

@@ -246,6 +246,7 @@ describe("compute session lifecycle planning", () => {
       patch: {
         status: COMPUTE_SESSION_STATUS.TERMINATING,
         terminationReason: "insufficient_credits",
+        terminatingSince: 6_000,
       },
       events: [
         {

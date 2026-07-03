@@ -44,6 +44,7 @@ export type ComputeSessionPatch = {
   lastHeartbeatAt?: number;
   lastIdleAt?: number;
   terminationReason?: string;
+  terminatingSince?: number;
   terminatedAt?: number;
 };
 
@@ -290,6 +291,7 @@ export function planComputeSessionStop(args: {
   return {
     patch: {
       status: COMPUTE_SESSION_STATUS.TERMINATING,
+      terminatingSince: args.nowMs,
       ...(reason ? { terminationReason: reason } : {}),
     },
     events: [

@@ -102,6 +102,11 @@ const timedOutComputeSessionValidator = v.object({
   active_run_id: v.string(),
   reason: v.union(v.literal("heartbeat"), v.literal("idle")),
 });
+const terminationTimedOutComputeSessionValidator = v.object({
+  user_id: v.string(),
+  environment_id: v.string(),
+  compute_session_id: v.string(),
+});
 
 function toComputeSessionState(row: Doc<"computeSessions">) {
   return {
@@ -250,6 +255,18 @@ async function getAccessibleComputeSession(
   return row;
 }
 
+function isComputeSessionTerminationTimedOut(args: {
+  terminatingSince?: number | null;
+  lastHeartbeatAt?: number | null;
+  computeStartedAt?: number | null;
+  createdAt: number;
+  timeoutSeconds: number;
+  nowMs: number;
+}) {
+  const since = args.terminatingSince ?? args.lastHeartbeatAt ?? args.computeStartedAt ?? args.createdAt;
+  return since + args.timeoutSeconds * 1000 <= args.nowMs;
+}
+
 export const list = query({
   args: {},
   returns: listComputeSessionsResponseValidator,
@@ -366,6 +383,34 @@ export const internalListIdleTimedOut = internalQuery({
         compute_session_id: String(row._id),
         active_run_id: "",
         reason: "idle" as const,
+      }));
+  },
+});
+
+export const internalListTerminationTimedOut = internalQuery({
+  args: { nowMs: v.number(), timeoutSeconds: v.number(), limit: v.optional(v.number()) },
+  returns: v.array(terminationTimedOutComputeSessionValidator),
+  handler: async (ctx, args) => {
+    const limit = Math.max(1, Math.min(100, Math.floor(args.limit ?? 50)));
+    const rows = await ctx.db
+      .query("computeSessions")
+      .withIndex("by_status", (q) => q.eq("status", "terminating"))
+      .take(limit);
+    return rows
+      .filter((row) =>
+        isComputeSessionTerminationTimedOut({
+          terminatingSince: row.terminatingSince,
+          lastHeartbeatAt: row.lastHeartbeatAt,
+          computeStartedAt: row.computeStartedAt,
+          createdAt: row.createdAt,
+          timeoutSeconds: args.timeoutSeconds,
+          nowMs: args.nowMs,
+        }),
+      )
+      .map((row) => ({
+        user_id: row.userId,
+        environment_id: String(row.environmentId),
+        compute_session_id: String(row._id),
       }));
   },
 });
@@ -850,6 +895,26 @@ export const enforceComputeSessionIdleTimeouts = internalAction({
         environmentId: session.environment_id as Id<"environments">,
         computeSessionId: session.compute_session_id as Id<"computeSessions">,
         reason: session.reason,
+      });
+    }
+    return null;
+  },
+});
+
+export const enforceComputeSessionTerminationTimeouts = internalAction({
+  args: {},
+  returns: v.null(),
+  handler: async (ctx) => {
+    const timedOut = await ctx.runQuery(internal.computeSessions.internalListTerminationTimedOut, {
+      nowMs: Date.now(),
+      timeoutSeconds: RUN_CONFIG.computeSessionTerminatingTimeoutSeconds,
+      limit: 50,
+    });
+    for (const session of timedOut) {
+      await ctx.runAction(internal.computeSessions.internalTerminateStaleEnvironmentSession, {
+        userId: session.user_id,
+        environmentId: session.environment_id as Id<"environments">,
+        computeSessionId: session.compute_session_id as Id<"computeSessions">,
       });
     }
     return null;

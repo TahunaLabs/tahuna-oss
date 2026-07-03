@@ -124,6 +124,7 @@ export default defineSchema({
     ),
     computeChargeError: v.optional(v.string()),
     terminationReason: v.optional(v.string()),
+    terminatingSince: v.optional(v.number()),
     createdAt: v.number(),
     terminatedAt: v.optional(v.number()),
   })

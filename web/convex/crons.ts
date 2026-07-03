@@ -25,4 +25,11 @@ crons.interval(
   {},
 );
 
+crons.interval(
+  "enforce compute session termination timeouts",
+  { minutes: 5 },
+  internal.computeSessions.enforceComputeSessionTerminationTimeouts,
+  {},
+);
+
 export default crons;
