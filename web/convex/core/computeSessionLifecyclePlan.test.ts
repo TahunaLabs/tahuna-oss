@@ -261,6 +261,37 @@ describe("compute session lifecycle planning", () => {
     });
   });
 
+  it("does not refresh terminatingSince when re-driving an already terminating session", () => {
+    expect(
+      planComputeSessionStop({
+        session: {
+          computeSessionId: "session_1",
+          status: COMPUTE_SESSION_STATUS.TERMINATING,
+          providerMachineId: "machine_1",
+          terminatingSince: 6_000,
+        },
+        force: true,
+        reason: "timeout",
+        nowMs: 12_000,
+      }),
+    ).toEqual({
+      patch: {
+        status: COMPUTE_SESSION_STATUS.TERMINATING,
+        terminationReason: "timeout",
+      },
+      events: [
+        {
+          status: COMPUTE_SESSION_STATUS.TERMINATING,
+          message: "force stop requested",
+          metadata: {
+            provider_machine_id: "machine_1",
+            reason: "timeout",
+          },
+        },
+      ],
+    });
+  });
+
   it("sets compute billing end when provisioned sessions terminate", () => {
     expect(
       planComputeSessionTerminated({

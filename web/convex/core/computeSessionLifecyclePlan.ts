@@ -28,6 +28,7 @@ export type ComputeSessionState = {
   providerCreationTime?: number;
   computeStartedAt?: number;
   computeEndedAt?: number;
+  terminatingSince?: number;
   runtimeTokenHash?: string;
   activeRunId?: string;
 };
@@ -291,7 +292,7 @@ export function planComputeSessionStop(args: {
   return {
     patch: {
       status: COMPUTE_SESSION_STATUS.TERMINATING,
-      terminatingSince: args.nowMs,
+      ...(args.session.status === COMPUTE_SESSION_STATUS.TERMINATING ? {} : { terminatingSince: args.nowMs }),
       ...(reason ? { terminationReason: reason } : {}),
     },
     events: [
