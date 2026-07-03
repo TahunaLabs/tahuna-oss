@@ -84,14 +84,12 @@ export function manifestLimitByKind(kind: SyncKind) {
   return kind === "data" ? UPLOAD_LIMITS_BYTES.dataManifest : UPLOAD_LIMITS_BYTES.codeManifest;
 }
 
-const R2_ARTEFACTS_PATH = "/assets/artefacts";
-
 export const CDN_CONFIG = {
   baseUrl: "https://pub-558336c62f024020ac75182f00ba41b2.r2.dev",
   providerIconsPath: "/assets/providers",
   frameworkIconsPath: "/assets/frameworks",
   faviconPath: "/assets/favicon",
-  artefactsPath: R2_ARTEFACTS_PATH,
+  artefactsPath: "/assets/artefacts",
   heroGradientLight: "tahuna-hero-gradient-teal-lime.avif",
   heroGradientDark: "tahuna-hero-gradient-dark-teal-lime.avif",
 } as const;
