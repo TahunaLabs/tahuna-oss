@@ -63,6 +63,8 @@ Compute reservations:
 - A reservation is released when the compute session reaches a terminal state and final settlement has run.
 - Ledger debits still represent collected usage, not held funds.
 
+Reservations are advisory row-derived holds, not ledger holds. They prevent new launches from overcommitting the visible prepaid balance, but they do not isolate or escrow credits. Concurrent live debits, storage debits, or other ledger activity can still consume the same balance while a reservation exists; the live debit and terminal settlement paths remain the source of truth for collected usage and owed amounts.
+
 ## Config Used Today
 
 From `web/cloud/config.ts`:
