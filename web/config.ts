@@ -86,8 +86,8 @@ export function manifestLimitByKind(kind: SyncKind) {
 
 export const CDN_CONFIG = {
   get baseUrl(): string {
-    const url = process.env.NEXT_PUBLIC_CDN_BASE_URL;
-    if (!url) throw new Error("NEXT_PUBLIC_CDN_BASE_URL is required");
+    const url = process.env.NEXT_PUBLIC_ASSETS_URL;
+    if (!url) throw new Error("NEXT_PUBLIC_ASSETS_URL is required");
     return url;
   },
   providerIconsPath: "/assets/providers",
