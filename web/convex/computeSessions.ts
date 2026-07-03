@@ -326,7 +326,7 @@ export const internalMarkIdleIfActiveRunTerminal = internalMutation({
       return null;
     }
     const run = await ctx.db.get(row.activeRunId);
-    if (!run || !TERMINAL_STATUSES.has(run.status)) {
+    if (run && !TERMINAL_STATUSES.has(run.status)) {
       return null;
     }
     await applyComputeSessionPlan(
@@ -570,7 +570,7 @@ export const internalMarkIdleAfterRun = internalMutation({
       return null;
     }
     const run = await ctx.db.get(args.runId);
-    if (!run || !TERMINAL_STATUSES.has(run.status)) {
+    if (run && !TERMINAL_STATUSES.has(run.status)) {
       return null;
     }
     await applyComputeSessionPlan(
