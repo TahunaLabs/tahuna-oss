@@ -475,6 +475,7 @@ export function planCancellationTerminationCompleted(args: {
   return {
     patch: {
       status: RUN_LIFECYCLE_STATUS.CANCELLED,
+      runtimeTokenHash: "revoked",
     },
     events: [
       terminalRunEvent(

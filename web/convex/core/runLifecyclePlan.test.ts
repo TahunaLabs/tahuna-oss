@@ -4,6 +4,7 @@ import {
   RUN_LIFECYCLE_STATUS,
   isActiveRunStatus,
   isTerminalRunStatus,
+  planCancellationTerminationCompleted,
   planRunCancellation,
   planRunCreation,
   planRunDeletion,
@@ -204,6 +205,23 @@ describe("run lifecycle planning", () => {
       runtimeTokenHash: "revoked",
     });
     expect(plan.jobs).toEqual([]);
+  });
+
+  it("revokes runtime tokens when cancellation termination completes", () => {
+    const plan = planCancellationTerminationCompleted({
+      run: {
+        runId: "run_1",
+        status: RUN_LIFECYCLE_STATUS.CANCELLING,
+        cancellationRequested: true,
+        runtimeTokenHash: "token_hash",
+      },
+      force: true,
+    });
+
+    expect(plan.patch).toEqual({
+      status: RUN_LIFECYCLE_STATUS.CANCELLED,
+      runtimeTokenHash: "revoked",
+    });
   });
 
   it("commits only artifact keys under the run output path and deduplicates existing keys", () => {
