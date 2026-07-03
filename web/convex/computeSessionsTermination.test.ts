@@ -3,6 +3,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const billingMocks = vi.hoisted(() => ({
   settleHostedComputeSessionUsage: vi.fn(async () => ({ patch: {} })),
 }));
+const runtimeProvisioningMocks = vi.hoisted(() => ({
+  provisionRuntimeMachine: vi.fn(),
+  resolveImageName: vi.fn(),
+  resolveWandbBaseURL: vi.fn(),
+  terminateRuntimeMachine: vi.fn(),
+  terminateRuntimeMachineWithRetry: vi.fn(),
+}));
 
 vi.mock("@convex/auth", () => ({
   authComponent: {},
@@ -20,13 +27,7 @@ vi.mock("@convex/convexJobQueue", () => ({
   enqueueRunLifecycleJobs: vi.fn(),
 }));
 
-vi.mock("@convex/runtimeProvisioning", () => ({
-  provisionRuntimeMachine: vi.fn(),
-  resolveImageName: vi.fn(),
-  resolveWandbBaseURL: vi.fn(),
-  terminateRuntimeMachine: vi.fn(),
-  terminateRuntimeMachineWithRetry: vi.fn(),
-}));
+vi.mock("@convex/runtimeProvisioning", () => runtimeProvisioningMocks);
 
 import {
   internalListHeartbeatTimedOut,
@@ -34,6 +35,7 @@ import {
   internalMarkFailed,
   internalMarkTerminated,
   internalTerminateInsufficientCreditsSession,
+  internalTerminateStaleEnvironmentSession,
   internalListTerminationTimedOut,
 } from "@convex/computeSessions";
 
@@ -123,6 +125,7 @@ function createTerminationCtx(args: {
 
 describe("compute session termination run failure sink", () => {
   beforeEach(() => {
+    vi.clearAllMocks();
     vi.spyOn(Date, "now").mockReturnValue(NOW_MS);
   });
 
@@ -251,6 +254,44 @@ describe("compute session termination run failure sink", () => {
       serveId: "serve_1",
       reason: "insufficient_credits",
     });
+  });
+
+  it("re-driven stale termination still wants to terminate the provider machine", async () => {
+    const session = {
+      compute_session_id: "session_1",
+      user_id: "user_1",
+      environment_id: "env_1",
+      status: "terminating",
+      provider_machine_id: "machine_1",
+    };
+    runtimeProvisioningMocks.terminateRuntimeMachineWithRetry.mockImplementationOnce(
+      async (args: { shouldTerminate: () => Promise<boolean> }) => {
+        await expect(args.shouldTerminate()).resolves.toBe(true);
+      },
+    );
+    const ctx = {
+      runQuery: vi.fn(async () => session),
+      runMutation: vi.fn(),
+      scheduler: {
+        runAfter: vi.fn(),
+      },
+    };
+
+    await internalActionHandler<{
+      userId: string;
+      environmentId: string;
+      computeSessionId: string;
+    }>(internalTerminateStaleEnvironmentSession)(ctx, {
+      userId: "user_1",
+      environmentId: "env_1",
+      computeSessionId: "session_1",
+    });
+
+    expect(runtimeProvisioningMocks.terminateRuntimeMachineWithRetry).toHaveBeenCalledWith(expect.objectContaining({
+      ctx,
+      providerMachineId: "machine_1",
+      attempt: 0,
+    }));
   });
 
   it("lists only terminating sessions older than the terminating timeout", async () => {
