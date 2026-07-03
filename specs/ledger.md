@@ -19,7 +19,7 @@ This is prepaid credits accounting with Stripe funding:
 - One ledger balance per Better Auth user (`userCredits`).
 - Ledger events in `usageEvents`.
 - Training compute debits keyed to `computeSessions`.
-- Serving compute debits are currently keyed to `serves`, but the target serving migration moves provider-machine billing to `computeSessions`.
+- Serving compute debits keyed to `computeSessions`.
 - Storage growth debits.
 - Prepaid Stripe Checkout top-ups.
 - Billing UI reads balance + ledger history from Convex.
@@ -59,7 +59,7 @@ Compute reservations:
 
 - Active compute reservations reduce available credits but do not debit the ledger upfront.
 - The canonical reservation owner for provider compute is the `computeSessions` row.
-- This is implemented for training compute sessions now; serving must use the same reservation owner when it migrates.
+- Training and serving provider compute use the same compute-session reservation owner.
 - A reservation is released when the compute session reaches a terminal state and final settlement has run.
 - Ledger debits still represent collected usage, not held funds.
 
@@ -164,7 +164,7 @@ Serving runs on the compute-session billing path.
 
 - Every serve runs on top of a compute session.
 - The compute session owns provider-machine lifetime, runtime token, runtime spec snapshot, reservation, termination, and compute billing.
-- The serve should own serving identity, health/readiness, routing, inference proxying, model snapshot, logs, and user-facing serve status.
+- The serve owns serving identity, health/readiness, routing, inference proxying, model snapshot, logs, and user-facing serve status.
 - Serve compute-session launch uses the same available-balance gate as training:
   - compute the one-hour reserve from the selected serving runtime
   - subtract active reservation remainder from `userCredits.balanceCents`
@@ -172,8 +172,8 @@ Serving runs on the compute-session billing path.
 - Serving compute sessions are live-billed every 5 minutes from exact provider-machine uptime.
 - The serving live debit ledger row is keyed by `compute_session:<computeSessionId>:live_debit`.
 - Serving compute ledger references use `referenceType = "compute_session"` and the compute session ID, not the serve ID.
-- If the ledger cannot collect the full target charge, the compute session must terminate with reason `insufficient_credits`; the serve should stop routing work and transition to a terminal/unavailable user-facing state with a billing error.
-- That migration requires a separate design because serving is long-lived and request-addressable.
+- If the ledger cannot collect the full target charge, the compute session terminates with reason `insufficient_credits`; the serve stops routing work and transitions to a terminal/unavailable user-facing state with a billing error.
+- Serve stop/delete and serve failure paths terminate the backing compute session, not a separate serve-owned machine lifetime.
 
 ## Storage Billing (Implemented Now)
 
@@ -256,7 +256,7 @@ Users should not choose a compute billing mode in Tahuna Cloud. Billing UX shoul
 
 Current compute design optimizes for user clarity and runtime efficiency:
 
-- Pros: real-time balance updates, single line per compute session or serve in ledger history, no row fanout.
+- Pros: real-time balance updates, single line per compute session in ledger history, no row fanout.
 - Cons: active compute ledger line is mutable (not fully append-only tick history).
 
 If strict immutable event sourcing is required later, add a separate append-only accrual table and keep UI aggregation per run.

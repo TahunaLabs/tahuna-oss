@@ -74,7 +74,8 @@ Serving billing is compute-session-scoped:
 - insufficient credits terminate the compute session with reason `insufficient_credits`
 - request routing, health, model snapshot, and serve API compatibility remain on the serve
 - insufficient-credit termination stops accepting inference work, clears readiness/routing, and moves the serve to a terminal/unavailable user-facing state with a billing error
-- the migration must preserve existing inference URLs and serve lifecycle semantics
+- serve stop/delete and serve failure paths terminate the backing compute session
+- existing inference URLs and serve lifecycle semantics are preserved
 
 ### Serve Record Schema
 
@@ -82,6 +83,7 @@ Serving billing is compute-session-scoped:
 |-------|------|-------------|
 | `userId` | string | Owner |
 | `environmentId` | string | Parent environment |
+| `computeSessionId` | string | Backing compute session that owns provider-machine lifetime and billing |
 | `status` | enum | Current state |
 | `engine` | string | `vllm`, `llama.cpp`, `onnxruntime`, or `triton` later |
 | `engineVersion` | string | Selected engine version |
@@ -89,8 +91,8 @@ Serving billing is compute-session-scoped:
 | `task` | string | `chat`, `completion`, `embeddings`, `rerank`, or `predict` |
 | `modelRef` | string | Model reference from `tahuna.toml` |
 | `imageName` | string | Resolved Tahuna runtime image |
-| `providerMachineId` | string? | Provider-native machine identifier |
-| `runtimeTokenHash` | string | SHA256 of machine runtime token |
+| `providerMachineId` | string? | Provider-native machine identifier mirrored for routing; source lifetime is the compute session |
+| `runtimeTokenHash` | string | Legacy/compatibility field; hosted serving stores the machine runtime token hash on the backing compute session |
 | `port` | number | Internal engine port |
 | `healthPath` | string | Readiness/liveness probe path |
 | `endpointUrl` | string? | User-facing endpoint once healthy |

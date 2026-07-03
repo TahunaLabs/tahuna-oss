@@ -14,7 +14,7 @@ The ledger accounting model lives in `specs/ledger.md`. This document defines th
 4. Active compute must never continue intentionally after credits are exhausted.
 5. Warm-session idle time is real provider spend and remains charged to the compute session.
 6. Ledger debits represent collected usage. Reservations are holds against available credits, not charges.
-7. The target architecture is that all provider compute runs on top of `computeSessions`; serving is the next migration after training.
+7. All hosted provider compute runs on top of `computeSessions`; runs and serves keep their own workload identity and user-facing lifecycle.
 
 ## Billing Subjects
 
@@ -82,7 +82,7 @@ Only available balance can be used for new compute reservations.
 
 ## One-Hour Launch Reserve
 
-Before provisioning a training compute session, Tahuna must reserve one hour of the selected runtime.
+Before provisioning a hosted compute session for training or serving, Tahuna must reserve one hour of the selected runtime.
 
 ```text
 hourlyRateCents =
@@ -126,7 +126,7 @@ This prevents a user from launching multiple one-hour machines with the same cre
 
 ## Billing Cadence
 
-Training compute sessions are billed every 5 minutes.
+Hosted compute sessions are billed every 5 minutes.
 
 The billing tick does not define the price granularity. Each tick recomputes the cumulative target charge from exact uptime:
 
@@ -169,6 +169,7 @@ Required behavior:
 6. Request provider machine termination.
 7. Record the termination reason as `insufficient_credits`.
 8. If a run is active, move it to a terminal failure/cancelled state with a user-readable insufficient-credit error.
+9. If a serve owns the session, stop accepting inference work and move the serve to a terminal/unavailable state with a user-readable billing error.
 
 Owed status is an accounting state, not permission to keep running compute.
 
@@ -252,18 +253,19 @@ The MVP does not require auto top-up. Auto top-up can be added later as a user-c
 
 ## Implementation Notes
 
-Required training implementation changes:
+Implemented compute-session billing changes:
 
-1. Store a one-hour reservation on each active training compute session.
+1. Store a one-hour reservation on each active compute session.
 2. Compute available balance as ledger balance minus active reservation remainder.
 3. Gate compute-session provisioning on available balance, not raw ledger balance.
-4. Change training compute billing cron cadence to 5 minutes.
+4. Use a 5-minute compute-session billing cron cadence.
 5. Keep live debit idempotency keyed to compute session.
 6. Terminate compute sessions immediately when live billing cannot collect the full target delta.
 7. Mark active runs terminal when their session terminates for insufficient credits.
-8. Release unused reservation during terminal settlement.
+8. Mark backed serves terminal/unavailable when their session terminates for insufficient credits.
+9. Release unused reservation during terminal settlement.
 
-Serving compute-session migration is complete:
+Serving compute-session support is implemented:
 
 1. Serves have backing compute sessions.
 2. Provider-machine lifetime, runtime token, reservation, billing, and termination live on `computeSessions`.
@@ -279,17 +281,18 @@ Serving compute-session migration is complete:
 - Monthly invoices as the primary credit control.
 - Letting active compute intentionally run into arrears.
 - Smearing warm idle cost across runs.
-- Migrating serving to compute sessions in the same pass as training credit enforcement.
+- Duplicating provider-machine billing on runs or serves outside the compute-session ledger reference.
 
 ## Acceptance Criteria
 
-- A training compute session cannot be provisioned unless the user has enough available credits for one hour of the selected runtime.
+- A training or serving compute session cannot be provisioned unless the user has enough available credits for one hour of the selected runtime.
 - Active reservations prevent the same balance from launching multiple sessions.
-- Training compute sessions are billed every 5 minutes from exact uptime.
+- Active compute sessions are billed every 5 minutes from exact uptime.
 - If a compute-session live debit cannot collect the full target charge, the session transitions to terminating with reason `insufficient_credits`.
 - One-shot sessions terminate after the attached run reaches terminal state.
 - Warm sessions keep billing while idle until timeout or termination.
 - Warm idle spend stays on the compute session.
 - Run summaries may display derived charges, but run ledger debits are not the source of truth for training compute.
-- Current serving behavior remains unchanged until its compute-session migration.
-- After serving migration, serving provider-machine lifetime, billing, reservations, 5-minute live polling, and insufficient-credit termination are compute-session-owned.
+- Serve summaries may display serve identity and lifecycle context, but serve ledger debits are not the source of truth for serving compute.
+- Serving provider-machine lifetime, billing, reservations, 5-minute live polling, final settlement, and insufficient-credit termination are compute-session-owned.
+- Existing serve API compatibility, inference URLs, routing, health, readiness, and model snapshot ownership remain serve-owned.

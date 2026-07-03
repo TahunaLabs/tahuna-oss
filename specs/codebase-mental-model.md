@@ -1,6 +1,6 @@
 # Tahuna Codebase Mental Model
 
-Last reviewed: 2026-07-02
+Last reviewed: 2026-07-03
 
 This document is a codebase-level mental model for Tahuna. It is written for someone who wants to understand the system deeply enough to debug lifecycle problems, reason about CLI/backend/runtime boundaries, and know where each concern lives.
 
@@ -31,9 +31,9 @@ Tahuna is a local CLI plus Convex/Next.js control plane plus Go runtime agent. T
 | Data manifest | R2 object under data manifest prefix, hash on environment/run/serve | Immutable data bundle manifest; current CLI stores data as one deterministic tar.gz blob |
 | Blob | R2 `blobs/{sha256}` | Content-addressed file body used by manifests |
 | Run | `runs` table | One training execution with its own status, logs, metrics, artifacts, terminal result, and pinned manifests |
-| Compute session | `computeSessions` table | Training provider-machine lifetime; owns runtime spec snapshot, liveness, idle policy, termination, and compute billing |
-| Serve | `serves` table | Long-lived inference process pinned to code/data plus immutable model snapshot |
-| Runtime token | SHA256 stored on run/serve/session, raw token injected into container | Per-machine bearer token for runtime callback endpoints |
+| Compute session | `computeSessions` table | Provider-machine lifetime for hosted training and serving; owns runtime spec snapshot, liveness, reservation, termination, runtime token, and compute billing |
+| Serve | `serves` table | Long-lived inference identity pinned to code/data plus immutable model snapshot; backed by a compute session for provider-machine lifetime |
+| Runtime token | SHA256 stored on run/session, raw token injected into container | Per-machine bearer token for runtime callback endpoints; serving stores the machine token on the backing compute session |
 | Job | `jobs` table and Convex scheduler/Workpool | Idempotent provisioning, timeout, termination, cleanup work |
 | Storage object | `storageObjects`, `dataBlobs` tables plus R2 | Indexed user-visible data uploads and run artifacts |
 
@@ -712,7 +712,7 @@ Flow:
 
 Warm runs are still separate run records. Each run has its own pinned manifests, logs, metrics, artifacts, and terminal state.
 
-Compute sessions are the canonical training billing subject. They accrue provider-machine uptime, including startup, active execution, and warm idle time. Runs may display derived charge summaries, but the ledger reference for training compute is the compute session.
+Compute sessions are the canonical hosted compute billing subject. They accrue provider-machine uptime, including startup, active training execution, warm idle time, and serving uptime. Runs and serves may display derived charge summaries, but the ledger reference for provider compute is the compute session.
 
 ## Serve Lifecycle
 
@@ -838,19 +838,19 @@ The serve runtime never reads directly from the source run or source storage pre
 2. Calls `internal.serves.provisionServe`.
 3. If no capacity, removes serve and returns 409.
 
-`provisionServe()`:
+Hosted `provisionServe()`:
 
 1. Load provisioning payload and serve provision spec.
 2. Mark serve provisioning.
 3. Validate pinned code/data manifests and model manifest.
 4. Resolve env vars.
-5. Generate runtime token and store hash.
+5. Generate runtime token and store hash on the backing compute session.
 6. Create provider machine:
-   - name `tahuna-{serveId}`
-   - image by framework/version/Python
+   - name `tahuna-session-{computeSessionId}`
+   - image by serve framework/version/Python
    - GPU/volume from serve config
    - ports: `22/tcp` and `{servePort}/http`
-7. Mark machine provisioned.
+7. Mark the backing compute session and serve machine mirror provisioned.
 8. Schedule startup timeout.
 
 ### Warden Serve Mode
@@ -876,6 +876,7 @@ The serve process gets these user-facing env vars in addition to inherited syste
 
 ```text
 TAHUNA_SERVE_ID
+TAHUNA_COMPUTE_SESSION_ID
 TAHUNA_WORKSPACE_ROOT
 TAHUNA_DATA_DIR
 TAHUNA_OUTPUT_DIR
@@ -915,7 +916,7 @@ Behavior:
 | Dimension | Run / Train | Serve | Auto-Research |
 |---|---|---|---|
 | User command | `tahuna train`, `tahuna run create` | `tahuna serve create` | `tahuna research run` |
-| Backend durable object | `runs` plus `computeSessions` | `serves` | Local `.tahuna/research/*.json` plus normal runs |
+| Backend durable object | `runs` plus `computeSessions` | `serves` plus backing `computeSessions` | Local `.tahuna/research/*.json` plus normal runs |
 | Runtime mode | Warden compute-session mode for hosted training; direct run mode is legacy | Warden serve mode | No special runtime mode |
 | Lifetime | Terminal execution | Long-lived service | Local loop over many terminal runs |
 | Input code | Latest synced code manifest pinned on run | Latest synced code manifest pinned on serve | Each baseline/trial syncs and creates a normal pinned run |
@@ -924,7 +925,7 @@ Behavior:
 | Output | Artifacts from output dir | Live inference endpoint and serve logs | Session JSON, patch snapshots, graph, accepted/rejected trial runs |
 | Process command | Train command | Serve command | CLI creates train runs; local agent/user edits code |
 | Status model | `queued/provisioning/running/cancelling/completed/failed/cancelled` | `queued/provisioning/starting/serving/stopping/stopped/failed` | `running`, `awaiting_patch`, `running_trial`, `budget_exhausted`, `failed` in local JSON |
-| Auth from machine | Runtime token on run/session | Runtime token on serve | Uses normal CLI API key to create/poll runs |
+| Auth from machine | Runtime token on run/session | Runtime token on backing compute session plus serve ID | Uses normal CLI API key to create/poll runs |
 | Artifacts | Uploaded after training | Model snapshot exists before serve starts; serve runtime does not upload model artifacts | Reads run metrics and keeps/restores local patches |
 
 ## Auto-Research

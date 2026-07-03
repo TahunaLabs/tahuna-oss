@@ -14,7 +14,7 @@ This is the hosted managed-billing path. Users pay Tahuna, Tahuna credits fund h
 - `$1 paid = $1 Tahuna credit`.
 - Training compute-session launch requires a one-hour credit reserve before provider provisioning.
 - Serve launch requires a one-hour backing compute-session credit reserve before provider provisioning.
-- Hosted training compute sessions and serves are managed by Tahuna only; users do not choose a compute billing mode.
+- Hosted compute sessions for training and serving are managed by Tahuna only; users do not choose a compute billing mode.
 - No Stripe Billing Portal for MVP.
 - No refund, dispute, or chargeback automation for MVP.
 
@@ -27,7 +27,7 @@ Managed billing is the only Tahuna Cloud path.
 - Tahuna owns and uses the provider credentials.
 - Tahuna pays the compute provider.
 - Tahuna records user-facing payment history from Stripe payment records.
-- Tahuna records training compute-session debits and serve compute debits in the credit ledger.
+- Tahuna records training and serving compute debits in the credit ledger as compute-session references.
 - Provider-side balance, quota, credential, and capacity failures are Tahuna operational failures.
 
 ## Configuration

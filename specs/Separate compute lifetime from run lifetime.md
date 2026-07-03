@@ -6,7 +6,7 @@ Tahuna separates **run lifetime** from **compute lifetime**.
 
 A **run** is one immutable training execution. It owns the run ID, status, logs, metrics, artifacts, terminal result, and the pinned code/data manifests used for that execution.
 
-A **compute session** is the billable provider-machine lifetime. It owns provider machine provisioning, runtime spec snapshot, runtime token, liveness, reservation, provider termination, and compute billing. For training, it can execute one run and terminate immediately, or stay warm and execute multiple runs sequentially while it remains alive. For serving, the next migration should put the long-lived serving machine on top of a compute session while keeping serving identity and routing on the serve.
+A **compute session** is the billable provider-machine lifetime. It owns provider machine provisioning, runtime spec snapshot, runtime token, liveness, reservation, provider termination, and compute billing. For training, it can execute one run and terminate immediately, or stay warm and execute multiple runs sequentially while it remains alive. For serving, it backs the long-lived serving machine while serving identity, health, routing, inference proxying, model snapshot, logs, and user-facing status remain on the serve.
 
 A compute session never owns the user's code/data truth, run logs, run metrics, artifacts, or terminal result. Those remain owned by runs. The compute session is the machine lease plus cache; runs are immutable workload records assigned to that lease.
 
@@ -16,7 +16,7 @@ The target refactor is that every training run uses a compute session:
 - a keep-warm run creates a compute session with a user-selected idle window and terminates after the session has been idle for that window
 - a warm run attaches to the environment's current idle compute session
 
-Serving was out of scope for the training refactor phase. The target architecture is still that serving also runs on top of compute sessions; serve lifecycle and inference routing stay serve-owned while compute lifetime, billing, reservation, and termination move to `computeSessions`.
+Serving also runs on top of compute sessions. Serve lifecycle and inference routing stay serve-owned while compute lifetime, billing, reservation, and termination live on `computeSessions`.
 
 The normal user surface stays run-first:
 
@@ -366,22 +366,22 @@ The backend guarantee is "do not assign more work and request provider terminati
 
 ## Billing And Spend
 
-Compute billing accrues on the compute session while the provider machine is alive. This includes provider startup, runtime bootstrap, active run execution, and warm idle time.
+Compute billing accrues on the compute session while the provider machine is alive. This includes provider startup, runtime bootstrap, active run execution, warm idle time, and serving uptime.
 
 The credit enforcement policy is defined in `specs/billing.md`. The short version:
 
-- training compute-session launch requires enough available credits for one hour of the selected runtime before provider provisioning
-- live training compute debits run every 5 minutes and recompute exact cumulative uptime
+- training and serving compute-session launches require enough available credits for one hour of the selected runtime before provider provisioning
+- live hosted compute debits run every 5 minutes and recompute exact cumulative uptime
 - if the ledger cannot collect the full target charge, the compute session terminates with reason `insufficient_credits`
 - reservations are holds against available credits, not upfront ledger debits
 
-The compute session is the canonical billing reference for training compute:
+The compute session is the canonical billing reference for hosted provider compute:
 
 - live debit idempotency keys are keyed by `computeSessionId`
 - pricing fields live on the compute session runtime spec snapshot
 - `computeStartedAt` is set when the provider machine is provisioned
 - `computeEndedAt` is set when provider termination succeeds or when termination failure is finalized
-- the final training compute charge is settled against the compute session
+- the final compute charge is settled against the compute session
 
 Runs may expose derived billing fields for user-facing summaries, but they must not be the source of truth for provider-machine spend. This avoids double billing and makes idle warm time auditable.
 
@@ -391,9 +391,7 @@ For keep-warm training, the compute session may execute multiple runs. Active ex
 
 Until that exists, Auto-Research requires explicit `--keep-warm-minutes` so idle spend is never inherited silently from project training defaults.
 
-## Serving Compute-Session Migration
-
-Serving remains separate in the current implementation, but it must move to the same billable compute-lifetime model.
+## Serving Compute Sessions
 
 Serving now uses the compute-session model:
 
@@ -407,7 +405,7 @@ Serving now uses the compute-session model:
 - insufficient-credit termination stops accepting inference work, clears routing/readiness, and moves the serve to a terminal/unavailable state with a user-readable billing error
 - existing serve API compatibility and inference URLs must be preserved
 
-That migration requires a separate design because inference has long-lived health, readiness, routing, and proxy concerns that are not part of training runs.
+Inference still has long-lived health, readiness, routing, and proxy concerns that are not part of training runs. Those concerns remain serve-owned and are not billing subjects.
 
 ## Current Status
 
@@ -432,14 +430,18 @@ Implemented:
 - training compute billing source of truth moved from runs to compute sessions
 - one-shot attached run summaries expose derived compute-session charges for compatibility
 - one-hour compute-session reservation model
-- 5-minute training compute billing cadence
+- 5-minute compute-session billing cadence
 - insufficient-credit compute-session termination enforcement
+- serving compute-session backing records and serve links
+- serving one-hour compute-session reservation gate
+- serving compute billing through the 5-minute compute-session billing path
+- serving insufficient-credit termination through `computeSessions`
+- serve stop/delete/failure termination through the backing compute session
 
 Still pending:
 
 - user-facing compute session inspect/stop controls
 - better warm-session billing display for Auto-Research idle time
-- serving compute-session migration: move serving provider-machine lifetime, reservation, billing, 5-minute polling, and insufficient-credit termination to `computeSessions`
 - operational guardrail that all deployed runtime images include Warden session mode
 
 ## Acceptance Criteria
@@ -448,9 +450,9 @@ Still pending:
 - `tahuna train --keep-warm-minutes 10` creates a run, provisions one session-mode machine, executes the run, and leaves the session idle.
 - `tahuna train --warm` creates a new run and attaches only through `environments.activeComputeSessionId`.
 - One-shot compute sessions never set `environments.activeComputeSessionId`.
-- Training compute-session launch is rejected before provider provisioning unless the user has enough available credits for one hour of the selected runtime.
-- Active training compute sessions are billed every 5 minutes from exact uptime.
-- A training compute session terminates with reason `insufficient_credits` if the billing tick cannot collect the full target charge.
+- Training and serving compute-session launches are rejected before provider provisioning unless the user has enough available credits for one hour of the selected runtime.
+- Active compute sessions are billed every 5 minutes from exact uptime.
+- A compute session terminates with reason `insufficient_credits` if the billing tick cannot collect the full target charge.
 - Reused runs keep distinct run IDs, logs, metrics, artifacts, manifest hashes, and terminal statuses.
 - Provider machine ID is reused across warm runs.
 - Code/data sync does not invalidate warm compute.
@@ -458,6 +460,7 @@ Still pending:
 - Heartbeat-stale sessions cannot accept new assignments.
 - Idle-expired sessions cannot accept new assignments.
 - Warm failure never silently provisions a replacement ephemeral machine.
-- Training compute billing is keyed by compute session, with no duplicate billing on the attached run.
+- Hosted compute billing is keyed by compute session, with no duplicate billing on the attached run or serve.
 - Existing run lifecycle states and user-facing run responses remain backward compatible.
-- Existing serve lifecycle and inference behavior remain unchanged by the training refactor.
+- Serving provider-machine lifetime, billing, reservation, final settlement, and insufficient-credit termination are compute-session-owned.
+- Existing serve lifecycle, health, routing, inference proxy URLs, model snapshots, logs, and user-facing serve responses remain serve-owned.
