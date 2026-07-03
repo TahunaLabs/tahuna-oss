@@ -1897,7 +1897,7 @@ export const ingestRuntimeLogs = internalMutation({
   returns: v.object({ accepted: v.number() }),
   handler: async (ctx, args) => {
     const row = await ctx.db.get("serves", args.serveId)
-    if (!row) {
+    if (!row || TERMINAL_SERVE_STATUSES.has(row.status)) {
       return { accepted: 0 }
     }
     let accepted = 0

@@ -1880,7 +1880,7 @@ export const ingestRuntimeLogs = internalMutation({
   returns: v.object({ accepted: v.number() }),
   handler: async (ctx, args) => {
     const row = await ctx.db.get("runs", args.runId);
-    if (!row) {
+    if (!row || TERMINAL_STATUSES.has(row.status)) {
       return { accepted: 0 };
     }
     let accepted = 0;
@@ -1910,7 +1910,7 @@ export const ingestRuntimeMetrics = internalMutation({
   returns: v.object({ accepted: v.number() }),
   handler: async (ctx, args) => {
     const row = await ctx.db.get("runs", args.runId);
-    if (!row) {
+    if (!row || TERMINAL_STATUSES.has(row.status)) {
       return { accepted: 0 };
     }
     let accepted = 0;
