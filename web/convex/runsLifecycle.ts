@@ -66,6 +66,10 @@ export type RunLifecycleComposition = {
     ctx: MutationCtx,
     row: Doc<"runs">,
   ) => Promise<RunLifecycleSettlement | undefined>;
+  releaseComputeSessionForDeletedRun?: (
+    ctx: MutationCtx,
+    row: Doc<"runs">,
+  ) => Promise<void>;
 };
 
 async function deleteIndexedStorageKeys(ctx: MutationCtx, userId: string, keys: string[]) {
@@ -416,8 +420,13 @@ export async function deleteRunForUserId(
     });
   }
 
-  if (composition?.settleTerminalRunUsage && ACTIVE_STATUSES.has(row.status)) {
-    await composition.settleTerminalRunUsage(ctx, row);
+  if (ACTIVE_STATUSES.has(row.status)) {
+    if (composition?.settleTerminalRunUsage) {
+      await composition.settleTerminalRunUsage(ctx, row);
+    }
+    if (row.computeSessionId) {
+      await composition?.releaseComputeSessionForDeletedRun?.(ctx, row);
+    }
   }
   await applyRunDeletionPlan(ctx, runId, row, plan);
   return { deleted: true, run_id: String(runId) };

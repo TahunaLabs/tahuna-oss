@@ -1,4 +1,5 @@
 import { ConvexError } from "convex/values";
+import { internal } from "@convex/_generated/api";
 import type { Doc, Id } from "@convex/_generated/dataModel";
 import type { MutationCtx } from "@convex/_generated/server";
 import { estimateRunLaunchCents, resolveRunComputePricing } from "@/cloud/billing/run-compute-pricing";
@@ -80,6 +81,16 @@ export const hostedRunLifecycleComposition: RunLifecycleComposition = {
       };
     }
     return await settleHostedRunUsage(ctx, row);
+  },
+  async releaseComputeSessionForDeletedRun(ctx, row) {
+    if (!row.computeSessionId) {
+      return;
+    }
+    await ctx.scheduler.runAfter(0, internal.computeSessions.internalTerminateStaleEnvironmentSession, {
+      userId: row.userId,
+      environmentId: row.environmentId,
+      computeSessionId: row.computeSessionId,
+    });
   },
 };
 
