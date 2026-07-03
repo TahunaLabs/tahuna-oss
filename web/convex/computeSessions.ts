@@ -524,7 +524,13 @@ export const provisionComputeSession = internalAction({
         runtimeTokenHash,
       });
       if (!machineProvisioning.recorded) {
-        // Follow-up WI-2 commits add caller-specific orphan-machine termination.
+        await terminateRuntimeMachine(ctx, { providerMachineId: provisionResult.providerMachineId });
+        await ctx.runMutation(internal.runs.markFailed, {
+          runId: args.initialRunId,
+          error: "compute session terminated during provisioning",
+          provisioningPayload,
+        });
+        return null;
       }
       await ctx.runMutation(internal.computeSessions.internalMarkIdle, {
         computeSessionId: args.computeSessionId,
