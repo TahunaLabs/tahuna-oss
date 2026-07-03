@@ -294,25 +294,33 @@ describe("compute session termination run failure sink", () => {
     }));
   });
 
-  it("lists only terminating sessions older than the terminating timeout", async () => {
-    const rows = [
+  it("finds terminating timed-out sessions behind the first status page", async () => {
+    const freshRows = Array.from({ length: 3 }, (_, index) =>
       computeSession({
-        _id: "fresh_session",
+        _id: `fresh_session_${index}`,
         status: "terminating",
         terminatingSince: NOW_MS - 899_000,
       }),
-      computeSession({
-        _id: "stale_session",
-        status: "terminating",
-        terminatingSince: NOW_MS - 900_000,
-      }),
-    ];
+    );
+    const staleRow = computeSession({
+      _id: "stale_session",
+      status: "terminating",
+      terminatingSince: NOW_MS - 900_000,
+    });
+    let pageIndex = 0;
     const ctx = {
       db: {
         query: vi.fn(() => ({
-          withIndex: vi.fn(() => ({
-            take: vi.fn(async () => rows),
-          })),
+          withIndex: vi.fn(() => {
+            return {
+              paginate: vi.fn(async () => {
+                pageIndex += 1;
+                return pageIndex === 1
+                  ? { page: freshRows, isDone: false, continueCursor: "next" }
+                  : { page: [staleRow], isDone: true, continueCursor: "" };
+              }),
+            };
+          }),
         })),
       },
     };

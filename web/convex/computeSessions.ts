@@ -441,12 +441,16 @@ export const internalListTerminationTimedOut = internalQuery({
   returns: v.array(terminationTimedOutComputeSessionValidator),
   handler: async (ctx, args) => {
     const limit = Math.max(1, Math.min(100, Math.floor(args.limit ?? 50)));
-    const rows = await ctx.db
-      .query("computeSessions")
-      .withIndex("by_status", (q) => q.eq("status", "terminating"))
-      .take(limit);
-    return rows
-      .filter((row) =>
+    const matches: Array<{
+      user_id: string;
+      environment_id: string;
+      compute_session_id: string;
+    }> = [];
+    await collectComputeSessionTimeoutMatches(ctx, {
+      status: "terminating",
+      limit,
+      matches,
+      isMatch: (row) =>
         isComputeSessionTerminationTimedOut({
           terminatingSince: row.terminatingSince,
           lastHeartbeatAt: row.lastHeartbeatAt,
@@ -455,12 +459,13 @@ export const internalListTerminationTimedOut = internalQuery({
           timeoutSeconds: args.timeoutSeconds,
           nowMs: args.nowMs,
         }),
-      )
-      .map((row) => ({
+      toResult: (row) => ({
         user_id: row.userId,
         environment_id: String(row.environmentId),
         compute_session_id: String(row._id),
-      }));
+      }),
+    });
+    return matches;
   },
 });
 
