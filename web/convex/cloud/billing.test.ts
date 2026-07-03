@@ -25,11 +25,20 @@ import {
   BILLABLE_COMPUTE_SESSION_STATUSES,
   COMPUTE_SESSION_BILLING_INTERVAL_MINUTES,
   applyComputeSessionLiveBillingResult,
+  billComputeSessionsFiveMinutes,
   billLiveComputeSubject,
   initialHostedComputeSessionBillingFields,
   settleHostedComputeSessionUsage,
   validateHostedComputeSessionCreate,
 } from "@convex/cloud/billing";
+
+type InternalAction<TArgs> = {
+  _handler: (ctx: unknown, args: TArgs) => Promise<unknown>;
+};
+
+function internalActionHandler<TArgs>(action: unknown) {
+  return (action as InternalAction<TArgs>)._handler;
+}
 
 function fakeReservationCtx(
   rows: Array<{ userId: string; status: string; computeReservationRemainingCents?: number }>,
@@ -71,6 +80,53 @@ describe("hosted billing session reservations", () => {
 
   it("bills compute sessions every five minutes", () => {
     expect(COMPUTE_SESSION_BILLING_INTERVAL_MINUTES).toBe(5);
+  });
+
+  it("aggregates compute-session billing counters across batches", async () => {
+    const pageIndexByStatus: Record<string, number> = {};
+    const pagesByStatus: Record<string, Array<{ ids: string[]; next: string | null }>> = {
+      [BILLABLE_COMPUTE_SESSION_STATUSES[0]]: [
+        { ids: ["session_1"], next: "cursor_1" },
+        { ids: ["session_2"], next: null },
+      ],
+    };
+    const emptyPage = { ids: [], next: null };
+    const ctx = {
+      runQuery: vi.fn(async (_reference: unknown, args: { status: string }) => {
+        const index = pageIndexByStatus[args.status] ?? 0;
+        pageIndexByStatus[args.status] = index + 1;
+        const page = pagesByStatus[args.status]?.[index] ?? emptyPage;
+        return {
+          compute_session_ids: page.ids,
+          next_cursor: page.next,
+        };
+      }),
+      runMutation: vi.fn(async (_reference: unknown, args: { computeSessionIds: string[] }) => {
+        if (args.computeSessionIds[0] === "session_1") {
+          return {
+            processed_compute_sessions: 1,
+            charged_compute_sessions: 1,
+            owed_compute_sessions: 0,
+            skipped_compute_sessions: 0,
+          };
+        }
+        return {
+          processed_compute_sessions: 2,
+          charged_compute_sessions: 1,
+          owed_compute_sessions: 1,
+          skipped_compute_sessions: 1,
+        };
+      }),
+    };
+
+    await expect(
+      internalActionHandler<Record<string, never>>(billComputeSessionsFiveMinutes)(ctx, {}),
+    ).resolves.toEqual({
+      processed_compute_sessions: 3,
+      charged_compute_sessions: 2,
+      owed_compute_sessions: 1,
+      skipped_compute_sessions: 1,
+    });
   });
 
   it("initializes compute sessions with a one-hour reservation hold", () => {

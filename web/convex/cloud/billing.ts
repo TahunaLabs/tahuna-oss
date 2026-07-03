@@ -1,8 +1,8 @@
 import { ConvexError, v } from "convex/values";
-import type { Doc } from "@convex/_generated/dataModel";
+import type { Doc, Id } from "@convex/_generated/dataModel";
 import { internal } from "@convex/_generated/api";
 import type { ActionCtx, MutationCtx } from "@convex/_generated/server";
-import { action, httpAction, internalMutation, mutation, query } from "@convex/_generated/server";
+import { action, httpAction, internalAction, internalMutation, internalQuery, mutation, query } from "@convex/_generated/server";
 import Stripe from "stripe";
 import { CLOUD_BILLING_CONFIG } from "@/cloud/config";
 import { resolveRunComputePricing } from "@/cloud/billing/run-compute-pricing";
@@ -890,33 +890,72 @@ export const BILLABLE_COMPUTE_SESSION_STATUSES = [
   COMPUTE_SESSION_STATUS.RUNNING,
   COMPUTE_SESSION_STATUS.TERMINATING,
 ] as const;
+const BILLABLE_COMPUTE_SESSION_STATUS_SET = new Set<string>(BILLABLE_COMPUTE_SESSION_STATUSES);
+const COMPUTE_SESSION_BILLING_BATCH_SIZE = 25;
 
-export const billComputeSessionsFiveMinutes = internalMutation({
-  args: {},
+const computeSessionBillingCountersValidator = v.object({
+  processed_compute_sessions: v.number(),
+  charged_compute_sessions: v.number(),
+  owed_compute_sessions: v.number(),
+  skipped_compute_sessions: v.number(),
+});
+type ComputeSessionBillingIdsPage = {
+  compute_session_ids: Id<"computeSessions">[];
+  next_cursor: string | null;
+};
+
+function emptyComputeSessionBillingCounters() {
+  return {
+    processed_compute_sessions: 0,
+    charged_compute_sessions: 0,
+    owed_compute_sessions: 0,
+    skipped_compute_sessions: 0,
+  };
+}
+
+function addComputeSessionBillingCounters(
+  total: ReturnType<typeof emptyComputeSessionBillingCounters>,
+  next: ReturnType<typeof emptyComputeSessionBillingCounters>,
+) {
+  total.processed_compute_sessions += next.processed_compute_sessions;
+  total.charged_compute_sessions += next.charged_compute_sessions;
+  total.owed_compute_sessions += next.owed_compute_sessions;
+  total.skipped_compute_sessions += next.skipped_compute_sessions;
+}
+
+export const internalListBillableComputeSessionIdsPage = internalQuery({
+  args: {
+    status: v.string(),
+    cursor: v.union(v.string(), v.null()),
+    batchSize: v.optional(v.number()),
+  },
   returns: v.object({
-    processed_compute_sessions: v.number(),
-    charged_compute_sessions: v.number(),
-    owed_compute_sessions: v.number(),
-    skipped_compute_sessions: v.number(),
+    compute_session_ids: v.array(v.id("computeSessions")),
+    next_cursor: v.union(v.string(), v.null()),
   }),
-  handler: async (ctx) => {
-    const activeRows = (
-      await Promise.all(
-        BILLABLE_COMPUTE_SESSION_STATUSES.map((status) =>
-          ctx.db
-            .query("computeSessions")
-            .withIndex("by_status", (q) => q.eq("status", status))
-            .collect(),
-        ),
-      )
-    ).flat();
+  handler: async (ctx, args) => {
+    const batchSize = Math.max(1, Math.min(100, Math.floor(args.batchSize ?? COMPUTE_SESSION_BILLING_BATCH_SIZE)));
+    const result = await ctx.db
+      .query("computeSessions")
+      .withIndex("by_status", (q) => q.eq("status", args.status))
+      .paginate({ cursor: args.cursor, numItems: batchSize });
+    return {
+      compute_session_ids: result.page.map((row) => row._id),
+      next_cursor: result.isDone ? null : result.continueCursor,
+    };
+  },
+});
 
-    let processedComputeSessions = 0;
-    let chargedComputeSessions = 0;
-    let owedComputeSessions = 0;
-    let skippedComputeSessions = 0;
-
-    for (const row of activeRows) {
+export const internalBillComputeSessionBatch = internalMutation({
+  args: { computeSessionIds: v.array(v.id("computeSessions")) },
+  returns: computeSessionBillingCountersValidator,
+  handler: async (ctx, args) => {
+    const counters = emptyComputeSessionBillingCounters();
+    for (const computeSessionId of args.computeSessionIds) {
+      const row = await ctx.db.get("computeSessions", computeSessionId);
+      if (!row || !BILLABLE_COMPUTE_SESSION_STATUS_SET.has(row.status)) {
+        continue;
+      }
       const result = await billLiveComputeSubject(ctx, {
         subject: {
           userId: row.userId,
@@ -941,25 +980,50 @@ export const billComputeSessionsFiveMinutes = internalMutation({
       });
       const applied = await applyComputeSessionLiveBillingResult(ctx, row, result);
       if (applied.skipped) {
-        skippedComputeSessions += 1;
+        counters.skipped_compute_sessions += 1;
         continue;
       }
       if (applied.processed) {
-        processedComputeSessions += 1;
+        counters.processed_compute_sessions += 1;
       }
       if (applied.charged) {
-        chargedComputeSessions += 1;
+        counters.charged_compute_sessions += 1;
       }
       if (applied.owed) {
-        owedComputeSessions += 1;
+        counters.owed_compute_sessions += 1;
       }
     }
+    return counters;
+  },
+});
 
-    return {
-      processed_compute_sessions: processedComputeSessions,
-      charged_compute_sessions: chargedComputeSessions,
-      owed_compute_sessions: owedComputeSessions,
-      skipped_compute_sessions: skippedComputeSessions,
-    };
+export const billComputeSessionsFiveMinutes = internalAction({
+  args: {},
+  returns: computeSessionBillingCountersValidator,
+  handler: async (ctx) => {
+    const counters = emptyComputeSessionBillingCounters();
+    for (const status of BILLABLE_COMPUTE_SESSION_STATUSES) {
+      let cursor: string | null = null;
+      do {
+        const page: ComputeSessionBillingIdsPage = await ctx.runQuery(
+          internal.cloud.billing.internalListBillableComputeSessionIdsPage,
+          {
+            status,
+            cursor,
+            batchSize: COMPUTE_SESSION_BILLING_BATCH_SIZE,
+          },
+        );
+        if (page.compute_session_ids.length > 0) {
+          addComputeSessionBillingCounters(
+            counters,
+            await ctx.runMutation(internal.cloud.billing.internalBillComputeSessionBatch, {
+              computeSessionIds: page.compute_session_ids,
+            }),
+          );
+        }
+        cursor = page.next_cursor;
+      } while (cursor !== null);
+    }
+    return counters;
   },
 });
