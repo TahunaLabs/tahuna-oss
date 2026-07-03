@@ -29,6 +29,8 @@ vi.mock("@convex/runtimeProvisioning", () => ({
 }));
 
 import {
+  internalListHeartbeatTimedOut,
+  internalListIdleTimedOut,
   internalMarkFailed,
   internalMarkTerminated,
   internalListTerminationTimedOut,
@@ -242,6 +244,117 @@ describe("compute session termination run failure sink", () => {
         user_id: "user_1",
         environment_id: "env_1",
         compute_session_id: "stale_session",
+      },
+    ]);
+  });
+
+  it("finds idle timed-out sessions behind the first status page", async () => {
+    const freshRows = Array.from({ length: 3 }, (_, index) =>
+      computeSession({
+        _id: `fresh_session_${index}`,
+        status: "idle",
+        lastIdleAt: NOW_MS - 9_000,
+        idleTimeoutSeconds: 10,
+      }),
+    );
+    const staleRow = computeSession({
+      _id: "stale_session",
+      status: "idle",
+      lastIdleAt: NOW_MS - 10_000,
+      idleTimeoutSeconds: 10,
+    });
+    let pageIndex = 0;
+    const ctx = {
+      db: {
+        query: vi.fn(() => ({
+          withIndex: vi.fn(() => {
+            return {
+              paginate: vi.fn(async () => {
+                pageIndex += 1;
+                return pageIndex === 1
+                  ? { page: freshRows, isDone: false, continueCursor: "next" }
+                  : { page: [staleRow], isDone: true, continueCursor: "" };
+              }),
+            };
+          }),
+        })),
+      },
+    };
+
+    await expect(
+      internalQueryHandler<{ nowMs: number; limit?: number }>(internalListIdleTimedOut)(
+        ctx,
+        { nowMs: NOW_MS, limit: 1 },
+      ),
+    ).resolves.toEqual([
+      {
+        user_id: "user_1",
+        environment_id: "env_1",
+        compute_session_id: "stale_session",
+        active_run_id: "",
+        reason: "idle",
+      },
+    ]);
+  });
+
+  it("finds heartbeat timed-out running sessions behind the first status page", async () => {
+    const freshRows = Array.from({ length: 3 }, (_, index) =>
+      computeSession({
+        _id: `fresh_running_session_${index}`,
+        status: "running",
+        lastHeartbeatAt: NOW_MS - 119_000,
+      }),
+    );
+    const staleRow = computeSession({
+      _id: "stale_running_session",
+      status: "running",
+      lastHeartbeatAt: NOW_MS - 120_000,
+      activeRunId: "run_1",
+    });
+    const pageIndexByStatus: Record<string, number> = {};
+    const ctx = {
+      db: {
+        query: vi.fn(() => ({
+          withIndex: vi.fn((_index: string, callback: (q: { eq: (field: string, value: string) => unknown }) => unknown) => {
+            let status = "";
+            callback({
+              eq: (_field: string, value: string) => {
+                status = value;
+                return {};
+              },
+            });
+            return {
+              paginate: vi.fn(async () => {
+                if (status === "idle") {
+                  return { page: [], isDone: true, continueCursor: "" };
+                }
+                const pageIndex = (pageIndexByStatus[status] ?? 0) + 1;
+                pageIndexByStatus[status] = pageIndex;
+                return pageIndex === 1
+                  ? { page: freshRows, isDone: false, continueCursor: "next" }
+                  : { page: [staleRow], isDone: true, continueCursor: "" };
+              }),
+            };
+          }),
+        })),
+      },
+    };
+
+    await expect(
+      internalQueryHandler<{ nowMs: number; timeoutSeconds: number; limit?: number }>(
+        internalListHeartbeatTimedOut,
+      )(ctx, {
+        nowMs: NOW_MS,
+        timeoutSeconds: 120,
+        limit: 1,
+      }),
+    ).resolves.toEqual([
+      {
+        user_id: "user_1",
+        environment_id: "env_1",
+        compute_session_id: "stale_running_session",
+        active_run_id: "run_1",
+        reason: "heartbeat",
       },
     ]);
   });

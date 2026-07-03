@@ -8,6 +8,7 @@ import {
   internalQuery,
   query,
   type MutationCtx,
+  type QueryCtx,
 } from "@convex/_generated/server";
 import { requireUser } from "@convex/auth";
 import { RUN_CONFIG } from "@convex/appConfig";
@@ -107,6 +108,7 @@ const terminationTimedOutComputeSessionValidator = v.object({
   environment_id: v.string(),
   compute_session_id: v.string(),
 });
+const TIMEOUT_SWEEP_SCAN_LIMIT = 500;
 
 function toComputeSessionState(row: Doc<"computeSessions">) {
   return {
@@ -267,6 +269,40 @@ function isComputeSessionTerminationTimedOut(args: {
   return since + args.timeoutSeconds * 1000 <= args.nowMs;
 }
 
+async function collectComputeSessionTimeoutMatches<TResult>(
+  ctx: QueryCtx,
+  args: {
+    status: string;
+    limit: number;
+    matches: TResult[];
+    isMatch: (row: Doc<"computeSessions">) => boolean;
+    toResult: (row: Doc<"computeSessions">) => TResult;
+  },
+) {
+  let cursor: string | null = null;
+  let scannedRows = 0;
+  while (args.matches.length < args.limit && scannedRows < TIMEOUT_SWEEP_SCAN_LIMIT) {
+    const remainingScanRows = TIMEOUT_SWEEP_SCAN_LIMIT - scannedRows;
+    const result = await ctx.db
+      .query("computeSessions")
+      .withIndex("by_status", (q) => q.eq("status", args.status))
+      .paginate({ cursor, numItems: Math.min(100, remainingScanRows) });
+    scannedRows += result.page.length;
+    for (const row of result.page) {
+      if (args.isMatch(row)) {
+        args.matches.push(args.toResult(row));
+        if (args.matches.length >= args.limit) {
+          break;
+        }
+      }
+    }
+    if (result.isDone) {
+      break;
+    }
+    cursor = result.continueCursor;
+  }
+}
+
 export const list = query({
   args: {},
   returns: listComputeSessionsResponseValidator,
@@ -329,34 +365,40 @@ export const internalListHeartbeatTimedOut = internalQuery({
   returns: v.array(timedOutComputeSessionValidator),
   handler: async (ctx, args) => {
     const limit = Math.max(1, Math.min(100, Math.floor(args.limit ?? 50)));
-    const rows = await Promise.all(
-      ["idle", "running"].map((status) =>
-        ctx.db
-          .query("computeSessions")
-          .withIndex("by_status", (q) => q.eq("status", status))
-          .take(limit),
-      ),
-    );
-    return rows
-      .flat()
-      .filter((row) =>
-        isComputeSessionHeartbeatTimedOut({
-          lastHeartbeatAt: row.lastHeartbeatAt,
-          providerCreationTime: row.providerCreationTime,
-          createdAt: row.createdAt,
-          heartbeatTimeoutSeconds: args.timeoutSeconds,
-          startupTimeoutSeconds: RUN_CONFIG.startupTimeoutSeconds,
-          nowMs: args.nowMs,
+    const matches: Array<{
+      user_id: string;
+      environment_id: string;
+      compute_session_id: string;
+      active_run_id: string;
+      reason: "heartbeat";
+    }> = [];
+    for (const status of ["idle", "running"]) {
+      await collectComputeSessionTimeoutMatches(ctx, {
+        status,
+        limit,
+        matches,
+        isMatch: (row) =>
+          isComputeSessionHeartbeatTimedOut({
+            lastHeartbeatAt: row.lastHeartbeatAt,
+            providerCreationTime: row.providerCreationTime,
+            createdAt: row.createdAt,
+            heartbeatTimeoutSeconds: args.timeoutSeconds,
+            startupTimeoutSeconds: RUN_CONFIG.startupTimeoutSeconds,
+            nowMs: args.nowMs,
+          }),
+        toResult: (row) => ({
+          user_id: row.userId,
+          environment_id: String(row.environmentId),
+          compute_session_id: String(row._id),
+          active_run_id: row.activeRunId ? String(row.activeRunId) : "",
+          reason: "heartbeat" as const,
         }),
-      )
-      .slice(0, limit)
-      .map((row) => ({
-        user_id: row.userId,
-        environment_id: String(row.environmentId),
-        compute_session_id: String(row._id),
-        active_run_id: row.activeRunId ? String(row.activeRunId) : "",
-        reason: "heartbeat" as const,
-      }));
+      });
+      if (matches.length >= limit) {
+        break;
+      }
+    }
+    return matches;
   },
 });
 
@@ -365,25 +407,32 @@ export const internalListIdleTimedOut = internalQuery({
   returns: v.array(timedOutComputeSessionValidator),
   handler: async (ctx, args) => {
     const limit = Math.max(1, Math.min(100, Math.floor(args.limit ?? 50)));
-    const rows = await ctx.db
-      .query("computeSessions")
-      .withIndex("by_status", (q) => q.eq("status", "idle"))
-      .take(limit);
-    return rows
-      .filter((row) =>
+    const matches: Array<{
+      user_id: string;
+      environment_id: string;
+      compute_session_id: string;
+      active_run_id: string;
+      reason: "idle";
+    }> = [];
+    await collectComputeSessionTimeoutMatches(ctx, {
+      status: "idle",
+      limit,
+      matches,
+      isMatch: (row) =>
         isComputeSessionIdleTimedOut({
           lastIdleAt: row.lastIdleAt,
           idleTimeoutSeconds: row.idleTimeoutSeconds,
           nowMs: args.nowMs,
         }),
-      )
-      .map((row) => ({
+      toResult: (row) => ({
         user_id: row.userId,
         environment_id: String(row.environmentId),
         compute_session_id: String(row._id),
         active_run_id: "",
         reason: "idle" as const,
-      }));
+      }),
+    });
+    return matches;
   },
 });
 
