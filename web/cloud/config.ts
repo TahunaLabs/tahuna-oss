@@ -5,6 +5,13 @@ export const CLOUD_EMAIL_CONFIG = {
   },
 } as const;
 
+export const REDEEMABLE_CODE_CONFIG = {
+  authorizedCreatorEmails: ["monaim@tahuna.app", "mehdi@tahuna.app"],
+  defaultMaxRedemptions: 0,
+} as const;
+
+// TODO: move back to main config?
+// TODO: check duplicate with BILLING_CONFIG in web/config.ts
 export const CLOUD_BILLING_CONFIG = {
   currency: "USD",
   initialCreditCents: 0,
