@@ -59,4 +59,17 @@ export const cloudSchemaTables = {
     .index("by_user", ["userId"])
     .index("by_user_and_status", ["userId", "status"])
     .index("by_stripe_checkout_session_id", ["stripeCheckoutSessionId"]),
+
+  redeemableCodes: defineTable({
+    code: v.string(),
+    kind: v.union(v.literal("promo"), v.literal("referral")),
+    amountCents: v.number(),
+    currency: v.string(),
+    maxRedemptions: v.optional(v.number()),
+    redemptionCount: v.number(),
+    active: v.boolean(),
+    createdBy: v.optional(v.string()),
+    expiresAt: v.optional(v.number()),
+    updatedAt: v.number(),
+  }).index("by_code", ["code"]),
 } as const;

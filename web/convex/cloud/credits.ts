@@ -13,6 +13,8 @@ export const USAGE_EVENT_TYPE = {
   TRAINING_COMPUTE_SETTLEMENT_REFUND: "training_compute_settlement_refund",
   TRAINING_COMPUTE_SETTLEMENT_OWED: "training_compute_settlement_owed",
   STRIPE_TOP_UP: "stripe_top_up",
+  PROMO_CODE_REDEMPTION: "promo_code_redemption",
+  REFERRAL_CODE_REDEMPTION: "referral_code_redemption",
 } as const;
 
 type EnsureUserLedgerArgs = {
