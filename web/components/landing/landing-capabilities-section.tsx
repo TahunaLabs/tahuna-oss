@@ -30,7 +30,7 @@ export function LandingCapabilitiesSection() {
           <h2 className="text-3xl font-semibold leading-tight tracking-tight text-foreground md:text-4xl">
             Primitives for
             <br />
-            Owned Intelligence
+            Continual Learning
           </h2>
           <p className="mt-6 max-w-md text-base leading-relaxed text-muted-foreground">
             Start with the pieces that exist today: compute for training and sandboxes, hillclimb for experiment search,

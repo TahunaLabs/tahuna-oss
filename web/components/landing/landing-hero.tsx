@@ -45,15 +45,16 @@ export function LandingHero() {
       <div className="relative mx-auto flex max-w-7xl flex-col gap-12 lg:flex-row lg:items-stretch">
         <div className="flex min-w-0 max-w-2xl flex-1 flex-col justify-center lg:max-w-none">
           <p className="mb-3 text-xs uppercase tracking-ui-eyebrow text-muted-foreground">
-            Infrastructure for adaptive AI systems
+            POST-TRAINING · INFERENCE · OBSERVABILITY
           </p>
           <h1 className="font-serif text-3xl tracking-tight text-foreground md:text-4xl">
-            <span className="lg:block">Own the intelligence loop</span>{" "}
-            <span className="italic lg:block lg:whitespace-nowrap">behind your AI systems.</span>
+            <span className="lg:block">Scaling Compute on your</span>{" "}
+            <span className="italic lg:block lg:whitespace-nowrap">Own signal</span>
           </h1>
 
           <p className="mt-5 max-w-2xl text-base leading-relaxed text-muted-foreground md:text-lg">
-            Move from one-off model work to a controlled improvement loop: train, serve, hillclimb, and observe.
+            Tahuna turns real usage —traces, feedback, failures, outcomes— into evals, training runs, and better
+            models. Deployed back into your product, on repeat.
           </p>
 
           <div className="mt-8 flex flex-col items-start gap-3 sm:flex-row">
