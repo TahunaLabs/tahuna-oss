@@ -22,8 +22,8 @@ export function PublicHome() {
           <LandingHero />
           <LandingCapabilitiesSection />
           <FrameworksBar />
-          <LandingWhySection />
           <LandingTerminalSection />
+          <LandingWhySection />
           <LandingLayersSection />
           <LandingFaqSection />
           <LandingCtaSection />
