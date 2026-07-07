@@ -95,6 +95,6 @@ export const CDN_CONFIG = {
   frameworkIconsPath: "/assets/frameworks",
   faviconPath: "/assets/favicon",
   artefactsPath: "/assets/artefacts",
-  heroGradientLight: "tahuna-hero-gradient-teal-lime.avif",
+  heroGradientLight: "tahuna-hero-gradient-teal-lime-1.avif",
   heroGradientDark: "tahuna-hero-gradient-dark-teal-lime.avif",
 } as const;
