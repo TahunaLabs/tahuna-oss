@@ -1,5 +1,3 @@
-import { LandingFoundersIncBadge } from "@/components/landing/landing-founders-inc-badge"
-
 const reasons = [
   {
     title: "Capture the real signal",
@@ -18,9 +16,6 @@ const reasons = [
 export function LandingWhySection() {
   return (
     <section className="relative border-t border-border px-6 py-20 md:px-8 md:py-24">
-      <div className="absolute right-6 top-20 z-10 md:right-8">
-        <LandingFoundersIncBadge />
-      </div>
       <div className="mx-auto max-w-7xl">
         <div className="mb-12 max-w-2xl">
           <p className="mb-3 text-xs uppercase tracking-ui-eyebrow text-muted-foreground">Build the AI that no one can replicate</p>
