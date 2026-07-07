@@ -23,7 +23,7 @@ export function LandingWhySection() {
       </div>
       <div className="mx-auto max-w-7xl">
         <div className="mb-12 max-w-2xl">
-          <p className="mb-3 text-xs uppercase tracking-ui-eyebrow text-muted-foreground">Why it matters</p>
+          <p className="mb-3 text-xs uppercase tracking-ui-eyebrow text-muted-foreground">Build the AI that no one can replicate</p>
           <h2 className="text-3xl font-semibold leading-tight tracking-tight text-foreground md:text-4xl">
             From static models
             <br />

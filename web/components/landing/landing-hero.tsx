@@ -45,7 +45,7 @@ export function LandingHero() {
       <div className="relative mx-auto flex max-w-7xl flex-col gap-12 lg:flex-row lg:items-stretch">
         <div className="flex min-w-0 max-w-2xl flex-1 flex-col justify-center lg:max-w-none">
           <p className="mb-3 text-xs uppercase tracking-ui-eyebrow text-muted-foreground">
-            POST-TRAINING · INFERENCE · OBSERVABILITY
+            Train any model. Deploy it. Improve it.
           </p>
           <h1 className="font-serif text-3xl tracking-tight text-foreground md:text-4xl">
             <span className="lg:block">Scaling Compute on your</span>{" "}

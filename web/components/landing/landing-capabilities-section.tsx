@@ -1,23 +1,23 @@
 const capabilities = [
   {
     name: "Tahuna Compute",
-    label: "Compute",
-    body: "Run training jobs and sandboxed experiments on managed GPUs.",
-  },
-  {
-    name: "Tahuna Hillclimb",
-    label: "Hillclimb",
-    body: "Autonomous Research for recursive model improvement",
+    label: "Train",
+    body: "Post-train models and run sandboxed experiments on managed GPUs. Code, data, checkpoints, and metrics stay attached to the run that produced them.",
   },
   {
     name: "Tahuna Serve",
     label: "Serve",
-    body: "Promote model snapshots into production inference endpoints.",
+    body: "Promote any checkpoint into a production inference endpoint in one step. No gap between the training run and the release.",
   },
   {
     name: "Tahuna Observability",
-    label: "Observability",
-    body: "Track the agent signals, metrics, and artifacts that decide what improves next.",
+    label: "Observe",
+    body: "Capture traces, feedback, evals, and outcomes from production — the evidence that decides what improves next.",
+  },
+  {
+    name: "Tahuna Hillclimb",
+    label: "Hillclimb",
+    body: "Autonomous research on your models. Give an agent an objective and compute: it runs experiments, benchmarks them, keeps what moves the metric, and climbs.",
   },
 ] as const
 
@@ -33,8 +33,7 @@ export function LandingCapabilitiesSection() {
             Continual Learning
           </h2>
           <p className="mt-6 max-w-md text-base leading-relaxed text-muted-foreground">
-            Start with the pieces that exist today: compute for training and sandboxes, hillclimb for experiment search,
-            serve for production inference, and observability for the evidence behind every improvement.
+            One loop, three moves. Train on managed GPUs, serve any checkpoint in production, and turn what production tells you into the next run.
           </p>
         </div>
 
