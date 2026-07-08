@@ -9,12 +9,12 @@ const steps = [
   {
     step: "Step 1",
     title: "AI Opportunity Audit",
-    body: "We run a structured audit of how work moves through your product and organization — across teams, systems, and decision points. The goal is to pinpoint where a model that learns from your production signal reduces operational overhead, accelerates execution, or replaces manual coordination entirely.",
+    body: "We run a structured audit of how work moves through your product and organization — across teams, systems, and decision points. The goal is to pinpoint where AI can reduce operational overhead, accelerates execution, or replaces manual coordination entirely.",
   },
   {
     step: "Step 2",
     title: "Architecture & Design",
-    body: "Tahuna designs and builds the model-improvement loop that will power the workflow — integrating evals, reward logic, and your training code with the enterprise tools, data, and operational logic behind the process. You're kept in the loop the entire time.",
+    body: "We design and build the model-improvement loop that will power the workflow — integrating your company's context, data, and operational logic behind the process.",
   },
   {
     step: "Step 3",
@@ -24,7 +24,7 @@ const steps = [
 ] as const
 
 const selfServeItems = [
-  "Instant access, no sales call",
+  "Instant access",
   "CLI & full documentation",
   "Bring your own framework",
   "Usage-based pricing",
@@ -47,8 +47,7 @@ export function LandingPartnerSection() {
             with Tahuna
           </h2>
           <p className="mt-6 max-w-xl text-base leading-relaxed text-muted-foreground">
-            Want us in the room shipping your first model, or the platform to build on your own? Either way you own the
-            loop.
+            
           </p>
         </div>
 
@@ -59,7 +58,12 @@ export function LandingPartnerSection() {
               <div className="flex flex-col border-b border-border p-8 md:border-b-0 md:border-r">
                 <ColumnLabel>Forward-deployed</ColumnLabel>
 
-                <div className="flex flex-col">
+                <h3 className="text-2xl font-semibold tracking-tight text-foreground">We embed with your team</h3>
+                <p className="mt-4 text-sm leading-relaxed text-muted-foreground">
+                  Our engineers work alongside yours — from first audit to a model improving in production.
+                </p>
+
+                <div className="mt-6 flex flex-col">
                   {steps.map((s) => (
                     <div
                       key={s.step}
@@ -103,8 +107,7 @@ export function LandingPartnerSection() {
 
                 <h3 className="text-2xl font-semibold tracking-tight text-foreground">Use it however you want</h3>
                 <p className="mt-4 text-sm leading-relaxed text-muted-foreground">
-                  Bring your code, framework, and training loop. Full platform access, CLI, and docs — move at your own
-                  pace, no calls required.
+                  Your team designs and runs experiments. We manage the training, serving, and infrastructure load.
                 </p>
 
                 <ul className="mt-6 grid gap-3">
