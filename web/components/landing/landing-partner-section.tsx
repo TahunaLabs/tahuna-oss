@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { ArrowRight } from "lucide-react"
+import { ArrowRight, Plus } from "lucide-react"
 
 import { DotGrid } from "@/components/landing/section-decorations"
 import { Button } from "@/components/ui/button"
@@ -23,13 +23,15 @@ const steps = [
   },
 ] as const
 
-function DividerLabel({ children }: { children: string }) {
-  return (
-    <div className="mb-5 flex items-center gap-4">
-      <span className="text-xs uppercase tracking-ui-eyebrow text-muted-foreground">{children}</span>
-      <span className="h-px flex-1 bg-border" />
-    </div>
-  )
+const selfServeItems = [
+  "Instant access, no sales call",
+  "CLI & full documentation",
+  "Bring your own framework",
+  "Usage-based pricing",
+] as const
+
+function ColumnLabel({ children }: { children: string }) {
+  return <p className="mb-6 text-xs uppercase tracking-ui-eyebrow text-muted-foreground">{children}</p>
 }
 
 export function LandingPartnerSection() {
@@ -50,48 +52,84 @@ export function LandingPartnerSection() {
           </p>
         </div>
 
-        <DividerLabel>Forward-deployed</DividerLabel>
-        <div className="grid gap-6 md:grid-cols-3">
-          {steps.map((s) => (
-            <Card key={s.step} variant="default" className="border-border bg-card/95">
-              <CardContent className="p-8">
-                <p className="text-xs uppercase tracking-ui-eyebrow text-muted-foreground">{s.step}</p>
-                <h3 className="mt-3 text-xl font-semibold tracking-tight text-foreground">{s.title}</h3>
-                <p className="mt-4 text-sm leading-relaxed text-muted-foreground">{s.body}</p>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+        <Card variant="default" className="overflow-hidden border-border bg-card/95">
+          <CardContent className="p-0">
+            <div className="grid md:grid-cols-2">
+              {/* Forward-deployed — hover to reveal each step */}
+              <div className="flex flex-col border-b border-border p-8 md:border-b-0 md:border-r">
+                <ColumnLabel>Forward-deployed</ColumnLabel>
 
-        <div className="mt-6 flex justify-center md:justify-start">
-          <Button asChild size="lg">
-            <Link href="https://cal.com/monaimel/15min" target="_blank" rel="noreferrer">
-              Talk to an engineer
-              <ArrowRight />
-            </Link>
-          </Button>
-        </div>
+                <div className="flex flex-col">
+                  {steps.map((s) => (
+                    <div
+                      key={s.step}
+                      tabIndex={0}
+                      className="group border-b border-border/60 py-5 first:pt-0 last:border-b-0 last:pb-0 focus-visible:outline-none"
+                    >
+                      <div className="flex items-start justify-between gap-4">
+                        <div>
+                          <p className="text-xs uppercase tracking-ui-eyebrow text-muted-foreground">{s.step}</p>
+                          <h3 className="mt-2 text-lg font-semibold tracking-tight text-foreground">{s.title}</h3>
+                        </div>
+                        <Plus
+                          aria-hidden
+                          className="mt-1 hidden size-4 shrink-0 text-muted-foreground transition-transform duration-300 group-hover:rotate-45 group-focus-visible:rotate-45 md:block"
+                        />
+                      </div>
+                      <div className="grid grid-rows-[1fr] transition-[grid-template-rows] duration-300 ease-out md:grid-rows-[0fr] md:group-hover:grid-rows-[1fr] md:group-focus-visible:grid-rows-[1fr]">
+                        <div className="overflow-hidden">
+                          <p className="mt-3 text-sm leading-relaxed text-muted-foreground transition-opacity duration-300 md:opacity-0 md:group-hover:opacity-100 md:group-focus-visible:opacity-100">
+                            {s.body}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
 
-        <div className="mt-14">
-          <DividerLabel>Self-serve</DividerLabel>
-          <Card variant="default" className="border-border bg-card/95">
-            <CardContent className="flex flex-col gap-6 p-8 md:flex-row md:items-center md:justify-between">
-              <div className="max-w-xl">
-                <h3 className="text-xl font-semibold tracking-tight text-foreground">Or use it however you want</h3>
+                <div className="mt-auto pt-8">
+                  <Button asChild size="lg">
+                    <Link href="https://cal.com/monaimel/15min" target="_blank" rel="noreferrer">
+                      Talk to an engineer
+                      <ArrowRight />
+                    </Link>
+                  </Button>
+                </div>
+              </div>
+
+              {/* Self-serve */}
+              <div className="flex flex-col p-8">
+                <ColumnLabel>Self-serve</ColumnLabel>
+
+                <h3 className="text-2xl font-semibold tracking-tight text-foreground">Use it however you want</h3>
                 <p className="mt-4 text-sm leading-relaxed text-muted-foreground">
                   Bring your code, framework, and training loop. Full platform access, CLI, and docs — move at your own
                   pace, no calls required.
                 </p>
+
+                <ul className="mt-6 grid gap-3">
+                  {selfServeItems.map((item) => (
+                    <li
+                      key={item}
+                      className="border-b border-border/60 pb-2 text-sm text-foreground last:border-b-0 last:pb-0"
+                    >
+                      <span>{item}</span>
+                    </li>
+                  ))}
+                </ul>
+
+                <div className="mt-auto pt-8">
+                  <Button asChild size="lg" variant="outline">
+                    <Link href="/login">
+                      Get started
+                      <ArrowRight />
+                    </Link>
+                  </Button>
+                </div>
               </div>
-              <Button asChild size="lg" variant="outline" className="shrink-0">
-                <Link href="/login">
-                  Get started
-                  <ArrowRight />
-                </Link>
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </section>
   )
