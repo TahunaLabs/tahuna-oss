@@ -26,7 +26,7 @@ const steps = [
 const selfServeItems = [
   "Instant access",
   "CLI & full documentation",
-  "Bring your own framework",
+  "Bring your own training loop",
   "Usage-based pricing",
 ] as const
 
@@ -39,15 +39,18 @@ export function LandingPartnerSection() {
     <section id="partner" className="relative overflow-hidden border-t border-border px-6 py-20 md:px-8 md:py-24">
       <DotGrid className="right-0 top-16 h-64 w-1/3" />
       <div className="relative mx-auto max-w-7xl">
-        <div className="mb-12 max-w-2xl">
-          <p className="mb-3 text-xs uppercase tracking-ui-eyebrow text-muted-foreground">How we partner</p>
-          <h2 className="text-3xl font-semibold leading-tight tracking-tight text-foreground md:text-4xl">
-            Two ways to work
-            <br />
-            with Tahuna
-          </h2>
-          <p className="mt-6 max-w-xl text-base leading-relaxed text-muted-foreground">
-            
+        <div className="mb-12 flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
+          <div className="max-w-2xl">
+            <p className="mb-3 text-xs uppercase tracking-ui-eyebrow text-muted-foreground">How we partner</p>
+            <h2 className="text-3xl font-semibold leading-tight tracking-tight text-foreground md:text-4xl">
+              Frontier ML,
+              <br />
+              Embedded in your stack
+            </h2>
+          </div>
+          <p className="max-w-md text-base leading-relaxed text-muted-foreground md:text-right">
+            We pair frontier ML — RL post-training, long-horizon agents — with real enterprise
+            deployment, embedded in your team.
           </p>
         </div>
 
