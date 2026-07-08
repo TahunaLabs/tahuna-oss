@@ -3,13 +3,9 @@ import Link from "next/link"
 import { CLOUD_LINKS_CONFIG } from "@/cloud/links"
 import { BrandLockup } from "@/components/brand-lockup"
 import { FooterWordmark } from "@/components/landing/footer-wordmark"
-import { CDN_CONFIG } from "@/config"
 
-const FOUNDERS_INC_LOGO_URL =
-  "https://framerusercontent.com/images/l5QcIiKQDZnMLRqyEZxspYyuXAc.png?width=6588&height=1080"
-
-const nvidiaInceptionLightSrc = `${CDN_CONFIG.baseUrl}${CDN_CONFIG.artefactsPath}/${CDN_CONFIG.nvidiaInceptionLight}`
-const nvidiaInceptionDarkSrc = `${CDN_CONFIG.baseUrl}${CDN_CONFIG.artefactsPath}/${CDN_CONFIG.nvidiaInceptionDark}`
+// TODO: move to CDN — using local /public/nvidia-inception.webp until uploaded to Cloudflare
+const nvidiaInceptionSrc = "/nvidia-inception.webp"
 
 const FOOTER_SECTIONS = [
   {
@@ -54,38 +50,20 @@ export function LandingFooter() {
               © 2026 Tahuna. All rights reserved.
             </p>
 
-            {/* Credentials: backed by / part of */}
+            {/* Credential: NVIDIA Inception member */}
             <div className="mt-2 flex flex-wrap items-stretch gap-3">
-              <Link
-                href="https://f.inc/"
-                target="_blank"
-                rel="noreferrer"
-                className="group flex flex-col justify-center gap-1.5 rounded-lg border border-background/15 bg-background/[0.04] px-4 py-2.5 transition-colors hover:bg-background/[0.08]"
-              >
-                <span className="text-[10px] uppercase tracking-widest text-background/40">Backed by</span>
-                <img
-                  src={FOUNDERS_INC_LOGO_URL}
-                  alt="Founders, Inc."
-                  className="h-5 w-auto object-contain object-left opacity-80 grayscale brightness-0 invert transition-opacity group-hover:opacity-100 dark:invert-0"
-                />
-              </Link>
-
               <Link
                 href="https://www.nvidia.com/en-us/startups/"
                 target="_blank"
                 rel="noreferrer"
-                className="group flex items-center justify-center rounded-lg border border-background/15 bg-background/[0.04] px-4 py-2.5 transition-colors hover:bg-background/[0.08]"
+                className="group flex flex-col justify-center gap-2 rounded-lg border border-background/15 bg-background/[0.04] px-5 py-4 transition-colors hover:bg-background/[0.08]"
                 aria-label="Member of the NVIDIA Inception Program"
               >
+                <span className="text-[11px] uppercase tracking-widest text-background/40">Member of</span>
                 <img
-                  src={nvidiaInceptionLightSrc}
+                  src={nvidiaInceptionSrc}
                   alt="NVIDIA Inception Program"
-                  className="h-14 w-auto rounded object-contain opacity-90 transition-opacity group-hover:opacity-100 dark:hidden"
-                />
-                <img
-                  src={nvidiaInceptionDarkSrc}
-                  alt="NVIDIA Inception Program"
-                  className="hidden h-14 w-auto rounded object-contain opacity-90 transition-opacity group-hover:opacity-100 dark:block"
+                  className="h-12 w-auto object-contain object-left opacity-90 brightness-0 invert transition-opacity group-hover:opacity-100 dark:invert-0"
                 />
               </Link>
             </div>

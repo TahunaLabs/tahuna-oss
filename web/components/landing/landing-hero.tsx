@@ -48,8 +48,8 @@ export function LandingHero() {
             Train any model. Deploy it. Improve it.
           </p>
           <h1 className="font-serif text-3xl tracking-tight text-foreground md:text-4xl">
-            <span className="lg:block">Scaling Compute on your</span>{" "}
-            <span className="italic lg:block lg:whitespace-nowrap">Own signal</span>
+            <span className="lg:block">Scaling Compute on </span>{" "}
+            <span className="italic lg:block lg:whitespace-nowrap">your Own signal</span>
           </h1>
 
           <p className="mt-5 max-w-2xl text-base leading-relaxed text-muted-foreground md:text-lg">
