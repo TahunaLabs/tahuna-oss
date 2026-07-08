@@ -33,7 +33,7 @@ export function LandingCapabilitiesSection() {
             Continual Learning
           </h2>
           <p className="mt-6 max-w-md text-base leading-relaxed text-muted-foreground">
-            One loop, three moves. Train on managed GPUs, serve any checkpoint in production, and turn what production tells you into the next run.
+            One loop that compounds. Train on managed GPUs, serve any checkpoint in production, observe what production tells you, and point Hillclimb at a metric to run autonomous research that climbs it.
           </p>
         </div>
 

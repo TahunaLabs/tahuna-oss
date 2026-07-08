@@ -5,7 +5,7 @@ import { CLOUD_LINKS_CONFIG } from "@/cloud/links"
 const FAQS = [
   {
     q: "What is Tahuna?",
-    a: "Post-training infrastructure for adaptive AI systems. You keep the training loop; Tahuna handles the cloud GPU lifecycle around it.",
+    a: "Post-training infrastructure for continual learning. You own the loop — traces, evals, rewards, and training code; Tahuna runs the cloud GPU lifecycle around it and feeds every run back into the next.",
   },
   {
     q: "Do I have to change my training code?",
@@ -20,12 +20,12 @@ const FAQS = [
     a: "Logs and metrics stream live. Metrics are Weights & Biases-compatible, so you can keep using familiar dashboards.",
   },
   {
-    q: "Does Tahuna automatically retrain from production traffic?",
-    a: "No. Tahuna is not a black-box retraining system. Today, it runs your training code and handles the reproducible GPU lifecycle. The path we are building toward is production traces, feedback, evals, rewards, and training data feeding the next run you control.",
+    q: "Does Tahuna learn from production traffic?",
+    a: "Yes — under your control. Tahuna captures production traces, feedback, evals, and outcomes, turns them into training data and rewards, and feeds the next run. Hillclimb can run that research autonomously against an objective you set, but nothing promotes to production without your sign-off. It's a loop you own, not a black box.",
   },
   {
     q: "How does pricing work?",
-    a: "You pay for active GPU time and attached volume from prepaid credits. See the pricing section for the current GPU catalog.",
+    a: "You pay for active GPU time and attached volume from prepaid credits. See the pricing page for the current GPU catalog.",
   },
   {
     q: "Which GPUs are available?",

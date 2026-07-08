@@ -8,7 +8,7 @@ export type TerminalStep = { kind: "command" | "status"; value: string }
 export const DEFAULT_TERMINAL_STEPS: TerminalStep[] = [
   { kind: "command", value: "$ tahuna init ." },
   { kind: "status", value: "config def" },
-  { kind: "status", value: "entrypoint detected, environment scaffolded" },
+  { kind: "status", value: "entrypoint detected, environment initialized" },
   { kind: "command", value: "$ tahuna sync" },
   { kind: "status", value: "syncing code, data, env config" },
   { kind: "command", value: "$ tahuna train" },
