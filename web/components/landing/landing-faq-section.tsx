@@ -5,15 +5,15 @@ import { CLOUD_LINKS_CONFIG } from "@/cloud/links"
 const FAQS = [
   {
     q: "What is Tahuna?",
-    a: "Post-training infrastructure for continual learning. You own the loop — traces, evals, rewards, and training code; Tahuna runs the cloud GPU lifecycle around it and feeds every run back into the next.",
+    a: "Infrastructure for continual learning. We provide the primitives for you to own the loop — traces, evals, rewards, and training code; Tahuna runs the cloud GPU lifecycle around it and feeds every run back into the next.",
   },
   {
     q: "Do I have to change my training code?",
-    a: "No. Tahuna runs your configured Python entrypoint, so your code owns the training loop.",
+    a: "No. Tahuna runs your configured Python entrypoint, so your code owns the training loop. Tahuna is the control-plane that wraps it with the cloud lifecycle, observability, and autonomous research. You can use our CLI to scaffold a new project or add a few lines to an existing one.",
   },
   {
     q: "Which frameworks are supported?",
-    a: "PyTorch, Hugging Face, Unsloth, TRL, and Verifiers — and anything that runs from a standard Python entrypoint.",
+    a: "Tahuna is intentionally agnostic. PyTorch, Hugging Face, Unsloth, TRL, and Verifiers — and anything that runs from a standard Python entrypoint.",
   },
   {
     q: "Where do my metrics go?",
@@ -29,7 +29,7 @@ const FAQS = [
   },
   {
     q: "Which GPUs are available?",
-    a: "From L4 and RTX 3090/4090 up to A100, H100/H200, RTX PRO 6000, and B200 — billed per hour.",
+    a: "From L4 and RTX 3090/4090 up to A100, H100/H200, RTX PRO 6000, and B200 — billed per seconds.",
   },
 ]
 

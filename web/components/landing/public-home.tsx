@@ -6,6 +6,7 @@ import { LandingFooter } from "@/components/landing/landing-footer"
 import { LandingHero } from "@/components/landing/landing-hero"
 import { LandingLayersSection } from "@/components/landing/landing-layers-section"
 import { LandingNav } from "@/components/landing/landing-nav"
+import { LandingPartnerSection } from "@/components/landing/landing-partner-section"
 import { LandingTerminalSection } from "@/components/landing/landing-terminal-section"
 import { LandingWhySection } from "@/components/landing/landing-why-section"
 
@@ -25,6 +26,7 @@ export function PublicHome() {
           <LandingTerminalSection />
           <LandingWhySection />
           <LandingLayersSection />
+          <LandingPartnerSection />
           <LandingFaqSection />
           <LandingCtaSection />
         </main>
