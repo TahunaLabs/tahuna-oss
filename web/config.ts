@@ -97,6 +97,5 @@ export const CDN_CONFIG = {
   artefactsPath: "/assets/artefacts",
   heroGradientLight: "tahuna-hero-gradient-teal-lime-1.avif",
   heroGradientDark: "tahuna-hero-gradient-dark-teal-lime.avif",
-  nvidiaInceptionLight: "nvidia-inception-light.avif",
-  nvidiaInceptionDark: "nvidia-inception-dark.avif",
+  nvidiaInception: "nvidia-inception.webp",
 } as const;

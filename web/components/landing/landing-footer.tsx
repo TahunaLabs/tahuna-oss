@@ -3,9 +3,9 @@ import Link from "next/link"
 import { CLOUD_LINKS_CONFIG } from "@/cloud/links"
 import { BrandLockup } from "@/components/brand-lockup"
 import { FooterWordmark } from "@/components/landing/footer-wordmark"
+import { CDN_CONFIG } from "@/config"
 
-// TODO: move to CDN — using local /public/nvidia-inception.webp until uploaded to Cloudflare
-const nvidiaInceptionSrc = "/nvidia-inception.webp"
+const nvidiaInceptionSrc = `${CDN_CONFIG.baseUrl}${CDN_CONFIG.artefactsPath}/${CDN_CONFIG.nvidiaInception}`
 
 const FOOTER_SECTIONS = [
   {
@@ -59,7 +59,6 @@ export function LandingFooter() {
                 className="group flex flex-col justify-center gap-2 rounded-lg border border-background/15 bg-background/[0.04] px-5 py-4 transition-colors hover:bg-background/[0.08]"
                 aria-label="Member of the NVIDIA Inception Program"
               >
-                <span className="text-[11px] uppercase tracking-widest text-background/40">Member of</span>
                 <img
                   src={nvidiaInceptionSrc}
                   alt="NVIDIA Inception Program"
