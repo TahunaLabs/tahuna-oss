@@ -1,11 +1,13 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { ConvexError } from "convex/values"
 import { toast } from "sonner"
 import type { EnvironmentConfigDetail, EnvironmentRow } from "@/components/features/dashboard-model"
 import type { EnvironmentConfigEditor } from "@/components/features/dashboard/environments/environments-grid-view"
 import { ENVIRONMENT_CONFIG_FILE_NAME, renderEnvironmentConfig } from "@/lib/environment-config"
 import { useDashboardEnvironmentConfig, useUpdateDashboardEnvironmentConfig } from "@/lib/dashboard-api"
+import { ERROR_MESSAGES } from "@/lib/error-messages"
 
 type UseEnvironmentConfigEditorArgs = {
   environments: EnvironmentRow[]
@@ -80,8 +82,12 @@ function useEnvironmentConfigEditor({ environments, shouldLoadQueries }: UseEnvi
       setConfigSourceText(saved.config_text)
       setConfigDraft(saved.config_text)
       toast.success(`Saved config for environment ${environmentId}.`)
-    } catch (e) {
-      setConfigError(e instanceof Error ? e.message : "failed to save environment config")
+    } catch (error) {
+      setConfigError(
+        error instanceof ConvexError && typeof error.data === "string"
+          ? error.data
+          : ERROR_MESSAGES.failedToSaveEnvironmentConfig,
+      )
     } finally {
       setConfigSaving(false)
     }

@@ -6,6 +6,7 @@ import { api } from "@convex/_generated/api"
 import { useConvexAuth, useMutation } from "convex/react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useEffect, useState } from "react"
+import { ERROR_MESSAGES } from "@/lib/error-messages"
 
 function isLocalCallback(rawCallback: string) {
   try {
@@ -60,9 +61,9 @@ export default function CliAuthPage() {
 
       setStatus("redirecting")
       window.location.href = redirect.toString()
-    } catch (err) {
+    } catch {
       setStatus("error")
-      setError(err instanceof Error ? err.message : "Failed to complete CLI login.")
+      setError(ERROR_MESSAGES.failedToCompleteCliLogin)
     }
   }
 

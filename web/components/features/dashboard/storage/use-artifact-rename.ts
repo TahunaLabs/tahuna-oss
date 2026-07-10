@@ -1,9 +1,11 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { ConvexError } from "convex/values"
 import { toast } from "sonner"
 import { validateArtifactRenameName, type StorageItem } from "@/components/features/dashboard-model"
 import { useRenameDashboardArtifact } from "@/lib/dashboard-api"
+import { ERROR_MESSAGES } from "@/lib/error-messages"
 
 type UseArtifactRenameArgs = {
   storageItems: StorageItem[]
@@ -69,8 +71,23 @@ function useArtifactRename({ storageItems, onSuccess }: UseArtifactRenameArgs) {
           ? `Renamed artifact to ${renamed.name}. Old object cleanup needs a retry.`
           : `Renamed artifact to ${renamed.name}.`,
       )
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "failed to rename artifact")
+    } catch (error) {
+      const reason = error instanceof ConvexError ? error.data : undefined
+      if (reason === "new artifact name must differ from the current name") {
+        toast.error(ERROR_MESSAGES.artifactNameMustDiffer)
+      } else if (reason === "artifact not found in run outputs") {
+        toast.error(ERROR_MESSAGES.artifactNotFoundInRunOutputs)
+      } else if (reason === "artifact name already exists in this run") {
+        toast.error(ERROR_MESSAGES.artifactNameAlreadyExistsInRun)
+      } else if (reason === "artifact object is missing from storage") {
+        toast.error(ERROR_MESSAGES.artifactObjectMissingFromStorage)
+      } else if (reason === "artifact name already exists in storage") {
+        toast.error(ERROR_MESSAGES.artifactNameAlreadyExistsInStorage)
+      } else if (reason === "renamed artifact metadata could not be loaded") {
+        toast.error(ERROR_MESSAGES.renamedArtifactMetadataNotLoaded)
+      } else {
+        toast.error(ERROR_MESSAGES.failedToRenameArtifact)
+      }
     } finally {
       setRenameBusyId(null)
     }

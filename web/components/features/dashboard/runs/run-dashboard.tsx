@@ -29,6 +29,7 @@ import { StatusDot, toStatusDotVariant } from "@/components/ui/status-dot"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useListDashboardStorage } from "@/lib/dashboard-api"
+import { ERROR_MESSAGES } from "@/lib/error-messages"
 
 type RunDetailTab = "overview" | "logs" | "checkpoints" | "system"
 
@@ -80,10 +81,10 @@ export function RunDashboard({
         if (cancelled) return
         setArtifacts(result.items.filter((item) => item.source === "run_artifact" && item.run?.id === runId))
       })
-      .catch((error) => {
+      .catch(() => {
         if (cancelled) return
         setArtifacts([])
-        setArtifactsError(error instanceof Error ? error.message : "failed to load checkpoints")
+        setArtifactsError(ERROR_MESSAGES.failedToLoadCheckpoints)
       })
     return () => {
       cancelled = true

@@ -28,6 +28,7 @@ import { DashboardAppLayout } from "@/components/app-shell/dashboard-app-layout"
 import { DashboardContentShell } from "@/components/app-shell/dashboard-content-shell"
 import { type ResourceType } from "@/components/features/dashboard-model"
 import { authClient } from "@/lib/auth-client"
+import { ERROR_MESSAGES } from "@/lib/error-messages"
 import {
   useCreateDashboardShareLink,
   useDashboardAuthState,
@@ -126,8 +127,8 @@ export default function DashboardPage() {
         permission,
       })
       toast.success(`Link generated (${permission}).`)
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to generate link")
+    } catch {
+      toast.error(ERROR_MESSAGES.failedToGenerateLink)
     } finally {
       setShareBusy(false)
     }
@@ -138,8 +139,8 @@ export default function DashboardPage() {
     try {
       await revokeShareLinkMutation(shareLinkId)
       toast.success("Link revoked.")
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to revoke link")
+    } catch {
+      toast.error(ERROR_MESSAGES.failedToRevokeLink)
     } finally {
       setShareBusy(false)
     }

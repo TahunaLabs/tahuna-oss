@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { ConvexError } from "convex/values"
 import { toast } from "sonner"
 
 import {
@@ -15,6 +16,7 @@ import {
   useDashboardServes,
   useStopDashboardServe,
 } from "@/lib/dashboard-api"
+import { ERROR_MESSAGES } from "@/lib/error-messages"
 
 type Props = {
   shouldLoadQueries: boolean
@@ -44,7 +46,9 @@ export function ServingContainer({ shouldLoadQueries }: Props) {
       await task()
       return true
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "unexpected error")
+      toast.error(
+        error instanceof ConvexError && typeof error.data === "string" ? error.data : ERROR_MESSAGES.unexpectedError,
+      )
       return false
     } finally {
       setBusy(false)

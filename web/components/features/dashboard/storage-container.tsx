@@ -19,6 +19,7 @@ import {
   useSetDashboardStorageVisibility,
 } from "@/lib/dashboard-api"
 import { useDebounce } from "@/lib/use-debounce"
+import { ERROR_MESSAGES } from "@/lib/error-messages"
 
 
 type Props = {
@@ -73,7 +74,7 @@ export function StorageContainer({ shouldLoadQueries, onOpenShareDialog }: Props
       limit: STORAGE_PAGE_LIMIT,
     })
       .then((result) => { if (!cancelled) setStorageResult(result as StorageListResult) })
-      .catch((e) => { if (!cancelled) setStorageError(e instanceof Error ? e.message : "failed to load storage") })
+      .catch(() => { if (!cancelled) setStorageError(ERROR_MESSAGES.failedToLoadStorage) })
       .finally(() => { if (!cancelled) setStorageLoading(false) })
     return () => { cancelled = true }
   }, [listStorageAction, shouldLoadQueries, storageOffset, storageReloadToken, storageSearchDebounced, storageSort, storageSourceFilter])
@@ -95,8 +96,8 @@ export function StorageContainer({ shouldLoadQueries, onOpenShareDialog }: Props
     try {
       await setStorageVisibilityMutation({ key: item.key, visibility })
       setStorageReloadToken((n) => n + 1)
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "failed to update visibility")
+    } catch {
+      toast.error(ERROR_MESSAGES.failedToUpdateVisibility)
     }
   }
 
@@ -110,8 +111,8 @@ export function StorageContainer({ shouldLoadQueries, onOpenShareDialog }: Props
         setStorageReloadToken((n) => n + 1)
       }
       return result.deleted === keys.length
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "failed to delete storage items")
+    } catch {
+      toast.error(ERROR_MESSAGES.failedToDeleteStorageItems)
       return false
     } finally {
       setStorageDeleteBusy(false)
