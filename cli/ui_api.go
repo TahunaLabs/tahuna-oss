@@ -695,35 +695,54 @@ func friendlyError(err error) string {
 		detail := strings.ToLower(apiErr.detail)
 		switch {
 		case apiErr.status == 401 && strings.Contains(detail, "expired"):
-			return "Session expired. Run `tahuna login` to re-authenticate."
+			return errMsgSessionExpired
 		case apiErr.status == 401:
-			return "Not authenticated. Run `tahuna login` first."
+			return errMsgNotAuthenticated
 		case apiErr.status == 403:
-			return "Access denied."
+			return errMsgAccessDenied
 		case apiErr.status == 404 && strings.Contains(detail, "environment"):
-			return "Environment not found."
+			return errMsgEnvironmentNotFound
 		case apiErr.status == 404 && strings.Contains(detail, "env var"):
-			return "Env var not found."
+			return errMsgEnvVarNotFound
 		case apiErr.status == 404 && strings.Contains(detail, "run"):
-			return "Run not found."
+			return errMsgRunNotFound
 		case apiErr.status == 404:
-			return "Resource not found."
-		case apiErr.status == 409:
-			return apiErr.detail
+			return errMsgResourceNotFound
 		case apiErr.status == 400 && strings.Contains(detail, "no compute provider configured"):
 			return fmt.Sprintf("No compute provider configured. Add one at: %s", providerSettingsURL())
-		case apiErr.status == 400:
-			return apiErr.detail
+		case apiErr.status == 400 || apiErr.status == 409:
+			return friendlyDetailError(detail, apiErr.detail)
 		case apiErr.status >= 500:
-			return "Something went wrong. Try again or check status."
+			return errMsgGeneric
 		}
 		return ""
 	}
 	var netErr net.Error
 	if errors.As(err, &netErr) {
-		return "Cannot reach Tahuna backend. Check your connection."
+		return errMsgCannotReachBackend
 	}
 	return ""
+}
+
+// friendlyDetailError maps known backend error reasons (400/409 responses)
+// to user-facing copy instead of showing the raw backend message.
+func friendlyDetailError(detailLower string, detail string) string {
+	const invalidConfigPrefix = "invalid environment config: "
+	switch {
+	case strings.HasPrefix(detailLower, "environment has no command configured"):
+		return errMsgEnvironmentMissingCommand
+	case strings.HasPrefix(detailLower, "environment has no training dependency selection configured"):
+		return errMsgEnvironmentMissingDependencies
+	case strings.HasPrefix(detailLower, "environment code is not synced"):
+		return errMsgEnvironmentCodeNotSynced
+	case detailLower == "run name is already used":
+		return errMsgRunNameAlreadyUsed
+	case strings.HasPrefix(detailLower, "runtime launch blocked"):
+		return errMsgRuntimeLaunchBlocked
+	case strings.HasPrefix(detailLower, invalidConfigPrefix):
+		return errMsgInvalidEnvironmentConfigPrefix + " " + detail[len(invalidConfigPrefix):]
+	}
+	return errMsgGeneric
 }
 
 func doJSONRaw(method, path string, payload map[string]any) ([]byte, error) {
