@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { ConvexError } from "convex/values"
 import { toast } from "sonner"
 import type { FormEvent } from "react"
 import { UPLOAD_LIMITS_BYTES } from "@/config"
@@ -23,11 +24,6 @@ function useStorageUpload({ onSuccess }: UseStorageUploadArgs) {
   async function upload(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (selectedFiles.length === 0) return
-    const oversizedFile = selectedFiles.find((file) => file.size > UPLOAD_LIMITS_BYTES.dataBlob)
-    if (oversizedFile) {
-      toast.error(`${ERROR_MESSAGES.fileTooLargePrefix} ${formatBytes(UPLOAD_LIMITS_BYTES.dataBlob)}.`)
-      return
-    }
     setUploading(true)
     try {
       for (const file of selectedFiles) {
@@ -46,7 +42,9 @@ function useStorageUpload({ onSuccess }: UseStorageUploadArgs) {
       onSuccess()
       toast.success(count === 1 ? "Uploaded 1 file." : `Uploaded ${count} files.`)
     } catch (error) {
-      if (error instanceof Error && error.message === "Failed to fetch") {
+      if (error instanceof ConvexError && typeof error.data === "string" && error.data.startsWith("data file exceeds limit of")) {
+        toast.error(`${ERROR_MESSAGES.fileTooLargePrefix} ${formatBytes(UPLOAD_LIMITS_BYTES.dataBlob)}.`)
+      } else if (error instanceof Error && error.message === "Failed to fetch") {
         toast.error(ERROR_MESSAGES.uploadCorsFailure)
       } else {
         toast.error(ERROR_MESSAGES.failedToUploadFile)
