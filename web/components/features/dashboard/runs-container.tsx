@@ -1,7 +1,6 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { ConvexError } from "convex/values"
 import { parseAsStringLiteral, useQueryState } from "nuqs"
 import { toast } from "sonner"
 import { RunsView } from "@/components/features/dashboard/runs-view"
@@ -96,10 +95,8 @@ export function RunsContainer({ shouldLoadQueries, onOpenShareDialog }: Props) {
     try {
       await task()
       return true
-    } catch (error) {
-      toast.error(
-        error instanceof ConvexError && typeof error.data === "string" ? error.data : ERROR_MESSAGES.unexpectedError,
-      )
+    } catch {
+      toast.error(ERROR_MESSAGES.unexpectedError)
       return false
     } finally {
       setBusy(false)

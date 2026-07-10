@@ -83,11 +83,13 @@ function useEnvironmentConfigEditor({ environments, shouldLoadQueries }: UseEnvi
       setConfigDraft(saved.config_text)
       toast.success(`Saved config for environment ${environmentId}.`)
     } catch (error) {
-      setConfigError(
-        error instanceof ConvexError && typeof error.data === "string"
-          ? error.data
-          : ERROR_MESSAGES.failedToSaveEnvironmentConfig,
-      )
+      const reason = error instanceof ConvexError ? error.data : undefined
+      const invalidConfigPrefix = "invalid environment config: "
+      if (typeof reason === "string" && reason.startsWith(invalidConfigPrefix)) {
+        setConfigError(`${ERROR_MESSAGES.invalidEnvironmentConfigPrefix} ${reason.slice(invalidConfigPrefix.length)}`)
+      } else {
+        setConfigError(ERROR_MESSAGES.failedToSaveEnvironmentConfig)
+      }
     } finally {
       setConfigSaving(false)
     }

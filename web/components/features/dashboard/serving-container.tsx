@@ -1,7 +1,6 @@
 "use client"
 
 import { useState } from "react"
-import { ConvexError } from "convex/values"
 import { toast } from "sonner"
 
 import {
@@ -45,10 +44,8 @@ export function ServingContainer({ shouldLoadQueries }: Props) {
     try {
       await task()
       return true
-    } catch (error) {
-      toast.error(
-        error instanceof ConvexError && typeof error.data === "string" ? error.data : ERROR_MESSAGES.unexpectedError,
-      )
+    } catch {
+      toast.error(ERROR_MESSAGES.unexpectedError)
       return false
     } finally {
       setBusy(false)

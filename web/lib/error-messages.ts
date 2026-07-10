@@ -19,4 +19,13 @@ export const ERROR_MESSAGES = {
   artifactObjectMissingFromStorage: "Artifact object is missing from storage.",
   artifactNameAlreadyExistsInStorage: "Artifact name already exists in storage.",
   renamedArtifactMetadataNotLoaded: "Renamed artifact metadata could not be loaded.",
+  uploadCorsFailure: "Upload failed. Check the object storage CORS policy for PUT requests from this app origin.",
+  failedToUploadFile: "Failed to upload file.",
+  fileTooLargePrefix: "File exceeds the maximum upload size of",
+  environmentMissingCommand: "This environment has no command configured. Run `tahuna sync` before launching a run.",
+  environmentMissingDependencies: "This environment has no training dependencies configured. Run `tahuna sync` before launching a run.",
+  environmentCodeNotSynced: "This environment's code is not synced. Run `tahuna sync` before launching a run.",
+  runNameAlreadyUsed: "That run name is already in use.",
+  runtimeLaunchBlocked: "This GPU/image combination is temporarily unavailable. Try a different GPU or image.",
+  invalidEnvironmentConfigPrefix: "Your environment config is invalid:",
 } as const

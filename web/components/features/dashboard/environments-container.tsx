@@ -65,10 +65,8 @@ export function EnvironmentsContainer({
     try {
       await task()
       return true
-    } catch (error) {
-      toast.error(
-        error instanceof ConvexError && typeof error.data === "string" ? error.data : ERROR_MESSAGES.unexpectedError,
-      )
+    } catch {
+      toast.error(ERROR_MESSAGES.unexpectedError)
       return false
     } finally {
       setBusy(false)
@@ -87,10 +85,28 @@ export function EnvironmentsContainer({
   }
 
   async function launchRun(environmentId: EnvironmentRow["environment_id"]) {
-    await withBusy(async () => {
+    setBusy(true)
+    try {
       await createRunMutation(environmentId)
       toast.success("Run launched.")
-    })
+    } catch (error) {
+      const reason = error instanceof ConvexError ? error.data : undefined
+      if (reason === "environment has no command configured; run `tahuna sync` before creating a run") {
+        toast.error(ERROR_MESSAGES.environmentMissingCommand)
+      } else if (reason === "environment has no training dependency selection configured; run `tahuna sync` before creating a run") {
+        toast.error(ERROR_MESSAGES.environmentMissingDependencies)
+      } else if (reason === "environment code is not synced; run `tahuna sync` before creating a run") {
+        toast.error(ERROR_MESSAGES.environmentCodeNotSynced)
+      } else if (reason === "run name is already used") {
+        toast.error(ERROR_MESSAGES.runNameAlreadyUsed)
+      } else if (typeof reason === "string" && reason.startsWith("runtime launch blocked")) {
+        toast.error(ERROR_MESSAGES.runtimeLaunchBlocked)
+      } else {
+        toast.error(ERROR_MESSAGES.unexpectedError)
+      }
+    } finally {
+      setBusy(false)
+    }
   }
 
   async function bindSelectedData(environmentId: EnvironmentRow["environment_id"], selectedDataId: string) {

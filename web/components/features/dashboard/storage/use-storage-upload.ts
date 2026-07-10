@@ -3,7 +3,10 @@
 import { useState } from "react"
 import { toast } from "sonner"
 import type { FormEvent } from "react"
+import { UPLOAD_LIMITS_BYTES } from "@/config"
+import { formatBytes } from "@/components/features/dashboard-model"
 import { useGenerateDashboardUploadUrl, useSyncDashboardDataMetadata } from "@/lib/dashboard-api"
+import { ERROR_MESSAGES } from "@/lib/error-messages"
 
 type UseStorageUploadArgs = {
   onSuccess: () => void
@@ -20,6 +23,11 @@ function useStorageUpload({ onSuccess }: UseStorageUploadArgs) {
   async function upload(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (selectedFiles.length === 0) return
+    const oversizedFile = selectedFiles.find((file) => file.size > UPLOAD_LIMITS_BYTES.dataBlob)
+    if (oversizedFile) {
+      toast.error(`${ERROR_MESSAGES.fileTooLargePrefix} ${formatBytes(UPLOAD_LIMITS_BYTES.dataBlob)}.`)
+      return
+    }
     setUploading(true)
     try {
       for (const file of selectedFiles) {
@@ -37,13 +45,12 @@ function useStorageUpload({ onSuccess }: UseStorageUploadArgs) {
       setFileInputKey((n) => n + 1)
       onSuccess()
       toast.success(count === 1 ? "Uploaded 1 file." : `Uploaded ${count} files.`)
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "unexpected error"
-      toast.error(
-        msg === "Failed to fetch"
-          ? "Upload failed. Check the object storage CORS policy for PUT requests from this app origin."
-          : msg,
-      )
+    } catch (error) {
+      if (error instanceof Error && error.message === "Failed to fetch") {
+        toast.error(ERROR_MESSAGES.uploadCorsFailure)
+      } else {
+        toast.error(ERROR_MESSAGES.failedToUploadFile)
+      }
     } finally {
       setUploading(false)
     }

@@ -11,6 +11,7 @@ import {
   useCloudDashboardPaymentTransactions,
   useRedeemCloudDashboardCode,
 } from "@/cloud/dashboard-api"
+import { ERROR_MESSAGES } from "@/lib/error-messages"
 
 type Props = { shouldLoadQueries: boolean }
 
@@ -33,7 +34,7 @@ export function BillingContainer({ shouldLoadQueries }: Props) {
       const checkout = await createTopUpCheckoutSession({ amount_cents: amountCents })
       window.location.assign(checkout.url)
     } catch {
-      toast.error("Failed to start checkout.")
+      toast.error(ERROR_MESSAGES.failedToStartCheckout)
       setCheckoutAmountCents(null)
     }
   }
