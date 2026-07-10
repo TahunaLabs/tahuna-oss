@@ -12,11 +12,30 @@ function normalizeCode(raw: string) {
   return code;
 }
 
-function normalizeAmountCents(value: number) {
+function normalizeAmountDollars(value: number) {
   if (!Number.isFinite(value) || value <= 0) {
-    throw new ConvexError("amount_cents must be a positive number");
+    throw new ConvexError("amount_dollars must be a positive number");
   }
-  return Math.floor(value);
+  return Math.round(value * 100);
+}
+
+function normalizeExpiresAt(value: string) {
+  const match = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(value.trim());
+  if (!match) {
+    throw new ConvexError("expires_at must be in DD/MM/YYYY format");
+  }
+  const [, day, month, year] = match;
+  const date = new Date(Number(year), Number(month) - 1, Number(day));
+  const isValidCalendarDate =
+    date.getFullYear() === Number(year) && date.getMonth() === Number(month) - 1 && date.getDate() === Number(day);
+  if (!isValidCalendarDate) {
+    throw new ConvexError("expires_at must be a valid date");
+  }
+  const timestamp = date.getTime();
+  if (timestamp <= Date.now()) {
+    throw new ConvexError("expires_at must be in the future");
+  }
+  return timestamp;
 }
 
 function normalizeCreatedBy(value: string) {
@@ -46,17 +65,18 @@ function normalizeMaxRedemptions(value: number | undefined) {
 export const internalCreateReferralCode = internalMutation({
   args: {
     code: v.optional(v.string()),
-    amount_cents: v.number(),
+    amount_dollars: v.number(),
     max_redemptions: v.optional(v.number()),
-    expires_at: v.number(),
+    expires_at: v.string(),
     created_by: v.string(),
   },
   returns: v.object({ code: v.string() }),
   handler: async (ctx, args) => {
     const code = normalizeCode(args.code ?? crypto.randomUUID().slice(0, 8));
-    const amountCents = normalizeAmountCents(args.amount_cents);
+    const amountCents = normalizeAmountDollars(args.amount_dollars);
     const createdBy = normalizeCreatedBy(args.created_by);
     const maxRedemptions = normalizeMaxRedemptions(args.max_redemptions);
+    const expiresAt = normalizeExpiresAt(args.expires_at);
     const existing = await ctx.db
       .query("redeemableCodes")
       .withIndex("by_code", (q) => q.eq("code", code))
@@ -74,7 +94,7 @@ export const internalCreateReferralCode = internalMutation({
       redemptionCount: 0,
       active: true,
       createdBy,
-      expiresAt: args.expires_at,
+      expiresAt,
       updatedAt: Date.now(),
     });
     return { code };
@@ -84,17 +104,18 @@ export const internalCreateReferralCode = internalMutation({
 export const internalUpsertPromoCode = internalMutation({
   args: {
     code: v.string(),
-    amount_cents: v.number(),
+    amount_dollars: v.number(),
     max_user_count: v.optional(v.number()),
-    expires_at: v.number(),
+    expires_at: v.string(),
     created_by: v.string(),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
     const code = normalizeCode(args.code);
-    const amountCents = normalizeAmountCents(args.amount_cents);
+    const amountCents = normalizeAmountDollars(args.amount_dollars);
     const createdBy = normalizeCreatedBy(args.created_by);
     const maxRedemptions = normalizeMaxRedemptions(args.max_user_count);
+    const expiresAt = normalizeExpiresAt(args.expires_at);
     const existing = await ctx.db
       .query("redeemableCodes")
       .withIndex("by_code", (q) => q.eq("code", code))
@@ -106,7 +127,7 @@ export const internalUpsertPromoCode = internalMutation({
         maxRedemptions,
         active: true,
         createdBy,
-        expiresAt: args.expires_at,
+        expiresAt,
         updatedAt: now,
       });
     } else {
@@ -119,7 +140,7 @@ export const internalUpsertPromoCode = internalMutation({
         redemptionCount: 0,
         active: true,
         createdBy,
-        expiresAt: args.expires_at,
+        expiresAt,
         updatedAt: now,
       });
     }

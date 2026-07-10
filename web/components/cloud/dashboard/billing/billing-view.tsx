@@ -22,6 +22,10 @@ type BillingViewProps = {
   onCustomTopUpAmountChange: (value: string) => void
   onStartTopUp: (amountCents: number) => void
   paymentTransactions: CloudDashboardPaymentTransaction[]
+  redeemCodeBusy: boolean
+  redeemCodeValue: string
+  onRedeemCodeValueChange: (value: string) => void
+  onRedeemCode: (code: string) => void
 }
 
 function formatMoney(cents: number, currency: string) {
@@ -75,6 +79,10 @@ export function BillingView({
   onCustomTopUpAmountChange,
   onStartTopUp,
   paymentTransactions,
+  redeemCodeBusy,
+  redeemCodeValue,
+  onRedeemCodeValueChange,
+  onRedeemCode,
 }: BillingViewProps) {
   const [selectedFixedAmountCents, setSelectedFixedAmountCents] = useState(fixedTopUpAmountCents[0] ?? null)
   const customAmountCents = parseDollarAmountCents(customTopUpAmount)
@@ -186,6 +194,29 @@ export function BillingView({
               </Button>
             </form>
           ) : null}
+        </div>
+
+        <div className="mt-6 border-t border-border pt-6">
+          <p className="text-sm text-muted-foreground">Have a promo or referral code?</p>
+          <form
+            className="mt-3 flex flex-col gap-3 sm:flex-row"
+            onSubmit={(event) => {
+              event.preventDefault()
+              onRedeemCode(redeemCodeValue)
+            }}
+          >
+            <Input
+              className="h-9"
+              aria-label="Redeem code"
+              value={redeemCodeValue}
+              placeholder="Enter code"
+              disabled={redeemCodeBusy}
+              onChange={(event) => onRedeemCodeValueChange(event.target.value)}
+            />
+            <Button type="submit" variant="outline" size="default" disabled={redeemCodeBusy || !redeemCodeValue.trim()}>
+              Redeem
+            </Button>
+          </form>
         </div>
 
         <div className="mt-6 border-t border-border pt-6">

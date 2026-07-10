@@ -5,6 +5,7 @@ import { useAction, useMutation, useQuery } from "convex/react"
 import { api } from "@convex/_generated/api"
 import type {
   CloudDashboardCheckoutSession,
+  CloudDashboardCodeRedemption,
   CloudDashboardCredits,
   CloudDashboardPaymentTransaction,
   CloudDashboardUsageEvent,
@@ -34,4 +35,10 @@ export function useCreateCloudDashboardTopUpCheckoutSession() {
   return useAction(api.cloud.billing.createTopUpCheckoutSession) as (args: {
     amount_cents: number
   }) => Promise<CloudDashboardCheckoutSession>
+}
+
+export function useRedeemCloudDashboardCode() {
+  return useMutation(api.cloud.redeemableCodes.redeemCode) as (args: {
+    code: string
+  }) => Promise<CloudDashboardCodeRedemption>
 }

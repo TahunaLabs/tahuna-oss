@@ -9,6 +9,12 @@ export type CloudDashboardCheckoutSession = {
   url: string
 }
 
+export type CloudDashboardCodeRedemption = {
+  balance_cents: number
+  currency: string
+  amount_cents_granted: number
+}
+
 export type CloudDashboardPaymentTransaction = {
   amount_cents: number
   credits_cents: number

@@ -9,6 +9,7 @@ import {
   useCreateCloudDashboardTopUpCheckoutSession,
   useCloudDashboardCredits,
   useCloudDashboardPaymentTransactions,
+  useRedeemCloudDashboardCode,
 } from "@/cloud/dashboard-api"
 
 type Props = { shouldLoadQueries: boolean }
@@ -16,9 +17,12 @@ type Props = { shouldLoadQueries: boolean }
 export function BillingContainer({ shouldLoadQueries }: Props) {
   const [customTopUpAmount, setCustomTopUpAmount] = useState("")
   const [checkoutAmountCents, setCheckoutAmountCents] = useState<number | null>(null)
+  const [redeemCodeValue, setRedeemCodeValue] = useState("")
+  const [redeemCodeBusy, setRedeemCodeBusy] = useState(false)
   const myCredits = useCloudDashboardCredits(shouldLoadQueries)
   const paymentTransactions = useCloudDashboardPaymentTransactions(shouldLoadQueries, 8)
   const createTopUpCheckoutSession = useCreateCloudDashboardTopUpCheckoutSession()
+  const redeemCode = useRedeemCloudDashboardCode()
 
   async function startTopUp(amountCents: number) {
     if (checkoutAmountCents !== null) {
@@ -28,9 +32,25 @@ export function BillingContainer({ shouldLoadQueries }: Props) {
     try {
       const checkout = await createTopUpCheckoutSession({ amount_cents: amountCents })
       window.location.assign(checkout.url)
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to start checkout.")
+    } catch {
+      toast.error("Failed to start checkout.")
       setCheckoutAmountCents(null)
+    }
+  }
+
+  async function redeem(code: string) {
+    if (redeemCodeBusy || !code.trim()) {
+      return
+    }
+    setRedeemCodeBusy(true)
+    try {
+      const result = await redeemCode({ code })
+      toast.success(`Credited ${(result.amount_cents_granted / 100).toFixed(2)} ${result.currency}.`)
+      setRedeemCodeValue("")
+    } catch {
+      toast.error("Failed to redeem code.")
+    } finally {
+      setRedeemCodeBusy(false)
     }
   }
 
@@ -47,6 +67,10 @@ export function BillingContainer({ shouldLoadQueries }: Props) {
       onCustomTopUpAmountChange={setCustomTopUpAmount}
       onStartTopUp={(amountCents) => { void startTopUp(amountCents) }}
       paymentTransactions={paymentTransactions ?? []}
+      redeemCodeBusy={redeemCodeBusy}
+      redeemCodeValue={redeemCodeValue}
+      onRedeemCodeValueChange={setRedeemCodeValue}
+      onRedeemCode={(code) => { void redeem(code) }}
     />
   )
 }

@@ -25,6 +25,7 @@ import type * as cloud_billing from "../cloud/billing.js";
 import type * as cloud_computeSessionReservations from "../cloud/computeSessionReservations.js";
 import type * as cloud_credits from "../cloud/credits.js";
 import type * as cloud_errors from "../cloud/errors.js";
+import type * as cloud_redeemableCodes from "../cloud/redeemableCodes.js";
 import type * as cloud_resend from "../cloud/resend.js";
 import type * as cloud_runBilling from "../cloud/runBilling.js";
 import type * as cloud_runLifecycleComposition from "../cloud/runLifecycleComposition.js";
@@ -109,6 +110,7 @@ declare const fullApi: ApiFromModules<{
   "cloud/computeSessionReservations": typeof cloud_computeSessionReservations;
   "cloud/credits": typeof cloud_credits;
   "cloud/errors": typeof cloud_errors;
+  "cloud/redeemableCodes": typeof cloud_redeemableCodes;
   "cloud/resend": typeof cloud_resend;
   "cloud/runBilling": typeof cloud_runBilling;
   "cloud/runLifecycleComposition": typeof cloud_runLifecycleComposition;
