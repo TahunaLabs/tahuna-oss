@@ -56,7 +56,7 @@ install-cli-dev:
 	echo "Installed tahuna-dev ✔ (standalone binary; no shell alias required)"
 
 install-cli-tools:
-	cd cli && GOBIN="$$(go env GOPATH)/bin" go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.8
+	cd cli && GOBIN="$$(go env GOPATH)/bin" go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.13.2
 
 lint-cli:
 	cd cli && ./tests/run_go_lint.sh
@@ -67,7 +67,7 @@ test-cli:
 validate-cli: lint-cli test-cli
 
 install-runtime-tools:
-	cd runtime/warden && GOBIN="$$(go env GOPATH)/bin" go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.8
+	cd runtime/warden && GOBIN="$$(go env GOPATH)/bin" go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.13.2
 
 lint-warden:
 	cd runtime/warden && ./tests/run_go_lint.sh
