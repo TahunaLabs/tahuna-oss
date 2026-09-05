@@ -220,6 +220,12 @@ func ExtractDataBundle(rootDir string) (files int, totalBytes int64, archiveByte
 			break
 		}
 		if nextErr != nil {
+			if errors.Is(nextErr, io.ErrUnexpectedEOF) {
+				return 0, 0, archiveBytes, fmt.Errorf(
+					"data entry size mismatch detail=archive expected=complete actual=truncated: %w",
+					nextErr,
+				)
+			}
 			return 0, 0, archiveBytes, fmt.Errorf("read data bundle entry: %w", nextErr)
 		}
 		if header.FileInfo().IsDir() {
