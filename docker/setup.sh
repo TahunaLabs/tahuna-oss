@@ -115,10 +115,10 @@ docker build --target deployer -f "$ROOT_DIR/docker/app.Dockerfile" -t tahuna-co
 
 echo "Applying backend configuration and deploying Convex functions..."
 docker run --rm --network tahuna_default \
-  --mount "type=bind,src=$CREDENTIALS_FILE,dst=/run/secrets/convex.env,readonly" \
+  --env-file "$CREDENTIALS_FILE" \
   --mount "type=bind,src=$APPLICATION_ENV_FILE,dst=/run/secrets/application.env,readonly" \
   tahuna-convex-deployer:local \
-  sh -c 'set -a; . /run/secrets/convex.env; set +a; bunx convex env set --from-file /run/secrets/application.env --force && bunx convex deploy'
+  sh -c 'bunx convex env set --from-file /run/secrets/application.env --force && bunx convex deploy'
 
 echo "Building and starting the app and dashboard..."
 docker compose --env-file "$PLATFORM_ENV_FILE" -f "$COMPOSE_FILE" up -d --build

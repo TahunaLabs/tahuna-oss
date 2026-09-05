@@ -9,7 +9,10 @@ COPY web ./
 FROM source AS deployer
 CMD ["bunx", "convex", "deploy"]
 
-FROM source AS builder
+FROM node:22-slim AS builder
+WORKDIR /repo/web
+COPY --from=dependencies /repo/web/node_modules ./node_modules
+COPY web ./
 ARG NEXT_PUBLIC_CONVEX_URL
 ARG NEXT_PUBLIC_CONVEX_SITE_URL
 ARG NEXT_PUBLIC_SITE_URL
@@ -20,7 +23,7 @@ ENV NEXT_TELEMETRY_DISABLED=1 \
     NEXT_PUBLIC_CONVEX_SITE_URL=${NEXT_PUBLIC_CONVEX_SITE_URL} \
     NEXT_PUBLIC_SITE_URL=${NEXT_PUBLIC_SITE_URL} \
     NEXT_PUBLIC_ASSETS_URL=${NEXT_PUBLIC_ASSETS_URL}
-RUN bun run build
+RUN node node_modules/next/dist/bin/next build
 
 FROM node:22-slim AS runner
 WORKDIR /app
