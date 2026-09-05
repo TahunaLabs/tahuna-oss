@@ -20,6 +20,7 @@ database, durable backups, and a TLS reverse proxy for production.
 
 - Docker Engine with Compose v2
 - OpenSSL
+- ngrok (only for local runs on remote GPU machines)
 - A RunPod API key
 - An R2 bucket and API credentials
 - A Resend API key
@@ -58,17 +59,33 @@ TAHUNA_API_URL=http://localhost:3000 tahuna-dev login
 ## Remote compute callbacks
 
 RunPod machines cannot reach loopback. For local evaluation with remote compute,
-expose port 3211 through a temporary HTTPS tunnel, then set both of these values
-to that public URL before rerunning `make self-host-up`:
+authenticate the ngrok CLI once, then start a temporary HTTPS tunnel and apply
+its callback origin:
 
-```dotenv
-# docker/.env
-CONVEX_SITE_ORIGIN=https://your-tunnel.example
-NEXT_PUBLIC_CONVEX_SITE_URL=https://your-tunnel.example
+```bash
+ngrok config add-authtoken YOUR_TOKEN
+make self-host-tunnel-up
+make self-host-up
 ```
 
 Keep `ENV=development` in `docker/.env.application` for this arrangement so
-runtime callbacks go directly to the Convex HTTP-actions origin.
+runtime callbacks go directly to the Convex HTTP-actions origin. Runtime status,
+logs, and fallback metrics use authenticated HTTP/JSON endpoints. Framework
+metrics use the included W&B-compatible HTTP endpoints; there is no gRPC service
+to expose.
+
+Check or stop the tunnel with:
+
+```bash
+make self-host-tunnel-status
+make self-host-tunnel-down
+make self-host-up
+```
+
+Stopping restores the previous origins in `docker/.env`; the final
+`self-host-up` applies them to Convex and the web app. Keep the tunnel running
+until every remote run is terminal so its final metrics and artifacts can be
+committed.
 
 ## Internet-facing deployment
 

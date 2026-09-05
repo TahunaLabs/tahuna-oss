@@ -3,7 +3,7 @@
 SELF_HOST_COMPOSE := docker/docker-compose.yml
 SELF_HOST_ENV := docker/.env
 
-.PHONY: help install-web run-web install-docs run-docs build-docs install-cli install-cli-dev install-cli-tools run-cli lint-cli test-cli validate-cli install-runtime-tools lint-warden test-warden validate-warden self-host-up self-host-down self-host-logs self-host-dashboard-key
+.PHONY: help install-web run-web install-docs run-docs build-docs install-cli install-cli-dev install-cli-tools run-cli lint-cli test-cli validate-cli install-runtime-tools lint-warden test-warden validate-warden self-host-up self-host-down self-host-logs self-host-dashboard-key self-host-tunnel-up self-host-tunnel-down self-host-tunnel-status
 
 help:
 	@echo "Available targets:"
@@ -26,6 +26,9 @@ help:
 	@echo "  self-host-down  Stop the self-hosted stack"
 	@echo "  self-host-logs  Follow self-hosted stack logs"
 	@echo "  self-host-dashboard-key  Generate a Convex dashboard admin key"
+	@echo "  self-host-tunnel-up  Start an HTTPS tunnel for remote runtime callbacks"
+	@echo "  self-host-tunnel-down  Stop the callback tunnel and restore local origins"
+	@echo "  self-host-tunnel-status  Show callback tunnel status"
 	@echo "  run-cli      Run the CLI"
 
 install-web:
@@ -94,3 +97,12 @@ self-host-logs:
 self-host-dashboard-key:
 	@if [ ! -f $(SELF_HOST_ENV) ]; then cp $(SELF_HOST_ENV).example $(SELF_HOST_ENV); fi
 	docker compose --env-file $(SELF_HOST_ENV) -f $(SELF_HOST_COMPOSE) exec -T convex-backend ./generate_admin_key.sh
+
+self-host-tunnel-up:
+	./docker/ngrok-tunnel.sh up
+
+self-host-tunnel-down:
+	./docker/ngrok-tunnel.sh down
+
+self-host-tunnel-status:
+	./docker/ngrok-tunnel.sh status
