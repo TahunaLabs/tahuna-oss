@@ -22,6 +22,10 @@ __pycache__/
 .Python
 .env*
 !.env.example
+!docker/.env.example
+!docker/.env.application.example
+docker/.env.application
+docker/.ngrok-tunnel/
 .venv/
 venv/
 ENV/

@@ -21,3 +21,9 @@ make install-cli
 make run-web
 make run-cli
 ```
+
+## Self-hosting
+
+The supported self-hosting recipe runs the current web app with a self-hosted
+Convex backend. See [`docker/README.md`](docker/README.md) for requirements,
+security boundaries, and setup instructions.

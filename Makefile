@@ -1,6 +1,9 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help install-web run-web install-docs run-docs build-docs install-cli install-cli-dev install-cli-tools run-cli lint-cli test-cli validate-cli install-runtime-tools lint-warden test-warden validate-warden
+SELF_HOST_COMPOSE := docker/docker-compose.yml
+SELF_HOST_ENV := docker/.env
+
+.PHONY: help install-web run-web install-docs run-docs build-docs install-cli install-cli-dev install-cli-tools run-cli lint-cli test-cli validate-cli install-runtime-tools lint-warden test-warden validate-warden self-host-up self-host-down self-host-logs self-host-dashboard-key
 
 help:
 	@echo "Available targets:"
@@ -19,6 +22,10 @@ help:
 	@echo "  test-warden  Run Warden runtime tests"
 	@echo "  validate-warden Run the full Warden runtime validation stack"
 	@echo "  install-cli-dev  Build and install CLI as tahuna-dev (local dev binary)"
+	@echo "  self-host-up  Configure and start the self-hosted stack"
+	@echo "  self-host-down  Stop the self-hosted stack"
+	@echo "  self-host-logs  Follow self-hosted stack logs"
+	@echo "  self-host-dashboard-key  Generate a Convex dashboard admin key"
 	@echo "  run-cli      Run the CLI"
 
 install-web:
@@ -72,3 +79,18 @@ validate-warden: lint-warden test-warden
 
 run-cli:
 	cd cli && go run .
+
+self-host-up:
+	./docker/setup.sh
+
+self-host-down:
+	@if [ ! -f $(SELF_HOST_ENV) ]; then cp $(SELF_HOST_ENV).example $(SELF_HOST_ENV); fi
+	docker compose --env-file $(SELF_HOST_ENV) -f $(SELF_HOST_COMPOSE) down
+
+self-host-logs:
+	@if [ ! -f $(SELF_HOST_ENV) ]; then cp $(SELF_HOST_ENV).example $(SELF_HOST_ENV); fi
+	docker compose --env-file $(SELF_HOST_ENV) -f $(SELF_HOST_COMPOSE) logs -f
+
+self-host-dashboard-key:
+	@if [ ! -f $(SELF_HOST_ENV) ]; then cp $(SELF_HOST_ENV).example $(SELF_HOST_ENV); fi
+	docker compose --env-file $(SELF_HOST_ENV) -f $(SELF_HOST_COMPOSE) exec -T convex-backend ./generate_admin_key.sh

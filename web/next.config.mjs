@@ -3,6 +3,7 @@ if (!assetsUrl) throw new Error("NEXT_PUBLIC_ASSETS_URL is required")
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  output: process.env.NEXT_OUTPUT_MODE === "standalone" ? "standalone" : undefined,
   images: {
     remotePatterns: [
       {
