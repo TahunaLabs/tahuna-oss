@@ -2,6 +2,11 @@
 
 Tahuna is a monorepo for GPU provisioning and ML training orchestration.
 
+This repository is source-available under the
+[PolyForm Noncommercial License 1.0.0](LICENSE.md). Noncommercial self-hosting,
+evaluation, research, and modification are permitted by that license;
+commercial use is not. This is not an OSI-approved open-source license.
+
 ## Subrepos
 
 - [`cli/README.md`](cli/README.md): Go CLI used by end users (`tahuna login/init/train/run/sync`).
@@ -11,7 +16,7 @@ Tahuna is a monorepo for GPU provisioning and ML training orchestration.
 ## Project context
 
 - [`CONTEXT.md`](CONTEXT.md): current product status, architecture, and decisions.
-- [`PROMPT.md`](PROMPT.md): repo guardrails and implementation constraints.
+- [`AGENTS.md`](AGENTS.md): repository guardrails and implementation constraints.
 
 ## Quick local dev
 
