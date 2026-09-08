@@ -17,10 +17,6 @@ export function LandingCtaSection() {
           Run your first
           <br />GPU job
         </h2>
-        <p className="mx-auto mt-6 max-w-xl text-lg leading-relaxed text-muted-foreground">
-          Bring a Python project. Tahuna handles the path from your machine to a remote GPU and shuts it down when the
-          work is done.
-        </p>
         <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
           <Button asChild size="lg">
             <Link href={CLOUD_LINKS_CONFIG.quickstartUrl} target="_blank" rel="noreferrer">

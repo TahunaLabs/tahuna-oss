@@ -42,9 +42,6 @@ export function LandingTerminalSection() {
           <p className="mt-4 max-w-sm text-base leading-relaxed text-muted-foreground">
             Initialize your project, choose your compute, and run the same Python code you already use.
           </p>
-          <p className="mt-3 max-w-sm text-base leading-relaxed text-muted-foreground">
-            Code, data, runtime configuration, metrics, checkpoints, and artifacts stay attached to the run.
-          </p>
         </div>
 
         <div className="min-w-0 lg:-mr-12 lg:w-3/5">
