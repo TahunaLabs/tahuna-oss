@@ -294,7 +294,7 @@ describe("compute session termination run failure sink", () => {
     }));
   });
 
-  it("finds terminating timed-out sessions behind the first status page", async () => {
+  it("finds terminating timed-out sessions within the status sweep", async () => {
     const freshRows = Array.from({ length: 3 }, (_, index) =>
       computeSession({
         _id: `fresh_session_${index}`,
@@ -307,18 +307,12 @@ describe("compute session termination run failure sink", () => {
       status: "terminating",
       terminatingSince: NOW_MS - 900_000,
     });
-    let pageIndex = 0;
     const ctx = {
       db: {
         query: vi.fn(() => ({
           withIndex: vi.fn(() => {
             return {
-              paginate: vi.fn(async () => {
-                pageIndex += 1;
-                return pageIndex === 1
-                  ? { page: freshRows, isDone: false, continueCursor: "next" }
-                  : { page: [staleRow], isDone: true, continueCursor: "" };
-              }),
+              take: vi.fn(async () => [...freshRows, staleRow]),
             };
           }),
         })),
@@ -342,7 +336,7 @@ describe("compute session termination run failure sink", () => {
     ]);
   });
 
-  it("finds idle timed-out sessions behind the first status page", async () => {
+  it("finds idle timed-out sessions within the status sweep", async () => {
     const freshRows = Array.from({ length: 3 }, (_, index) =>
       computeSession({
         _id: `fresh_session_${index}`,
@@ -357,18 +351,12 @@ describe("compute session termination run failure sink", () => {
       lastIdleAt: NOW_MS - 10_000,
       idleTimeoutSeconds: 10,
     });
-    let pageIndex = 0;
     const ctx = {
       db: {
         query: vi.fn(() => ({
           withIndex: vi.fn(() => {
             return {
-              paginate: vi.fn(async () => {
-                pageIndex += 1;
-                return pageIndex === 1
-                  ? { page: freshRows, isDone: false, continueCursor: "next" }
-                  : { page: [staleRow], isDone: true, continueCursor: "" };
-              }),
+              take: vi.fn(async () => [...freshRows, staleRow]),
             };
           }),
         })),
@@ -391,7 +379,7 @@ describe("compute session termination run failure sink", () => {
     ]);
   });
 
-  it("finds heartbeat timed-out running sessions behind the first status page", async () => {
+  it("finds heartbeat timed-out running sessions within the status sweep", async () => {
     const freshRows = Array.from({ length: 3 }, (_, index) =>
       computeSession({
         _id: `fresh_running_session_${index}`,
@@ -405,7 +393,6 @@ describe("compute session termination run failure sink", () => {
       lastHeartbeatAt: NOW_MS - 120_000,
       activeRunId: "run_1",
     });
-    const pageIndexByStatus: Record<string, number> = {};
     const ctx = {
       db: {
         query: vi.fn(() => ({
@@ -418,15 +405,11 @@ describe("compute session termination run failure sink", () => {
               },
             });
             return {
-              paginate: vi.fn(async () => {
+              take: vi.fn(async () => {
                 if (status === "idle") {
-                  return { page: [], isDone: true, continueCursor: "" };
+                  return [];
                 }
-                const pageIndex = (pageIndexByStatus[status] ?? 0) + 1;
-                pageIndexByStatus[status] = pageIndex;
-                return pageIndex === 1
-                  ? { page: freshRows, isDone: false, continueCursor: "next" }
-                  : { page: [staleRow], isDone: true, continueCursor: "" };
+                return [...freshRows, staleRow];
               }),
             };
           }),
@@ -473,10 +456,10 @@ describe("compute session termination run failure sink", () => {
               },
             });
             return {
-              paginate: vi.fn(async () =>
+              take: vi.fn(async () =>
                 status === "running"
-                  ? { page: [staleServeSession], isDone: true, continueCursor: "" }
-                  : { page: [], isDone: true, continueCursor: "" },
+                  ? [staleServeSession]
+                  : [],
               ),
             };
           }),

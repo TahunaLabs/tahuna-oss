@@ -280,27 +280,17 @@ async function collectComputeSessionTimeoutMatches<TResult>(
     toResult: (row: Doc<"computeSessions">) => TResult;
   },
 ) {
-  let cursor: string | null = null;
-  let scannedRows = 0;
-  while (args.matches.length < args.limit && scannedRows < TIMEOUT_SWEEP_SCAN_LIMIT) {
-    const remainingScanRows = TIMEOUT_SWEEP_SCAN_LIMIT - scannedRows;
-    const result = await ctx.db
-      .query("computeSessions")
-      .withIndex("by_status", (q) => q.eq("status", args.status))
-      .paginate({ cursor, numItems: Math.min(100, remainingScanRows) });
-    scannedRows += result.page.length;
-    for (const row of result.page) {
-      if (args.isMatch(row)) {
-        args.matches.push(args.toResult(row));
-        if (args.matches.length >= args.limit) {
-          break;
-        }
+  const rows = await ctx.db
+    .query("computeSessions")
+    .withIndex("by_status", (q) => q.eq("status", args.status))
+    .take(TIMEOUT_SWEEP_SCAN_LIMIT);
+  for (const row of rows) {
+    if (args.isMatch(row)) {
+      args.matches.push(args.toResult(row));
+      if (args.matches.length >= args.limit) {
+        break;
       }
     }
-    if (result.isDone) {
-      break;
-    }
-    cursor = result.continueCursor;
   }
 }
 
