@@ -2,6 +2,20 @@
 
 Tahuna is a monorepo for GPU provisioning and ML training orchestration.
 
+## Set up with a coding agent
+
+This repository includes a [self-hosting skill](.agents/skills/tahuna-self-host/SKILL.md)
+that a coding agent can use to configure the stack and run the MNIST example
+end to end. Once your credentials are ready, the setup is designed to take
+about five minutes.
+
+Create credentials for RunPod, Cloudflare R2, Resend, and ngrok, then ask your
+agent:
+
+```text
+Use the $tahuna-self-host skill to set up Tahuna and run the MNIST example.
+```
+
 Tahuna is open-source software licensed under the
 [GNU Affero General Public License v3.0 only](LICENSE.md). Commercial use is
 permitted. If you modify Tahuna and make that version available to users over
