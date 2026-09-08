@@ -1,0 +1,16 @@
+.git
+.github
+.DS_Store
+**/.DS_Store
+**/.env*
+!docker/.env.example
+!docker/.env.application.example
+**/.next
+**/.open-next
+**/.wrangler
+**/node_modules
+**/.tahuna
+**/data
+**/dist
+**/output
+*.log

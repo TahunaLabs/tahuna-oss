@@ -1,0 +1,4 @@
+interface:
+  display_name: "Tahuna Serve Model"
+  short_description: "Deploy and call Tahuna model serves"
+  default_prompt: "Use $tahuna-serve-model to serve a trained Tahuna model."

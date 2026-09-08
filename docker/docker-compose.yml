@@ -1,0 +1,70 @@
+name: tahuna
+
+services:
+  convex-backend:
+    image: ${CONVEX_BACKEND_IMAGE}
+    restart: unless-stopped
+    stop_grace_period: 10s
+    stop_signal: SIGINT
+    ports:
+      - "${TAHUNA_CONVEX_BIND_ADDRESS:-127.0.0.1}:${CONVEX_PORT:-3210}:3210"
+      - "${TAHUNA_CONVEX_BIND_ADDRESS:-127.0.0.1}:${CONVEX_SITE_PORT:-3211}:3211"
+    volumes:
+      - convex-data:/convex/data
+    environment:
+      CONVEX_CLOUD_ORIGIN: ${CONVEX_CLOUD_ORIGIN}
+      CONVEX_SITE_ORIGIN: ${CONVEX_SITE_ORIGIN}
+      DISABLE_BEACON: ${DISABLE_BEACON:-true}
+      DISABLE_METRICS_ENDPOINT: ${DISABLE_METRICS_ENDPOINT:-true}
+      DOCUMENT_RETENTION_DELAY: ${DOCUMENT_RETENTION_DELAY:-172800}
+      DO_NOT_REQUIRE_SSL: ${DO_NOT_REQUIRE_SSL-true}
+      REDACT_LOGS_TO_CLIENT: ${REDACT_LOGS_TO_CLIENT:-true}
+      RUST_LOG: ${RUST_LOG:-info}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3210/version"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+
+  convex-dashboard:
+    image: ${CONVEX_DASHBOARD_IMAGE}
+    restart: unless-stopped
+    stop_grace_period: 10s
+    stop_signal: SIGINT
+    ports:
+      - "${TAHUNA_DASHBOARD_BIND_ADDRESS:-127.0.0.1}:${DASHBOARD_PORT:-6791}:6791"
+    environment:
+      NEXT_PUBLIC_DEPLOYMENT_URL: ${NEXT_PUBLIC_DEPLOYMENT_URL}
+      NEXT_PUBLIC_LOAD_MONACO_INTERNALLY: ${NEXT_PUBLIC_LOAD_MONACO_INTERNALLY:-}
+    depends_on:
+      convex-backend:
+        condition: service_healthy
+
+  app:
+    image: tahuna-self-hosted:local
+    build:
+      context: ..
+      dockerfile: docker/app.Dockerfile
+      target: runner
+      args:
+        NEXT_PUBLIC_CONVEX_URL: ${NEXT_PUBLIC_CONVEX_URL}
+        NEXT_PUBLIC_CONVEX_SITE_URL: ${NEXT_PUBLIC_CONVEX_SITE_URL}
+        NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL}
+        NEXT_PUBLIC_ASSETS_URL: ${NEXT_PUBLIC_ASSETS_URL}
+    restart: unless-stopped
+    ports:
+      - "${TAHUNA_APP_BIND_ADDRESS:-127.0.0.1}:${APP_PORT:-3000}:3000"
+    environment:
+      CONVEX_INTERNAL_URL: http://convex-backend:3210
+      CONVEX_INTERNAL_SITE_URL: http://convex-backend:3211
+      NEXT_PUBLIC_CONVEX_URL: ${NEXT_PUBLIC_CONVEX_URL}
+      NEXT_PUBLIC_CONVEX_SITE_URL: ${NEXT_PUBLIC_CONVEX_SITE_URL}
+      NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL}
+      NEXT_PUBLIC_ASSETS_URL: ${NEXT_PUBLIC_ASSETS_URL}
+    depends_on:
+      convex-backend:
+        condition: service_healthy
+
+volumes:
+  convex-data:

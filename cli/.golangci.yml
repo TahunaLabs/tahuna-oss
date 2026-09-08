@@ -1,0 +1,22 @@
+version: "2"
+
+run:
+  timeout: 3m
+  tests: true
+
+linters:
+  default: none
+  enable:
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+  exclusions:
+    rules:
+      - linters:
+          - staticcheck
+        text: "(QF1001|QF1003|QF1008|ST1005)"
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0

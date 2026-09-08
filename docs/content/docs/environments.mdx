@@ -1,0 +1,103 @@
+---
+title: Environments
+description: Create and manage GPU-accelerated compute environments.
+---
+
+An environment is an isolated compute configuration that defines what infrastructure your runs execute on. Environments are created and managed through the Tahuna CLI. Tahuna Cloud launches runs with managed billing.
+
+## Creating an environment
+
+Initialize an environment in your project:
+
+```bash
+tahuna init .
+```
+
+This initializes the current project, writes root `tahuna.toml`, stores link/cache state under `.tahuna/`, and creates any missing project files needed for a run.
+
+## Configuration
+
+The local project file `tahuna.toml` records the paths, commands, dependency groups, and runtime settings Tahuna syncs for the project:
+
+```toml
+# Generated from local Tahuna project state.
+[project]
+data_dir = "data"
+output_dir = "outputs"
+
+[environment]
+framework = "pt"
+version = "2.10.0-cu128"
+python_version = "3.11"
+gpu_type = "L4"
+gpu_count = 1
+volume_gb = 10
+
+[train]
+command = ["uv", "run", "--active", "--no-sync", "python", "-u", "train.py"]
+dependency_group = "train"
+output_model_path = "outputs/model"
+
+[serve]
+command = ["uv", "run", "--active", "--no-sync", "python", "-u", "inference.py"]
+dependency_group = "serve"
+python_version = "3.11"
+gpu_type = "L4"
+gpu_count = 1
+volume_gb = 10
+port = 8000
+health_path = "/health"
+default_model_path = "outputs/model"
+```
+
+### Fields
+
+| Field | Description | Example |
+| --- | --- | --- |
+| `data_dir` | Directory synced as project input data | `data` |
+| `output_dir` | Directory collected for run outputs and artifacts | `outputs` |
+| `framework` | Detected framework key stored for the project | `pt`, `tf` |
+| `version` | Framework/runtime image version selection | `2.10.0-cu128` |
+| `python_version` | Detected Python version for the environment setup | `"3.11"` |
+| `gpu_type` | Default training GPU type | `L4` |
+| `gpu_count` | Default training GPU count | `1` |
+| `volume_gb` | Default training volume size | `10` |
+| `train.command` | Command tokens executed for training from the workspace root | `["uv", "run", ...]` |
+| `train.dependency_group` | Dependency group installed for training | `train` |
+| `train.output_model_path` | Model path inside the output tree that serving can use by default | `outputs/model` |
+| `serve.command` | Command tokens executed for serving from the workspace root | `["uv", "run", ...]` |
+| `serve.*` | Optional serving runtime, health, and model defaults | `port = 8000` |
+
+Use `tahuna env update` to update local compute and command settings:
+
+```bash
+tahuna env update --gpu-type L4 --gpu-count 1 --volume-gb 20
+tahuna env update --entrypoint-command "uv run --active --no-sync python -u train.py"
+tahuna env update --serve-entrypoint-command "uv run --active --no-sync python -u inference.py"
+```
+
+## Data bindings
+
+Environments can have data bound to them. Bound data is automatically mounted when a run starts.
+
+You can bind data via the CLI:
+
+```bash
+tahuna env data bind <environment-id> <data-id...>
+tahuna env data bind <data-id...>
+```
+
+To unbind:
+
+```bash
+tahuna env data unbind <environment-id> <data-id...>
+tahuna env data unbind <data-id...>
+```
+
+## Deleting an environment
+
+```bash
+tahuna env rm <environment-id>
+```
+
+This permanently removes the environment, all its runs, and associated logs, metrics, and artifacts.

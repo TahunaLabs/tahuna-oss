@@ -1,0 +1,95 @@
+---
+title: Installation
+description: Install the Tahuna CLI on your machine.
+---
+
+## Requirements
+
+- macOS (`amd64` or `arm64`)
+- Linux (`amd64`)
+- WSL on Windows (`amd64`)
+- Python 3.10+ (for ML frameworks)
+- A Tahuna account
+
+## Install with the installer script
+
+The recommended way to install the Tahuna CLI:
+
+```bash
+curl -fsSL https://tahuna.app/install.sh | bash
+```
+
+This command resolves the `stable` channel from `releases/channels.conf`.
+
+To install the rolling nightly channel (built from `main`):
+
+```bash
+curl -fsSL https://tahuna.app/install.sh | bash -s -- --channel nightly
+```
+
+Verify the installation:
+
+```bash
+tahuna version
+```
+
+## Manual install (without `curl | bash`)
+
+If you prefer to download and unpack manually, pick the artifact that matches your OS and CPU:
+
+- `tahuna_darwin_amd64.tar.gz`
+- `tahuna_darwin_arm64.tar.gz`
+- `tahuna_linux_amd64.tar.gz`
+
+Example:
+
+```bash
+VERSION=v0.1.0
+OS=darwin
+ARCH=arm64
+curl -fsSL -o tahuna.tar.gz "https://github.com/TahunaLabs/tahuna-cli/releases/download/${VERSION}/tahuna_${OS}_${ARCH}.tar.gz"
+tar -xzf tahuna.tar.gz
+install -m 0755 tahuna ~/.local/bin/tahuna
+```
+
+Release checksums are published in `checksums.txt` for each release tag.
+
+## Authenticate
+
+Log in to your Tahuna account:
+
+```bash
+tahuna login
+```
+
+This opens a browser window for authentication. Once complete, your credentials are stored locally and all subsequent commands are authenticated.
+
+## Billing
+
+Tahuna Cloud launches runs with managed billing by default. Add credits in the [Tahuna dashboard](/dashboard) before starting a paid run; Tahuna manages provider credentials and provider payment.
+
+Provider keys are deployment configuration, not user setup. You do not need a separate provider key for the managed cloud path.
+
+## Update
+
+To update to the latest version:
+
+```bash
+curl -fsSL https://tahuna.app/install.sh | bash
+```
+
+To install a specific version:
+
+```bash
+curl -fsSL https://tahuna.app/install.sh | bash -s -- --version v0.1.0
+```
+
+To update on nightly channel:
+
+```bash
+curl -fsSL https://tahuna.app/install.sh | bash -s -- --channel nightly
+```
+
+## Next Steps
+
+Once installed, head to the [Quickstart](/quickstart) guide to create your first environment and launch a managed run.

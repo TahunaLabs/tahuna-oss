@@ -1,0 +1,510 @@
+---
+title: Auto-Research / Hillclimb
+description: Run bounded local research loops with Tahuna-managed GPU training.
+---
+
+Auto-Research is a local CLI workflow for running iterative model experiments against a Tahuna project. Tahuna owns the deterministic parts of the loop: code sync, data sync, GPU run launch, log streaming, final metric lookup, budget enforcement, cancellation, session state, and patch restore. You or your local coding agent own the research ideas and code edits.
+
+When the CLI is authenticated, each local session save is also synced to Tahuna as compact research metadata. That sync powers the Dashboard Hillclimb view. The local `.tahuna/research/<session-id>.json` file is still the source of truth for resuming a session.
+
+The current workflow is intentionally local. Tahuna does not launch or configure an agent. Instead, `tahuna research run` gives an agent-safe harness that can be called repeatedly:
+
+1. Launch and score a baseline run.
+2. Wait for one candidate patch.
+3. Launch and score one trial.
+4. Accept, reject, or mark the trial inconclusive.
+5. Stop when the configured budgets are exhausted.
+
+## Who does what
+
+Auto-Research is split deliberately:
+
+- The human chooses the objective, budget, editable scope, and whether an agent is allowed to iterate.
+- The coding agent proposes one focused tracked-file patch at a time.
+- Tahuna syncs the project, launches GPU work, scores the final metric, records the session, and restores rejected or inconclusive patches.
+- Tahuna never edits code, chooses research ideas, starts an agent, or manages an agent process.
+
+For agents, the safe loop is:
+
+1. Read `program.md`, `tahuna.toml`, and the current `.tahuna/research/<session-id>.json` when resuming.
+2. Change only tracked files covered by `--editable`.
+3. Keep the objective metric print intact.
+4. Run `tahuna research run --resume <session-id> --trial-title "<short label>"`.
+5. Stop or ask the human when the session reaches `budget_exhausted`, repeated inconclusive trials, a runtime-spec error, or a change outside the approved scope.
+
+## When to use it
+
+Use Auto-Research when you have a Tahuna project that already launches normal training runs and you want a bounded loop for improving one objective metric.
+
+Good fits:
+
+- hyperparameter tuning in a training script
+- LoRA configuration changes
+- loss, reward, or accuracy experiments
+- small architecture or data-processing edits inside an explicit allowlist
+- agent-assisted experiment loops where the agent edits local code and Tahuna runs the GPU work
+
+Avoid Auto-Research for broad rewrites, multi-file migrations, experiments that need untracked files, or objectives that cannot be emitted as a stable metric yet.
+
+## Prerequisites
+
+Before starting:
+
+- Install and authenticate the CLI.
+- Run from an initialized Tahuna project directory.
+- Make sure the project has a linked environment.
+- Make sure `tahuna train` can complete normally.
+- Run inside a Git worktree.
+- Commit or stash unrelated changes before starting.
+- Review root `tahuna.toml`; it is the synced runtime configuration for train and serve commands.
+- Add a `program.md` file describing the research objective.
+- Make your training code print a stable final metric line, such as `eval_loss=0.300734`.
+
+Auto-Research only supports tracked-file candidate patches in the current MVP. If a candidate creates untracked files, the resume command refuses to launch a GPU run.
+
+## Program file
+
+The program file is a plain Markdown brief for the person or agent proposing patches. Tahuna only checks that the file exists; it does not parse or execute it.
+
+Example:
+
+```md
+# Research Program
+
+Minimize final eval loss for this LoRA fine-tuning project.
+
+## Objective
+
+Minimize `final:eval_loss`.
+
+## Editable Scope
+
+Only edit `train.py`.
+
+## Candidate Ideas
+
+- Tune LoRA rank, alpha, or dropout.
+- Adjust learning rate or warmup.
+- Try smaller changes to batch size or sequence length.
+
+## Constraints
+
+- Preserve the final `eval_loss=<number>` print.
+- Do not add untracked files.
+```
+
+The `examples/qwen-yoda-lora` project includes a small `program.md` for local testing.
+
+## Metrics
+
+The implemented scoring path is `final:<metric-name>`.
+
+```bash
+--metric final:eval_loss
+```
+
+Your training code should print a stable `name=value` metric line:
+
+```python
+print(f"eval_loss={eval_metrics['eval_loss']:.6f}", flush=True)
+```
+
+Tahuna persists runtime metrics and resolves the final value after the run reaches a terminal status. For a metric name, the final lookup prefers training metrics when available, then the highest numeric step, then the newest timestamp.
+
+External scorer commands through `--metric-cmd` are not part of the local MVP. Training code should emit the objective as a stable Tahuna metric.
+
+Do not depend on progress-only metrics for acceptance. Auto-Research may stream logs and metrics while a run executes, but accepted/rejected/inconclusive decisions use only the resolved final objective metric after the run is terminal.
+
+## Start a session
+
+Run `tahuna research run` from the project directory:
+
+```bash
+tahuna research run \
+  --program program.md \
+  --metric final:eval_loss \
+  --minimize \
+  --max-trials 5 \
+  --max-spend-usd 5 \
+  --max-trial-minutes 30 \
+  --editable train.py
+```
+
+Use `--maximize` instead of `--minimize` for metrics where higher is better:
+
+```bash
+tahuna research run \
+  --program program.md \
+  --metric final:reward \
+  --maximize \
+  --max-trials 5 \
+  --max-spend-usd 5 \
+  --max-trial-minutes 30 \
+  --editable "src/training/**"
+```
+
+The first command creates a session, syncs code and data, launches a baseline run, waits for the run to finish, fetches the final metric, writes a session JSON file, and exits in `awaiting_patch` unless a budget is already exhausted.
+
+Session files are stored under:
+
+```text
+.tahuna/research/<session-id>.json
+```
+
+Patch snapshots are stored under:
+
+```text
+.tahuna/research/<session-id>/
+```
+
+## Resume with a candidate patch
+
+After the baseline completes, make one focused tracked-file edit inside the `--editable` allowlist. Then resume:
+
+```bash
+tahuna research run --resume <session-id>
+```
+
+Pass a short trial title when you want readable Dashboard labels:
+
+```bash
+tahuna research run --resume <session-id> --trial-title "add 5% warmup"
+```
+
+The title should describe the patch being tested, such as `lower lr to 5e-5`, `rank 16 lora`, or `more epochs`.
+
+The resume command:
+
+- loads the session
+- validates the project and Git worktree
+- verifies the patch only changes allowed tracked files
+- syncs code and data
+- launches `research-<session-id>-trial-<N>`
+- stores the optional trial title in local session state and synced Dashboard metadata
+- streams logs until terminal status or timeout
+- fetches the final metric
+- compares the metric against the incumbent
+- accepts or restores the patch
+- writes the result to session state
+
+If the trial improves the incumbent by at least `--min-improvement`, Tahuna marks it `accepted` and keeps the patch. Otherwise, Tahuna marks it `rejected` and restores the incumbent tracked-file patch. If the run fails, times out, is cancelled, or has no final metric, Tahuna marks it `inconclusive` and restores the incumbent patch.
+
+Each resume evaluates exactly one candidate patch. Do not stack multiple unrelated ideas before a single resume call; that makes the result hard to interpret and weakens the patch restore model.
+
+## Budgets
+
+Auto-Research enforces budgets before launching GPU work and while trials run.
+
+### `--max-trials`
+
+`--max-trials` is the number of candidate trials allowed after the baseline.
+
+```bash
+--max-trials 5
+```
+
+The baseline is not counted as a trial. If you set `--max-trials 1`, Tahuna stops after the first candidate trial even if that trial is accepted.
+
+### `--max-spend-usd`
+
+`--max-spend-usd` is the estimated total spend budget for the whole research session.
+
+It applies across:
+
+- the baseline run
+- every trial run
+- observed spend already recorded in the session
+- the estimated spend for the next run
+
+Before launching a run, Tahuna estimates:
+
+```text
+GPU hourly price * GPU count * estimated run duration
+```
+
+The GPU hourly price comes from the GPU catalog. GPU type and GPU count come from the run's effective compute fields when available, otherwise from the linked environment.
+
+Before a baseline duration is known, Tahuna uses `--max-trial-minutes` as the conservative estimated duration. After the baseline completes, Tahuna uses the observed baseline duration when available.
+
+For example, if a GPU costs `$0.55/hour`, GPU count is `1`, and `--max-trial-minutes` is `30`, the next-run estimate before a baseline exists is:
+
+```text
+0.55 * 1 * 0.5 = 0.275 USD
+```
+
+So this command refuses to launch:
+
+```bash
+tahuna research run \
+  --program program.md \
+  --metric final:eval_loss \
+  --minimize \
+  --max-trials 1 \
+  --max-spend-usd 0.005 \
+  --max-trial-minutes 30 \
+  --editable train.py
+```
+
+The spend budget is too small for one possible 30-minute run on that GPU.
+
+### `--max-trial-minutes`
+
+`--max-trial-minutes` is a per-run time cap for trial runs.
+
+```bash
+--max-trial-minutes 30
+```
+
+If a trial exceeds the cap, Tahuna requests cancellation through the same run cancellation API used by `tahuna run cancel`, records observed spend where possible, marks the trial `inconclusive`, restores the incumbent patch, and updates the session.
+
+The flag is also used as the conservative run-duration estimate before Tahuna has an observed baseline duration.
+
+### Why spend and trial minutes are both enforced
+
+They protect different failure modes.
+
+`--max-spend-usd` answers: "How much can this whole research session spend?"
+
+`--max-trial-minutes` answers: "How long can any single trial run before it should be cancelled?"
+
+They are enforced together because spend is a function of time. A session can be under its total spend budget but still have one runaway trial; that trial should be cancelled. A trial can be under its per-run time cap but still make the next run exceed the session spend budget; that run should not launch.
+
+### `--stop-after-no-improvement`
+
+`--stop-after-no-improvement` stops the session after a number of consecutive rejected or inconclusive trials.
+
+```bash
+--stop-after-no-improvement 3
+```
+
+An accepted trial resets the count because it becomes the new incumbent.
+
+### `--min-improvement`
+
+`--min-improvement` is the minimum absolute metric change required to accept a candidate patch.
+
+```bash
+--min-improvement 0.01
+```
+
+For `--minimize`, the candidate must be at least `0.01` lower than the incumbent. For `--maximize`, it must be at least `0.01` higher.
+
+## Warm compute
+
+Auto-Research can keep the baseline machine warm and reuse it for sequential trials:
+
+```bash
+tahuna research run \
+  --program program.md \
+  --metric final:eval_loss \
+  --minimize \
+  --max-trials 5 \
+  --max-spend-usd 5 \
+  --max-trial-minutes 30 \
+  --keep-warm-minutes 10 \
+  --editable train.py
+```
+
+This is opt-in on the research command. Auto-Research does not inherit `train.keep_warm_after_minutes` from `tahuna.toml`.
+
+When warm compute is enabled:
+
+- the baseline run starts the warm compute session with `keep_warm_after_minutes`
+- each trial resume uses `warm=true` and attaches to the environment's active compatible warm compute session
+- the baseline and each trial are still separate runs with separate manifests, logs, metrics, artifacts, and terminal statuses
+- Tahuna records the starting runtime spec and rejects runtime-spec drift on resume
+
+Do not edit runtime fields during a warm research session. That includes framework, framework version, Python version, GPU type, GPU count, and volume size in `tahuna.toml`. If those need to change, start a new research session.
+
+If warm compute is stale or busy, the resume command returns that error without silently launching cold compute and without counting the candidate as an inconclusive trial.
+
+## Editable allowlist and Git safety
+
+`--editable` limits candidate patches to approved project-relative paths:
+
+```bash
+--editable train.py
+--editable "src/training/**"
+```
+
+Tahuna checks the Git worktree before GPU work. It refuses to launch if there are dirty files outside the editable allowlist, unless `--allow-dirty` is passed for the session start or resume command.
+
+Candidate patches must be tracked-file diffs. Current MVP behavior intentionally rejects untracked files before GPU spend so rejected and inconclusive trials can restore the previous incumbent deterministically.
+
+For agents, treat `--allow-dirty` as an escape hatch for a human-approved local state, not as a normal loop flag. The deterministic path is a clean worktree plus one allowed tracked-file candidate patch.
+
+## Session state
+
+The session JSON is the audit log for the loop. It records:
+
+- session id
+- program path
+- objective direction
+- metric config
+- editable allowlist
+- budget config
+- aggregate observed spend
+- starting commit and starting patch hash
+- baseline run id, status, and metric value
+- incumbent run id, value, patch hash, and patch path
+- trial run ids, labels, reasons, values, running best values, patch hashes, estimated spend, observed spend, and timestamps
+- optional trial titles, used by the local graph and Dashboard Hillclimb view
+
+Useful statuses:
+
+| Status | Meaning |
+| --- | --- |
+| `running` | Session is being created and the baseline is in progress |
+| `awaiting_patch` | Baseline or previous trial completed; edit an allowed file and resume |
+| `running_trial` | A trial run is in progress |
+| `budget_exhausted` | No further trial can launch within the configured budgets |
+| `failed` | Baseline setup or baseline run failed |
+
+Useful trial labels:
+
+| Label | Meaning |
+| --- | --- |
+| `accepted` | Candidate improved the incumbent enough and the patch was kept |
+| `rejected` | Candidate did not improve enough and the incumbent patch was restored |
+| `inconclusive` | Trial failed, timed out, was cancelled, or could not be scored; the incumbent patch was restored |
+
+Inspect the latest session file:
+
+```bash
+ls -t .tahuna/research/*.json | head -1
+cat "$(ls -t .tahuna/research/*.json | head -1)"
+```
+
+## Progress graph
+
+Render a local SVG progress graph from the session JSON:
+
+```bash
+tahuna research graph <session-id>
+```
+
+When `--output` is omitted, Tahuna writes:
+
+```text
+.tahuna/research/<session-id>/progress.svg
+```
+
+Pass an explicit output path when you want the SVG somewhere else:
+
+```bash
+tahuna research graph <session-id> --output reports/research-progress.svg
+```
+
+The command creates parent directories for the output path when needed and prints the session id plus the written path. The SVG includes the metric name, direction, axes, trial numbers, a legend, the baseline value, accepted trials, rejected trials, inconclusive trials, and the running best line. Minimize sessions treat lower values as better; maximize sessions treat higher values as better.
+
+Trials without metric values still appear as inconclusive markers when the graph can place them against the current running best.
+
+## Dashboard Hillclimb
+
+Open the Dashboard and choose `Hillclimb` from the sidebar to inspect synced Auto-Research sessions.
+
+The view shows:
+
+- one row per synced research session
+- objective metric and direction
+- one point per baseline or trial
+- kept, discarded, and inconclusive trial states
+- latest value, final value, and running best
+- experiment labels from `--trial-title` when available
+
+The Dashboard reads backend `researchSessions` and `researchExperiments` metadata first, then joins ordinary run rows and runtime metrics. Older sessions that were created before metadata sync can still appear through run-name inference, but labels may be less readable.
+
+Backend sync is best-effort. If sync is unavailable, continue the loop from the local `.tahuna/research/<session-id>.json` file and use `tahuna research graph <session-id>` for local progress.
+
+## Example: Qwen Yoda LoRA
+
+From the repo example:
+
+```bash
+cd examples/qwen-yoda-lora
+```
+
+Start a baseline and allow one candidate trial:
+
+```bash
+tahuna research run \
+  --program program.md \
+  --metric final:eval_loss \
+  --minimize \
+  --max-trials 1 \
+  --max-spend-usd 1 \
+  --max-trial-minutes 30 \
+  --editable train.py
+```
+
+When the baseline completes, make a small tracked edit in `train.py`, such as adjusting `DEFAULT_LORA_DROPOUT` or `LEARNING_RATE`. Then resume:
+
+```bash
+tahuna research run --resume <session-id> --trial-title "add 5% warmup"
+```
+
+If the output says:
+
+```text
+Trial 1: accepted
+  final eval_loss: 0.300734
+  reason: metric improved incumbent
+
+Budget exhausted; no further trial can launch.
+```
+
+that means the candidate patch beat the baseline and the session stopped because `--max-trials 1` was reached. Start another session with a higher trial count if you want more iterations:
+
+```bash
+tahuna research run \
+  --program program.md \
+  --metric final:eval_loss \
+  --minimize \
+  --max-trials 5 \
+  --max-spend-usd 5 \
+  --max-trial-minutes 30 \
+  --editable train.py
+```
+
+Render the session graph:
+
+```bash
+tahuna research graph <session-id>
+```
+
+## Troubleshooting
+
+### `program not found: program.md`
+
+Run from the project directory that contains `program.md`, or pass the correct path:
+
+```bash
+--program path/to/program.md
+```
+
+### `candidate patch is empty`
+
+The session is waiting for one candidate edit. Change a tracked file inside the editable allowlist before resuming.
+
+### `candidate patch includes untracked files`
+
+Current Auto-Research restores tracked-file patches only. Add the files to Git or remove them before resuming.
+
+### `dirty files outside --editable paths`
+
+Commit, stash, or revert unrelated local changes, or include the intended path with another `--editable` flag.
+
+### `estimated next run spend ... would exceed --max-spend-usd`
+
+The configured spend budget cannot cover the estimated next run. Increase `--max-spend-usd`, reduce `--max-trial-minutes`, reduce GPU count, choose a cheaper GPU, or run a smaller baseline manually before using a tight budget.
+
+### Trial timed out and became `inconclusive`
+
+The trial exceeded `--max-trial-minutes`. Tahuna requested cancellation, restored the incumbent patch, and recorded the trial as inconclusive. Increase the time cap or reduce the training workload if the timeout was expected.
+
+## Current limitations
+
+- `--metric-cmd` external scoring is outside the local MVP.
+- Candidate patches are tracked-file only.
+- Tahuna does not generate candidate edits or launch an agent.
+- The local loop runs one candidate trial per `--resume` call.

@@ -1,0 +1,46 @@
+---
+title: Storage
+description: Inspect stored data and run artifacts.
+---
+
+Tahuna provides unified cloud storage for your training data, run-produced artifacts, and serve model snapshots. Files are stored in Cloudflare R2. Compute is ephemeral, so persisted data, artifacts, and model snapshots live outside the runtime pod rather than on long-lived machine disks.
+
+Tahuna uses encrypted transport for service communication. Managed provider credentials are deployment secrets and are not stored in user-controlled project storage.
+
+## Data items
+
+List the data items currently available in your workspace:
+
+```bash
+tahuna data list
+```
+
+Inspect one data item in more detail:
+
+```bash
+tahuna data show <data-id>
+```
+
+Use `--verbose` with either command to see the full JSON payload.
+
+## Run artifacts
+
+When a run writes to its output directory, those files are automatically collected and stored as artifacts.
+
+Artifacts are read-only and cannot be renamed. They are linked to the run that produced them and can be inspected through run details in the dashboard or raw payloads from the CLI.
+
+Model artifacts can be snapshotted into a long-running serve:
+
+```bash
+tahuna serve create --from-run <run-id>
+```
+
+## Serve model snapshots
+
+A serve owns its own immutable model snapshot. When you create a serve from a run or storage prefix, Tahuna copies the selected model files into serve-owned storage and materializes that snapshot under `TAHUNA_MODEL_ROOT` at runtime.
+
+This keeps inference reproducible: later training runs or storage changes do not mutate an existing serve's model files.
+
+## Storage limits
+
+Storage quotas depend on your plan. Contact support if you need more capacity.

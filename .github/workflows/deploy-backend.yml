@@ -1,0 +1,42 @@
+name: Deploy Backend
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+    paths:
+      - web/**
+      - .github/workflows/deploy-backend.yml
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ github.ref_name == 'main' && 'production' || 'staging' }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.10
+
+      - name: Install dependencies
+        working-directory: web
+        run: bun install --frozen-lockfile
+
+      # Must run before deploy: catalog.ts reads TAHUNA_RUNTIME_IMAGE_REPO at
+      # module top level and throws if unset. On a cold redeploy (fresh
+      # deployment, or after the backend was torn down and the var cleared),
+      # `convex deploy` would fail during analysis if the var isn't set first.
+      - name: Sync runtime image repo
+        working-directory: web
+        run: bunx convex env set TAHUNA_RUNTIME_IMAGE_REPO "${{ vars.TAHUNA_RUNTIME_IMAGE_REPO }}"
+        env:
+          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
+
+      - name: Deploy
+        working-directory: web
+        run: bunx convex deploy
+        env:
+          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}

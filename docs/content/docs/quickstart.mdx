@@ -1,0 +1,209 @@
+---
+title: Quickstart
+description: Create a Tahuna project, launch training, and inspect the first run.
+---
+
+This guide gets a local Python ML project running on Tahuna Cloud. By the end, you will have:
+
+- an authenticated Tahuna CLI
+- a root `tahuna.toml` project configuration
+- a linked Tahuna environment
+- a completed or running training run
+- logs, metrics, and output artifacts available from the CLI and dashboard
+
+## 1. Create an account
+
+Open the [Tahuna dashboard](https://tahuna.app/dashboard) and create an account. You can also start from the CLI login flow in the next step; it will open the browser when authentication is needed.
+
+Before launching paid GPU work, add credits in the dashboard billing view. Tahuna Cloud uses managed billing by default, so you do not need to configure a separate cloud provider key for the normal hosted path.
+
+## 2. Install and authenticate the CLI
+
+Install the CLI:
+
+```bash
+curl -fsSL https://tahuna.app/install.sh | bash
+```
+
+Log in:
+
+```bash
+tahuna login
+```
+
+Verify the installed CLI:
+
+```bash
+tahuna version
+```
+
+See [Installation](/installation) for manual tarball installation, version pinning, and nightly channel installs.
+
+## 3. Choose a project directory
+
+Run the quickstart from the root of the ML project you want Tahuna to execute:
+
+```bash
+cd path/to/your-project
+```
+
+If you are starting from an empty directory, `tahuna init .` can scaffold the missing project files for a minimal run.
+
+## 4. Initialize the project
+
+Initialize the current directory:
+
+```bash
+tahuna init .
+```
+
+The interactive setup links the local directory to Tahuna and writes the files Tahuna needs for remote execution.
+
+Expected local state after initialization:
+
+| Path | Purpose |
+| --- | --- |
+| `tahuna.toml` | Project configuration synced to Tahuna |
+| `.tahuna/` | Local link, cache, and session state |
+| `pyproject.toml` | Python dependency metadata, if scaffolded |
+| `uv.lock` | Locked Python dependencies, if scaffolded |
+| `train.py` | Training entrypoint, if scaffolded |
+| `inference.py` | Optional serving entrypoint, when serving is enabled |
+| `data/` | Default local input data directory |
+| `outputs/` | Default output and model artifact directory |
+
+## 5. Review the generated configuration
+
+Open root `tahuna.toml` before the first paid run. The important fields are the data path, output path, GPU settings, and training command:
+
+```toml
+[project]
+data_dir = "data"
+output_dir = "outputs"
+
+[environment]
+framework = "pt"
+version = "2.10.0-cu128"
+python_version = "3.11"
+gpu_type = "L4"
+gpu_count = 1
+volume_gb = 10
+
+[train]
+command = ["uv", "run", "--active", "--no-sync", "python", "-u", "train.py"]
+dependency_group = "train"
+output_model_path = "outputs/model"
+```
+
+Change common compute and command settings with `tahuna env update`:
+
+```bash
+tahuna env update --gpu-type L4 --gpu-count 1 --volume-gb 20
+tahuna env update --entrypoint-command "uv run --active --no-sync python -u train.py"
+```
+
+See [Environments](/environments) for the full configuration model.
+
+## 6. Launch training
+
+Start the first training run:
+
+```bash
+tahuna train
+```
+
+Tahuna will:
+
+1. Sync code and data from the project directory.
+2. Create a run for the linked environment.
+3. Provision GPU compute from the environment settings.
+4. Materialize the workspace on the runtime machine.
+5. Install the configured dependency group.
+6. Execute `train.command` from `tahuna.toml`.
+7. Stream logs and metrics until the run reaches a terminal status.
+8. Collect files written under the configured output directory.
+
+If you want the run to continue without keeping the CLI attached:
+
+```bash
+tahuna train -d
+```
+
+If the estimated launch cost exceeds your Tahuna balance, the command will ask you to add credits before GPU work starts.
+
+## 7. Inspect the run
+
+List recent runs:
+
+```bash
+tahuna run list
+```
+
+Inspect one run:
+
+```bash
+tahuna run show <run-id>
+```
+
+Stream logs:
+
+```bash
+tahuna run logs <run-id> --follow
+```
+
+Inspect a metric emitted by your training code:
+
+```bash
+tahuna run metrics <run-id> --metric eval_loss
+```
+
+You can also open the [Tahuna dashboard](https://tahuna.app/dashboard?view=runs) to inspect live logs, metric charts, diagnostics, and output artifacts.
+
+## 8. Use the result
+
+When the run completes, artifacts written under the configured output directory are stored with the run. If the output includes model files, create a serve from the run:
+
+```bash
+tahuna serve create --from-run <run-id>
+```
+
+See [Serving](/serving) for the inference workflow.
+
+## Troubleshooting
+
+### The CLI is not found after installation
+
+Open a new shell and run:
+
+```bash
+tahuna version
+```
+
+If the command is still missing, check that the install location is on your `PATH`. See [Installation](/installation) for manual install details.
+
+### The run fails before my code starts
+
+Check the generated `tahuna.toml`, then inspect the run:
+
+```bash
+tahuna run show <run-id>
+tahuna run logs <run-id> --tail 200
+```
+
+Common causes are missing dependency groups, a training command that cannot be found, or insufficient volume size for the project.
+
+### I need to stop an active run
+
+Cancel the run:
+
+```bash
+tahuna run cancel <run-id>
+```
+
+## Next steps
+
+- [Runs](/runs) explains the run lifecycle, logs, metrics, cancellation, and artifacts.
+- [Environments](/environments) covers GPU, volume, command, dependency, and serving configuration.
+- [Syncing](/syncing) explains how code and data snapshots are uploaded.
+- [Serving](/serving) deploys a trained model for inference.
+- [CLI Reference](/cli) lists the exact command surface.

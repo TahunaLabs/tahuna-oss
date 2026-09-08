@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    {
+      "source": "/install.sh",
+      "destination": "https://raw.githubusercontent.com/TahunaLabs/tahuna-cli/main/scripts/install-tahuna.sh"
+    }
+  ]
+}

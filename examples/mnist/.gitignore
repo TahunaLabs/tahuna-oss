@@ -1,0 +1,8 @@
+# Local Python environment
+.venv/
+
+# Training artifacts
+outputs/
+
+# Local/synced datasets
+data/

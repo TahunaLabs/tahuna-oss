@@ -1,0 +1,4 @@
+interface:
+  display_name: "Tahuna Repo Workflow"
+  short_description: "Repo guardrails and handoff workflow"
+  default_prompt: "Use $tahuna-repo-workflow to plan and validate a Tahuna repository change."

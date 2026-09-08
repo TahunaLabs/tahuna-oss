@@ -1,0 +1,25 @@
+{
+  "title": "Tahuna",
+  "root": true,
+  "pages": [
+    "index",
+    "---Introduction---",
+    "quickstart",
+    "installation",
+    "---Training---",
+    "environments",
+    "syncing",
+    "runs",
+    "tracking",
+    "---Serving---",
+    "serving",
+    "---Storage---",
+    "storage",
+    "---Research---",
+    "auto-research",
+    "---Account and Reference---",
+    "agent-skills",
+    "billing",
+    "cli"
+  ]
+}

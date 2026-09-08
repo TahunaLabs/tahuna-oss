@@ -1,0 +1,149 @@
+# Tahuna
+
+> Post-training control plane for adaptive AI systems. Run your custom training code on cloud GPUs — Tahuna handles the infrastructure around it.
+
+Tahuna is a CLI-first training orchestration platform for ML engineers, AI researchers, and agent builders who need full control over their training loop without managing GPU infrastructure. You bring your own Python code, framework, and reward logic; Tahuna handles code and data sync, GPU provisioning, dependency installation, run execution, log and metric streaming, artifact persistence, and model serving.
+
+Tahuna occupies the gap between managed fine-tuning APIs (which constrain the training loop) and raw GPU compute (which requires full DevOps). The design principle: full algorithmic control, low operational complexity.
+
+## Core workflow
+
+1. Install the CLI and authenticate: `curl -fsSL https://tahuna.app/install.sh | bash && tahuna login`
+2. Initialize a project: `tahuna init .` — writes `.tahuna/tahuna.toml`, scaffolds `train.py`, `pyproject.toml`, and `uv.lock` when missing.
+3. Add credits in the dashboard billing view.
+4. Launch a training run: `tahuna train` — syncs code and data, provisions a GPU pod, executes the entrypoint, streams logs and metrics, persists output artifacts.
+
+## Key concepts
+
+- **Environments** — Isolated compute configurations storing GPU type, GPU count, volume size, Python version, and framework. Created via `tahuna init`.
+- **Runs** — A single remote execution of your code. Each run is pinned to exact code and data snapshots and captures logs, metrics, and artifacts.
+- **Sync** — Incremental, content-addressed upload to R2. Only changed blobs are uploaded. Code and data syncs happen automatically before each run, and manually via `tahuna sync`.
+- **Artifacts** — Output files written to the configured output directory are collected after a successful run and stored in cloud storage.
+- **Serves** — A trained model artifact can be promoted to a managed inference endpoint via `tahuna serve create --from-run <run-id>`. Tahuna proxies authenticated inference requests at `/api/serves/{serve_id}/inference/...`.
+- **Auto-Research** — A bounded local experiment loop. Tahuna manages budget enforcement, code sync, GPU run launch, metric scoring, and patch restore. The user or an agent proposes one code edit per iteration.
+
+## CLI reference
+
+### Authentication
+- `tahuna login` — Browser OAuth flow. Stores API key in `~/.config/tahuna/config.env`.
+- `tahuna version` — Print CLI version.
+
+### Project setup
+- `tahuna init .` — Initialize current directory as a Tahuna project.
+- `tahuna up` — Alias for `tahuna init .`.
+
+### Training
+- `tahuna train` — Sync code and data, provision GPU, run training, stream output.
+- `tahuna train -d` — Detached mode: launch and return immediately.
+- `tahuna train --gpu-type <gpu> --gpu-count <n> --volume-gb <n>` — Override GPU spec for the run.
+- `tahuna train --warm` / `--keep-warm-minutes <n>` — Keep the pod warm after the run.
+
+### Sync
+- `tahuna sync` — Sync code and data.
+- `tahuna sync code` — Sync code only.
+- `tahuna sync data` — Sync data only.
+
+### Run management
+- `tahuna run list` — Show last 5 runs (newest at bottom). `-n <N>` for N runs, `-a` for all.
+- `tahuna run show <run-id|name>` — Show run details, status, and artifact keys.
+- `tahuna run logs <run-id|name> [--follow] [--tail <N>]` — Stream or tail run logs.
+- `tahuna run metrics <run> --metric <name> [--follow]` — Stream a specific metric.
+- `tahuna run watch <run-id|name>` — Poll run status until terminal.
+- `tahuna run cancel <run-id|name>` — Cancel a running or queued run.
+- `tahuna run rename <run-id|name> --name <new-name>` — Rename a run.
+- `tahuna run rm <run-id|name|pattern>... [--all] [--cancel] [--force]` — Delete runs.
+
+### Environments
+- `tahuna env list` — List environments.
+- `tahuna env show <env-id>` — Show environment details.
+- `tahuna env update [<env-id>] --gpu-type <gpu> --gpu-count <n> --volume-gb <n>` — Update GPU spec.
+- `tahuna env rm <env-id>` — Delete environment, runs, and artifacts.
+- `tahuna env data bind <env-id> <data-id>` — Bind a data item to an environment.
+- `tahuna env data unbind <env-id> <data-id>` — Remove a data binding.
+
+### Environment variables
+- `tahuna env_vars list` — List env var names for the linked environment.
+- `tahuna env_vars get <name>` — Get one env var value.
+- `tahuna env_vars set NAME=value` — Set an env var.
+- `tahuna env_vars set --from-file <path>` — Load env vars from a `.env` file.
+- `tahuna env_vars rm <name>` — Remove an env var.
+
+### Data
+- `tahuna data list` — List data items in the workspace.
+- `tahuna data show <data-id>` — Show data item details.
+- `tahuna gpus list` — List available GPU types and prices.
+
+### Serving
+- `tahuna serve create --from-run <run-id> [--model-path <path>]` — Create a serve from a run artifact.
+- `tahuna serve create --from-storage-prefix <prefix>` — Create a serve from a storage prefix.
+- `tahuna serve list` — List serves.
+- `tahuna serve show <serve-id>` — Show serve details.
+- `tahuna serve logs <serve-id>` — Stream serve logs.
+- `tahuna serve stop <serve-id>` — Stop a serve.
+
+### Auto-Research
+- `tahuna research run --program <file.md> --metric final:<name> --minimize|--maximize --max-trials <N> --max-spend-usd <USD> --max-trial-minutes <N> --editable <path>` — Start a bounded research session.
+- `tahuna research run --resume <session-id>` — Resume a session after editing an allowed file.
+- `tahuna research graph <session-id> [--output <path>]` — Render an SVG progress graph.
+
+### Shell
+- `tahuna shell` — Interactive REPL that wraps CLI commands in a persistent session.
+
+## Configuration
+
+Local project state lives in `.tahuna/tahuna.toml`:
+
+```toml
+[project]
+entrypoint = "train.py"
+data_dir = "data"
+output_dir = "outputs"
+python_project_file = "pyproject.toml"
+uv_lock_file = "uv.lock"
+
+[environment]
+framework = "pt"
+python_version = "3.11"
+```
+
+Auth and URL overrides via environment variables:
+- `TAHUNA_API_KEY` — Auth token (set by `tahuna login`).
+- `TAHUNA_API_URL` — API base URL override (default: `https://tahuna.app`).
+- `TAHUNA_BROWSER_URL` — Browser base URL for login flow.
+- `TAHUNA_CONFIG_DIR` — Config directory override (default: `~/.config/tahuna`).
+
+## Compute and pricing
+
+Supported GPUs (billed per active hour): L4, RTX 3090, RTX 4090, A100 (40 GB and 80 GB), H100 SXM, H100 PCIe, H200, RTX PRO 6000, B200.
+Volume storage: $0.12 / GB / month.
+Tahuna Cloud uses prepaid credits. Runs draw down credits for active GPU time and attached volume. No compute markup for individual users.
+
+## Frameworks
+
+PyTorch, Hugging Face Transformers, Unsloth, TRL, Verifiers — and any Python entrypoint that runs from `uv run`. Python 3.11–3.14 supported via uv.
+
+## Run lifecycle statuses
+
+`queued` → `provisioning` → `running` → `completed` | `failed` | `cancelled`
+
+## Tech stack
+
+- CLI: Go
+- Web and API: Next.js, Convex, Better Auth
+- Runtime: Dockerized Python + uv on RunPod GPU pods
+- Storage: Cloudflare R2
+- Inference proxy: Next.js edge route at `/api/serves/{serve_id}/inference/...`
+
+## Links
+
+- Site: https://tahuna.app
+- Docs: https://docs.tahuna.app
+- Install: `curl -fsSL https://tahuna.app/install.sh | bash`
+- Quickstart: https://docs.tahuna.app/quickstart
+- CLI reference: https://docs.tahuna.app/cli
+- Environments: https://docs.tahuna.app/environments
+- Runs: https://docs.tahuna.app/runs
+- Syncing: https://docs.tahuna.app/syncing
+- Storage: https://docs.tahuna.app/storage
+- Auto-Research: https://docs.tahuna.app/auto-research
+- Pricing: https://tahuna.app/pricing

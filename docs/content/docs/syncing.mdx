@@ -1,0 +1,79 @@
+---
+title: Syncing
+description: How Tahuna syncs code and data into reproducible remote runs.
+---
+
+Tahuna syncs your project incrementally. Instead of re-uploading everything for every run, it detects what changed, uploads only missing content, and pins the run to exact code and data snapshots.
+
+## What syncing does
+
+When you launch a run, Tahuna prepares the project in three parts:
+
+- It scans your code and data inputs.
+- It records what those files are in ordered manifests.
+- It uploads only the file content that is not already stored remotely.
+
+### That gives Tahuna two useful properties at the same time:
+
+- Normal iteration stays fast because unchanged content is reused
+- Each run stays reproducible because it is pinned to exact snapshots
+
+## Manifests
+
+A manifest is the structured record of a project snapshot.
+
+For each file, Tahuna records metadata such as:
+
+- path
+- content hash
+- mode
+- size
+
+Tahuna builds manifests separately for code and data. The manifest hash becomes the identity of that snapshot.
+
+## Blob storage and deduplication
+
+File content is stored as content-addressed blobs. In practice, that means the hash of a file determines the object Tahuna stores remotely.
+
+If two runs reference the same file content, Tahuna does not need to upload that content twice. The manifest can point to the existing blob instead.
+
+This deduplication works across repeated runs of the same project and across files that already exist remotely with the same content.
+
+## Zero-change detection
+
+If your local files have not changed, the manifest hash also stays the same.
+
+When that happens, Tahuna can skip re-uploading unchanged content and reuse the existing snapshot. This is why repeated runs are much faster than a naive tarball upload flow.
+
+## Code and data snapshots
+
+Tahuna treats code and data as explicit snapshots rather than as mutable machine state.
+
+That matters because runtime compute is ephemeral:
+
+- pods are temporary
+- workspace state is reconstructed for each run
+- persistent state lives in stored manifests and blobs, not on a long-lived machine
+
+When a run starts, Tahuna materializes the workspace from those pinned snapshots before executing your entrypoint.
+
+## What gets uploaded
+
+Tahuna uploads the content your project configuration points to, such as:
+
+- your entrypoint and project files
+- the configured data directory
+- dependency metadata such as `pyproject.toml` and `uv.lock`
+
+Outputs are different. Files written during the run are collected afterward as run artifacts rather than as sync inputs.
+
+## Why this model exists
+
+This syncing model is designed to avoid the usual tradeoff between speed and reproducibility.
+
+With Tahuna:
+
+- you do not need to package the whole project as a fresh archive for every run
+- you still get an exact record of what code and data a run used
+- remote execution is reconstructed from explicit state instead of relying on whatever happened to be left on a machine
+

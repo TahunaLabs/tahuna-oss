@@ -1,0 +1,112 @@
+---
+title: Tracking
+description: Use Tahuna's W&B-compatible tracking flow in your training code.
+---
+
+Tahuna provides a W&B-compatible tracking surface for training runs. Your code can use `import wandb`, `wandb.init()`, and `wandb.log()` while Tahuna captures the resulting metrics inside your Tahuna run.
+
+## What is supported
+
+Tahuna currently supports the compatibility flow required for a standard tracked run:
+
+- Run initialization and bucket upsert
+- Numeric metric logging
+- Summary updates
+- Uploads for `wandb-metadata.json`, `config.yaml`, `requirements.txt`, and `wandb-summary.json`
+
+This is a compatibility layer for Tahuna runs, not a full clone of the W&B product surface.
+
+## Setup
+
+### 1. Use the normal W&B SDK in your code
+
+```python
+import wandb
+
+run = wandb.init(
+    project="mnist-demo",
+    name="baseline-a100",
+    config={
+        "epochs": 5,
+        "batch_size": 64,
+        "learning_rate": 1e-3,
+    },
+)
+
+for step in range(5):
+    loss = 1.0 / (step + 1)
+    accuracy = 0.75 + step * 0.04
+    wandb.log({"loss": loss, "accuracy": accuracy}, step=step)
+
+run.finish()
+```
+
+### 2. Configure W&B through environment env vars
+
+Tahuna injects its own default `WANDB_BASE_URL` and `WANDB_API_KEY` for Tahuna's W&B-compatible tracking endpoint.
+
+If you want to use Tahuna's tracking endpoint, you do not need to set them manually.
+
+If you want different W&B settings, define `WANDB_*` variables on the Tahuna environment explicitly. User-defined environment env vars override Tahuna's injected defaults.
+
+### 3. Manage environment env vars with the CLI
+
+Tahuna env vars are scoped to an environment, not to a user.
+
+The `tahuna env_vars ...` commands operate on the linked environment in the current project, so run `tahuna init .` first if the project is not linked yet.
+
+Examples:
+
+```bash
+tahuna env_vars list
+tahuna env_vars get HF_TOKEN
+tahuna env_vars set HF_TOKEN=hf_example
+tahuna env_vars set WANDB_BASE_URL --value https://tahuna.app/api/monitoring/wandb
+tahuna env_vars set --from-file .env.local
+tahuna env_vars rm HF_TOKEN
+```
+
+Output behavior:
+
+- `list` returns env var names only so secret values are not printed accidentally.
+- `get <name>` returns a single `NAME=value` pair for that env var.
+- `set` without arguments loads `.env.local` first, then `.env`, from the current working directory.
+
+Reserved keys such as `TAHUNA_*`, `PATH`, `VIRTUAL_ENV`, and `UV_PROJECT_ENVIRONMENT` are managed by Tahuna and cannot be set through this interface.
+
+## What Tahuna captures
+
+Tahuna stores compatibility data for the run and mirrors logged metrics into the normal Tahuna run metrics stream.
+
+In practice:
+
+- Numeric metrics logged through `wandb.log()` show up in Tahuna live metrics.
+- Summary updates are captured on the backend.
+- Uploaded compatibility files such as `config.yaml` and `requirements.txt` are stored on the backend for the run.
+
+## Where it shows up
+
+After the run starts emitting metrics:
+
+- The dashboard run detail shows the metrics in the live metrics charts.
+- The CLI run views use the same underlying Tahuna metrics stream.
+
+## Verification checklist
+
+Use this checklist to confirm the integration is working in your environment:
+
+1. Launch a Tahuna run with training code that calls `wandb.init()` and `wandb.log()`.
+2. Confirm the required `WANDB_*` variables are set on the Tahuna environment before launch.
+3. Open the run in the dashboard and verify that logged numeric metrics appear in the live charts.
+4. Refresh the run page and confirm the metrics still appear after reload.
+5. If you intentionally point `WANDB_BASE_URL` somewhere other than Tahuna, confirm your environment configuration still matches that endpoint.
+
+## Current compatibility surface
+
+Tahuna's current implementation is built around the W&B-compatible request flow used for regular tracked runs:
+
+- GraphQL operations for server features, run upsert, and upload URL creation
+- File stream ingestion for history and summary updates
+- Upload endpoints for run metadata and auxiliary config files
+
+If your workflow depends on broader W&B product features beyond this core run-tracking path, verify them explicitly against Tahuna before depending on them.

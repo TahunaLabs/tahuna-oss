@@ -1,0 +1,79 @@
+---
+title: Runs
+description: Launch, monitor, and manage training runs.
+---
+
+A run is a single training execution of your code within an environment. Tahuna handles GPU provisioning, code/data sync, dependency installation, log streaming, metric capture, and artifact collection.
+
+## Launching a run
+
+From your project directory:
+
+```bash
+tahuna train
+```
+
+Tahuna Cloud uses managed billing by default. Before launching a paid run, make sure your dashboard billing balance can cover the estimated launch cost.
+
+For an explicit run command with naming and compute overrides:
+
+```bash
+tahuna run create --name baseline-l4
+tahuna run create --gpu-type L4 --gpu-count 1 --volume-gb 20
+```
+
+## Run lifecycle
+
+Each run goes through these statuses:
+
+| Status | Description |
+| --- | --- |
+| `queued` | Run is waiting for a GPU pod |
+| `provisioning` | Pod is being allocated and configured |
+| `running` | Code is executing on the pod |
+| `completed` | Run finished successfully |
+| `failed` | Run exited with an error |
+| `cancelling` | Cancellation has been requested |
+| `cancelled` | Run was cancelled |
+
+## Monitoring
+
+### Live logs
+
+Tahuna streams stdout and stderr from your run in real-time. View logs from the CLI:
+
+```bash
+tahuna run logs <run-id>
+tahuna run logs <run-id> --follow
+```
+
+### Live metrics
+
+If your training code emits metrics (loss, accuracy, learning rate, etc.), they are captured and can be viewed via the CLI.
+
+```bash
+tahuna run metrics <run-id> --metric eval_loss
+tahuna run metrics <run-a> <run-b> --metric eval_loss --follow
+```
+
+Tahuna also supports a W&B-compatible tracking path for standard `wandb.init()` and `wandb.log()` flows. See [Tracking](/tracking).
+
+## Cancelling a run
+
+Cancel a running or queued run:
+
+```bash
+tahuna run cancel <run-id>
+```
+
+## Artifacts
+
+When a run writes files to its output directory, they are automatically collected as artifacts and stored in cloud storage. Artifact information is associated with the run that produced it.
+
+If the output contains model files, you can deploy them as a serve:
+
+```bash
+tahuna serve create --from-run <run-id>
+```
+
+See [Serving](/serving) for the full inference workflow.

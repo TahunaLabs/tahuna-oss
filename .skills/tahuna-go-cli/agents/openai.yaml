@@ -1,0 +1,4 @@
+interface:
+  display_name: "Tahuna Go CLI"
+  short_description: "Tahuna CLI command and test patterns"
+  default_prompt: "Use $tahuna-go-cli to implement or debug a Tahuna CLI command."

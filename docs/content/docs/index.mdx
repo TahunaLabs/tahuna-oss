@@ -1,0 +1,41 @@
+---
+title: Introduction
+description: Tahuna is the control plane between your training code and cloud GPUs.
+---
+
+Tahuna runs Python training and inference workloads on managed cloud GPUs while keeping your code, dependencies, and project layout under your control.
+
+You bring a local ML project. Tahuna syncs it into reproducible snapshots, provisions compute, installs dependencies, runs training or serving commands, streams logs and metrics, and stores artifacts outside the runtime machine.
+
+## Start here
+
+Install the CLI, log in, initialize a project, then launch a run:
+
+```bash
+curl -fsSL https://tahuna.app/install.sh | bash
+tahuna login
+tahuna init .
+tahuna train
+```
+
+Before your first paid launch, add Tahuna credits in the dashboard billing view. See [Installation](/installation) and [Quickstart](/quickstart) for the full first-run path.
+
+## What you can do
+
+- [Launch and monitor training runs](/runs)
+- [Deploy a trained model for inference](/serving)
+- [Run bounded Auto-Research loops](/auto-research)
+- [Track metrics with the W&B-compatible flow](/tracking)
+- [Install agent skills for local coding agents](/agent-skills)
+
+## How Tahuna works
+
+- [Environments](/environments) define the project runtime, GPU type/count, volume size, commands, and dependency groups.
+- [Syncing](/syncing) records code and data as pinned manifests and uploads only missing file content.
+- [Storage](/storage) holds data, run artifacts, and serve model snapshots outside ephemeral compute.
+- [Billing](/billing) covers managed credits for hosted runs, serves, and storage.
+
+## References
+
+- [CLI Reference](/cli) lists the exact command surface.
+- [Agent Skills](/agent-skills) explains the Tahuna skills available for coding agents.

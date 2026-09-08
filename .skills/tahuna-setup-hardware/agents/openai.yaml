@@ -1,0 +1,4 @@
+interface:
+  display_name: "Tahuna Setup Hardware"
+  short_description: "Initialize Tahuna and choose compute"
+  default_prompt: "Use $tahuna-setup-hardware to set up my Tahuna project and pick a GPU."

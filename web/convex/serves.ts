@@ -1,0 +1,1972 @@
+import { ConvexError, v } from "convex/values"
+import { api, internal } from "@convex/_generated/api"
+import type { Id } from "@convex/_generated/dataModel"
+import { action, internalAction, internalMutation, internalQuery, mutation, query, type ActionCtx } from "@convex/_generated/server"
+import { RUN_CONFIG } from "@convex/appConfig"
+import { requireUser } from "@convex/auth"
+import { computeProvider } from "@convex/computeProvider"
+import { enqueueTerminateServeMachineJob } from "@convex/convexJobQueue"
+import { createTerminateServeMachineJob } from "@convex/core/jobQueue"
+import {
+  planServeFailure,
+  planServeComputeSessionBillingFailure,
+  planServeComputeSessionTerminationFailed,
+  planServeMachineProvisioned,
+  planServeRuntimeStatusIngestion,
+  planServeStoppedAfterTermination,
+  planServeStopTerminationFailed,
+  planServeTerminationRetry,
+  sanitizeServeRuntimeMessage,
+  shouldEnforceServeStartupTimeout,
+  type ServeLifecycleStatus,
+} from "@convex/core/serveLifecyclePlan"
+import { buildProvisionedRuntimeEnv, resolveEnvironmentEnvVarsForEnvironmentId } from "@convex/envVars"
+import { RUN_STATUS } from "@convex/runsConstants"
+import { storageKeys, storagePrefixUpperBound } from "@convex/core/storage"
+import {
+  buildServeProvisioningSystemEnv,
+  serveProviderMachineName,
+} from "@convex/serveProvisioning"
+import { objectStore } from "@convex/objectStore"
+import { resolveConfiguredDependencyGroup } from "@/lib/dependency-selection"
+import {
+  fetchServeSnapshotManifest,
+  fetchSyncManifest,
+  resolveServeSnapshotDownloadEntries,
+  resolveSyncManifestDownloadEntries,
+  type RuntimeBootstrapEntry,
+} from "@convex/runtimeBootstrap"
+import { getAccessibleEnvironment, getAccessibleRun } from "@convex/runsAccess"
+import { getAccessibleServe } from "@convex/servesAccess"
+import { SERVE_STATUS, TERMINAL_SERVE_STATUSES } from "@convex/servesConstants"
+import {
+  provisionRuntimeMachine,
+  resolveImageName,
+  resolveWandbBaseURL,
+  terminateRuntimeMachineWithRetry,
+} from "@convex/runtimeProvisioning"
+import { terminateServeMachineProvisionedAfterSessionTermination } from "@convex/serveOrphanMachines"
+import {
+  applyHostedServeLifecyclePlan as applyServeLifecyclePlan,
+  createHostedServeForUserId as createServeForUserId,
+  stopHostedServeForUserId as stopServeForUserId,
+} from "@convex/cloud/serveLifecycleComposition"
+import {
+  applyServeLifecyclePlan as applyBareServeLifecyclePlan,
+  scheduleServeComputeSessionTermination,
+  toServeLifecycleState,
+} from "@convex/servesLifecycle"
+import {
+  listByUserId,
+  listSummariesByUserId,
+  toServeInferenceMachineTarget,
+  toServeLogsOnlyResponse,
+  toServeLogsResponse,
+  toServeResponse,
+} from "@convex/servesRead"
+import { sha256Hex } from "@convex/syncManifest"
+
+type ServeModelSnapshotResponse = {
+  source_type: "run" | "storage"
+  source_run_id: string | null
+  source_object_prefix: string | null
+  source_model_path: string | null
+  object_prefix: string
+  manifest_key: string
+  manifest_hash: string
+  object_count: number
+  total_bytes: number
+}
+
+type ResolvedServeConfig = {
+  command: string[]
+  outputDir: string
+  codeManifestHash: string
+  dataManifestHash: string | null
+  dependencyGroup: string
+  pythonVersion: string
+  gpuType: string
+  gpuCount: number
+  volumeGb: number
+  port: number
+  healthPath: string
+  defaultModelPath: string
+  startupTimeoutSeconds: number
+  healthIntervalSeconds: number
+  healthTimeoutSeconds: number
+  healthFailureThreshold: number
+  gracefulShutdownSeconds: number
+}
+
+type ServeResponse = {
+  serve_id: string
+  created_at: number
+  environment_id: string
+  compute_session_id: string
+  inference_path: string
+  command: string[]
+  output_dir: string
+  logs: string
+  status: string
+  error: string
+  provider_machine_id: string
+  code_manifest_hash: string
+  data_manifest_hash: string
+  python_version: string
+  gpu_type: string
+  gpu_count: number
+  volume_gb: number
+  port: number
+  health_path: string
+  default_model_path: string
+  startup_timeout_seconds: number
+  health_interval_seconds: number
+  health_timeout_seconds: number
+  health_failure_threshold: number
+  graceful_shutdown_seconds: number
+  model_snapshot: ServeModelSnapshotResponse
+}
+
+type SnapshotSourceSelection = {
+  source_type: "run" | "storage"
+  source_run_id: string | null
+  source_object_prefix: string | null
+  source_model_path: string | null
+}
+
+type SnapshotSourceEntry = {
+  source_key: string
+  path: string
+  size: number
+}
+
+type SnapshotManifestEntry = {
+  path: string
+  key: string
+  size: number
+  sha256: string
+}
+
+type CreateServePreparation = {
+  environment_id: string
+  serve_config: ResolvedServeConfig
+  source: SnapshotSourceSelection
+  source_entries: SnapshotSourceEntry[]
+}
+
+type ServeRemovalPayload = {
+  serve_id: string
+  user_id: string
+  environment_id: string
+  compute_session_id: string | null
+  status: string
+  provider_machine_id: string
+  object_prefix: string
+  manifest_key: string
+  manifest_hash: string
+}
+
+type ServeProvisioningPayload = {
+  serve_id: string
+  compute_session_id: string
+  environment_id: string
+  environment_data_id: string
+  user_id: string
+  command: string[]
+  dependency_group: string
+  output_dir: string
+  logs_path: string
+  code_manifest_hash: string | null
+  data_manifest_hash: string | null
+  model_manifest_key: string
+  model_manifest_hash: string
+  contract_version: string
+  port: number
+  health_path: string
+  startup_timeout_seconds: number
+  graceful_shutdown_seconds: number
+}
+
+type ServeProvisionSpec = {
+  serve_id: string
+  effective_gpu_type: string
+  effective_gpu_count: number
+  effective_volume_gb: number
+  framework: string
+  version: string
+  python_version: string
+  port: number
+  startup_timeout_seconds: number
+}
+
+type RuntimeBootstrapPlan = {
+  serve_id: string
+  contract_version: string
+  environment_id: string
+  workspace_root: string
+  model_root: string
+  output_dir: string
+  logs_path: string
+  command: string[]
+  dependency_group: string
+  code: {
+    manifest_hash: string
+    entries: RuntimeBootstrapEntry[]
+  }
+  data: {
+    manifest_hash: string | null
+    entries: RuntimeBootstrapEntry[]
+  }
+  model: {
+    manifest_hash: string
+    entries: RuntimeBootstrapEntry[]
+  }
+  python_version: string
+  port: number
+  health_path: string
+  startup_timeout_seconds: number
+  health_interval_seconds: number
+  health_timeout_seconds: number
+  health_failure_threshold: number
+  graceful_shutdown_seconds: number
+  model_snapshot: ServeModelSnapshotResponse
+}
+
+type RuntimeBootstrapContext = {
+  serve_id: string
+  environment_id: string
+  environment_data_id: string
+  workspace_root: string
+  model_root: string
+  output_dir: string
+  logs_path: string
+  command: string[]
+  dependency_group: string
+  code_manifest_hash: string | null
+  data_manifest_hash: string | null
+  python_version: string
+  port: number
+  health_path: string
+  startup_timeout_seconds: number
+  health_interval_seconds: number
+  health_timeout_seconds: number
+  health_failure_threshold: number
+  graceful_shutdown_seconds: number
+  model_snapshot: ServeModelSnapshotResponse
+}
+
+type StartupTimeoutState = {
+  status: string
+  providerMachineId: string | null
+}
+
+const resolvedServeConfigValidator = v.object({
+  command: v.array(v.string()),
+  outputDir: v.string(),
+  codeManifestHash: v.string(),
+  dataManifestHash: v.union(v.string(), v.null()),
+  dependencyGroup: v.string(),
+  pythonVersion: v.string(),
+  gpuType: v.string(),
+  gpuCount: v.number(),
+  volumeGb: v.number(),
+  port: v.number(),
+  healthPath: v.string(),
+  defaultModelPath: v.string(),
+  startupTimeoutSeconds: v.number(),
+  healthIntervalSeconds: v.number(),
+  healthTimeoutSeconds: v.number(),
+  healthFailureThreshold: v.number(),
+  gracefulShutdownSeconds: v.number(),
+})
+
+const serveModelSnapshotResponseValidator = v.object({
+  source_type: v.union(v.literal("run"), v.literal("storage")),
+  source_run_id: v.union(v.string(), v.null()),
+  source_object_prefix: v.union(v.string(), v.null()),
+  source_model_path: v.union(v.string(), v.null()),
+  object_prefix: v.string(),
+  manifest_key: v.string(),
+  manifest_hash: v.string(),
+  object_count: v.number(),
+  total_bytes: v.number(),
+})
+
+const serveResponseValidator = v.object({
+  serve_id: v.string(),
+  created_at: v.number(),
+  environment_id: v.string(),
+  compute_session_id: v.string(),
+  inference_path: v.string(),
+  command: v.array(v.string()),
+  output_dir: v.string(),
+  logs: v.string(),
+  status: v.string(),
+  error: v.string(),
+  provider_machine_id: v.string(),
+  code_manifest_hash: v.string(),
+  data_manifest_hash: v.string(),
+  python_version: v.string(),
+  gpu_type: v.string(),
+  gpu_count: v.number(),
+  volume_gb: v.number(),
+  port: v.number(),
+  health_path: v.string(),
+  default_model_path: v.string(),
+  startup_timeout_seconds: v.number(),
+  health_interval_seconds: v.number(),
+  health_timeout_seconds: v.number(),
+  health_failure_threshold: v.number(),
+  graceful_shutdown_seconds: v.number(),
+  model_snapshot: serveModelSnapshotResponseValidator,
+})
+
+const serveRemovalPayloadValidator = v.object({
+  serve_id: v.string(),
+  user_id: v.string(),
+  environment_id: v.string(),
+  compute_session_id: v.union(v.string(), v.null()),
+  status: v.string(),
+  provider_machine_id: v.string(),
+  object_prefix: v.string(),
+  manifest_key: v.string(),
+  manifest_hash: v.string(),
+})
+
+const listServesResponseValidator = v.object({
+  serves: v.array(serveResponseValidator),
+})
+
+const serveSummaryModelSnapshotResponseValidator = v.object({
+  source_type: v.union(v.literal("run"), v.literal("storage")),
+  source_run_id: v.union(v.string(), v.null()),
+  source_object_prefix: v.union(v.string(), v.null()),
+  source_model_path: v.union(v.string(), v.null()),
+  object_count: v.number(),
+  total_bytes: v.number(),
+})
+
+const serveSummaryResponseValidator = v.object({
+  serve_id: v.string(),
+  created_at: v.number(),
+  environment_id: v.string(),
+  compute_session_id: v.string(),
+  inference_path: v.string(),
+  status: v.string(),
+  error: v.string(),
+  python_version: v.string(),
+  gpu_type: v.string(),
+  gpu_count: v.number(),
+  volume_gb: v.number(),
+  model_snapshot: serveSummaryModelSnapshotResponseValidator,
+})
+
+const listServeSummariesResponseValidator = v.object({
+  serves: v.array(serveSummaryResponseValidator),
+})
+
+const serveLogsResponseValidator = v.object({
+  serve_id: v.string(),
+  status: v.string(),
+  logs_path: v.string(),
+  log_file: v.string(),
+  note: v.string(),
+  logs_window: v.object({
+    tail_limit: v.number(),
+    startup_scan_limit: v.number(),
+    pinned_bootstrap_limit: v.number(),
+    scanned_tail: v.number(),
+    scanned_startup: v.number(),
+    pinned_bootstrap_count: v.number(),
+    returned_logs: v.number(),
+    includes_pinned_bootstrap: v.boolean(),
+  }),
+  recent_logs: v.array(
+    v.object({
+      timestamp: v.number(),
+      level: v.string(),
+      source: v.string(),
+      message: v.string(),
+    }),
+  ),
+})
+
+const serveLogsOnlyResponseValidator = v.object({
+  serve_id: v.string(),
+  status: v.string(),
+  recent_logs: v.array(
+    v.object({
+      timestamp: v.number(),
+      level: v.string(),
+      source: v.string(),
+      message: v.string(),
+    }),
+  ),
+})
+
+const serveInferenceTargetValidator = v.object({
+  serve_id: v.string(),
+  status: v.string(),
+  ingress_url: v.string(),
+  inference_path: v.string(),
+})
+
+const serveInferenceMachineTargetValidator = v.object({
+  serve_id: v.string(),
+  status: v.string(),
+  provider_machine_id: v.string(),
+  port: v.number(),
+  inference_path: v.string(),
+})
+
+const runtimeLogLineValidator = v.object({
+  message: v.string(),
+  level: v.optional(v.string()),
+  source: v.optional(v.string()),
+  timestamp: v.optional(v.number()),
+})
+
+const runtimeStatusValidator = v.union(
+  v.literal(SERVE_STATUS.PROVISIONING),
+  v.literal(SERVE_STATUS.STARTING),
+  v.literal(SERVE_STATUS.SERVING),
+  v.literal(SERVE_STATUS.STOPPING),
+  v.literal(SERVE_STATUS.STOPPED),
+  v.literal(SERVE_STATUS.FAILED),
+)
+
+const serveStopResponseValidator = v.object({
+  serve_id: v.string(),
+  stop_requested: v.boolean(),
+  forced: v.boolean(),
+  status: v.string(),
+})
+
+const snapshotSourceEntryValidator = v.object({
+  source_key: v.string(),
+  path: v.string(),
+  size: v.number(),
+})
+
+const snapshotSourceSelectionValidator = v.object({
+  source_type: v.union(v.literal("run"), v.literal("storage")),
+  source_run_id: v.union(v.string(), v.null()),
+  source_object_prefix: v.union(v.string(), v.null()),
+  source_model_path: v.union(v.string(), v.null()),
+})
+
+const persistedModelSnapshotValidator = v.object({
+  sourceType: v.union(v.literal("run"), v.literal("storage")),
+  sourceRunId: v.optional(v.id("runs")),
+  sourceObjectPrefix: v.optional(v.string()),
+  sourceModelPath: v.optional(v.string()),
+  objectPrefix: v.string(),
+  manifestKey: v.string(),
+  manifestHash: v.string(),
+  objectCount: v.number(),
+  totalBytes: v.number(),
+})
+
+const createServePreparationValidator = v.object({
+  environment_id: v.string(),
+  serve_config: resolvedServeConfigValidator,
+  source: snapshotSourceSelectionValidator,
+  source_entries: v.array(snapshotSourceEntryValidator),
+})
+
+const serveProvisioningPayloadValidator = v.object({
+  serve_id: v.string(),
+  compute_session_id: v.string(),
+  environment_id: v.string(),
+  environment_data_id: v.string(),
+  user_id: v.string(),
+  command: v.array(v.string()),
+  dependency_group: v.string(),
+  output_dir: v.string(),
+  logs_path: v.string(),
+  code_manifest_hash: v.union(v.string(), v.null()),
+  data_manifest_hash: v.union(v.string(), v.null()),
+  model_manifest_key: v.string(),
+  model_manifest_hash: v.string(),
+  contract_version: v.string(),
+  port: v.number(),
+  health_path: v.string(),
+  startup_timeout_seconds: v.number(),
+  graceful_shutdown_seconds: v.number(),
+})
+
+const serveProvisionSpecValidator = v.object({
+  serve_id: v.string(),
+  effective_gpu_type: v.string(),
+  effective_gpu_count: v.number(),
+  effective_volume_gb: v.number(),
+  framework: v.string(),
+  version: v.string(),
+  python_version: v.string(),
+  port: v.number(),
+  startup_timeout_seconds: v.number(),
+})
+
+const runtimeBootstrapEntryValidator = v.object({
+  path: v.string(),
+  sha256: v.string(),
+  size: v.number(),
+  mode: v.number(),
+  download_url: v.string(),
+})
+
+const runtimeBootstrapContextValidator = v.object({
+  serve_id: v.string(),
+  environment_id: v.string(),
+  environment_data_id: v.string(),
+  workspace_root: v.string(),
+  model_root: v.string(),
+  output_dir: v.string(),
+  logs_path: v.string(),
+  command: v.array(v.string()),
+  dependency_group: v.string(),
+  code_manifest_hash: v.union(v.string(), v.null()),
+  data_manifest_hash: v.union(v.string(), v.null()),
+  python_version: v.string(),
+  port: v.number(),
+  health_path: v.string(),
+  startup_timeout_seconds: v.number(),
+  health_interval_seconds: v.number(),
+  health_timeout_seconds: v.number(),
+  health_failure_threshold: v.number(),
+  graceful_shutdown_seconds: v.number(),
+  model_snapshot: serveModelSnapshotResponseValidator,
+})
+
+const startupTimeoutStateValidator = v.union(
+  v.null(),
+  v.object({
+    status: v.string(),
+    providerMachineId: v.union(v.string(), v.null()),
+  }),
+)
+
+const runtimeBootstrapPlanValidator = v.object({
+  serve_id: v.string(),
+  contract_version: v.string(),
+  environment_id: v.string(),
+  workspace_root: v.string(),
+  model_root: v.string(),
+  output_dir: v.string(),
+  logs_path: v.string(),
+  command: v.array(v.string()),
+  dependency_group: v.string(),
+  code: v.object({
+    manifest_hash: v.string(),
+    entries: v.array(runtimeBootstrapEntryValidator),
+  }),
+  data: v.object({
+    manifest_hash: v.union(v.string(), v.null()),
+    entries: v.array(runtimeBootstrapEntryValidator),
+  }),
+  model: v.object({
+    manifest_hash: v.string(),
+    entries: v.array(runtimeBootstrapEntryValidator),
+  }),
+  python_version: v.string(),
+  port: v.number(),
+  health_path: v.string(),
+  startup_timeout_seconds: v.number(),
+  health_interval_seconds: v.number(),
+  health_timeout_seconds: v.number(),
+  health_failure_threshold: v.number(),
+  graceful_shutdown_seconds: v.number(),
+  model_snapshot: serveModelSnapshotResponseValidator,
+})
+
+function normalizeProjectSubpath(value: string, field: string) {
+  const normalized = value.trim().replace(/\\/g, "/").replace(/^\/+/, "").replace(/\/+$/, "")
+  if (!normalized) {
+    throw new ConvexError(`${field} is required`)
+  }
+  if (normalized.split("/").includes("..")) {
+    throw new ConvexError(`${field} must not escape the workspace`)
+  }
+  return normalized
+}
+
+function normalizeStoragePrefix(value: string) {
+  const normalized = value.trim().replace(/^\/+/, "").replace(/\/+$/, "")
+  if (!normalized) {
+    throw new ConvexError("from_storage_prefix is required")
+  }
+  return normalized
+}
+
+function resolveRunArtifactSnapshotPrefix(modelPath: string, outputDir: string) {
+  const normalizedModelPath = normalizeProjectSubpath(modelPath, "model_path")
+  const normalizedOutputDir = normalizeProjectSubpath(outputDir, "output_dir")
+  if (normalizedModelPath === normalizedOutputDir) {
+    return ""
+  }
+  if (!normalizedModelPath.startsWith(`${normalizedOutputDir}/`)) {
+    throw new ConvexError("model_path must be within the environment output_dir")
+  }
+  return normalizedModelPath.slice(`${normalizedOutputDir}/`.length)
+}
+
+function leafName(value: string) {
+  return value.split("/").filter(Boolean).pop() || "model"
+}
+
+function relativePathFromPrefixedKey(key: string, prefix: string) {
+  if (key === prefix) {
+    return leafName(prefix)
+  }
+  return key.slice(`${prefix}/`.length)
+}
+
+function matchesObjectPrefix(key: string, prefix: string) {
+  return key === prefix || key.startsWith(`${prefix}/`)
+}
+
+async function deleteObjectsByPrefix(ctx: ActionCtx, prefix: string) {
+  let cursor: string | null = null
+  let pages = 0
+  while (pages < 100) {
+    const result = await objectStore.listMetadata(ctx, 100, cursor)
+    for (const item of result.page) {
+      if (!item.key.startsWith(prefix)) {
+        continue
+      }
+      try {
+        await objectStore.deleteObject(ctx, item.key)
+      } catch {
+        // Best-effort cleanup only.
+      }
+    }
+    if (result.isDone) {
+      return
+    }
+    cursor = result.continueCursor
+    pages += 1
+  }
+}
+
+async function deleteServeSnapshotObjects(ctx: ActionCtx, payload: ServeRemovalPayload) {
+  try {
+    const manifest = await fetchServeSnapshotManifest(ctx, payload.manifest_key, payload.manifest_hash)
+    const keys = new Set<string>(manifest.entries.map((entry) => entry.key))
+    keys.add(payload.manifest_key)
+    for (const key of keys) {
+      try {
+        await objectStore.deleteObject(ctx, key)
+      } catch {
+        // Best-effort cleanup only.
+      }
+    }
+    return
+  } catch {
+    // Fall back to prefix cleanup when the manifest is missing or unreadable.
+  }
+
+  await deleteObjectsByPrefix(ctx, `${payload.object_prefix}/`)
+  try {
+    await objectStore.deleteObject(ctx, payload.manifest_key)
+  } catch {
+    // Best-effort cleanup only.
+  }
+}
+
+function serializeSnapshotManifest(entries: SnapshotManifestEntry[], objectPrefix: string) {
+  return JSON.stringify({
+    version: "serve-model-snapshot.v1",
+    object_prefix: objectPrefix,
+    entries,
+  })
+}
+
+function normalizeRuntimeLevel(level: string | undefined) {
+  const trimmed = (level || "").trim().toLowerCase()
+  if (trimmed === "debug" || trimmed === "warn" || trimmed === "warning" || trimmed === "error") {
+    return trimmed === "warning" ? "warn" : trimmed
+  }
+  return "info"
+}
+
+function normalizeRuntimeSource(source: string | undefined) {
+  const trimmed = (source || "").trim()
+  return trimmed || "machine"
+}
+
+function normalizeRuntimeTimestamp(timestamp: number | undefined) {
+  if (typeof timestamp === "number" && Number.isFinite(timestamp) && timestamp > 0) {
+    return Math.floor(timestamp)
+  }
+  return Date.now()
+}
+
+function sanitizeRuntimeMessage(message: string) {
+  return sanitizeServeRuntimeMessage(message)
+}
+
+function resolveServeInferenceTarget(target: {
+  serve_id: string
+  status: string
+  provider_machine_id: string
+  port: number
+  inference_path: string
+}) {
+  return {
+    serve_id: target.serve_id,
+    status: target.status,
+    ingress_url:
+      target.status === SERVE_STATUS.SERVING
+        ? computeProvider.resolveIngressEndpoint({
+            providerMachineId: target.provider_machine_id,
+            port: target.port,
+          })
+        : "",
+    inference_path: target.inference_path,
+  }
+}
+
+export const list = query({
+  args: {},
+  returns: listServeSummariesResponseValidator,
+  handler: async (ctx) => {
+    const user = await requireUser(ctx)
+    return listSummariesByUserId(ctx, String(user._id))
+  },
+})
+
+export const getLogs = query({
+  args: { serveId: v.id("serves") },
+  returns: serveLogsOnlyResponseValidator,
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx)
+    const row = await getAccessibleServe(ctx, String(user._id), args.serveId)
+    return toServeLogsOnlyResponse(ctx, row)
+  },
+})
+
+export const resolveInferenceTarget = action({
+  args: { serveId: v.id("serves") },
+  returns: serveInferenceTargetValidator,
+  handler: async (ctx, args): Promise<{
+    serve_id: string
+    status: string
+    ingress_url: string
+    inference_path: string
+  }> => {
+    const user = await requireUser(ctx)
+    const target = await ctx.runQuery(internal.serves.internalGetInferenceTarget, {
+      userId: String(user._id),
+      serveId: args.serveId,
+    })
+    return resolveServeInferenceTarget(target)
+  },
+})
+
+export const resolveInferenceTargetByApiKey = action({
+  args: {
+    serveId: v.id("serves"),
+    apiKey: v.string(),
+  },
+  returns: serveInferenceTargetValidator,
+  handler: async (ctx, args): Promise<{
+    serve_id: string
+    status: string
+    ingress_url: string
+    inference_path: string
+  }> => {
+    const auth = await ctx.runQuery(api.auth.authByApiKey, { apiKey: args.apiKey })
+    if (!auth) {
+      throw new ConvexError("authentication required")
+    }
+
+    const now = Date.now()
+    const shouldTouch = typeof auth.lastUsedAt !== "number" || now - auth.lastUsedAt >= 60_000
+    if (shouldTouch) {
+      try {
+        await ctx.runMutation(internal.auth.internalTouchApiKeyLastUsed, {
+          keyId: auth.keyId,
+          at: now,
+        })
+      } catch {
+        // Best effort only. Inference auth must not fail due to usage timestamp contention.
+      }
+    }
+
+    const target = await ctx.runQuery(internal.serves.internalGetInferenceTarget, {
+      userId: auth.userId,
+      serveId: args.serveId,
+    })
+    return resolveServeInferenceTarget(target)
+  },
+})
+
+export const stop = mutation({
+  args: {
+    serveId: v.id("serves"),
+    force: v.optional(v.boolean()),
+  },
+  returns: serveStopResponseValidator,
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx)
+    return stopServeForUserId(ctx, String(user._id), args.serveId, args.force === true)
+  },
+})
+
+export const internalList = internalQuery({
+  args: { userId: v.string() },
+  returns: listServesResponseValidator,
+  handler: async (ctx, args) => {
+    return listByUserId(ctx, args.userId)
+  },
+})
+
+export const internalGet = internalQuery({
+  args: { userId: v.string(), serveId: v.id("serves") },
+  returns: serveResponseValidator,
+  handler: async (ctx, args) => {
+    const row = await getAccessibleServe(ctx, args.userId, args.serveId)
+    return toServeResponse(row)
+  },
+})
+
+export const internalGetInferenceTarget = internalQuery({
+  args: { userId: v.string(), serveId: v.id("serves") },
+  returns: serveInferenceMachineTargetValidator,
+  handler: async (ctx, args) => {
+    const row = await getAccessibleServe(ctx, args.userId, args.serveId)
+    return toServeInferenceMachineTarget(row)
+  },
+})
+
+export const internalGetLogs = internalQuery({
+  args: { userId: v.string(), serveId: v.id("serves") },
+  returns: serveLogsResponseValidator,
+  handler: async (ctx, args) => {
+    const row = await getAccessibleServe(ctx, args.userId, args.serveId)
+    return toServeLogsResponse(ctx, row)
+  },
+})
+
+export const internalGetRemovalPayload = internalQuery({
+  args: { userId: v.string(), serveId: v.id("serves") },
+  returns: serveRemovalPayloadValidator,
+  handler: async (ctx, args): Promise<ServeRemovalPayload> => {
+    const row = await getAccessibleServe(ctx, args.userId, args.serveId)
+    return {
+      serve_id: String(row._id),
+      user_id: row.userId,
+      environment_id: String(row.environmentId),
+      compute_session_id: row.computeSessionId ? String(row.computeSessionId) : null,
+      status: row.status,
+      provider_machine_id: row.providerMachineId || "",
+      object_prefix: row.modelSnapshot.objectPrefix,
+      manifest_key: row.modelSnapshot.manifestKey,
+      manifest_hash: row.modelSnapshot.manifestHash,
+    }
+  },
+})
+
+export const internalPrepareCreate = internalQuery({
+  args: {
+    userId: v.string(),
+    environmentId: v.id("environments"),
+    fromRunId: v.optional(v.id("runs")),
+    fromStoragePrefix: v.optional(v.string()),
+    modelPath: v.optional(v.string()),
+    gpuType: v.optional(v.string()),
+    gpuCount: v.optional(v.number()),
+    volumeGb: v.optional(v.number()),
+  },
+  returns: createServePreparationValidator,
+  handler: async (ctx, args) => {
+    const env = await getAccessibleEnvironment(ctx, args.userId, args.environmentId)
+    const serveSnapshot = env.serveSnapshot
+    if (!serveSnapshot || !Array.isArray(serveSnapshot.command) || serveSnapshot.command.length === 0) {
+      throw new ConvexError("environment has no serve config configured; run `tahuna sync` before creating a serve")
+    }
+    const dependencyGroup = resolveConfiguredDependencyGroup({
+      dependencyGroup: serveSnapshot.dependencyGroup,
+    })
+    if (dependencyGroup === null) {
+      throw new ConvexError("environment has no serve dependency selection configured; run `tahuna sync` before creating a serve")
+    }
+    if (!env.latestCodeManifestHash) {
+      throw new ConvexError("environment code is not synced; run `tahuna sync` before creating a serve")
+    }
+
+    const hasRunSource = !!args.fromRunId
+    const hasStorageSource = !!args.fromStoragePrefix?.trim()
+    if ((hasRunSource ? 1 : 0) + (hasStorageSource ? 1 : 0) !== 1) {
+      throw new ConvexError("exactly one model source is required")
+    }
+
+    const serveConfig: ResolvedServeConfig = {
+      command: serveSnapshot.command,
+      outputDir: env.outputDir,
+      codeManifestHash: env.latestCodeManifestHash,
+      dataManifestHash: env.latestDataManifestHash || null,
+      dependencyGroup,
+      pythonVersion: serveSnapshot.pythonVersion,
+      gpuType: args.gpuType?.trim() || serveSnapshot.gpuType,
+      gpuCount:
+        typeof args.gpuCount === "number" && Number.isFinite(args.gpuCount) && args.gpuCount > 0
+          ? Math.floor(args.gpuCount)
+          : serveSnapshot.gpuCount,
+      volumeGb:
+        typeof args.volumeGb === "number" && Number.isFinite(args.volumeGb) && args.volumeGb > 0
+          ? Math.floor(args.volumeGb)
+          : serveSnapshot.volumeGb,
+      port: serveSnapshot.port,
+      healthPath: serveSnapshot.healthPath,
+      defaultModelPath: serveSnapshot.defaultModelPath,
+      startupTimeoutSeconds: serveSnapshot.startupTimeoutSeconds,
+      healthIntervalSeconds: serveSnapshot.healthIntervalSeconds,
+      healthTimeoutSeconds: serveSnapshot.healthTimeoutSeconds,
+      healthFailureThreshold: serveSnapshot.healthFailureThreshold,
+      gracefulShutdownSeconds: serveSnapshot.gracefulShutdownSeconds,
+    }
+
+    let source: SnapshotSourceSelection
+    let sourceEntries: SnapshotSourceEntry[] = []
+
+    if (args.fromRunId) {
+      const run = await getAccessibleRun(ctx, args.userId, args.fromRunId)
+      if (run.status !== RUN_STATUS.COMPLETED) {
+        throw new ConvexError("source run must be completed")
+      }
+      const outputPath = (run.output || "").trim()
+      if (!outputPath) {
+        throw new ConvexError("source run has no output artifacts")
+      }
+      const runOutputDir = normalizeProjectSubpath(run.outputDir || "", "output_dir")
+      const modelPath = normalizeProjectSubpath(args.modelPath || serveSnapshot.defaultModelPath, "model_path")
+      const relativeArtifactPrefix = resolveRunArtifactSnapshotPrefix(modelPath, runOutputDir)
+      const sourcePrefix = relativeArtifactPrefix ? `${outputPath}/${relativeArtifactPrefix}` : outputPath
+      const matchingKeys = (run.artifactKeys || [])
+        .filter((key) => matchesObjectPrefix(key, sourcePrefix))
+        .sort((a, b) => a.localeCompare(b))
+      if (matchingKeys.length === 0) {
+        throw new ConvexError("source run has no artifacts under the selected model path")
+      }
+
+      source = {
+        source_type: "run",
+        source_run_id: String(run._id),
+        source_object_prefix: null,
+        source_model_path: modelPath,
+      }
+      sourceEntries = matchingKeys.map((key) => ({
+        source_key: key,
+        path: relativePathFromPrefixedKey(key, sourcePrefix),
+        size: 0,
+      }))
+    } else {
+      const objectPrefix = normalizeStoragePrefix(args.fromStoragePrefix || "")
+      const storageRows = await ctx.db
+        .query("storageObjects")
+        .withIndex("by_user_and_key", (q) =>
+          q.eq("userId", args.userId).gte("key", objectPrefix).lt("key", storagePrefixUpperBound(objectPrefix)),
+        )
+        .collect()
+      const matchingRows = storageRows
+        .filter((row) => matchesObjectPrefix(row.key, objectPrefix))
+        .sort((a, b) => a.key.localeCompare(b.key))
+      if (matchingRows.length === 0) {
+        throw new ConvexError("storage prefix has no objects")
+      }
+
+      source = {
+        source_type: "storage",
+        source_run_id: null,
+        source_object_prefix: objectPrefix,
+        source_model_path: null,
+      }
+      sourceEntries = matchingRows.map((row) => ({
+        source_key: row.key,
+        path: relativePathFromPrefixedKey(row.key, objectPrefix),
+        size: row.size,
+      }))
+    }
+
+    return {
+      environment_id: String(args.environmentId),
+      serve_config: serveConfig,
+      source,
+      source_entries: sourceEntries,
+    }
+  },
+})
+
+export const internalCreate = internalAction({
+  args: {
+    userId: v.string(),
+    environmentId: v.id("environments"),
+    fromRunId: v.optional(v.id("runs")),
+    fromStoragePrefix: v.optional(v.string()),
+    modelPath: v.optional(v.string()),
+    gpuType: v.optional(v.string()),
+    gpuCount: v.optional(v.number()),
+    volumeGb: v.optional(v.number()),
+    enqueueProvisioning: v.optional(v.boolean()),
+  },
+  returns: serveResponseValidator,
+  handler: async (ctx, args): Promise<ServeResponse> => {
+    const preparation: CreateServePreparation = await ctx.runQuery(internal.serves.internalPrepareCreate, {
+      userId: args.userId,
+      environmentId: args.environmentId,
+      fromRunId: args.fromRunId,
+      fromStoragePrefix: args.fromStoragePrefix,
+      modelPath: args.modelPath,
+      gpuType: args.gpuType,
+      gpuCount: args.gpuCount,
+      volumeGb: args.volumeGb,
+    })
+    const snapshotBasePrefix = storageKeys.serveSnapshotBasePrefix(preparation.environment_id)
+    const objectPrefix = storageKeys.serveSnapshotModelPrefix(snapshotBasePrefix)
+    const manifestKey = storageKeys.serveSnapshotManifestKey(snapshotBasePrefix)
+    const copiedKeys: string[] = []
+    const manifestEntries: SnapshotManifestEntry[] = []
+    let totalBytes = 0
+
+    try {
+      for (const entry of preparation.source_entries) {
+        const targetKey = `${objectPrefix}/${entry.path}`
+        await objectStore.copyObject(ctx, {
+          fromKey: entry.source_key,
+          toKey: targetKey,
+        })
+        copiedKeys.push(targetKey)
+        await objectStore.syncMetadata(ctx, targetKey)
+        const metadata = await objectStore.getMetadata(ctx, targetKey)
+        const size = typeof metadata?.size === "number" && Number.isFinite(metadata.size) ? metadata.size : entry.size
+        manifestEntries.push({
+          path: entry.path,
+          key: targetKey,
+          size,
+          // Copied run artifacts do not reliably expose checksum metadata.
+          // Keep the field canonical in the snapshot manifest, but allow it to be empty.
+          sha256: metadata?.sha256 || "",
+        })
+        totalBytes += size
+      }
+
+      const manifestJson = serializeSnapshotManifest(manifestEntries, objectPrefix)
+      const manifestHash = await sha256Hex(manifestJson)
+      await objectStore.putTextObject(ctx, manifestKey, manifestJson, {
+        contentType: "application/json",
+      })
+      copiedKeys.push(manifestKey)
+      await objectStore.syncMetadata(ctx, manifestKey)
+
+      return await ctx.runMutation(internal.serves.internalInsertCreatedServe, {
+        userId: args.userId,
+        environmentId: args.environmentId,
+        enqueueProvisioning: args.enqueueProvisioning,
+        serveConfig: preparation.serve_config,
+        modelSnapshot: {
+          sourceType: preparation.source.source_type,
+          sourceRunId:
+            preparation.source.source_type === "run" && preparation.source.source_run_id
+              ? (preparation.source.source_run_id as Id<"runs">)
+              : undefined,
+          sourceObjectPrefix: preparation.source.source_object_prefix || undefined,
+          sourceModelPath: preparation.source.source_model_path || undefined,
+          objectPrefix,
+          manifestKey,
+          manifestHash,
+          objectCount: manifestEntries.length,
+          totalBytes,
+        },
+      })
+    } catch (error) {
+      for (const key of copiedKeys) {
+        try {
+          await objectStore.deleteObject(ctx, key)
+        } catch {
+          // Best-effort cleanup only.
+        }
+      }
+      throw error
+    }
+  },
+})
+
+export const internalInsertCreatedServe = internalMutation({
+  args: {
+    userId: v.string(),
+    environmentId: v.id("environments"),
+    enqueueProvisioning: v.optional(v.boolean()),
+    serveConfig: resolvedServeConfigValidator,
+    modelSnapshot: persistedModelSnapshotValidator,
+  },
+  returns: serveResponseValidator,
+  handler: async (ctx, args) => {
+    return createServeForUserId(ctx, args)
+  },
+})
+
+export const internalDeleteRemovedServeRecords = internalMutation({
+  args: { serveId: v.id("serves") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const row = await ctx.db.get("serves", args.serveId)
+    if (!row) {
+      return null
+    }
+
+    const [events, runtimeLogs] = await Promise.all([
+      ctx.db
+        .query("serveEvents")
+        .withIndex("by_serve", (q) => q.eq("serveId", args.serveId))
+        .collect(),
+      ctx.db
+        .query("serveRuntimeLogs")
+        .withIndex("by_serve", (q) => q.eq("serveId", args.serveId))
+        .collect(),
+    ])
+    await Promise.all(events.map((event) => ctx.db.delete("serveEvents", event._id)))
+    await Promise.all(runtimeLogs.map((runtimeLog) => ctx.db.delete("serveRuntimeLogs", runtimeLog._id)))
+    await ctx.db.delete("serves", args.serveId)
+    return null
+  },
+})
+
+export const internalRemove = internalAction({
+  args: { userId: v.string(), serveId: v.id("serves") },
+  returns: v.object({ deleted: v.boolean(), serve_id: v.string() }),
+  handler: async (ctx, args): Promise<{ deleted: boolean; serve_id: string }> => {
+    const payload: ServeRemovalPayload = await ctx.runQuery(internal.serves.internalGetRemovalPayload, args)
+    await deleteServeSnapshotObjects(ctx, payload)
+    if (payload.compute_session_id) {
+      await ctx.runAction(internal.computeSessions.internalTerminateStaleEnvironmentSession, {
+        userId: payload.user_id,
+        environmentId: payload.environment_id as Id<"environments">,
+        computeSessionId: payload.compute_session_id as Id<"computeSessions">,
+        reason: "serve_delete",
+      })
+    } else if (payload.provider_machine_id && !TERMINAL_SERVE_STATUSES.has(payload.status)) {
+      await enqueueTerminateServeMachineJob(
+        ctx,
+        createTerminateServeMachineJob({
+          serveId: payload.serve_id,
+          providerMachineId: payload.provider_machine_id,
+          force: true,
+        }),
+      )
+    }
+    await ctx.runMutation(internal.serves.internalDeleteRemovedServeRecords, {
+      serveId: args.serveId,
+    })
+    return {
+      deleted: true,
+      serve_id: payload.serve_id,
+    }
+  },
+})
+
+export const internalStop = internalMutation({
+  args: {
+    userId: v.string(),
+    serveId: v.id("serves"),
+    force: v.optional(v.boolean()),
+  },
+  returns: serveStopResponseValidator,
+  handler: async (ctx, args) => {
+    return stopServeForUserId(ctx, args.userId, args.serveId, args.force === true)
+  },
+})
+
+export const internalGetProvisioningPayload = internalQuery({
+  args: { serveId: v.id("serves") },
+  returns: serveProvisioningPayloadValidator,
+  handler: async (ctx, args): Promise<ServeProvisioningPayload> => {
+    const row = await ctx.db.get("serves", args.serveId)
+    if (!row) {
+      throw new ConvexError("serve not found")
+    }
+    const environment = await ctx.db.get(row.environmentId)
+    if (!environment) {
+      throw new ConvexError("environment not found")
+    }
+    const dependencyGroup = resolveConfiguredDependencyGroup({
+      dependencyGroup: row.dependencyGroup,
+    })
+    if (dependencyGroup === null) {
+      throw new ConvexError("serve dependency selection is missing")
+    }
+    if (!row.computeSessionId) {
+      throw new ConvexError("serve compute session is required")
+    }
+    return {
+      serve_id: String(row._id),
+      compute_session_id: String(row.computeSessionId),
+      environment_id: String(row.environmentId),
+      environment_data_id: environment.dataId,
+      user_id: row.userId,
+      command: row.command,
+      dependency_group: dependencyGroup,
+      output_dir: row.outputDir,
+      logs_path: row.logs,
+      code_manifest_hash: row.codeManifestHash || null,
+      data_manifest_hash: row.dataManifestHash || null,
+      model_manifest_key: row.modelSnapshot.manifestKey,
+      model_manifest_hash: row.modelSnapshot.manifestHash,
+      contract_version: "serve.v1",
+      port: row.port,
+      health_path: row.healthPath,
+      startup_timeout_seconds: row.startupTimeoutSeconds,
+      graceful_shutdown_seconds: row.gracefulShutdownSeconds,
+    }
+  },
+})
+
+export const internalGetServeProvisionSpec = internalQuery({
+  args: { serveId: v.id("serves") },
+  returns: serveProvisionSpecValidator,
+  handler: async (ctx, args): Promise<ServeProvisionSpec> => {
+    const row = await ctx.db.get("serves", args.serveId)
+    if (!row) {
+      throw new ConvexError("serve not found")
+    }
+    if (!row.computeSessionId) {
+      throw new ConvexError("serve compute session is required")
+    }
+    const session = await ctx.db.get(row.computeSessionId)
+    if (!session) {
+      throw new ConvexError("serve compute session not found")
+    }
+    return {
+      serve_id: String(row._id),
+      effective_gpu_type: session.effectiveGpuType,
+      effective_gpu_count: session.effectiveGpuCount,
+      effective_volume_gb: session.effectiveVolumeGb,
+      framework: session.framework,
+      version: session.frameworkVersion,
+      python_version: session.pythonVersion,
+      port: row.port,
+      startup_timeout_seconds: row.startupTimeoutSeconds,
+    }
+  },
+})
+
+export const internalShouldAbortProvisioning = internalQuery({
+  args: { serveId: v.id("serves") },
+  returns: v.boolean(),
+  handler: async (ctx, args) => {
+    const row = await ctx.db.get("serves", args.serveId)
+    if (!row) {
+      return true
+    }
+    return row.status === SERVE_STATUS.STOPPING || TERMINAL_SERVE_STATUSES.has(row.status)
+  },
+})
+
+export const internalGetStartupTimeoutState = internalQuery({
+  args: { serveId: v.id("serves") },
+  returns: startupTimeoutStateValidator,
+  handler: async (ctx, args): Promise<StartupTimeoutState | null> => {
+    const row = await ctx.db.get("serves", args.serveId)
+    if (!row) {
+      return null
+    }
+    return {
+      status: row.status,
+      providerMachineId: row.providerMachineId || null,
+    }
+  },
+})
+
+export const setRuntimeTokenHash = internalMutation({
+  args: {
+    serveId: v.id("serves"),
+    runtimeTokenHash: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const row = await ctx.db.get("serves", args.serveId)
+    if (!row || !row.computeSessionId || row.status === SERVE_STATUS.STOPPING || TERMINAL_SERVE_STATUSES.has(row.status)) {
+      return null
+    }
+    await ctx.db.patch("computeSessions", row.computeSessionId, { runtimeTokenHash: args.runtimeTokenHash })
+    return null
+  },
+})
+
+export const internalValidateRuntimeToken = internalQuery({
+  args: { serveId: v.id("serves"), tokenHash: v.string() },
+  returns: v.boolean(),
+  handler: async (ctx, args) => {
+    const row = await ctx.db.get("serves", args.serveId)
+    if (!row?.computeSessionId) {
+      return false
+    }
+    const session = await ctx.db.get(row.computeSessionId)
+    return !!session?.runtimeTokenHash && session.runtimeTokenHash === args.tokenHash
+  },
+})
+
+export const internalGetRuntimeBootstrapContext = internalQuery({
+  args: { serveId: v.id("serves") },
+  returns: runtimeBootstrapContextValidator,
+  handler: async (ctx, args): Promise<RuntimeBootstrapContext> => {
+    const row = await ctx.db.get("serves", args.serveId)
+    if (!row) {
+      throw new ConvexError("serve not found")
+    }
+    const environment = await ctx.db.get(row.environmentId)
+    if (!environment) {
+      throw new ConvexError("environment not found")
+    }
+    const dependencyGroup = resolveConfiguredDependencyGroup({
+      dependencyGroup: row.dependencyGroup,
+    })
+    if (dependencyGroup === null) {
+      throw new ConvexError("serve dependency selection is missing")
+    }
+    return {
+      serve_id: String(row._id),
+      environment_id: String(row.environmentId),
+      environment_data_id: environment.dataId,
+      workspace_root: "/workspace",
+      model_root: "/workspace/model",
+      output_dir: row.outputDir,
+      logs_path: row.logs,
+      command: row.command,
+      dependency_group: dependencyGroup,
+      code_manifest_hash: row.codeManifestHash || null,
+      data_manifest_hash: row.dataManifestHash || null,
+      python_version: row.pythonVersion,
+      port: row.port,
+      health_path: row.healthPath,
+      startup_timeout_seconds: row.startupTimeoutSeconds,
+      health_interval_seconds: row.healthIntervalSeconds,
+      health_timeout_seconds: row.healthTimeoutSeconds,
+      health_failure_threshold: row.healthFailureThreshold,
+      graceful_shutdown_seconds: row.gracefulShutdownSeconds,
+      model_snapshot: toServeResponse(row).model_snapshot,
+    }
+  },
+})
+
+export const internalGetRuntimeBootstrapPlan = internalAction({
+  args: { serveId: v.id("serves") },
+  returns: runtimeBootstrapPlanValidator,
+  handler: async (ctx, args): Promise<RuntimeBootstrapPlan> => {
+    const bootstrap: RuntimeBootstrapContext = await ctx.runQuery(internal.serves.internalGetRuntimeBootstrapContext, {
+      serveId: args.serveId,
+    })
+    if (!bootstrap.code_manifest_hash) {
+      throw new Error("missing pinned code manifest hash on serve")
+    }
+
+    const codeManifest = await fetchSyncManifest(
+      ctx,
+      "code",
+      storageKeys.manifestObjectKey(
+        bootstrap.environment_id,
+        bootstrap.environment_data_id,
+        "code",
+        bootstrap.code_manifest_hash,
+      ),
+      bootstrap.code_manifest_hash,
+    )
+    const codeEntries = await resolveSyncManifestDownloadEntries(ctx, "code", codeManifest)
+
+    let dataEntries: RuntimeBootstrapEntry[] = []
+    if (bootstrap.data_manifest_hash) {
+      const dataManifest = await fetchSyncManifest(
+        ctx,
+        "data",
+        storageKeys.manifestObjectKey(
+          bootstrap.environment_id,
+          bootstrap.environment_data_id,
+          "data",
+          bootstrap.data_manifest_hash,
+        ),
+        bootstrap.data_manifest_hash,
+      )
+      dataEntries = await resolveSyncManifestDownloadEntries(ctx, "data", dataManifest)
+    }
+
+    const modelManifest = await fetchServeSnapshotManifest(
+      ctx,
+      bootstrap.model_snapshot.manifest_key,
+      bootstrap.model_snapshot.manifest_hash,
+    )
+    const modelEntries = await resolveServeSnapshotDownloadEntries(ctx, modelManifest)
+
+    return {
+      serve_id: bootstrap.serve_id,
+      contract_version: "serve.v1",
+      environment_id: bootstrap.environment_id,
+      workspace_root: bootstrap.workspace_root,
+      model_root: bootstrap.model_root,
+      output_dir: bootstrap.output_dir,
+      logs_path: bootstrap.logs_path,
+      command: bootstrap.command,
+      dependency_group: bootstrap.dependency_group,
+      code: {
+        manifest_hash: bootstrap.code_manifest_hash,
+        entries: codeEntries,
+      },
+      data: {
+        manifest_hash: bootstrap.data_manifest_hash,
+        entries: dataEntries,
+      },
+      model: {
+        manifest_hash: bootstrap.model_snapshot.manifest_hash,
+        entries: modelEntries,
+      },
+      python_version: bootstrap.python_version,
+      port: bootstrap.port,
+      health_path: bootstrap.health_path,
+      startup_timeout_seconds: bootstrap.startup_timeout_seconds,
+      health_interval_seconds: bootstrap.health_interval_seconds,
+      health_timeout_seconds: bootstrap.health_timeout_seconds,
+      health_failure_threshold: bootstrap.health_failure_threshold,
+      graceful_shutdown_seconds: bootstrap.graceful_shutdown_seconds,
+      model_snapshot: bootstrap.model_snapshot,
+    }
+  },
+})
+
+export const enforceProvisioningStartupTimeout = internalAction({
+  args: {
+    serveId: v.id("serves"),
+    providerMachineId: v.string(),
+    startupTimeoutSeconds: v.number(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const state = await ctx.runQuery(internal.serves.internalGetStartupTimeoutState, {
+      serveId: args.serveId,
+    })
+    if (!shouldEnforceServeStartupTimeout({ state, providerMachineId: args.providerMachineId })) {
+      return null
+    }
+    const detail = `startup timeout: timed out waiting for serve startup after ${args.startupTimeoutSeconds}s`
+    await ctx.runMutation(internal.serves.markFailed, {
+      serveId: args.serveId,
+      error: detail,
+    })
+    return null
+  },
+})
+
+export const provisionServe = internalAction({
+  args: { serveId: v.id("serves") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const provisioningPayload = await ctx.runQuery(internal.serves.internalGetProvisioningPayload, {
+      serveId: args.serveId,
+    })
+    const serveSpec = await ctx.runQuery(internal.serves.internalGetServeProvisionSpec, {
+      serveId: args.serveId,
+    })
+    await ctx.runMutation(internal.serves.markProvisioning, {
+      serveId: args.serveId,
+      provisioningPayload,
+    })
+    if (await ctx.runQuery(internal.serves.internalShouldAbortProvisioning, { serveId: args.serveId })) {
+      return null
+    }
+    const environmentEnv = await resolveEnvironmentEnvVarsForEnvironmentId(
+      ctx,
+      provisioningPayload.environment_id as Id<"environments">,
+    )
+
+    let provisionedProviderMachineId = ""
+    let provisionedProviderCreationTime: number | undefined
+    let runtimeTokenHash = ""
+    try {
+      if (!provisioningPayload.code_manifest_hash) {
+        throw new Error("missing pinned code manifest hash on serve")
+      }
+
+      await fetchSyncManifest(
+        ctx,
+        "code",
+        storageKeys.manifestObjectKey(
+          provisioningPayload.environment_id,
+          provisioningPayload.environment_data_id,
+          "code",
+          provisioningPayload.code_manifest_hash,
+        ),
+        provisioningPayload.code_manifest_hash,
+      )
+      if (provisioningPayload.data_manifest_hash) {
+        await fetchSyncManifest(
+          ctx,
+          "data",
+          storageKeys.manifestObjectKey(
+            provisioningPayload.environment_id,
+            provisioningPayload.environment_data_id,
+            "data",
+            provisioningPayload.data_manifest_hash,
+          ),
+          provisioningPayload.data_manifest_hash,
+        )
+      }
+      await fetchServeSnapshotManifest(
+        ctx,
+        provisioningPayload.model_manifest_key,
+        provisioningPayload.model_manifest_hash,
+      )
+
+      const provisionResult = await provisionRuntimeMachine({
+        ctx,
+        shouldAbort: async () =>
+          await ctx.runQuery(internal.serves.internalShouldAbortProvisioning, { serveId: args.serveId }),
+        setRuntimeTokenHash: async (nextRuntimeTokenHash) => {
+          runtimeTokenHash = nextRuntimeTokenHash
+          await ctx.runMutation(internal.serves.setRuntimeTokenHash, {
+            serveId: args.serveId,
+            runtimeTokenHash: nextRuntimeTokenHash,
+          })
+        },
+        createMachine: {
+          name: serveProviderMachineName({ computeSessionId: provisioningPayload.compute_session_id }),
+          imageName: resolveImageName(serveSpec.framework, serveSpec.version, serveSpec.python_version),
+          gpuType: serveSpec.effective_gpu_type,
+          gpuCount: serveSpec.effective_gpu_count,
+          volumeGb: serveSpec.effective_volume_gb,
+          ports: ["22/tcp", `${serveSpec.port}/http`],
+        },
+        buildEnv: ({ runtimeToken, runtimeApiBase, runtimeRequestTimeoutSeconds }) =>
+          buildProvisionedRuntimeEnv({
+            defaultEnv: {
+              WANDB_API_KEY: runtimeToken,
+              WANDB_BASE_URL: resolveWandbBaseURL(runtimeApiBase),
+            },
+            environmentEnv,
+            systemEnv: buildServeProvisioningSystemEnv({
+              serveId: provisioningPayload.serve_id,
+              computeSessionId: provisioningPayload.compute_session_id,
+              environmentId: provisioningPayload.environment_id,
+              contractVersion: provisioningPayload.contract_version,
+              outputDir: provisioningPayload.output_dir,
+              runtimeApiBase,
+              runtimeToken,
+              runtimeRequestTimeoutSeconds,
+              gracefulShutdownSeconds: provisioningPayload.graceful_shutdown_seconds,
+            }),
+          }),
+      })
+      if (!provisionResult) {
+        return null
+      }
+      provisionedProviderMachineId = provisionResult.providerMachineId
+      provisionedProviderCreationTime = provisionResult.providerCreationTime
+      if (!runtimeTokenHash) {
+        throw new Error("serve compute session runtime token hash is required")
+      }
+      const machineProvisioning = await ctx.runMutation(internal.computeSessions.internalMarkMachineProvisioned, {
+        computeSessionId: provisioningPayload.compute_session_id as Id<"computeSessions">,
+        providerMachineId: provisionResult.providerMachineId,
+        providerCreationTime: provisionResult.providerCreationTime,
+        runtimeTokenHash,
+      })
+      if (!machineProvisioning.recorded) {
+        await terminateServeMachineProvisionedAfterSessionTermination(ctx, {
+          serveId: args.serveId,
+          computeSessionId: provisioningPayload.compute_session_id as Id<"computeSessions">,
+          providerMachineId: provisionResult.providerMachineId,
+        })
+        return null
+      }
+      await ctx.runMutation(internal.serves.markMachineProvisioned, {
+        serveId: args.serveId,
+        providerMachineId: provisionResult.providerMachineId,
+        startupTimeoutSeconds: serveSpec.startup_timeout_seconds,
+        providerMetadata: provisionResult.providerMetadata,
+      })
+      await ctx.runMutation(internal.computeSessions.internalMarkServingSession, {
+        computeSessionId: provisioningPayload.compute_session_id as Id<"computeSessions">,
+      })
+      if (await ctx.runQuery(internal.serves.internalShouldAbortProvisioning, { serveId: args.serveId })) {
+        await ctx.runAction(internal.computeSessions.internalTerminateStaleEnvironmentSession, {
+          userId: provisioningPayload.user_id,
+          environmentId: provisioningPayload.environment_id as Id<"environments">,
+          computeSessionId: provisioningPayload.compute_session_id as Id<"computeSessions">,
+          serveId: args.serveId,
+          reason: "serve_provisioning_abort",
+        })
+        return null
+      }
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : "serve provisioning failed"
+      if (provisionedProviderMachineId) {
+        const machineProvisioning = await ctx.runMutation(internal.computeSessions.internalMarkMachineProvisioned, {
+          computeSessionId: provisioningPayload.compute_session_id as Id<"computeSessions">,
+          providerMachineId: provisionedProviderMachineId,
+          providerCreationTime: provisionedProviderCreationTime,
+          runtimeTokenHash: runtimeTokenHash || "revoked",
+        })
+        if (!machineProvisioning.recorded) {
+          await terminateServeMachineProvisionedAfterSessionTermination(ctx, {
+            serveId: args.serveId,
+            computeSessionId: provisioningPayload.compute_session_id as Id<"computeSessions">,
+            providerMachineId: provisionedProviderMachineId,
+          })
+          return null
+        }
+      }
+      await ctx.runMutation(internal.serves.markFailed, {
+        serveId: args.serveId,
+        error: `serve provisioning failed: ${detail}`,
+        provisioningPayload,
+      })
+    }
+    return null
+  },
+})
+
+export const markProvisioning = internalMutation({
+  args: {
+    serveId: v.id("serves"),
+    provisioningPayload: v.optional(serveProvisioningPayloadValidator),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const row = await ctx.db.get("serves", args.serveId)
+    if (!row || row.status === SERVE_STATUS.STOPPING || TERMINAL_SERVE_STATUSES.has(row.status)) {
+      return null
+    }
+    await ctx.db.patch("serves", args.serveId, { status: SERVE_STATUS.PROVISIONING })
+    await ctx.db.insert("serveEvents", {
+      serveId: args.serveId,
+      status: SERVE_STATUS.PROVISIONING,
+      message: "serve provisioning started",
+      metadata: args.provisioningPayload
+        ? {
+            provisioning_payload: args.provisioningPayload,
+            fetch_strategy: "serve runtime fetches pinned code/data manifests and the pinned model snapshot into /workspace",
+          }
+        : undefined,
+    })
+    return null
+  },
+})
+
+export const markMachineProvisioned = internalMutation({
+  args: {
+    serveId: v.id("serves"),
+    providerMachineId: v.string(),
+    startupTimeoutSeconds: v.number(),
+    providerMetadata: v.optional(v.any()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const row = await ctx.db.get("serves", args.serveId)
+    if (!row || row.status === SERVE_STATUS.STOPPING || TERMINAL_SERVE_STATUSES.has(row.status)) {
+      return null
+    }
+    await applyServeLifecyclePlan(ctx, args.serveId, row, planServeMachineProvisioned({
+      serve: toServeLifecycleState(row),
+      providerMachineId: args.providerMachineId,
+      providerMetadata: args.providerMetadata,
+      startupTimeout: {
+        delayMs: args.startupTimeoutSeconds * 1000,
+        startupTimeoutSeconds: args.startupTimeoutSeconds,
+      },
+    }))
+    return null
+  },
+})
+
+export const markFailed = internalMutation({
+  args: {
+    serveId: v.id("serves"),
+    error: v.string(),
+    provisioningPayload: v.optional(serveProvisioningPayloadValidator),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const row = await ctx.db.get("serves", args.serveId)
+    if (!row) {
+      return null
+    }
+    const plan = planServeFailure({
+      serve: toServeLifecycleState(row),
+      error: args.error,
+      provisioningPayload: args.provisioningPayload,
+    })
+    await applyServeLifecyclePlan(ctx, args.serveId, row, plan)
+    if (plan.patch?.status === SERVE_STATUS.FAILED) {
+      await scheduleServeComputeSessionTermination(ctx, row, "serve_failure")
+    }
+    return null
+  },
+})
+
+export const markComputeSessionBillingFailed = internalMutation({
+  args: {
+    serveId: v.id("serves"),
+    computeSessionId: v.id("computeSessions"),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const row = await ctx.db.get("serves", args.serveId)
+    if (!row || row.computeSessionId !== args.computeSessionId) {
+      return null
+    }
+    await applyBareServeLifecyclePlan(ctx, args.serveId, row, planServeComputeSessionBillingFailure({
+      serve: toServeLifecycleState(row),
+      computeSessionId: String(args.computeSessionId),
+    }))
+    return null
+  },
+})
+
+export const markComputeSessionTerminationFailed = internalMutation({
+  args: {
+    serveId: v.id("serves"),
+    computeSessionId: v.id("computeSessions"),
+    error: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const row = await ctx.db.get("serves", args.serveId)
+    if (!row || row.computeSessionId !== args.computeSessionId) {
+      return null
+    }
+    await applyBareServeLifecyclePlan(ctx, args.serveId, row, planServeComputeSessionTerminationFailed({
+      serve: toServeLifecycleState(row),
+      computeSessionId: String(args.computeSessionId),
+      error: args.error,
+    }))
+    return null
+  },
+})
+
+export const markStoppedAfterTermination = internalMutation({
+  args: {
+    serveId: v.id("serves"),
+    force: v.optional(v.boolean()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const row = await ctx.db.get("serves", args.serveId)
+    if (!row) {
+      return null
+    }
+    await applyServeLifecyclePlan(ctx, args.serveId, row, planServeStoppedAfterTermination({
+      serve: toServeLifecycleState(row),
+      force: args.force === true,
+    }))
+    return null
+  },
+})
+
+export const markStoppedAfterComputeSessionTermination = internalMutation({
+  args: {
+    serveId: v.id("serves"),
+    computeSessionId: v.id("computeSessions"),
+    force: v.optional(v.boolean()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const row = await ctx.db.get("serves", args.serveId)
+    if (!row || row.computeSessionId !== args.computeSessionId) {
+      return null
+    }
+    await applyBareServeLifecyclePlan(ctx, args.serveId, row, planServeStoppedAfterTermination({
+      serve: toServeLifecycleState(row),
+      force: args.force === true,
+    }))
+    return null
+  },
+})
+
+export const markStopTerminationFailed = internalMutation({
+  args: {
+    serveId: v.id("serves"),
+    error: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const row = await ctx.db.get("serves", args.serveId)
+    if (!row) {
+      return null
+    }
+    await applyServeLifecyclePlan(ctx, args.serveId, row, planServeStopTerminationFailed({
+      serve: toServeLifecycleState(row),
+      error: args.error,
+    }))
+    return null
+  },
+})
+
+export const recordTerminationFailure = internalMutation({
+  args: {
+    serveId: v.id("serves"),
+    error: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const row = await ctx.db.get("serves", args.serveId)
+    if (!row) {
+      return null
+    }
+    await ctx.db.insert("serveEvents", {
+      serveId: args.serveId,
+      status: row.status,
+      message: "serve machine termination failed",
+      metadata: {
+        error: sanitizeRuntimeMessage(args.error) || "failed to terminate serve machine",
+        source: "control-plane",
+      },
+    })
+    return null
+  },
+})
+
+export const scheduleTerminationRetry = internalMutation({
+  args: {
+    serveId: v.id("serves"),
+    providerMachineId: v.string(),
+    force: v.optional(v.boolean()),
+    attempt: v.number(),
+    error: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const row = await ctx.db.get("serves", args.serveId)
+    if (!row) {
+      return null
+    }
+    await applyServeLifecyclePlan(ctx, args.serveId, row, planServeTerminationRetry({
+      serve: toServeLifecycleState(row),
+      providerMachineId: args.providerMachineId,
+      force: args.force === true,
+      attempt: args.attempt,
+      maxAttempts: RUN_CONFIG.terminationRetryMaxAttempts,
+      delayMs: RUN_CONFIG.terminationRetryDelaySeconds * 1000,
+      error: args.error,
+    }))
+    return null
+  },
+})
+
+export const internalTerminateMachine = internalAction({
+  args: {
+    serveId: v.id("serves"),
+    providerMachineId: v.string(),
+    force: v.optional(v.boolean()),
+    attempt: v.optional(v.number()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await terminateRuntimeMachineWithRetry({
+      ctx,
+      providerMachineId: args.providerMachineId,
+      attempt: args.attempt ?? 0,
+      shouldTerminate: async () => {
+        if (args.force === true) {
+          return true
+        }
+        const state = await ctx.runQuery(internal.serves.internalGetStartupTimeoutState, {
+          serveId: args.serveId,
+        })
+        return !!state && state.status === SERVE_STATUS.STOPPING
+      },
+      onTerminated: async () => {
+        await ctx.runMutation(internal.serves.markStoppedAfterTermination, {
+          serveId: args.serveId,
+          force: args.force === true,
+        })
+      },
+      onRetry: async ({ nextAttempt, error }) => {
+        if (nextAttempt < RUN_CONFIG.terminationRetryMaxAttempts) {
+          await ctx.runMutation(internal.serves.scheduleTerminationRetry, {
+            serveId: args.serveId,
+            providerMachineId: args.providerMachineId,
+            force: args.force === true,
+            attempt: nextAttempt,
+            error,
+          })
+          return
+        }
+
+        const latestState = await ctx.runQuery(internal.serves.internalGetStartupTimeoutState, {
+          serveId: args.serveId,
+        })
+        if (latestState?.status === SERVE_STATUS.STOPPING) {
+          await ctx.runMutation(internal.serves.markStopTerminationFailed, {
+            serveId: args.serveId,
+            error: `${error} (retries exhausted)`,
+          })
+          return
+        }
+        await ctx.runMutation(internal.serves.recordTerminationFailure, {
+          serveId: args.serveId,
+          error: `${error} (retries exhausted)`,
+        })
+      },
+    })
+    return null
+  },
+})
+
+export const ingestRuntimeLogs = internalMutation({
+  args: {
+    serveId: v.id("serves"),
+    lines: v.array(runtimeLogLineValidator),
+  },
+  returns: v.object({ accepted: v.number() }),
+  handler: async (ctx, args) => {
+    const row = await ctx.db.get("serves", args.serveId)
+    if (!row || TERMINAL_SERVE_STATUSES.has(row.status)) {
+      return { accepted: 0 }
+    }
+    let accepted = 0
+    for (const line of args.lines.slice(0, 500)) {
+      const message = sanitizeRuntimeMessage(line.message)
+      if (!message) {
+        continue
+      }
+      await ctx.db.insert("serveRuntimeLogs", {
+        serveId: args.serveId,
+        timestamp: normalizeRuntimeTimestamp(line.timestamp),
+        level: normalizeRuntimeLevel(line.level),
+        source: normalizeRuntimeSource(line.source),
+        message,
+      })
+      accepted += 1
+    }
+    return { accepted }
+  },
+})
+
+export const ingestRuntimeStatus = internalMutation({
+  args: {
+    serveId: v.id("serves"),
+    status: runtimeStatusValidator,
+    message: v.optional(v.string()),
+    error: v.optional(v.string()),
+  },
+  returns: v.object({ status: v.string() }),
+  handler: async (ctx, args) => {
+    const row = await ctx.db.get("serves", args.serveId)
+    if (!row) {
+      return { status: "missing" }
+    }
+    const plan = planServeRuntimeStatusIngestion({
+      serve: toServeLifecycleState(row),
+      status: args.status as ServeLifecycleStatus,
+      message: args.message,
+      error: args.error,
+      nowMs: Date.now(),
+    })
+    if (plan.error) {
+      throw new ConvexError(plan.error)
+    }
+    await applyServeLifecyclePlan(ctx, args.serveId, row, plan)
+    if (plan.patch?.status === SERVE_STATUS.FAILED) {
+      await scheduleServeComputeSessionTermination(ctx, row, "serve_runtime_failure")
+    }
+
+    return { status: plan.resultStatus }
+  },
+})

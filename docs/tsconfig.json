@@ -1,0 +1,23 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "strict": true,
+    "noEmit": true,
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "react-jsx",
+    "skipLibCheck": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"],
+      "app/*": ["./app/*"],
+      "collections/*": ["./.source/*"]
+    },
+    "types": ["vite/client"]
+  },
+  "include": ["src", "app", "source.config.ts", "vite.config.ts", ".source/**/*.ts"],
+  "exclude": ["node_modules", "dist"]
+}

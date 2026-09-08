@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    width: 1200px;
+    height: 630px;
+    overflow: hidden;
+    background: #000;
+    font-family: -apple-system, "Inter", sans-serif;
+    color: #fafaf9;
+    position: relative;
+  }
+
+  .gradient {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: right center;
+    opacity: 0.6;
+  }
+
+  /* hard fade to pure black on the left — logo stays readable */
+  .gradient-mask {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(to right, #000 30%, transparent 65%, #000 100%);
+  }
+
+  .content {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 56px 72px;
+    gap: 16px;
+  }
+
+  .mark {
+    width: 56px;
+    height: 56px;
+    flex-shrink: 0;
+    border-radius: 12px;
+    margin-bottom: 4px;
+  }
+
+  .wordmark {
+    font-size: 48px;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    line-height: 1;
+    color: #fafaf9;
+  }
+
+  .tagline {
+    font-size: 22px;
+    font-weight: 400;
+    color: rgba(250, 250, 249, 0.5);
+    line-height: 1.4;
+    max-width: 480px;
+  }
+
+  .url {
+    font-size: 16px;
+    font-weight: 500;
+    color: rgba(250, 250, 249, 0.25);
+    letter-spacing: 0.01em;
+    margin-top: 8px;
+  }
+</style>
+</head>
+<body>
+
+  <img
+    class="gradient"
+    src="https://pub-5f7c225fd68446a9b652150d7c7e52e9.r2.dev/assets/artefacts/tahuna-hero-gradient-dark-teal-lime.avif"
+    alt=""
+  />
+  <div class="gradient-mask"></div>
+
+  <div class="content">
+    <img
+      class="mark"
+      src="https://pub-5f7c225fd68446a9b652150d7c7e52e9.r2.dev/assets/favicon/apple-touch-icon.png"
+      alt="Tahuna"
+    />
+
+    <div class="wordmark">tahuna</div>
+
+    <div class="tagline">
+      Post-training infrastructure<br>for adaptive AI systems.
+    </div>
+
+    <div class="url">tahuna.app</div>
+  </div>
+
+</body>
+</html>
