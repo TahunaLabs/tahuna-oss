@@ -1,8 +1,8 @@
 # Contributing to Tahuna
 
-Thanks for helping improve Tahuna. This is a source-available project licensed
-for noncommercial use; contributions are distributed under the same terms in
-[`LICENSE.md`](LICENSE.md).
+Thanks for helping improve Tahuna. This is an open-source project licensed
+under the GNU Affero General Public License v3.0 only; contributions are
+distributed under the same terms in [`LICENSE.md`](LICENSE.md).
 
 ## Before opening a pull request
 

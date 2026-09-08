@@ -2,10 +2,11 @@
 
 Tahuna is a monorepo for GPU provisioning and ML training orchestration.
 
-This repository is source-available under the
-[PolyForm Noncommercial License 1.0.0](LICENSE.md). Noncommercial self-hosting,
-evaluation, research, and modification are permitted by that license;
-commercial use is not. This is not an OSI-approved open-source license.
+Tahuna is open-source software licensed under the
+[GNU Affero General Public License v3.0 only](LICENSE.md). Commercial use is
+permitted. If you modify Tahuna and make that version available to users over
+a network, the license requires you to offer those users the corresponding
+source code.
 
 ## Self-hosted quickstart
 
