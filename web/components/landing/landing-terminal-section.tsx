@@ -1,8 +1,10 @@
 "use client"
 
-import { Check, Copy } from "lucide-react"
+import Link from "next/link"
+import { ArrowRight, Check, Copy } from "lucide-react"
 import { useState } from "react"
 
+import { CLOUD_LINKS_CONFIG } from "@/cloud/links"
 import { TerminalMock } from "@/components/landing/terminal-mock"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -35,13 +37,22 @@ export function LandingTerminalSection() {
             <Badge variant="ghost">Tahuna</Badge>
           </div>
           <h2 className="text-3xl font-semibold tracking-tight text-foreground md:text-4xl">
-            Three commands
+            From local project
             <br />
-            to a remote GPU
+            to GPU run.
           </h2>
           <p className="mt-4 max-w-sm text-base leading-relaxed text-muted-foreground">
-            Initialize your project, choose your compute, and run the same Python code you already use.
+            Configure RunPod and R2 once. Then run any project with the same workflow.
           </p>
+          <p className="mt-3 max-w-sm text-sm leading-relaxed text-muted-foreground">
+            No SDK and no rewrite. Tahuna runs your existing Python entrypoint.
+          </p>
+          <Button asChild variant="outline" size="lg" className="mt-8">
+            <Link href={`${CLOUD_LINKS_CONFIG.repoUrl}#self-hosted-quickstart`} target="_blank" rel="noreferrer">
+              Self-host with Docker
+              <ArrowRight />
+            </Link>
+          </Button>
         </div>
 
         <div className="min-w-0 lg:-mr-12 lg:w-3/5">

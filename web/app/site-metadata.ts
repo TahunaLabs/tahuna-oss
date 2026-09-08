@@ -1,9 +1,9 @@
 import { CDN_CONFIG, NETWORK_CONFIG } from "@/config"
 import type { Metadata } from "next"
 
-const SITE_TITLE = "Tahuna | Open-source ML compute orchestration"
+const SITE_TITLE = "Tahuna | Open-source compute infrastructure"
 const SITE_DESCRIPTION =
-  "Run Python workloads on remote GPUs without managing SSH, file transfers, environment setup, metrics, artifacts, or machine cleanup."
+  "Run ML workloads on remote GPUs. Tahuna syncs your project, runs your Python entrypoint, saves the artifacts, and shuts the machine down."
 
 function faviconAsset(filename: string) {
   return `${CDN_CONFIG.baseUrl}${CDN_CONFIG.faviconPath}/${filename}`

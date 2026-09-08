@@ -9,7 +9,6 @@ import { Button } from "@/components/ui/button"
 import { useTheme } from "@/components/theme-provider"
 
 const NAV_LINKS = [
-  { label: "How it works", href: "/#capabilities", external: false },
   { label: "Quickstart", href: CLOUD_LINKS_CONFIG.quickstartUrl, external: true },
   { label: "Dashboard", href: "/dashboard", external: false },
   { label: "Docs", href: CLOUD_LINKS_CONFIG.docsUrl, external: true },
@@ -18,14 +17,6 @@ const NAV_LINKS = [
 
 export function LandingNav() {
   const { theme, setTheme } = useTheme()
-
-  const handleAnchorClick = (event: React.MouseEvent<HTMLAnchorElement>, href: string) => {
-    if (!href.startsWith("#")) return
-    const target = document.getElementById(href.slice(1))
-    if (!target) return
-    event.preventDefault()
-    target.scrollIntoView({ behavior: "smooth", block: "start" })
-  }
 
   return (
     <header className="sticky top-0 z-50 flex h-14 shrink-0 items-center border-b border-border bg-background/95 px-4 backdrop-blur md:px-8">
@@ -40,9 +31,7 @@ export function LandingNav() {
                   {label}
                 </a>
               ) : (
-                <Link href={href} onClick={(event) => handleAnchorClick(event, href)}>
-                  {label}
-                </Link>
+                <Link href={href}>{label}</Link>
               )}
             </Button>
           ))}
@@ -61,7 +50,9 @@ export function LandingNav() {
           <Link href="/login">Log in</Link>
         </Button>
         <Button size="sm" asChild>
-          <Link href="/login">Run a job</Link>
+          <Link href={`${CLOUD_LINKS_CONFIG.repoUrl}#5-run-the-mnist-example`} target="_blank" rel="noreferrer">
+            Run the example
+          </Link>
         </Button>
       </div>
     </header>

@@ -8,13 +8,13 @@ export type TerminalStep = { kind: "command" | "status"; value: string }
 export const DEFAULT_TERMINAL_STEPS: TerminalStep[] = [
   { kind: "command", value: "$ tahuna init ." },
   { kind: "status", value: "project configured" },
-  { kind: "status", value: "entrypoint detected, environment initialized" },
-  { kind: "command", value: "$ tahuna sync" },
-  { kind: "status", value: "syncing code, data, env config" },
+  { kind: "status", value: "Python entrypoint detected" },
   { kind: "command", value: "$ tahuna train" },
-  { kind: "status", value: "provisioning L4" },
-  { kind: "status", value: "training mnist on cuda" },
+  { kind: "status", value: "syncing project and data" },
+  { kind: "status", value: "provisioning RunPod L4" },
+  { kind: "status", value: "running train.py on cuda" },
   { kind: "status", value: "streaming logs and metrics" },
+  { kind: "status", value: "artifacts saved, compute terminated" },
 ]
 
 type TerminalMockProps = {

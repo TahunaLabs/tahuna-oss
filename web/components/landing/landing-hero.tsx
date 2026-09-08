@@ -46,28 +46,28 @@ export function LandingHero() {
       <div className="relative mx-auto flex max-w-7xl flex-col gap-12 lg:flex-row lg:items-stretch">
         <div className="flex min-w-0 max-w-2xl flex-1 flex-col justify-center lg:max-w-none">
           <p className="mb-3 text-xs uppercase tracking-ui-eyebrow text-muted-foreground">
-            Open-source control and compute plane
+            Open-source compute infrastructure
           </p>
           <h1 className="font-serif text-3xl tracking-tight text-foreground md:text-4xl">
-            <span className="lg:block">Run your Python project </span>{" "}
-            <span className="italic lg:block lg:whitespace-nowrap">on remote GPUs</span>
+            <span className="lg:block">Run your ML workloads </span>{" "}
+            <span className="italic lg:block lg:whitespace-nowrap">on remote GPUs.</span>
           </h1>
 
           <p className="mt-5 max-w-2xl text-base leading-relaxed text-muted-foreground md:text-lg">
-            Tahuna syncs your code and data, provisions a GPU, recreates your environment, runs your workload,
-            streams logs and metrics, persists artifacts, and shuts down the compute afterward.
+            Tahuna syncs your project, starts the GPU, runs your Python entrypoint, streams the output, saves the
+            artifacts, and shuts the machine down.
           </p>
 
           <div className="mt-8 flex flex-col items-start gap-3 sm:flex-row">
             <Button asChild variant="default" size="lg">
-              <Link href="/login">
-                Run a job
+              <Link href={`${CLOUD_LINKS_CONFIG.repoUrl}#5-run-the-mnist-example`} target="_blank" rel="noreferrer">
+                Run the MNIST example
                 <ArrowRight />
               </Link>
             </Button>
             <Button asChild variant="outline" size="lg">
-              <Link href={`${CLOUD_LINKS_CONFIG.repoUrl}#self-hosted-quickstart`} target="_blank" rel="noreferrer">
-                Self-host Tahuna
+              <Link href={CLOUD_LINKS_CONFIG.repoUrl} target="_blank" rel="noreferrer">
+                View on GitHub
                 <ArrowRight />
               </Link>
             </Button>

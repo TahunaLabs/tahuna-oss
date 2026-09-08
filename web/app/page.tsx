@@ -5,9 +5,9 @@ import type { Metadata } from "next"
 import { redirect } from "next/navigation"
 
 export const metadata: Metadata = {
-  title: "Tahuna | Open-source ML compute orchestration",
+  title: "Tahuna | Open-source compute infrastructure",
   description:
-    "Run Python workloads on remote GPUs without managing SSH, file transfers, environment setup, metrics, artifacts, or machine cleanup.",
+    "Run ML workloads on remote GPUs. Tahuna syncs your project, runs your Python entrypoint, saves the artifacts, and shuts the machine down.",
   alternates: { canonical: "/" },
 }
 

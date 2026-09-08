@@ -12,18 +12,16 @@ Sections, in order:
 
 - top navigation
 - hero with animated product screenshot slideshow
-- compute-orchestration workflow
 - install and terminal section
-- final CTA
 - footer
 
 ## Hero
 
 Current headline:
 
-> Run your Python project on remote GPUs.
+> Run your ML workloads on remote GPUs.
 
-Eyebrow: "Open-source control and compute plane"
+Eyebrow: "Open-source compute infrastructure"
 
 Supporting copy describes the complete current run lifecycle: code and data
 sync, GPU provisioning, environment reconstruction, workload execution, live
@@ -32,19 +30,10 @@ logs and metrics, artifact persistence, and compute cleanup.
 The hero includes a rotating product screenshot (`HeroProduct`) cycling through
 Overview, Runs, Run, and Environments screens. Slides rotate every 4.5 seconds.
 
-Primary actions:
+Primary actions link directly to the public repository:
 
-- `Run a job` links to `/login`.
-- `Self-host Tahuna` links to the repository quickstart.
-
-## How It Works
-
-Four stages presented in a two-column grid:
-
-- sync a project as content-addressed code and data snapshots
-- provision a remote GPU and reconstruct the environment
-- execute the configured Python entrypoint with live logs and metrics
-- persist output artifacts and terminate the compute
+- `Run the MNIST example` links to the checked-in example instructions.
+- `View on GitHub` links to the repository root.
 
 ## Install Section
 
@@ -53,16 +42,14 @@ The install section shows stable and nightly install commands:
 - `curl -fsSL https://tahuna.app/install.sh | bash`
 - `curl -fsSL https://tahuna.app/install.sh | bash -s -- --channel nightly`
 
-It also presents the basic CLI loop:
+It presents the minimal CLI loop:
 
 - `tahuna init .`
-- `tahuna sync`
 - `tahuna train`
 
-## CTA Section
-
-The final CTA invites the visitor to run a first GPU job and links to the
-quickstart and source repository. It does not use enterprise sales language.
+The section links to the Docker self-hosting instructions. It states that RunPod
+and R2 are configured once and that Tahuna runs the project's existing Python
+entrypoint without requiring an SDK or code rewrite.
 
 ## Invariants
 

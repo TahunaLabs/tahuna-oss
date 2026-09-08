@@ -1,6 +1,6 @@
 # Tahuna
 
-> Open-source control and compute plane for ML workloads. Run your Python code on remote GPUs while Tahuna handles the infrastructure around it.
+> Open-source compute infrastructure. Run your ML workloads on remote GPUs while Tahuna handles the infrastructure around them.
 
 Tahuna is a CLI-first compute orchestration platform for ML engineers, AI researchers, and agent builders who need remote GPUs without rebuilding the surrounding infrastructure for every workload. You bring your Python code, framework, dependencies, and data; Tahuna handles code and data sync, GPU provisioning, dependency installation, run execution, log and metric streaming, artifact persistence, and compute cleanup.
 

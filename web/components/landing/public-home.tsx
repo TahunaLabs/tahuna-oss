@@ -1,5 +1,3 @@
-import { LandingCapabilitiesSection } from "@/components/landing/landing-capabilities-section"
-import { LandingCtaSection } from "@/components/landing/landing-cta-section"
 import { LandingFooter } from "@/components/landing/landing-footer"
 import { LandingHero } from "@/components/landing/landing-hero"
 import { LandingNav } from "@/components/landing/landing-nav"
@@ -16,9 +14,7 @@ export function PublicHome() {
         <LandingNav />
         <main>
           <LandingHero />
-          <LandingCapabilitiesSection />
           <LandingTerminalSection />
-          <LandingCtaSection />
         </main>
         <LandingFooter />
       </div>
