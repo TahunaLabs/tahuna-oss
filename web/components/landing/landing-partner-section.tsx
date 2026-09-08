@@ -4,30 +4,31 @@ import { ArrowRight, Plus } from "lucide-react"
 import { DotGrid } from "@/components/landing/section-decorations"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
+import { CLOUD_LINKS_CONFIG } from "@/cloud/links"
 
 const steps = [
   {
     step: "Step 1",
-    title: "AI Opportunity Audit",
-    body: "We run a structured audit of how work moves through your product and organization — across teams, systems, and decision points. The goal is to pinpoint where AI can reduce operational overhead, accelerates execution, or replaces manual coordination entirely.",
+    title: "Compute orchestration",
+    body: "Available now. Sync a project, provision remote GPUs, reconstruct its environment, execute the workload, and collect the results.",
   },
   {
     step: "Step 2",
-    title: "Architecture & Design",
-    body: "We design and build the model-improvement loop that will power the workflow — integrating your company's context, data, and operational logic behind the process.",
+    title: "Training and inference workflows",
+    body: "Coming next. Higher-level primitives for training models and running the checkpoints those jobs produce.",
   },
   {
     step: "Step 3",
-    title: "Production Deployment",
-    body: "Tahuna deploys the loop into your enterprise stack, connecting it to live systems and workflows so the model starts improving on real production work. Everything is built on top of your existing software — no migrations required.",
+    title: "Observability",
+    body: "Coming next. Connect production traces, feedback, evaluations, and outcomes to the workloads that produced them.",
   },
 ] as const
 
 const selfServeItems = [
-  "Instant access",
-  "CLI & full documentation",
-  "Bring your own training loop",
-  "Usage-based pricing",
+  "Compute providers",
+  "Storage backends",
+  "Runtime images",
+  "Framework adapters",
 ] as const
 
 function ColumnLabel({ children }: { children: string }) {
@@ -41,29 +42,29 @@ export function LandingPartnerSection() {
       <div className="relative mx-auto max-w-7xl">
         <div className="mb-12 flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
           <div className="max-w-2xl">
-            <p className="mb-3 text-xs uppercase tracking-ui-eyebrow text-muted-foreground">How we partner</p>
+            <p className="mb-3 text-xs uppercase tracking-ui-eyebrow text-muted-foreground">What we are building</p>
             <h2 className="text-3xl font-semibold leading-tight tracking-tight text-foreground md:text-4xl">
-              Frontier ML,
+              Three primitives,
               <br />
-              Embedded in your stack
+              built in the open
             </h2>
           </div>
           <p className="max-w-md text-base leading-relaxed text-muted-foreground md:text-right">
-            We pair frontier ML — RL post-training, long-horizon agents — with real enterprise
-            deployment, embedded in your team.
+            Compute orchestration is available today. Higher-level training and inference workflows, followed by
+            observability, are next.
           </p>
         </div>
 
         <Card variant="default" className="overflow-hidden border-border bg-card/95">
           <CardContent className="p-0">
             <div className="grid md:grid-cols-2">
-              {/* Forward-deployed — hover to reveal each step */}
               <div className="flex flex-col border-b border-border p-8 md:border-b-0 md:border-r">
-                <ColumnLabel>Forward-deployed</ColumnLabel>
+                <ColumnLabel>Roadmap</ColumnLabel>
 
-                <h3 className="text-2xl font-semibold tracking-tight text-foreground">We embed with your team</h3>
+                <h3 className="text-2xl font-semibold tracking-tight text-foreground">Compute is available today</h3>
                 <p className="mt-4 text-sm leading-relaxed text-muted-foreground">
-                  Our engineers work alongside yours — from first audit to a model improving in production.
+                  We believe continual learning infrastructure needs three foundations. We are starting with the layer
+                  that makes remote compute usable.
                 </p>
 
                 <div className="mt-6 flex flex-col">
@@ -96,21 +97,21 @@ export function LandingPartnerSection() {
 
                 <div className="mt-auto pt-8">
                   <Button asChild size="lg">
-                    <Link href="https://cal.com/monaimel/15min" target="_blank" rel="noreferrer">
-                      Talk to an engineer
+                    <Link href={CLOUD_LINKS_CONFIG.quickstartUrl} target="_blank" rel="noreferrer">
+                      Read the quickstart
                       <ArrowRight />
                     </Link>
                   </Button>
                 </div>
               </div>
 
-              {/* Self-serve */}
               <div className="flex flex-col p-8">
-                <ColumnLabel>Self-serve</ColumnLabel>
+                <ColumnLabel>Open source</ColumnLabel>
 
-                <h3 className="text-2xl font-semibold tracking-tight text-foreground">Use it however you want</h3>
+                <h3 className="text-2xl font-semibold tracking-tight text-foreground">Add the adapter you need</h3>
                 <p className="mt-4 text-sm leading-relaxed text-muted-foreground">
-                  Your team designs and runs experiments. We manage the training, serving, and infrastructure load.
+                  Tahuna currently supports RunPod and R2. Help us support more infrastructure without forcing users
+                  into one provider.
                 </p>
 
                 <ul className="mt-6 grid gap-3">
@@ -126,8 +127,8 @@ export function LandingPartnerSection() {
 
                 <div className="mt-auto pt-8">
                   <Button asChild size="lg" variant="outline">
-                    <Link href="/login">
-                      Get started
+                    <Link href={CLOUD_LINKS_CONFIG.repoUrl} target="_blank" rel="noreferrer">
+                      Contribute on GitHub
                       <ArrowRight />
                     </Link>
                   </Button>

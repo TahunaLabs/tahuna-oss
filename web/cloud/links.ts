@@ -4,7 +4,7 @@ export const CLOUD_LINKS_CONFIG = {
   environmentsUrl: "https://docs.tahuna.app/environments",
   runsUrl: "https://docs.tahuna.app/runs",
   cliReferenceUrl: "https://docs.tahuna.app/cli",
-  changelogUrl: "https://github.com/TahunaLabs/tahuna/releases",
-  repoUrl: "https://github.com/TahunaLabs/tahuna",
+  changelogUrl: "https://github.com/TahunaLabs/tahuna-oss/releases",
+  repoUrl: "https://github.com/TahunaLabs/tahuna-oss",
   bugReportUrl: "https://insigh.to/b/tahuna/p/tahuna",
 } as const;

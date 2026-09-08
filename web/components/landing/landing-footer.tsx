@@ -26,6 +26,7 @@ const FOOTER_SECTIONS = [
   {
     title: "Resources",
     links: [
+      { label: "Source code", href: CLOUD_LINKS_CONFIG.repoUrl, external: true },
       { label: "Changelog", href: CLOUD_LINKS_CONFIG.changelogUrl, external: true },
     ],
   },
@@ -47,7 +48,7 @@ export function LandingFooter() {
           <div className="flex shrink-0 flex-col gap-4">
             <BrandLockup className="gap-3 text-background" logoClassName="h-14" />
             <p className="text-sm text-background/40">
-              © 2026 Tahuna. All rights reserved.
+              © 2026 Tahuna. Open source under AGPLv3.
             </p>
 
             {/* Credential: NVIDIA Inception member */}

@@ -5,9 +5,9 @@ import type { Metadata } from "next"
 import { redirect } from "next/navigation"
 
 export const metadata: Metadata = {
-  title: "Tahuna | Post-training control plane",
+  title: "Tahuna | Open-source ML compute orchestration",
   description:
-    "Post-training infrastructure for adaptive AI systems. Run your training code on cloud GPUs and build toward models that improve from real usage.",
+    "Run Python workloads on remote GPUs without managing SSH, file transfers, environment setup, metrics, artifacts, or machine cleanup.",
   alternates: { canonical: "/" },
 }
 
@@ -27,7 +27,7 @@ const jsonLd = {
       operatingSystem: "Linux, macOS",
       url: NETWORK_CONFIG.siteUrl,
       description:
-        "Post-training infrastructure for adaptive AI systems. Tahuna runs your training code on cloud GPUs and handles the run lifecycle around it.",
+        "Open-source infrastructure for syncing Python projects, provisioning remote GPUs, running workloads, streaming metrics, and persisting artifacts.",
       offers: {
         "@type": "Offer",
         price: "0",

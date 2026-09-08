@@ -3,6 +3,7 @@ import { ArrowRight } from "lucide-react"
 
 import { Crosshair, DotGrid } from "@/components/landing/section-decorations"
 import { Button } from "@/components/ui/button"
+import { CLOUD_LINKS_CONFIG } from "@/cloud/links"
 
 export function LandingCtaSection() {
   return (
@@ -13,24 +14,23 @@ export function LandingCtaSection() {
       <div className="relative mx-auto max-w-3xl text-center">
         <p className="mb-4 text-xs uppercase tracking-ui-eyebrow text-muted-foreground">Get started</p>
         <h2 className="text-4xl font-semibold leading-display-tight tracking-tight text-foreground md:text-5xl">
-          Don&apos;t rent intelligence.
-          <br />
-          Compound it.
+          Run your first
+          <br />GPU job
         </h2>
         <p className="mx-auto mt-6 max-w-xl text-lg leading-relaxed text-muted-foreground">
-          Bring your code, framework, and training loop. Tahuna handles the reproducible path from production signal to
-          GPU run to deployed model — and does it again every week.
+          Bring a Python project. Tahuna handles the path from your machine to a remote GPU and shuts it down when the
+          work is done.
         </p>
         <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
           <Button asChild size="lg">
-            <Link href="/login">
-              Get started
+            <Link href={CLOUD_LINKS_CONFIG.quickstartUrl} target="_blank" rel="noreferrer">
+              Open the quickstart
               <ArrowRight />
             </Link>
           </Button>
           <Button asChild variant="outline" size="lg">
-            <Link href="https://cal.com/monaimel/15min" target="_blank" rel="noreferrer">
-              Talk to an engineer
+            <Link href={CLOUD_LINKS_CONFIG.repoUrl} target="_blank" rel="noreferrer">
+              View the source
               <ArrowRight />
             </Link>
           </Button>

@@ -9,11 +9,11 @@ import { Button } from "@/components/ui/button"
 import { useTheme } from "@/components/theme-provider"
 
 const NAV_LINKS = [
-  { label: "Capabilities", href: "/#capabilities", external: false },
-  { label: "Pricing", href: "/pricing", external: false },
+  { label: "How it works", href: "/#capabilities", external: false },
+  { label: "Quickstart", href: CLOUD_LINKS_CONFIG.quickstartUrl, external: true },
   { label: "Dashboard", href: "/dashboard", external: false },
   { label: "Docs", href: CLOUD_LINKS_CONFIG.docsUrl, external: true },
-  // { label: "Blog", href: "#" },
+  { label: "GitHub", href: CLOUD_LINKS_CONFIG.repoUrl, external: true },
 ] as const
 
 export function LandingNav() {
@@ -61,7 +61,7 @@ export function LandingNav() {
           <Link href="/login">Log in</Link>
         </Button>
         <Button size="sm" asChild>
-          <Link href="/login">Get started</Link>
+          <Link href="/login">Run a job</Link>
         </Button>
       </div>
     </header>

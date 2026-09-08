@@ -9,6 +9,7 @@ import { HeroProduct } from "@/components/landing/hero-product"
 import { EnvironmentsScreen, OverviewScreen, RunScreen, RunsScreen } from "@/components/landing/hero-screens"
 import { DotGrid } from "@/components/landing/section-decorations"
 import { Button } from "@/components/ui/button"
+import { CLOUD_LINKS_CONFIG } from "@/cloud/links"
 import { CDN_CONFIG } from "@/config"
 
 const SLIDES = [<OverviewScreen />, <RunsScreen />, <RunScreen />, <EnvironmentsScreen />]
@@ -45,28 +46,28 @@ export function LandingHero() {
       <div className="relative mx-auto flex max-w-7xl flex-col gap-12 lg:flex-row lg:items-stretch">
         <div className="flex min-w-0 max-w-2xl flex-1 flex-col justify-center lg:max-w-none">
           <p className="mb-3 text-xs uppercase tracking-ui-eyebrow text-muted-foreground">
-            The loop where intelligence compounds
+            Open-source control and compute plane
           </p>
           <h1 className="font-serif text-3xl tracking-tight text-foreground md:text-4xl">
-            <span className="lg:block">Scaling Compute on </span>{" "}
-            <span className="italic lg:block lg:whitespace-nowrap">Your Own Context</span>
+            <span className="lg:block">Run your Python project </span>{" "}
+            <span className="italic lg:block lg:whitespace-nowrap">on remote GPUs</span>
           </h1>
 
           <p className="mt-5 max-w-2xl text-base leading-relaxed text-muted-foreground md:text-lg">
-            Tahuna turns real usage —traces, feedback, failures, outcomes— into evals, training runs, and better
-            models. Deployed back into your product, on repeat.
+            Tahuna syncs your code and data, provisions a GPU, recreates your environment, runs your workload,
+            streams logs and metrics, persists artifacts, and shuts down the compute afterward.
           </p>
 
           <div className="mt-8 flex flex-col items-start gap-3 sm:flex-row">
             <Button asChild variant="default" size="lg">
               <Link href="/login">
-                Get started
+                Run a job
                 <ArrowRight />
               </Link>
             </Button>
             <Button asChild variant="outline" size="lg">
-              <Link href="https://cal.com/monaimel/15min" target="_blank" rel="noreferrer">
-                Talk to an engineer
+              <Link href={`${CLOUD_LINKS_CONFIG.repoUrl}#self-hosted-quickstart`} target="_blank" rel="noreferrer">
+                Self-host Tahuna
                 <ArrowRight />
               </Link>
             </Button>

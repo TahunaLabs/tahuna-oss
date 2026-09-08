@@ -7,14 +7,14 @@ export type TerminalStep = { kind: "command" | "status"; value: string }
 
 export const DEFAULT_TERMINAL_STEPS: TerminalStep[] = [
   { kind: "command", value: "$ tahuna init ." },
-  { kind: "status", value: "config def" },
+  { kind: "status", value: "project configured" },
   { kind: "status", value: "entrypoint detected, environment initialized" },
   { kind: "command", value: "$ tahuna sync" },
   { kind: "status", value: "syncing code, data, env config" },
   { kind: "command", value: "$ tahuna train" },
-  { kind: "status", value: "materializing" },
-  { kind: "status", value: "finetuning minimax2.5" },
-  { kind: "status", value: "streaming metrics" },
+  { kind: "status", value: "provisioning L4" },
+  { kind: "status", value: "training mnist on cuda" },
+  { kind: "status", value: "streaming logs and metrics" },
 ]
 
 type TerminalMockProps = {

@@ -1,9 +1,9 @@
 import { CDN_CONFIG, NETWORK_CONFIG } from "@/config"
 import type { Metadata } from "next"
 
-const SITE_TITLE = "Tahuna | Post-training control plane"
+const SITE_TITLE = "Tahuna | Open-source ML compute orchestration"
 const SITE_DESCRIPTION =
-  "Post-training infrastructure for adaptive AI systems. Run your training code on cloud GPUs and build toward models that improve from real usage."
+  "Run Python workloads on remote GPUs without managing SSH, file transfers, environment setup, metrics, artifacts, or machine cleanup."
 
 function faviconAsset(filename: string) {
   return `${CDN_CONFIG.baseUrl}${CDN_CONFIG.faviconPath}/${filename}`
@@ -20,7 +20,7 @@ export const siteMetadata: Metadata = {
   title: SITE_TITLE,
   description: SITE_DESCRIPTION,
   applicationName: "Tahuna",
-  keywords: ["Tahuna", "post-training", "post-training infrastructure", "AI agent training", "RL", "Reinforcement Learning", "AI Training", "fine-tuning", "GPU infrastructure"],
+  keywords: ["Tahuna", "ML compute orchestration", "GPU orchestration", "remote GPU", "AI training", "fine-tuning", "GPU infrastructure", "open source"],
   authors: [{ name: "Tahuna" }],
   creator: "Tahuna",
   openGraph: {

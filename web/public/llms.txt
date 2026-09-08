@@ -1,10 +1,10 @@
 # Tahuna
 
-> Post-training control plane for adaptive AI systems. Run your custom training code on cloud GPUs — Tahuna handles the infrastructure around it.
+> Open-source control and compute plane for ML workloads. Run your Python code on remote GPUs while Tahuna handles the infrastructure around it.
 
-Tahuna is a CLI-first training orchestration platform for ML engineers, AI researchers, and agent builders who need full control over their training loop without managing GPU infrastructure. You bring your own Python code, framework, and reward logic; Tahuna handles code and data sync, GPU provisioning, dependency installation, run execution, log and metric streaming, artifact persistence, and model serving.
+Tahuna is a CLI-first compute orchestration platform for ML engineers, AI researchers, and agent builders who need remote GPUs without rebuilding the surrounding infrastructure for every workload. You bring your Python code, framework, dependencies, and data; Tahuna handles code and data sync, GPU provisioning, dependency installation, run execution, log and metric streaming, artifact persistence, and compute cleanup.
 
-Tahuna occupies the gap between managed fine-tuning APIs (which constrain the training loop) and raw GPU compute (which requires full DevOps). The design principle: full algorithmic control, low operational complexity.
+Tahuna occupies the gap between managed APIs that constrain the workload and raw GPU compute that requires manual DevOps. The current public release focuses on compute orchestration. Higher-level training and inference workflows, followed by observability, are the next parts of the roadmap.
 
 ## Core workflow
 
@@ -19,8 +19,8 @@ Tahuna occupies the gap between managed fine-tuning APIs (which constrain the tr
 - **Runs** — A single remote execution of your code. Each run is pinned to exact code and data snapshots and captures logs, metrics, and artifacts.
 - **Sync** — Incremental, content-addressed upload to R2. Only changed blobs are uploaded. Code and data syncs happen automatically before each run, and manually via `tahuna sync`.
 - **Artifacts** — Output files written to the configured output directory are collected after a successful run and stored in cloud storage.
-- **Serves** — A trained model artifact can be promoted to a managed inference endpoint via `tahuna serve create --from-run <run-id>`. Tahuna proxies authenticated inference requests at `/api/serves/{serve_id}/inference/...`.
-- **Auto-Research** — A bounded local experiment loop. Tahuna manages budget enforcement, code sync, GPU run launch, metric scoring, and patch restore. The user or an agent proposes one code edit per iteration.
+- **Experimental serving** — A trained model artifact can be promoted to an inference endpoint via `tahuna serve create --from-run <run-id>`. This interface is experimental and is not part of the current compute-orchestration release.
+- **Experimental auto-research** — A bounded local experiment loop. This interface is experimental and is not part of the current compute-orchestration release.
 
 ## CLI reference
 
@@ -73,7 +73,7 @@ Tahuna occupies the gap between managed fine-tuning APIs (which constrain the tr
 - `tahuna data show <data-id>` — Show data item details.
 - `tahuna gpus list` — List available GPU types and prices.
 
-### Serving
+### Experimental serving
 - `tahuna serve create --from-run <run-id> [--model-path <path>]` — Create a serve from a run artifact.
 - `tahuna serve create --from-storage-prefix <prefix>` — Create a serve from a storage prefix.
 - `tahuna serve list` — List serves.
@@ -81,7 +81,7 @@ Tahuna occupies the gap between managed fine-tuning APIs (which constrain the tr
 - `tahuna serve logs <serve-id>` — Stream serve logs.
 - `tahuna serve stop <serve-id>` — Stop a serve.
 
-### Auto-Research
+### Experimental auto-research
 - `tahuna research run --program <file.md> --metric final:<name> --minimize|--maximize --max-trials <N> --max-spend-usd <USD> --max-trial-minutes <N> --editable <path>` — Start a bounded research session.
 - `tahuna research run --resume <session-id>` — Resume a session after editing an allowed file.
 - `tahuna research graph <session-id> [--output <path>]` — Render an SVG progress graph.
@@ -132,7 +132,7 @@ PyTorch, Hugging Face Transformers, Unsloth, TRL, Verifiers — and any Python e
 - Web and API: Next.js, Convex, Better Auth
 - Runtime: Dockerized Python + uv on RunPod GPU pods
 - Storage: Cloudflare R2
-- Inference proxy: Next.js edge route at `/api/serves/{serve_id}/inference/...`
+- Experimental inference proxy: Next.js edge route at `/api/serves/{serve_id}/inference/...`
 
 ## Links
 
@@ -145,5 +145,5 @@ PyTorch, Hugging Face Transformers, Unsloth, TRL, Verifiers — and any Python e
 - Runs: https://docs.tahuna.app/runs
 - Syncing: https://docs.tahuna.app/syncing
 - Storage: https://docs.tahuna.app/storage
-- Auto-Research: https://docs.tahuna.app/auto-research
+- Experimental auto-research: https://docs.tahuna.app/auto-research
 - Pricing: https://tahuna.app/pricing

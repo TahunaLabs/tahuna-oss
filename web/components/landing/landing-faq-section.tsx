@@ -5,11 +5,15 @@ import { CLOUD_LINKS_CONFIG } from "@/cloud/links"
 const FAQS = [
   {
     q: "What is Tahuna?",
-    a: "Infrastructure for continual learning. We provide the primitives for you to own the loop — traces, evals, rewards, and training code; Tahuna runs the cloud GPU lifecycle around it and feeds every run back into the next.",
+    a: "Tahuna is an open-source control and compute plane for ML workloads. It handles the infrastructure around running your Python code on remote GPUs.",
+  },
+  {
+    q: "What does Tahuna support today?",
+    a: "The current release covers compute orchestration: project and data sync, GPU provisioning, environment reconstruction, workload execution, live logs and metrics, artifact persistence, and compute cleanup.",
   },
   {
     q: "Do I have to change my training code?",
-    a: "No. Tahuna runs your configured Python entrypoint, so your code owns the training loop. Tahuna is the control-plane that wraps it with the cloud lifecycle, observability, and autonomous research. You can use our CLI to scaffold a new project or add a few lines to an existing one.",
+    a: "No. Tahuna runs your configured Python entrypoint. You keep your framework, dependencies, models, data, and training logic.",
   },
   {
     q: "Which frameworks are supported?",
@@ -17,19 +21,15 @@ const FAQS = [
   },
   {
     q: "Where do my metrics go?",
-    a: "Logs and metrics stream live. Metrics are Weights & Biases-compatible, so you can keep using familiar dashboards.",
+    a: "Logs and Weights & Biases-compatible metrics stream back to Tahuna while the workload runs. Output files are persisted with the run as artifacts.",
   },
   {
-    q: "Does Tahuna learn from production traffic?",
-    a: "Yes — under your control. Tahuna captures production traces, feedback, evals, and outcomes, turns them into training data and rewards, and feeds the next run. Hillclimb can run that research autonomously against an objective you set, but nothing promotes to production without your sign-off. It's a loop you own, not a black box.",
+    q: "Which providers are supported?",
+    a: "RunPod is the first compute provider and R2 is the current object-storage backend. We welcome contributors who want to add more providers and storage backends.",
   },
   {
-    q: "How does pricing work?",
-    a: "You pay for active GPU time and attached volume from prepaid credits. See the pricing page for the current GPU catalog.",
-  },
-  {
-    q: "Which GPUs are available?",
-    a: "From L4 and RTX 3090/4090 up to A100, H100/H200, RTX PRO 6000, and B200 — billed per seconds.",
+    q: "Can I self-host Tahuna?",
+    a: "Yes. The repository includes a Docker quickstart and a coding-agent skill that sets up the stack and runs the MNIST example end to end.",
   },
 ]
 

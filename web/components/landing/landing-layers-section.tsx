@@ -7,14 +7,14 @@ import { CDN_CONFIG } from "@/config"
 const ownershipColumns = [
   {
     title: "You own",
-    headline: "Your loop",
-    items: ["Traces", "Feedback", "Evals", "Rewards", "Training code", "Model choices"],
+    headline: "Your project",
+    items: ["Python entrypoint", "Dependencies", "Data", "Models", "Training logic", "Output files"],
     className: "border-b border-border md:border-b-0 md:border-r border-background/40 bg-background/80",
   },
   {
     title: "Tahuna handles",
-    headline: "Tahuna path",
-    items: ["Sync", "GPUs", "Execution", "Metrics", "Checkpoints", "Artifacts"],
+    headline: "Run infrastructure",
+    items: ["Synchronization", "Environment reconstruction", "GPU provisioning", "Execution", "Logs and metrics", "Artifacts and cleanup"],
     className: "bg-card/75",
   },
 ] as const
@@ -28,15 +28,14 @@ export function LandingLayersSection() {
       <DotGrid className="left-0 top-20 h-64 w-1/3" />
       <div className="relative mx-auto grid max-w-7xl gap-10 lg:grid-cols-12 lg:items-start">
         <div className="lg:col-span-4">
-          <p className="mb-3 text-xs uppercase tracking-ui-eyebrow text-muted-foreground">Ownership model</p>
+          <p className="mb-3 text-xs uppercase tracking-ui-eyebrow text-muted-foreground">Ownership</p>
           <h2 className="text-3xl font-semibold leading-tight tracking-tight text-foreground md:text-4xl">
-            Everything around
-            <br />
-            the training loop
+            Your code
+            <br />stays yours
           </h2>
           <p className="mt-6 max-w-sm text-base leading-relaxed text-muted-foreground">
-            You own the learning loop: traces, evals, reward logic, rollout code, and training recipe. Tahuna handles
-            the run lifecycle around it.
+            Tahuna runs the infrastructure around your workload without replacing your training code, framework, or
+            model choices.
           </p>
         </div>
 

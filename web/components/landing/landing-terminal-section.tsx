@@ -35,15 +35,15 @@ export function LandingTerminalSection() {
             <Badge variant="ghost">Tahuna</Badge>
           </div>
           <h2 className="text-3xl font-semibold tracking-tight text-foreground md:text-4xl">
-            Your training loop,
+            Three commands
             <br />
-            executed cleanly
+            to a remote GPU
           </h2>
           <p className="mt-4 max-w-sm text-base leading-relaxed text-muted-foreground">
-            Point Tahuna at your workspace, choose the recipe, and launch on managed GPUs.
+            Initialize your project, choose your compute, and run the same Python code you already use.
           </p>
           <p className="mt-3 max-w-sm text-base leading-relaxed text-muted-foreground">
-            Code, data, metrics, checkpoints, and artifacts stay attached to the run that produced them.
+            Code, data, runtime configuration, metrics, checkpoints, and artifacts stay attached to the run.
           </p>
         </div>
 

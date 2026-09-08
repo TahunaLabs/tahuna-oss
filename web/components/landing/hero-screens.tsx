@@ -149,7 +149,7 @@ const overviewKpis = [
   { label: "Active runs", value: "3", hint: "Provisioning or running" },
   { label: "Success rate", value: "92%", hint: "Completed vs failed" },
   { label: "GPU hours", value: "184.0", hint: "Across all runs" },
-  { label: "Deployed", value: "5", hint: "Models serving" },
+  { label: "Artifacts", value: "27", hint: "Saved from completed runs" },
 ]
 
 const recentRuns = [

@@ -1,15 +1,15 @@
 const reasons = [
   {
-    title: "Capture the real signal",
-    body: "The best training signal is hidden in how people use your product: retries, edits, accepts, rejections, evals, and completed tasks. Tahuna captures this signal and turns it into a powerful engine for improvement.",
+    title: "No SSH or SCP",
+    body: "Stop manually copying projects, configuring machines, and following remote log files every time you need a GPU.",
   },
   {
-    title: "Shape model behavior",
-    body: "Model behavior is something you shape. Tahuna starts with the primitives to run, compare, auto-research, and promote improvements under your control.",
+    title: "Reproducible environments",
+    body: "Every run keeps its code, data, runtime configuration, metrics, and artifacts together so you can inspect what actually ran.",
   },
   {
-    title: "Compounding intelligence",
-    body: "Move beyond one-off model updates. Every run, eval, prompt, and snapshot becomes part of an improvement loop that compounds over time.",
+    title: "No forgotten GPUs",
+    body: "Compute is ephemeral and automatically terminated when the workload finishes, so idle machines do not keep running unnoticed.",
   },
 ] as const
 
@@ -18,11 +18,11 @@ export function LandingWhySection() {
     <section className="relative border-t border-border px-6 py-20 md:px-8 md:py-24">
       <div className="mx-auto max-w-7xl">
         <div className="mb-12 max-w-2xl">
-          <p className="mb-3 text-xs uppercase tracking-ui-eyebrow text-muted-foreground">Build the AI that no one can replicate</p>
+          <p className="mb-3 text-xs uppercase tracking-ui-eyebrow text-muted-foreground">Less infrastructure glue</p>
           <h2 className="text-3xl font-semibold leading-tight tracking-tight text-foreground md:text-4xl">
-            From static models
+            Keep your workflow.
             <br />
-            to compounding intelligence
+            Lose the manual setup.
           </h2>
         </div>
 
