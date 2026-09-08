@@ -55,7 +55,7 @@ jobs:
           - runtime/warden
     steps:
       - uses: actions/checkout@v5
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version-file: ${{ matrix.directory }}/go.mod
           cache-dependency-path: ${{ matrix.directory }}/go.sum
