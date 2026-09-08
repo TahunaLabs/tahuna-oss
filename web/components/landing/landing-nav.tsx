@@ -50,9 +50,7 @@ export function LandingNav() {
           <Link href="/login">Log in</Link>
         </Button>
         <Button size="sm" asChild>
-          <Link href={`${CLOUD_LINKS_CONFIG.repoUrl}#5-run-the-mnist-example`} target="_blank" rel="noreferrer">
-            Run the example
-          </Link>
+          <Link href="/login">Run your first SFT/RL workload</Link>
         </Button>
       </div>
     </header>

@@ -30,10 +30,10 @@ logs and metrics, artifact persistence, and compute cleanup.
 The hero includes a rotating product screenshot (`HeroProduct`) cycling through
 Overview, Runs, Run, and Environments screens. Slides rotate every 4.5 seconds.
 
-Primary actions link directly to the public repository:
+Primary actions:
 
-- `Run the MNIST example` links to the checked-in example instructions.
-- `View on GitHub` links to the repository root.
+- `Run your first SFT/RL workload` links to `/login`.
+- `Quickstart` links to the setup guide.
 
 ## Install Section
 

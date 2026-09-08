@@ -60,14 +60,14 @@ export function LandingHero() {
 
           <div className="mt-8 flex flex-col items-start gap-3 sm:flex-row">
             <Button asChild variant="default" size="lg">
-              <Link href={`${CLOUD_LINKS_CONFIG.repoUrl}#5-run-the-mnist-example`} target="_blank" rel="noreferrer">
-                Run the MNIST example
+              <Link href="/login">
+                Run your first SFT/RL workload
                 <ArrowRight />
               </Link>
             </Button>
             <Button asChild variant="outline" size="lg">
-              <Link href={CLOUD_LINKS_CONFIG.repoUrl} target="_blank" rel="noreferrer">
-                View on GitHub
+              <Link href={CLOUD_LINKS_CONFIG.quickstartUrl} target="_blank" rel="noreferrer">
+                Quickstart
                 <ArrowRight />
               </Link>
             </Button>
