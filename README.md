@@ -36,8 +36,8 @@ Create accounts and credentials for:
 ### 2. Clone and configure Tahuna
 
 ```bash
-git clone https://github.com/TahunaLabs/tahuna.git
-cd tahuna
+git clone https://github.com/TahunaLabs/tahuna-oss.git
+cd tahuna-oss
 cp docker/.env.example docker/.env
 cp docker/.env.application.example docker/.env.application
 chmod 600 docker/.env docker/.env.application
@@ -167,6 +167,7 @@ commands, see [`docker/README.md`](docker/README.md).
 
 - [`CONTEXT.md`](CONTEXT.md): current product status, architecture, and decisions.
 - [`AGENTS.md`](AGENTS.md): repository guardrails and implementation constraints.
+- [`.agents/skills/tahuna-self-host/SKILL.md`](.agents/skills/tahuna-self-host/SKILL.md): coding-agent workflow for running the self-hosted stack and MNIST GPU example.
 
 ## Quick local dev
 
