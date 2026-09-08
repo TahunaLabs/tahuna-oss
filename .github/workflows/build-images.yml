@@ -19,7 +19,7 @@ jobs:
     outputs:
       images: ${{ steps.set-matrix.outputs.images }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - id: set-matrix
         run: |
           PREBAKED_PACKAGES=$(jq -r '.default | join(",")' runtime/images/prebake/protected-packages.json)
@@ -58,7 +58,7 @@ jobs:
         include: ${{ fromJson(needs.matrix.outputs.images) }}
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - name: Free disk space
         run: |

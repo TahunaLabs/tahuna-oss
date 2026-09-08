@@ -22,10 +22,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout source repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Checkout distribution repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
         with:
           repository: TahunaLabs/tahuna-cli
           ref: main
