@@ -1,0 +1,106 @@
+---
+title: Architecture
+description: How Tahuna coordinates local ML projects, cloud GPU providers, runtime execution, and durable storage.
+---
+
+Tahuna is organized into three planes, each with a distinct responsibility:
+
+- The **interface plane** is where engineers and agents configure projects and launch workloads.
+- The **control plane** records state, coordinates synchronization, and manages compute lifecycle.
+- The **compute plane** reconstructs the project and executes training or inference on a GPU machine.
+
+![Tahuna architecture showing the interface, control, and compute planes](/images/tahuna-architecture.png)
+
+## Interface plane
+
+The interface plane contains the tools used to interact with Tahuna:
+
+- **Local ML project** contains the Python code, `tahuna.toml`, dependency files, and the selected data directory.
+- **Tahuna CLI** initializes the project, builds code and data manifests, uploads missing content, creates runs, and follows their progress.
+- **Web dashboard** provides the browser interface for environments, runs, logs, metrics, storage, and account configuration.
+
+The CLI communicates with the control plane over HTTP. For synchronization, the control plane returns signed object-storage URLs so the CLI can upload content directly to R2 without sending file bodies through the application server.
+
+## Control plane
+
+The Tahuna control plane is the coordination layer. It is implemented by the Next.js application and Convex backend and includes:
+
+- authentication and API-key validation
+- environments, runs, serves, and compute-session state
+- code and data manifest coordination
+- compute-session and run orchestration
+- a W&B-compatible monitoring API
+- the compute-provider adapter
+- the GPU and runtime-image catalog
+- storage and artifact indexing
+
+Convex stores the durable application state and schedules lifecycle work such as provisioning, startup timeouts, idle-session cleanup, cancellation, and machine termination.
+
+### Sync and manifests
+
+Before creating a run, the CLI scans the local project and selected data directory. It hashes the content, uploads only missing blobs, and commits immutable code and data manifests. The run record is pinned to those manifest hashes, so later local changes cannot alter an existing run.
+
+The control plane validates manifests and coordinates signed URLs, while file content moves directly between the client, runtime, and R2.
+
+### Compute orchestration
+
+The control plane talks to compute providers through a provider interface. RunPod is the current implementation. The adapter lists available GPUs, creates machines from Tahuna runtime images, resolves provider endpoints, and terminates machines.
+
+A compute session represents the lifetime of one provider machine. A one-shot session terminates after its run. A warm session can remain available and accept another run without provisioning a new machine.
+
+### Monitoring
+
+Warden reports lifecycle state, logs, and fallback metrics through authenticated HTTP/JSON callbacks. Training code can also use the W&B SDK against Tahuna's W&B-compatible HTTP API. Tahuna injects the endpoint and runtime credential into the remote workload.
+
+Tahuna does not require a gRPC service for runtime monitoring.
+
+## Compute plane
+
+The compute plane runs on provider-managed GPU machines. Each machine starts a Tahuna runtime image containing **Warden**, the Go execution agent.
+
+For every assigned workload, Warden:
+
+1. Fetches the pinned bootstrap plan from the control plane.
+2. Downloads and verifies code and data through signed R2 URLs.
+3. Materializes the workspace on the machine.
+4. Reconstructs dependencies with `uv sync`.
+5. Executes the configured training command or supervises the configured serving process.
+6. Streams lifecycle events, logs, and metrics to the control plane.
+7. For training runs, uploads files from the configured output directory as artifacts.
+
+A Warden executes one workload at a time. Warm compute reuses the same machine sequentially: the first run completes, the session becomes idle, and a later run is assigned. Parallel workloads use separate GPU machines.
+
+## Storage and runtime images
+
+Tahuna currently uses one R2 bucket as its durable object store. Prefixes separate:
+
+- content-addressed code and data blobs
+- code and data manifests
+- run artifacts, including checkpoints written under the configured output directory
+- immutable model snapshots used for serving
+
+The GPU machine's local disk is runtime workspace, not the durable source of truth. Warden reconstructs inputs from pinned manifests and uploads outputs to R2 before the machine is terminated.
+
+Runtime images are published to a container registry. The selected framework, framework version, and Python version determine the image, while the GPU configuration determines the provider machine. User code, data, and secrets are not baked into these images.
+
+## End-to-end training flow
+
+When you run `tahuna train`:
+
+1. The CLI loads and validates `tahuna.toml`.
+2. It creates code and data manifests and uploads missing content to R2.
+3. The control plane creates a run pinned to those exact manifests.
+4. The compute-provider adapter asks RunPod to create a GPU machine from the selected runtime image.
+5. Warden starts inside the machine and requests its authenticated bootstrap plan.
+6. Warden reconstructs the project, installs dependencies, and executes the command.
+7. Runtime callbacks and the W&B-compatible API record status, logs, and metrics.
+8. Warden uploads outputs and artifacts to R2.
+9. The control plane marks the run terminal and terminates or keeps the compute session warm according to the project configuration.
+
+## Self-hosted topology
+
+In a self-hosted installation, Docker Compose runs the Tahuna application, Convex backend, and Convex dashboard. RunPod, R2, and the container registry remain external infrastructure.
+
+Remote GPU machines cannot call services bound only to localhost. The local quickstart therefore uses an ngrok HTTPS tunnel for authenticated runtime callbacks. The tunnel carries status, logs, metrics, assignment polling, and artifact coordination between Warden and the self-hosted Convex HTTP-action origin.
+
+See the [Quickstart](/quickstart) for setup instructions, [Syncing](/syncing) for manifest behavior, and [Tracking](/tracking) for the W&B-compatible monitoring path.
