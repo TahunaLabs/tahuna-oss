@@ -4,6 +4,7 @@
   "pages": [
     "index",
     "---Introduction---",
+    "architecture",
     "quickstart",
     "installation",
     "---Training---",
