@@ -33,6 +33,7 @@ export const AWS_COMPUTE_CONFIG = {
   maxAttempts: 3,
   imagePullTimeoutSeconds: 600,
   maxUserDataBytes: 16 * 1024,
+  terminationWaitSeconds: 60,
   managedByTag: "tahuna",
 } as const;
 

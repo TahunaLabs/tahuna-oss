@@ -52,6 +52,6 @@ export type ComputeProvider = {
   createMachine(ctx: ComputeProviderContext, args: CreateMachineArgs): Promise<CreateMachineResult>;
   getMachine(ctx: ComputeProviderContext, args: GetMachineArgs): Promise<ComputeMachine | null>;
   terminateMachine(ctx: ComputeProviderContext, args: TerminateMachineArgs): Promise<void>;
-  resolveRuntimeEndpoint(args: ComputeEndpointArgs): string;
-  resolveIngressEndpoint(args: ComputeEndpointArgs): string;
+  resolveRuntimeEndpoint(args: ComputeEndpointArgs): string | Promise<string>;
+  resolveIngressEndpoint(args: ComputeEndpointArgs): string | Promise<string>;
 };

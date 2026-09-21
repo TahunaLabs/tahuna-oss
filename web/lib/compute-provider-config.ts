@@ -39,3 +39,11 @@ export function resolveAwsInstancePrice(instanceType: string): number {
   }
   return price;
 }
+
+export function resolveAwsVolumeGbMonthlyPrice() {
+  const price = Number(process.env.TAHUNA_AWS_VOLUME_GB_MONTHLY_PRICE?.trim());
+  if (!Number.isFinite(price) || price <= 0) {
+    throw new ConvexError({ detail: "TAHUNA_AWS_VOLUME_GB_MONTHLY_PRICE must be a positive USD/GiB-month price for gp3 storage" });
+  }
+  return price;
+}

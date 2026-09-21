@@ -1,5 +1,5 @@
 import { ConvexError } from "convex/values";
-import { resolveAwsInstancePrices } from "@/lib/compute-provider-config";
+import { resolveAwsInstancePrices, resolveAwsVolumeGbMonthlyPrice } from "@/lib/compute-provider-config";
 
 function requiredEnv(name: string) {
   const value = process.env[name]?.trim();
@@ -33,8 +33,18 @@ export function resolveAwsComputeConfig() {
   return { imageId, subnetId, securityGroupIds, publicIp: publicIp === "true" };
 }
 
+export function resolveAwsDeploymentId() {
+  const deploymentId = requiredEnv("TAHUNA_AWS_DEPLOYMENT_ID");
+  if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/.test(deploymentId)) {
+    throw new ConvexError({ detail: "TAHUNA_AWS_DEPLOYMENT_ID must be 1–64 letters, digits, underscores, or hyphens" });
+  }
+  return deploymentId;
+}
+
 export function requireAwsComputeProvider() {
   resolveAwsClientConfig();
   resolveAwsComputeConfig();
+  resolveAwsDeploymentId();
   resolveAwsInstancePrices();
+  resolveAwsVolumeGbMonthlyPrice();
 }
