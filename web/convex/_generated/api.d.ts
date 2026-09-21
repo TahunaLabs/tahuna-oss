@@ -13,6 +13,7 @@ import type * as auth from "../auth.js";
 import type * as awsComputeClient from "../awsComputeClient.js";
 import type * as awsComputeConfig from "../awsComputeConfig.js";
 import type * as awsComputeProvider from "../awsComputeProvider.js";
+import type * as awsQueryProtocol from "../awsQueryProtocol.js";
 import type * as awsRuntimeBootstrap from "../awsRuntimeBootstrap.js";
 import type * as catalog from "../catalog.js";
 import type * as cli_data from "../cli/data.js";
@@ -103,6 +104,7 @@ declare const fullApi: ApiFromModules<{
   awsComputeClient: typeof awsComputeClient;
   awsComputeConfig: typeof awsComputeConfig;
   awsComputeProvider: typeof awsComputeProvider;
+  awsQueryProtocol: typeof awsQueryProtocol;
   awsRuntimeBootstrap: typeof awsRuntimeBootstrap;
   catalog: typeof catalog;
   "cli/data": typeof cli_data;
