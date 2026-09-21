@@ -44,7 +44,8 @@ function gpuSpec(info: InstanceTypeInfo) {
   }
   return {
     gpuCount,
-    memoryInGb: (info.GpuInfo?.TotalGpuMemoryInMiB ?? 0) / gpuCount / 1024,
+    // The CLI catalog uses whole GB; round down to avoid overstating capacity.
+    memoryInGb: Math.floor((info.GpuInfo?.TotalGpuMemoryInMiB ?? 0) / gpuCount / 1024),
   };
 }
 
