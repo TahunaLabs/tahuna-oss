@@ -1,5 +1,6 @@
 import { CLOUD_BILLING_CONFIG } from "@/cloud/config";
 import { getRunpodGpuPricePerHourCents } from "@/cloud/providers/runpod-gpu-pricing";
+import { resolveAwsInstancePrice, resolveComputeProviderName } from "@/lib/compute-provider-config";
 
 const HOURS_PER_MONTH = 730;
 
@@ -26,7 +27,9 @@ export function resolveRunComputePricing(args: {
 }): RunComputePricing {
   const gpuCount = safePositiveNumber(args.gpuCount);
   const volumeGb = safePositiveNumber(args.volumeGb);
-  const lookupGpuUnitHourlyRateCents = getRunpodGpuPricePerHourCents(args.gpuType || "");
+  const lookupGpuUnitHourlyRateCents = resolveComputeProviderName() === "aws" && gpuCount > 0
+    ? (resolveAwsInstancePrice(args.gpuType?.trim() || "") * 100 * CLOUD_BILLING_CONFIG.computePriceMarkupMultiplier) / gpuCount
+    : getRunpodGpuPricePerHourCents(args.gpuType || "");
   let gpuUnitHourlyRateCents = 0;
   if (gpuCount > 0) {
     if (typeof lookupGpuUnitHourlyRateCents !== "number") {

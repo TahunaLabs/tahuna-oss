@@ -723,7 +723,7 @@ function normalizeCompatibilityFingerprint(
   fingerprint: RuntimeCompatibilityFingerprint,
 ): RuntimeCompatibilityFingerprint {
   return {
-    cloudType: fingerprint.cloudType === "COMMUNITY" ? "COMMUNITY" : "SECURE",
+    cloudType: fingerprint.cloudType.trim(),
     framework: fingerprint.framework.trim(),
     version: fingerprint.version.trim(),
     pythonVersion: fingerprint.pythonVersion.trim(),
