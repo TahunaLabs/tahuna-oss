@@ -1,0 +1,79 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "DescribeCompute",
+      "Effect": "Allow",
+      "Action": ["ec2:DescribeImages", "ec2:DescribeInstances", "ec2:DescribeInstanceTypes"],
+      "Resource": "*",
+      "Condition": { "StringEquals": { "aws:RequestedRegion": "REGION" } }
+    },
+    {
+      "Sid": "UseConfiguredInfrastructure",
+      "Effect": "Allow",
+      "Action": "ec2:RunInstances",
+      "Resource": [
+        "arn:aws:ec2:REGION::image/AMI_ID",
+        "arn:aws:ec2:REGION:ACCOUNT_ID:subnet/SUBNET_ID",
+        "arn:aws:ec2:REGION:ACCOUNT_ID:security-group/SECURITY_GROUP_ID"
+      ]
+    },
+    {
+      "Sid": "LaunchAllowedInstances",
+      "Effect": "Allow",
+      "Action": "ec2:RunInstances",
+      "Resource": "arn:aws:ec2:REGION:ACCOUNT_ID:instance/*",
+      "Condition": {
+        "StringEquals": {
+          "ec2:InstanceType": ["INSTANCE_TYPE"],
+          "aws:RequestTag/ManagedBy": "tahuna",
+          "aws:RequestTag/TahunaDeployment": "DEPLOYMENT_ID"
+        }
+      }
+    },
+    {
+      "Sid": "LaunchTaggedSupportingResources",
+      "Effect": "Allow",
+      "Action": "ec2:RunInstances",
+      "Resource": [
+        "arn:aws:ec2:REGION:ACCOUNT_ID:volume/*",
+        "arn:aws:ec2:REGION:ACCOUNT_ID:network-interface/*"
+      ],
+      "Condition": {
+        "StringEquals": {
+          "aws:RequestTag/ManagedBy": "tahuna",
+          "aws:RequestTag/TahunaDeployment": "DEPLOYMENT_ID"
+        }
+      }
+    },
+    {
+      "Sid": "TagAtLaunch",
+      "Effect": "Allow",
+      "Action": "ec2:CreateTags",
+      "Resource": [
+        "arn:aws:ec2:REGION:ACCOUNT_ID:instance/*",
+        "arn:aws:ec2:REGION:ACCOUNT_ID:volume/*",
+        "arn:aws:ec2:REGION:ACCOUNT_ID:network-interface/*"
+      ],
+      "Condition": {
+        "StringEquals": {
+          "ec2:CreateAction": "RunInstances",
+          "aws:RequestTag/ManagedBy": "tahuna",
+          "aws:RequestTag/TahunaDeployment": "DEPLOYMENT_ID"
+        }
+      }
+    },
+    {
+      "Sid": "TerminateDeploymentInstances",
+      "Effect": "Allow",
+      "Action": "ec2:TerminateInstances",
+      "Resource": "arn:aws:ec2:REGION:ACCOUNT_ID:instance/*",
+      "Condition": {
+        "StringEquals": {
+          "ec2:ResourceTag/ManagedBy": "tahuna",
+          "ec2:ResourceTag/TahunaDeployment": "DEPLOYMENT_ID"
+        }
+      }
+    }
+  ]
+}

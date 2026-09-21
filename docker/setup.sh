@@ -93,7 +93,23 @@ require_value "$APPLICATION_ENV_FILE" R2_BUCKET
 require_value "$APPLICATION_ENV_FILE" R2_ENDPOINT
 require_value "$APPLICATION_ENV_FILE" R2_ACCESS_KEY_ID
 require_value "$APPLICATION_ENV_FILE" R2_SECRET_ACCESS_KEY
-require_value "$APPLICATION_ENV_FILE" TAHUNA_MANAGED_RUNPOD_API_KEY
+compute_provider="$(read_env_var "$APPLICATION_ENV_FILE" TAHUNA_COMPUTE_PROVIDER)"
+case "${compute_provider:-runpod}" in
+  runpod)
+    require_value "$APPLICATION_ENV_FILE" TAHUNA_MANAGED_RUNPOD_API_KEY
+    ;;
+  aws)
+    for key in AWS_REGION AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY \
+      TAHUNA_AWS_DEPLOYMENT_ID TAHUNA_AWS_AMI_ID TAHUNA_AWS_SUBNET_ID \
+      TAHUNA_AWS_SECURITY_GROUP_IDS TAHUNA_AWS_INSTANCE_PRICES TAHUNA_AWS_VOLUME_GB_MONTHLY_PRICE; do
+      require_value "$APPLICATION_ENV_FILE" "$key"
+    done
+    ;;
+  *)
+    echo "TAHUNA_COMPUTE_PROVIDER must be runpod or aws." >&2
+    exit 1
+    ;;
+esac
 require_value "$APPLICATION_ENV_FILE" TAHUNA_RUNTIME_IMAGE_REPO
 
 echo "Starting the Convex backend..."
