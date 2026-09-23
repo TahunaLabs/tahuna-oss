@@ -2,11 +2,15 @@ package bootstrap
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
+	"net/url"
 	"os"
 	"strings"
 	"time"
 
+	"warden/internal/config"
 	"warden/internal/runtimeapi"
 )
 
@@ -16,7 +20,7 @@ const (
 )
 
 func (r *Runner) runSession(ctx context.Context) error {
-	if err := r.api.EmitSessionHeartbeat(ctx); err != nil {
+	if err := r.emitInitialSessionHeartbeat(ctx); err != nil {
 		return fmt.Errorf("emit compute session heartbeat: %w", err)
 	}
 
@@ -34,6 +38,30 @@ func (r *Runner) runSession(ctx context.Context) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-time.After(sessionPollInterval):
+		}
+	}
+}
+
+func (r *Runner) emitInitialSessionHeartbeat(ctx context.Context) error {
+	ctx, cancel := context.WithTimeout(ctx, config.SessionHeartbeatStartupTimeout)
+	defer cancel()
+
+	for attempt := 1; ; attempt++ {
+		err := r.api.EmitSessionHeartbeat(ctx)
+		if err == nil {
+			return nil
+		}
+		var requestErr *url.Error
+		transportFailure := errors.As(err, &requestErr) || errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, io.EOF)
+		if !transportFailure || ctx.Err() != nil || attempt == config.SessionHeartbeatRetryAttempts {
+			return err
+		}
+		// Heartbeats are idempotent, including when the response is lost after
+		// the server records one. Do not retry authentication or other HTTP errors.
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(config.SessionHeartbeatRetryInterval):
 		}
 	}
 }
