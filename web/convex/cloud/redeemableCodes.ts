@@ -47,7 +47,7 @@ function normalizeCreatedBy(value: string) {
     (email) => email.toLowerCase() === createdBy,
   );
   if (!isAuthorized) {
-    throw new ConvexError("created_by must be an authorized founder email");
+    throw new ConvexError("created_by must be an authorized creator email");
   }
   return createdBy;
 }

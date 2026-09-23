@@ -201,3 +201,5 @@ security boundaries, and setup instructions.
 ## Repository automation
 
 This repository does not deploy the hosted Tahuna website, docs, or backend. CLI releases publish to `TahunaLabs/tahuna-oss`; nightly releases require manual dispatch. Runtime images publish to `ghcr.io/tahunalabs/tahuna-oss` from this repository’s Build Runtime Images workflow. Build and publish those images before using that image namespace, or configure a registry you control. No credentials or configuration from `TahunaLabs/tahuna` are required.
+
+Optional email login requires your own Resend configuration and `TAHUNA_OTP_FROM_EMAIL` verified sender address in production. Optional billing-code creation is disabled unless `TAHUNA_REDEEMABLE_CODE_CREATOR_EMAILS` lists authorized operator email addresses. Neither setting grants Tahuna staff access by default.
