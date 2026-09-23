@@ -705,7 +705,7 @@ function sanitizeRuntimeMessage(message: string) {
   return sanitizeServeRuntimeMessage(message)
 }
 
-function resolveServeInferenceTarget(target: {
+async function resolveServeInferenceTarget(target: {
   serve_id: string
   status: string
   provider_machine_id: string
@@ -717,7 +717,7 @@ function resolveServeInferenceTarget(target: {
     status: target.status,
     ingress_url:
       target.status === SERVE_STATUS.SERVING
-        ? computeProvider.resolveIngressEndpoint({
+        ? await computeProvider.resolveIngressEndpoint({
             providerMachineId: target.provider_machine_id,
             port: target.port,
           })

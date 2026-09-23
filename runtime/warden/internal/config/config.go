@@ -16,6 +16,12 @@ const (
 	ModeSession Mode = "session"
 )
 
+const (
+	SessionHeartbeatStartupTimeout = 30 * time.Second
+	SessionHeartbeatRetryAttempts  = 3
+	SessionHeartbeatRetryInterval  = time.Second
+)
+
 type Config struct {
 	Mode                 Mode
 	RunID                string

@@ -10,6 +10,11 @@
 
 import type * as appConfig from "../appConfig.js";
 import type * as auth from "../auth.js";
+import type * as awsComputeClient from "../awsComputeClient.js";
+import type * as awsComputeConfig from "../awsComputeConfig.js";
+import type * as awsComputeProvider from "../awsComputeProvider.js";
+import type * as awsQueryProtocol from "../awsQueryProtocol.js";
+import type * as awsRuntimeBootstrap from "../awsRuntimeBootstrap.js";
 import type * as catalog from "../catalog.js";
 import type * as cli_data from "../cli/data.js";
 import type * as cli_envVars from "../cli/envVars.js";
@@ -21,6 +26,7 @@ import type * as cli_shared from "../cli/shared.js";
 import type * as cli_sync from "../cli/sync.js";
 import type * as cli_system from "../cli/system.js";
 import type * as cloud_authConfig from "../cloud/authConfig.js";
+import type * as cloud_awsComputeComposition from "../cloud/awsComputeComposition.js";
 import type * as cloud_billing from "../cloud/billing.js";
 import type * as cloud_computeSessionReservations from "../cloud/computeSessionReservations.js";
 import type * as cloud_credits from "../cloud/credits.js";
@@ -95,6 +101,11 @@ import type {
 declare const fullApi: ApiFromModules<{
   appConfig: typeof appConfig;
   auth: typeof auth;
+  awsComputeClient: typeof awsComputeClient;
+  awsComputeConfig: typeof awsComputeConfig;
+  awsComputeProvider: typeof awsComputeProvider;
+  awsQueryProtocol: typeof awsQueryProtocol;
+  awsRuntimeBootstrap: typeof awsRuntimeBootstrap;
   catalog: typeof catalog;
   "cli/data": typeof cli_data;
   "cli/envVars": typeof cli_envVars;
@@ -106,6 +117,7 @@ declare const fullApi: ApiFromModules<{
   "cli/sync": typeof cli_sync;
   "cli/system": typeof cli_system;
   "cloud/authConfig": typeof cloud_authConfig;
+  "cloud/awsComputeComposition": typeof cloud_awsComputeComposition;
   "cloud/billing": typeof cloud_billing;
   "cloud/computeSessionReservations": typeof cloud_computeSessionReservations;
   "cloud/credits": typeof cloud_credits;

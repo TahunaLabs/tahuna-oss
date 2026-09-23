@@ -6,7 +6,7 @@ API and worker used process-local storage and a simulated compute provider.
 
 ## What remains external
 
-Tahuna provisions GPU machines through RunPod, stores project data in an
+Tahuna provisions GPU machines through RunPod or AWS EC2, stores project data in an
 S3-compatible R2 bucket, and sends login codes through Resend. You need accounts
 and credentials for those services. The default runtime images are read from
 Tahuna's public GHCR repository; build and publish your own copies if you want
@@ -21,7 +21,7 @@ database, durable backups, and a TLS reverse proxy for production.
 - Docker Engine with Compose v2
 - OpenSSL
 - ngrok (only for local runs on remote GPU machines)
-- A RunPod API key
+- A RunPod API key, or [AWS EC2 configuration](aws.md)
 - An R2 bucket and API credentials
 - A Resend API key
 
@@ -58,7 +58,7 @@ TAHUNA_API_URL=http://localhost:3000 tahuna-dev login
 
 ## Remote compute callbacks
 
-RunPod machines cannot reach loopback. For local evaluation with remote compute,
+Remote GPU machines cannot reach loopback. For local evaluation with remote compute,
 authenticate the ngrok CLI once, then start a temporary HTTPS tunnel and apply
 its callback origin:
 
@@ -101,7 +101,7 @@ callbacks then pass through the app's `/api` routes. Configure a verified Resend
 sender before production use.
 
 The default initial grant gives each new user $10,000 of virtual credits and
-uses no compute markup. This does not pay RunPod: the self-hosting operator is
+uses no compute markup. This does not pay the compute provider: the self-hosting operator is
 responsible for all provider charges. Set `TAHUNA_INITIAL_CREDIT_CENTS=0` and
 configure Stripe if you want paid top-ups instead.
 

@@ -1,5 +1,7 @@
 import { CLOUD_BILLING_CONFIG } from "@/cloud/config";
 import { getRunpodGpuPricePerHourCents } from "@/cloud/providers/runpod-gpu-pricing";
+import { getAwsGpuPricePerHour } from "@/cloud/providers/aws-compute-pricing";
+import { resolveAwsVolumeGbMonthlyPrice, resolveComputeProviderName } from "@/lib/compute-provider-config";
 
 const HOURS_PER_MONTH = 730;
 
@@ -26,7 +28,10 @@ export function resolveRunComputePricing(args: {
 }): RunComputePricing {
   const gpuCount = safePositiveNumber(args.gpuCount);
   const volumeGb = safePositiveNumber(args.volumeGb);
-  const lookupGpuUnitHourlyRateCents = getRunpodGpuPricePerHourCents(args.gpuType || "");
+  const isAws = resolveComputeProviderName() === "aws";
+  const lookupGpuUnitHourlyRateCents = isAws && gpuCount > 0
+    ? getAwsGpuPricePerHour(args.gpuType?.trim() || "", gpuCount) * 100
+    : getRunpodGpuPricePerHourCents(args.gpuType || "");
   let gpuUnitHourlyRateCents = 0;
   if (gpuCount > 0) {
     if (typeof lookupGpuUnitHourlyRateCents !== "number") {
@@ -36,8 +41,10 @@ export function resolveRunComputePricing(args: {
     gpuUnitHourlyRateCents = lookupGpuUnitHourlyRateCents;
   }
   const gpuHourlyRateCents = gpuCount * gpuUnitHourlyRateCents;
-  const volumeHourlyRateCents =
-    (volumeGb * CLOUD_BILLING_CONFIG.computeVolumeGbMonthlyRateCents) / HOURS_PER_MONTH;
+  const volumeGbMonthlyRateCents = isAws
+    ? resolveAwsVolumeGbMonthlyPrice() * 100 * CLOUD_BILLING_CONFIG.computePriceMarkupMultiplier
+    : CLOUD_BILLING_CONFIG.computeVolumeGbMonthlyRateCents;
+  const volumeHourlyRateCents = (volumeGb * volumeGbMonthlyRateCents) / HOURS_PER_MONTH;
   return {
     gpuCount,
     volumeGb,

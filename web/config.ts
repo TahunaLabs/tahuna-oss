@@ -28,6 +28,15 @@ export const RUNPOD_CONFIG = {
   defaultCloudType: "SECURE" as "COMMUNITY" | "SECURE",
 } as const;
 
+export const AWS_COMPUTE_CONFIG = {
+  requestTimeoutMs: 30_000,
+  maxAttempts: 3,
+  imagePullTimeoutSeconds: 600,
+  maxUserDataBytes: 16 * 1024,
+  terminationWaitSeconds: 60,
+  managedByTag: "tahuna",
+} as const;
+
 export const RUN_CONFIG = {
   statusPollSeconds: 5,
   logsPollSeconds: 2,

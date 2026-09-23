@@ -99,7 +99,7 @@ When you run `tahuna train`:
 
 ## Self-hosted topology
 
-In a self-hosted installation, Docker Compose runs the Tahuna application, Convex backend, and Convex dashboard. RunPod, R2, and the container registry remain external infrastructure.
+In a self-hosted installation, Docker Compose runs the Tahuna application, Convex backend, and Convex dashboard. The configured GPU provider (RunPod or AWS EC2), R2, and the container registry remain external infrastructure.
 
 Remote GPU machines cannot call services bound only to localhost. The local quickstart therefore uses an ngrok HTTPS tunnel for authenticated runtime callbacks. The tunnel carries status, logs, metrics, assignment polling, and artifact coordination between Warden and the self-hosted Convex HTTP-action origin.
 

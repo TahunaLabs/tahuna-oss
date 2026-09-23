@@ -5,7 +5,7 @@ type RuntimeIncompatibilityPattern = {
 };
 
 export type RuntimeCompatibilityFingerprint = {
-  cloudType: "COMMUNITY" | "SECURE";
+  cloudType: string;
   framework: string;
   version: string;
   pythonVersion: string;
