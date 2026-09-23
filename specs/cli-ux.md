@@ -32,7 +32,7 @@ The CLI resolves:
 - `TAHUNA_BROWSER_URL`
 - `TAHUNA_CONFIG_DIR`
 
-Production defaults to `https://tahuna.app`. Development defaults to `http://localhost:3000`. The `tahuna` binary refuses localhost API targets; `tahuna-dev` refuses the production host.
+Both binaries default to `http://localhost:3000`. Set `TAHUNA_API_URL` to target your deployment; either binary accepts local and remote servers.
 
 Project state lives in `.tahuna/environment_id`. Project config lives in `tahuna.toml`.
 

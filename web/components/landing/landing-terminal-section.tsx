@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button"
 import { TruncatedTooltip } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 
-const installerScriptCommand = "curl -fsSL https://tahuna.app/install.sh"
+const installerScriptCommand = "curl -fsSL https://raw.githubusercontent.com/TahunaLabs/tahuna-oss/main/scripts/install-tahuna.sh"
 
 const commands = {
   stable: `${installerScriptCommand} | bash`,

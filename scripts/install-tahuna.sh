@@ -2,11 +2,11 @@
 set -euo pipefail
 
 OWNER="TahunaLabs"
-REPO="tahuna-cli"
+REPO="tahuna-oss"
 BINARY_NAME="tahuna"
 DEFAULT_BIN_DIR="${HOME}/.local/bin"
 CHANNELS_REPO_OWNER="TahunaLabs"
-CHANNELS_REPO_NAME="tahuna-cli"
+CHANNELS_REPO_NAME="tahuna-oss"
 CHANNELS_CONFIG_PATH="releases/channels.conf"
 DEFAULT_CHANNEL="stable"
 

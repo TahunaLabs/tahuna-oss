@@ -112,7 +112,7 @@ func TestInitConfig_ResolvesBrowserURL(t *testing.T) {
 	}
 }
 
-func TestInitConfig_ProdBinaryRejectsLocalhostAPI(t *testing.T) {
+func TestInitConfig_ProdBinaryAcceptsLocalhostAPI(t *testing.T) {
 	prevCfg := cfg
 	t.Cleanup(func() { cfg = prevCfg })
 	setTestArgv0(t, "tahuna")
@@ -121,22 +121,22 @@ func TestInitConfig_ProdBinaryRejectsLocalhostAPI(t *testing.T) {
 
 	cfg = cliConfig{}
 	err := initConfig()
-	if err == nil {
-		t.Fatal("expected initConfig to fail for localhost API in tahuna mode")
+	if err != nil {
+		t.Fatalf("initConfig failed for localhost API: %v", err)
 	}
 }
 
-func TestInitConfig_DevBinaryRejectsProdAPI(t *testing.T) {
+func TestInitConfig_DevBinaryAcceptsConfiguredAPI(t *testing.T) {
 	prevCfg := cfg
 	t.Cleanup(func() { cfg = prevCfg })
 	setTestArgv0(t, "tahuna-dev")
 
-	t.Setenv("TAHUNA_API_URL", "https://tahuna.app")
+	t.Setenv("TAHUNA_API_URL", "https://tahuna.example.com")
 
 	cfg = cliConfig{}
 	err := initConfig()
-	if err == nil {
-		t.Fatal("expected initConfig to fail for prod API in tahuna-dev mode")
+	if err != nil {
+		t.Fatalf("initConfig failed for configured API: %v", err)
 	}
 }
 

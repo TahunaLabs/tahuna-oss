@@ -50,34 +50,11 @@ func initConfig() error {
 		cfg.apiURL = defaultAPIURL
 	}
 
-	if mode == cliModeDev && isProdTahunaURL(cfg.apiURL) {
-		return errors.New("tahuna-dev cannot target production API; unset TAHUNA_API_URL or point it to a non-prod endpoint")
-	}
-	if mode == cliModeProd && isLocalTahunaURL(cfg.apiURL) {
-		return errors.New("tahuna cannot target localhost; use tahuna-dev for local development")
-	}
 	return nil
 }
 
 func printSuccessLine(message string) {
 	fmt.Printf("%s✓%s %s\n", cAmpGreen, cReset, message)
-}
-
-func isLocalTahunaURL(raw string) bool {
-	parsed, err := neturl.Parse(strings.TrimSpace(raw))
-	if err != nil {
-		return false
-	}
-	host := strings.ToLower(parsed.Hostname())
-	return host == "localhost" || host == "127.0.0.1" || host == "::1"
-}
-
-func isProdTahunaURL(raw string) bool {
-	parsed, err := neturl.Parse(strings.TrimSpace(raw))
-	if err != nil {
-		return false
-	}
-	return strings.EqualFold(parsed.Hostname(), "tahuna.app")
 }
 
 // logWarn prints a colored warning.
@@ -946,69 +923,13 @@ func serveInferenceURL(path string) string {
 }
 
 func resolveLoginBrowserBaseURL() string {
-	browserURL := cfg.browserURL
-	if browserURL == "" {
-		browserURL = lookupConfigValue("TAHUNA_BROWSER_URL")
-	}
-	if strings.TrimSpace(browserURL) != "" {
-		return cleanBrowserBaseURL(browserURL)
-	}
-
-	candidates := loginBrowserCandidates()
-	for _, candidate := range candidates {
-		if loginRouteAvailable(candidate) {
-			return candidate
-		}
-	}
-
-	if len(candidates) > 0 {
-		return candidates[0]
-	}
-	return defaultAPIURL
-}
-
-func loginBrowserCandidates() []string {
-	rawCandidates := []string{browserBaseURL(), defaultAPIURL}
-	candidates := []string{}
-	seen := map[string]struct{}{}
-	for _, raw := range rawCandidates {
-		clean := cleanBrowserBaseURL(raw)
-		if clean == "" {
-			continue
-		}
-		if _, exists := seen[clean]; exists {
-			continue
-		}
-		seen[clean] = struct{}{}
-		candidates = append(candidates, clean)
-	}
-	return candidates
+	return cleanBrowserBaseURL(browserBaseURL())
 }
 
 func cleanBrowserBaseURL(raw string) string {
 	base := strings.TrimSpace(strings.TrimRight(raw, "/"))
 	base = strings.TrimSuffix(base, apiPrefix)
 	return base
-}
-
-func loginRouteAvailable(base string) bool {
-	client := &http.Client{Timeout: 3 * time.Second}
-	req, err := http.NewRequest(http.MethodGet, cleanBrowserBaseURL(base)+"/auth/cli", nil)
-	if err != nil {
-		return false
-	}
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return false
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == http.StatusNotFound {
-		return false
-	}
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-	return !strings.Contains(strings.ToLower(string(body)), "no matching routes found")
 }
 
 func saveConfigValues(values map[string]string) error {

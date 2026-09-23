@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	defaultAPIURL     = "https://tahuna.app"
+	defaultAPIURL     = "http://localhost:3000"
 	defaultDevAPIURL  = "http://localhost:3000"
 	apiPrefix         = "/api"
 	projectStateDir   = ".tahuna"
@@ -161,7 +161,7 @@ Env Vars:
 
 Auth:
   TAHUNA_API_URL      API base URL override
-                      default in tahuna:     https://tahuna.app
+                      default in tahuna:     http://localhost:3000
                       default in tahuna-dev: http://localhost:3000
   TAHUNA_CONFIG_DIR   Config directory override
                       default in tahuna:     ~/.config/tahuna

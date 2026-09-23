@@ -9,22 +9,22 @@ description: Install the Tahuna CLI on your machine.
 - Linux (`amd64`)
 - WSL on Windows (`amd64`)
 - Python 3.10+ (for ML frameworks)
-- A Tahuna account
+- A running self-hosted Tahuna deployment
 
 ## Install with the installer script
 
-The recommended way to install the Tahuna CLI:
+Until this repository publishes its own releases, clone `TahunaLabs/tahuna-oss` and run `make install-cli-dev`, then use `tahuna-dev` in place of `tahuna`. Once an OSS release is available, the installer below downloads only from this repository:
 
 ```bash
-curl -fsSL https://tahuna.app/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/TahunaLabs/tahuna-oss/main/scripts/install-tahuna.sh | bash
 ```
 
 This command resolves the `stable` channel from `releases/channels.conf`.
 
-To install the rolling nightly channel (built from `main`):
+To install the rolling nightly channel (published manually):
 
 ```bash
-curl -fsSL https://tahuna.app/install.sh | bash -s -- --channel nightly
+curl -fsSL https://raw.githubusercontent.com/TahunaLabs/tahuna-oss/main/scripts/install-tahuna.sh | bash -s -- --channel nightly
 ```
 
 Verify the installation:
@@ -47,7 +47,7 @@ Example:
 VERSION=v0.1.0
 OS=darwin
 ARCH=arm64
-curl -fsSL -o tahuna.tar.gz "https://github.com/TahunaLabs/tahuna-cli/releases/download/${VERSION}/tahuna_${OS}_${ARCH}.tar.gz"
+curl -fsSL -o tahuna.tar.gz "https://github.com/TahunaLabs/tahuna-oss/releases/download/${VERSION}/tahuna_${OS}_${ARCH}.tar.gz"
 tar -xzf tahuna.tar.gz
 install -m 0755 tahuna ~/.local/bin/tahuna
 ```
@@ -64,32 +64,32 @@ tahuna login
 
 This opens a browser window for authentication. Once complete, your credentials are stored locally and all subsequent commands are authenticated.
 
-## Billing
+## Compute configuration
 
-Tahuna Cloud launches runs with managed billing by default. Add credits in the [Tahuna dashboard](/dashboard) before starting a paid run; Tahuna manages provider credentials and provider payment.
+Follow the [self-hosting setup](https://github.com/TahunaLabs/tahuna-oss#readme) to configure AWS or RunPod credentials on your deployment. Compute costs are billed to your provider account.
 
-Provider keys are deployment configuration, not user setup. You do not need a separate provider key for the managed cloud path.
+The CLI defaults to `http://localhost:3000`. Set `TAHUNA_API_URL` to your server URL before logging in when using a remote deployment.
 
 ## Update
 
 To update to the latest version:
 
 ```bash
-curl -fsSL https://tahuna.app/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/TahunaLabs/tahuna-oss/main/scripts/install-tahuna.sh | bash
 ```
 
 To install a specific version:
 
 ```bash
-curl -fsSL https://tahuna.app/install.sh | bash -s -- --version v0.1.0
+curl -fsSL https://raw.githubusercontent.com/TahunaLabs/tahuna-oss/main/scripts/install-tahuna.sh | bash -s -- --version v0.1.0
 ```
 
 To update on nightly channel:
 
 ```bash
-curl -fsSL https://tahuna.app/install.sh | bash -s -- --channel nightly
+curl -fsSL https://raw.githubusercontent.com/TahunaLabs/tahuna-oss/main/scripts/install-tahuna.sh | bash -s -- --channel nightly
 ```
 
 ## Next Steps
 
-Once installed, head to the [Quickstart](/quickstart) guide to create your first environment and launch a managed run.
+Once installed, head to the [Quickstart](/quickstart) guide to create your first environment and launch a run.

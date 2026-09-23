@@ -2,7 +2,7 @@ import type { BaseLayoutProps } from "fumadocs-ui/layouts/shared"
 import { faviconAsset } from "@/config"
 
 const docsLogo = faviconAsset("apple-touch-icon.png")
-const changelogUrl = "https://github.com/TahunaLabs/tahuna/releases"
+const changelogUrl = "https://github.com/TahunaLabs/tahuna-oss/releases"
 
 export const baseOptions: BaseLayoutProps = {
   nav: {

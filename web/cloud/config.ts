@@ -1,12 +1,15 @@
 export const CLOUD_EMAIL_CONFIG = {
   otpFromEmail: {
-    production: "hi@tahuna.app",
+    production: process.env.TAHUNA_OTP_FROM_EMAIL?.trim() ?? "",
     nonProduction: "onboarding@resend.dev",
   },
 } as const;
 
 export const REDEEMABLE_CODE_CONFIG = {
-  authorizedCreatorEmails: ["monaim@tahuna.app", "mehdi@tahuna.app"],
+  authorizedCreatorEmails: (process.env.TAHUNA_REDEEMABLE_CODE_CREATOR_EMAILS ?? "")
+    .split(",")
+    .map((email) => email.trim())
+    .filter(Boolean),
   defaultMaxRedemptions: 0,
 } as const;
 

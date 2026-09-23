@@ -37,7 +37,7 @@ Do not rewrite the user's training code unless they explicitly ask. If required 
 If `tahuna` is not installed, suggest the official installer:
 
 ```bash
-curl -fsSL https://tahuna.app/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/TahunaLabs/tahuna-oss/main/scripts/install-tahuna.sh | bash
 ```
 
 Then authenticate:
