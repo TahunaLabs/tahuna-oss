@@ -77,7 +77,7 @@ R2_ENDPOINT=https://your-account-id.r2.cloudflarestorage.com
 R2_ACCESS_KEY_ID=your-r2-access-key-id
 R2_SECRET_ACCESS_KEY=your-r2-secret-access-key
 TAHUNA_MANAGED_RUNPOD_API_KEY=rpa_your_runpod_key
-TAHUNA_RUNTIME_IMAGE_REPO=ghcr.io/tahunalabs/tahuna
+TAHUNA_RUNTIME_IMAGE_REPO=ghcr.io/tahunalabs/tahuna-oss
 ```
 
 Do not commit either env file. The remaining values in
@@ -197,3 +197,7 @@ make run-cli
 The supported self-hosting recipe runs the current web app with a self-hosted
 Convex backend. See [`docker/README.md`](docker/README.md) for requirements,
 security boundaries, and setup instructions.
+
+## Repository automation
+
+This repository does not deploy the hosted Tahuna website, docs, or backend. CLI releases publish to `TahunaLabs/tahuna-oss`; nightly releases require manual dispatch. Runtime images publish to `ghcr.io/tahunalabs/tahuna-oss` from this repository’s Build Runtime Images workflow. Build and publish those images before using that image namespace, or configure a registry you control. No credentials or configuration from `TahunaLabs/tahuna` are required.

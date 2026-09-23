@@ -36,7 +36,7 @@ checksum:
 release:
   github:
     owner: TahunaLabs
-    name: tahuna-cli
+    name: tahuna-oss
   target_commitish: main
   replace_existing_artifacts: true
   mode: replace

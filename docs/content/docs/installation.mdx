@@ -13,7 +13,7 @@ description: Install the Tahuna CLI on your machine.
 
 ## Install with the installer script
 
-The recommended way to install the Tahuna CLI:
+Until this repository publishes its own releases, clone `TahunaLabs/tahuna-oss` and run `make install-cli-dev`. Once an OSS release is available, the installer below downloads only from this repository:
 
 ```bash
 curl -fsSL https://tahuna.app/install.sh | bash
@@ -47,7 +47,7 @@ Example:
 VERSION=v0.1.0
 OS=darwin
 ARCH=arm64
-curl -fsSL -o tahuna.tar.gz "https://github.com/TahunaLabs/tahuna-cli/releases/download/${VERSION}/tahuna_${OS}_${ARCH}.tar.gz"
+curl -fsSL -o tahuna.tar.gz "https://github.com/TahunaLabs/tahuna-oss/releases/download/${VERSION}/tahuna_${OS}_${ARCH}.tar.gz"
 tar -xzf tahuna.tar.gz
 install -m 0755 tahuna ~/.local/bin/tahuna
 ```

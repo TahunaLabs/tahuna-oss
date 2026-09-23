@@ -4,14 +4,16 @@ Standalone Go CLI for login, project init, sync, and run lifecycle management.
 
 ## Install released binary
 
+Until this repository publishes its own releases, build from source with `make install-cli-dev`. The installer below reads only this repository’s releases.
+
 ```bash
-curl -fsSL https://tahuna.app/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/TahunaLabs/tahuna-oss/main/scripts/install-tahuna.sh | bash
 ```
 
 Install nightly channel:
 
 ```bash
-curl -fsSL https://tahuna.app/install.sh | bash -s -- --channel nightly
+curl -fsSL https://raw.githubusercontent.com/TahunaLabs/tahuna-oss/main/scripts/install-tahuna.sh | bash -s -- --channel nightly
 ```
 
 See the docs installation guide for manual tarball install and pinned versions:
@@ -19,10 +21,10 @@ See the docs installation guide for manual tarball install and pinned versions:
 
 ## Release
 
-Nightly (tracks `main`):
+Nightly (manual):
 
-1. Push commits to `main`.
-2. `Release CLI Nightly` runs on each `main` push and updates the `nightly` release in `TahunaLabs/tahuna-cli`.
+1. Open Actions → Release CLI Nightly in this repository.
+2. Run the workflow against `main` to update this repository’s `nightly` release.
 
 Stable:
 
@@ -36,7 +38,7 @@ git tag -a v0.1.1 -m "Release v0.1.1"
 git push origin v0.1.1
 ```
 
-3. `Release CLI` publishes release assets to `TahunaLabs/tahuna-cli`.
+3. `Release CLI` publishes release assets to `TahunaLabs/tahuna-oss`.
 4. Promote stable by updating `releases/channels.conf` (`stable=vX.Y.Z`) and pushing `main`.
 
 ## Dev binary (tahuna-dev)

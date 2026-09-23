@@ -1,9 +1,7 @@
 name: Release CLI Nightly
 
 on:
-  push:
-    branches:
-      - main
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -16,7 +14,7 @@ jobs:
   release:
     runs-on: ubuntu-latest
     env:
-      RELEASE_REPO: TahunaLabs/tahuna-cli
+      RELEASE_REPO: ${{ github.repository }}
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -67,7 +65,7 @@ jobs:
 
       - name: Publish nightly release assets
         env:
-          GH_TOKEN: ${{ secrets.RELEASES_GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
 
