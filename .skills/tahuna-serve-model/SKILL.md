@@ -145,7 +145,7 @@ For non-browser calls, the user needs a Tahuna API key from the Tahuna dashboard
 Example shape:
 
 ```bash
-curl -X POST "https://tahuna.app/api/serves/<serve_id>/inference" \
+curl -X POST "http://localhost:3000/api/serves/<serve_id>/inference" \
   -H "Authorization: Bearer <tahuna_api_key>" \
   -H "Content-Type: application/json" \
   -d '{"prompt":"Hello"}'

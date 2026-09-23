@@ -3,7 +3,7 @@ title: Quickstart
 description: Create a Tahuna project, launch training, and inspect the first run.
 ---
 
-This guide gets a local Python ML project running on Tahuna Cloud. By the end, you will have:
+This guide gets a local Python ML project running on your self-hosted Tahuna deployment. By the end, you will have:
 
 - an authenticated Tahuna CLI
 - a root `tahuna.toml` project configuration
@@ -11,18 +11,18 @@ This guide gets a local Python ML project running on Tahuna Cloud. By the end, y
 - a completed or running training run
 - logs, metrics, and output artifacts available from the CLI and dashboard
 
-## 1. Create an account
+## 1. Start your deployment
 
-Open the [Tahuna dashboard](https://tahuna.app/dashboard) and create an account. You can also start from the CLI login flow in the next step; it will open the browser when authentication is needed.
+Follow the [self-hosting setup](https://github.com/TahunaLabs/tahuna-oss#readme), then open the [Tahuna dashboard](http://localhost:3000/dashboard) and create an account. You can also start from the CLI login flow in the next step; it will open the browser when authentication is needed.
 
-Before launching paid GPU work, add credits in the dashboard billing view. Tahuna Cloud uses managed billing by default, so you do not need to configure a separate cloud provider key for the normal hosted path.
+Configure AWS or RunPod credentials on the deployment before launching GPU work. Your provider bills your account directly. For a remote deployment, set `TAHUNA_API_URL` to its URL before logging in.
 
 ## 2. Install and authenticate the CLI
 
-Install the CLI:
+Build the CLI with `make install-cli-dev` and use `tahuna-dev` until an OSS release is published. Once a release is available, install it with:
 
 ```bash
-curl -fsSL https://tahuna.app/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/TahunaLabs/tahuna-oss/main/scripts/install-tahuna.sh | bash
 ```
 
 Log in:
@@ -157,7 +157,7 @@ Inspect a metric emitted by your training code:
 tahuna run metrics <run-id> --metric eval_loss
 ```
 
-You can also open the [Tahuna dashboard](https://tahuna.app/dashboard?view=runs) to inspect live logs, metric charts, diagnostics, and output artifacts.
+You can also open the [Tahuna dashboard](http://localhost:3000/dashboard?view=runs) to inspect live logs, metric charts, diagnostics, and output artifacts.
 
 ## 8. Use the result
 

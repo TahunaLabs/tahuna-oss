@@ -6,7 +6,7 @@ description: Full reference for the Tahuna command-line interface.
 ## Installation
 
 ```bash
-curl -fsSL https://tahuna.app/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/TahunaLabs/tahuna-oss/main/scripts/install-tahuna.sh | bash
 ```
 
 For manual tarball installation and version pinning, see [Installation](/installation).
@@ -176,7 +176,7 @@ Set one variable, pass a value separately, load a file, or load `.env.local` / `
 
 ```bash
 tahuna env_vars set HF_TOKEN=hf_example
-tahuna env_vars set WANDB_BASE_URL --value https://tahuna.app/api/monitoring/wandb
+tahuna env_vars set WANDB_BASE_URL --value http://localhost:3000/api/monitoring/wandb
 tahuna env_vars set --from-file .env.local
 tahuna env_vars set
 ```

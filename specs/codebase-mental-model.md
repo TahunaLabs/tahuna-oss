@@ -126,8 +126,8 @@ Important files:
 
 There are two binary modes:
 
-- `tahuna`: production mode, default API `https://tahuna.app`, refuses localhost.
-- `tahuna-dev`: development mode, default API `http://localhost:3000`, refuses `tahuna.app`.
+- `tahuna`: standard mode, default API `http://localhost:3000`.
+- `tahuna-dev`: development mode, default API `http://localhost:3000`, separate configuration directory.
 
 ### HTTP Client Behavior
 

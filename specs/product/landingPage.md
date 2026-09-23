@@ -39,8 +39,8 @@ Primary actions:
 
 The install section shows stable and nightly install commands:
 
-- `curl -fsSL https://tahuna.app/install.sh | bash`
-- `curl -fsSL https://tahuna.app/install.sh | bash -s -- --channel nightly`
+- `curl -fsSL https://raw.githubusercontent.com/TahunaLabs/tahuna-oss/main/scripts/install-tahuna.sh | bash`
+- `curl -fsSL https://raw.githubusercontent.com/TahunaLabs/tahuna-oss/main/scripts/install-tahuna.sh | bash -s -- --channel nightly`
 
 It presents the minimal CLI loop:
 

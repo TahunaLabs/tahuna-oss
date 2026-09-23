@@ -8,9 +8,9 @@ Tahuna occupies the gap between managed APIs that constrain the workload and raw
 
 ## Core workflow
 
-1. Install the CLI and authenticate: `curl -fsSL https://tahuna.app/install.sh | bash && tahuna login`
+1. Install the CLI and authenticate: `curl -fsSL https://raw.githubusercontent.com/TahunaLabs/tahuna-oss/main/scripts/install-tahuna.sh | bash && tahuna login`
 2. Initialize a project: `tahuna init .` — writes `.tahuna/tahuna.toml`, scaffolds `train.py`, `pyproject.toml`, and `uv.lock` when missing.
-3. Add credits in the dashboard billing view.
+3. Configure AWS or RunPod credentials on your self-hosted deployment.
 4. Launch a training run: `tahuna train` — syncs code and data, provisions a GPU pod, executes the entrypoint, streams logs and metrics, persists output artifacts.
 
 ## Key concepts
@@ -108,15 +108,13 @@ python_version = "3.11"
 
 Auth and URL overrides via environment variables:
 - `TAHUNA_API_KEY` — Auth token (set by `tahuna login`).
-- `TAHUNA_API_URL` — API base URL override (default: `https://tahuna.app`).
+- `TAHUNA_API_URL` — API base URL override (default: `http://localhost:3000`).
 - `TAHUNA_BROWSER_URL` — Browser base URL for login flow.
 - `TAHUNA_CONFIG_DIR` — Config directory override (default: `~/.config/tahuna`).
 
 ## Compute and pricing
 
-Supported GPUs (billed per active hour): L4, RTX 3090, RTX 4090, A100 (40 GB and 80 GB), H100 SXM, H100 PCIe, H200, RTX PRO 6000, B200.
-Volume storage: $0.12 / GB / month.
-Tahuna Cloud uses prepaid credits. Runs draw down credits for active GPU time and attached volume. No compute markup for individual users.
+AWS EC2 and RunPod use credentials configured by the deployment operator. Availability and pricing depend on your provider account and region; the provider bills your account directly.
 
 ## Frameworks
 
@@ -130,20 +128,14 @@ PyTorch, Hugging Face Transformers, Unsloth, TRL, Verifiers — and any Python e
 
 - CLI: Go
 - Web and API: Next.js, Convex, Better Auth
-- Runtime: Dockerized Python + uv on RunPod GPU pods
+- Runtime: Dockerized Python + uv on AWS EC2 instances or RunPod GPU pods
 - Storage: Cloudflare R2
 - Experimental inference proxy: Next.js edge route at `/api/serves/{serve_id}/inference/...`
 
 ## Links
 
-- Site: https://tahuna.app
-- Docs: https://docs.tahuna.app
-- Install: `curl -fsSL https://tahuna.app/install.sh | bash`
-- Quickstart: https://docs.tahuna.app/quickstart
-- CLI reference: https://docs.tahuna.app/cli
-- Environments: https://docs.tahuna.app/environments
-- Runs: https://docs.tahuna.app/runs
-- Syncing: https://docs.tahuna.app/syncing
-- Storage: https://docs.tahuna.app/storage
-- Experimental auto-research: https://docs.tahuna.app/auto-research
-- Pricing: https://tahuna.app/pricing
+- Repository and self-hosting setup: https://github.com/TahunaLabs/tahuna-oss
+- Documentation: https://github.com/TahunaLabs/tahuna-oss/tree/main/docs/content/docs
+- Releases: https://github.com/TahunaLabs/tahuna-oss/releases
+
+Build the CLI from source with `make install-cli-dev` and use `tahuna-dev` until the first OSS release is published.

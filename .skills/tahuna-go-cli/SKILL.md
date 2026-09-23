@@ -51,7 +51,7 @@ Keep CLI request paths and DTO keys aligned with Convex or backend handlers. If 
 
 For auth and config resolution, remember:
 
-- `tahuna` defaults to `https://tahuna.app`.
+- `tahuna` defaults to `http://localhost:3000`.
 - `tahuna-dev` defaults to `http://localhost:3000`.
 - `TAHUNA_API_URL` overrides the API base.
 - `TAHUNA_BROWSER_URL` can override browser login URL.
